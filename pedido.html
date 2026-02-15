@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novo Pedido — MoskoGás</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .container { max-width: 680px; margin: 0 auto; padding: 20px; }
+  h1 { color: #1e293b; font-size: 22px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 4px; text-transform: uppercase; }
+  input, textarea, select { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 16px; transition: border 0.2s; }
+  input:focus, textarea:focus { outline: none; border-color: #f97316; }
+  .row { display: grid; gap: 12px; margin-bottom: 12px; }
+  .row-2 { grid-template-columns: 1fr 1fr; }
+  .autocomplete-box { position: relative; }
+  #suggestions { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 2px solid #f97316; border-top: none; border-radius: 0 0 8px 8px; z-index: 100; max-height: 250px; overflow-y: auto; }
+  .suggestion-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+  .suggestion-item:hover { background: #fff7ed; }
+  .suggestion-item strong { color: #1e293b; }
+  .suggestion-item small { color: #64748b; }
+  .items-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .item-btn { padding: 12px 6px; border: 2px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; text-align: center; transition: all 0.15s; }
+  .item-btn:hover { border-color: #f97316; background: #fff7ed; }
+  .item-btn.selected { border-color: #f97316; background: #f97316; color: #fff; }
+  .item-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; background: #f8fafc; border-radius: 8px; padding: 8px 12px; }
+  .item-row span { flex: 1; font-weight: 600; font-size: 14px; }
+  .qty-btn { width: 32px; height: 32px; border: 2px solid #e2e8f0; border-radius: 6px; background: #fff; font-size: 18px; cursor: pointer; font-weight: 700; }
+  .qty-val { width: 36px; text-align: center; font-weight: 700; font-size: 16px; }
+  .btn-remove { background: none; border: none; color: #dc2626; cursor: pointer; font-size: 18px; }
+  .btn-primary { background: #f97316; color: #fff; border: none; border-radius: 10px; padding: 16px 24px; font-size: 18px; font-weight: 800; width: 100%; cursor: pointer; transition: background 0.2s; }
+  .btn-primary:hover { background: #ea6d0a; }
+  .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+  .status-bar { text-align: center; padding: 8px; font-size: 13px; color: #64748b; }
+  .total-bar { background: #1e293b; color: #fff; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .total-bar .val { font-size: 22px; font-weight: 900; color: #f97316; }
+  textarea { resize: vertical; height: 70px; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>➕ Novo Pedido</h1>
+
+  <!-- BUSCA CLIENTE -->
+  <div class="card">
+    <label>🔍 Buscar Cliente (telefone, nome ou endereço)</label>
+    <div class="autocomplete-box">
+      <input id="search" type="text" placeholder="Ex: 67999... ou João Silva ou Rua das Flores" autocomplete="off">
+      <div id="suggestions" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- DADOS DO CLIENTE -->
+  <div class="card">
+    <div class="row row-2">
+      <div>
+        <label>Nome do Cliente *</label>
+        <input id="cName" type="text" placeholder="Nome completo">
+      </div>
+      <div>
+        <label>Telefone</label>
+        <input id="cPhone" type="tel" placeholder="67 9...">
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <label>Endereço (Rua + Número) *</label>
+      <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas, 123">
+    </div>
+    <div class="row row-2">
+      <div>
+        <label>Bairro</label>
+        <input id="cBairro" type="text" placeholder="Ex: Jardim Noroeste">
+      </div>
+      <div>
+        <label>Complemento</label>
+        <input id="cComp" type="text" placeholder="Apto, Bloco...">
+      </div>
+    </div>
+    <div>
+      <label>Ponto de Referência</label>
+      <input id="cRef" type="text" placeholder="Ex: próximo ao mercado X">
+    </div>
+  </div>
+
+  <!-- ITENS -->
+  <div class="card">
+    <label style="margin-bottom:10px">📦 Itens do Pedido</label>
+    <div class="items-grid">
+      <button class="item-btn" onclick="addItem('P13 Gás 13kg','P13 Gás 13kg', 45)">🔵 P13<br><small>Gás 13kg</small></button>
+      <button class="item-btn" onclick="addItem('P20 Gás 20kg','P20 Gás 20kg', 85)">🟠 P20<br><small>Gás 20kg</small></button>
+      <button class="item-btn" onclick="addItem('P45 Gás 45kg','P45 Gás 45kg', 190)">🔴 P45<br><small>Gás 45kg</small></button>
+      <button class="item-btn" onclick="addItem('Água 20L','Água 20L', 8)">💧 Água<br><small>20 Litros</small></button>
+      <button class="item-btn" onclick="addItem('Água 10L','Água 10L', 5)">💧 Água<br><small>10 Litros</small></button>
+      <button class="item-btn" onclick="addItem('P8 Gás 8kg','P8 Gás 8kg', 30)">🟢 P8<br><small>Gás 8kg</small></button>
+    </div>
+    <div id="items-list"></div>
+    <div class="total-bar" id="total-bar" style="display:none">
+      <span>TOTAL</span>
+      <span class="val" id="total-val">R$ 0,00</span>
+    </div>
+  </div>
+
+  <!-- OBSERVAÇÃO -->
+  <div class="card">
+    <label>📝 Observação (opcional)</label>
+    <textarea id="notes" placeholder="Urgente, horário preferido, troco para..."></textarea>
+  </div>
+
+  <div class="status-bar" id="status-bar"></div>
+  <button class="btn-primary" id="btn-save" onclick="saveOrder()">✅ SALVAR PEDIDO</button>
+</div>
+
+<script src="shared.js"></script>
+<script>
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+checkApiKey();
+
+let items = [];
+let searchTimer;
+
+// ── Autocomplete ──────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', function() {
+  clearTimeout(searchTimer);
+  const q = this.value.trim();
+  if (q.length < 2) { hideSuggestions(); return; }
+  searchTimer = setTimeout(() => searchCustomer(q), 280);
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-box')) hideSuggestions();
+});
+
+async function searchCustomer(q) {
+  try {
+    const results = await api(`/api/customer/search?q=${encodeURIComponent(q)}`);
+    showSuggestions(results);
+  } catch(e) { console.error(e); }
+}
+
+function showSuggestions(list) {
+  const box = document.getElementById('suggestions');
+  if (!list.length) { hideSuggestions(); return; }
+  box.style.display = 'block';
+  box.innerHTML = list.map((c, i) => `
+    <div class="suggestion-item" onclick="selectCustomer(${i})">
+      <strong>${c.name || c.customer_name}</strong>
+      <span style="margin-left:8px;color:#f97316">${c.phone_digits || ''}</span><br>
+      <small>${c.address_line || ''} ${c.bairro ? '— ' + c.bairro : ''}</small>
+    </div>
+  `).join('');
+  box._data = list;
+}
+
+function hideSuggestions() {
+  const box = document.getElementById('suggestions');
+  box.style.display = 'none';
+}
+
+function selectCustomer(i) {
+  const c = document.getElementById('suggestions')._data[i];
+  document.getElementById('cName').value   = c.name || c.customer_name || '';
+  document.getElementById('cPhone').value  = c.phone_digits || '';
+  document.getElementById('cAddr').value   = c.address_line || '';
+  document.getElementById('cBairro').value = c.bairro || '';
+  document.getElementById('cComp').value   = c.complemento || '';
+  document.getElementById('cRef').value    = c.referencia || '';
+  document.getElementById('search').value  = c.name || '';
+  hideSuggestions();
+}
+
+// ── Itens ─────────────────────────────────────────────────────
+function addItem(id, name, price) {
+  const existing = items.find(i => i.id === id);
+  if (existing) { existing.qty++; }
+  else { items.push({ id, name, qty: 1, price }); }
+  renderItems();
+}
+
+function changeQty(id, delta) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) items = items.filter(i => i.id !== id);
+  renderItems();
+}
+
+function renderItems() {
+  const list = document.getElementById('items-list');
+  const totalBar = document.getElementById('total-bar');
+  const totalVal = document.getElementById('total-val');
+
+  if (!items.length) {
+    list.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:12px">Nenhum item adicionado</div>';
+    totalBar.style.display = 'none';
+    return;
+  }
+
+  let total = 0;
+  list.innerHTML = items.map(it => {
+    total += it.price * it.qty;
+    return `
+      <div class="item-row">
+        <span>${it.name}</span>
+        <button class="qty-btn" onclick="changeQty('${it.id}',-1)">−</button>
+        <span class="qty-val">${it.qty}</span>
+        <button class="qty-btn" onclick="changeQty('${it.id}',1)">+</button>
+        <span style="font-weight:700;min-width:70px;text-align:right">R$ ${(it.price*it.qty).toFixed(2)}</span>
+        <button class="btn-remove" onclick="changeQty('${it.id}',-99)">✕</button>
+      </div>`;
+  }).join('');
+
+  totalBar.style.display = 'flex';
+  totalVal.textContent = `R$ ${total.toFixed(2)}`;
+}
+
+// ── Salvar ────────────────────────────────────────────────────
+async function saveOrder() {
+  const name  = document.getElementById('cName').value.trim();
+  const addr  = document.getElementById('cAddr').value.trim();
+  if (!name) { toast('Nome do cliente obrigatório', 'error'); return; }
+  if (!addr) { toast('Endereço obrigatório', 'error'); return; }
+
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = '⏳ Salvando...';
+
+  try {
+    const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+    const result = await api('/api/order/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone:       document.getElementById('cPhone').value.replace(/\D/g, ''),
+        name,
+        address_line: addr,
+        bairro:      document.getElementById('cBairro').value,
+        complemento: document.getElementById('cComp').value,
+        referencia:  document.getElementById('cRef').value,
+        items:       items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
+        total_value: total || null,
+        notes:       document.getElementById('notes').value,
+      }),
+    });
+
+    // Salvar cliente no cache
+    await api('/api/customer/upsert', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone: document.getElementById('cPhone').value.replace(/\D/g, ''),
+        name,
+        address_line: addr,
+        bairro:      document.getElementById('cBairro').value,
+        complemento: document.getElementById('cComp').value,
+        referencia:  document.getElementById('cRef').value,
+      }),
+    }).catch(() => {});
+
+    toast(`✅ Pedido #${result.id} criado!`);
+
+    // Limpar form
+    setTimeout(() => {
+      ['cName','cPhone','cAddr','cBairro','cComp','cRef','notes','search'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      items = [];
+      renderItems();
+      btn.disabled = false;
+      btn.textContent = '✅ SALVAR PEDIDO';
+    }, 800);
+
+  } catch(e) {
+    toast(e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '✅ SALVAR PEDIDO';
+  }
+}
+
+renderItems();
+</script>
+</body>
+</html>

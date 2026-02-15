@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Recibo — MoskoGás</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body { font-family: Arial, Helvetica, sans-serif; background: #fff; }
+
+  /* Botão imprimir (some na impressão) */
+  .no-print { background: #f97316; color: #fff; border: none; padding: 12px 24px; font-size: 16px; font-weight: 700; cursor: pointer; border-radius: 8px; margin: 20px auto; display: block; }
+
+  /* Layout das 2 vias */
+  .page { width: 210mm; margin: 0 auto; }
+  .via { width: 100%; padding: 12mm 14mm; }
+  
+  /* Separador */
+  .corte { border-top: 2px dashed #999; text-align: center; color: #999; font-size: 11px; padding: 4px 0; letter-spacing: 2px; margin: 0 14mm; }
+
+  /* Cabeçalho */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 2px solid #f97316; padding-bottom: 10px; }
+  .logo-text { font-size: 24px; font-weight: 900; color: #f97316; }
+  .logo-sub { font-size: 11px; color: #666; }
+  .header-right { text-align: right; font-size: 11px; color: #555; }
+  .via-label { background: #1e293b; color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 700; margin-bottom: 8px; display: inline-block; }
+
+  /* Info pedido */
+  .pedido-info { background: #f8fafc; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .pedido-info strong { color: #f97316; font-size: 16px; }
+
+  /* Dados cliente */
+  .section-title { font-size: 10px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .cliente-box { margin-bottom: 10px; }
+  .cliente-line { font-size: 12px; padding: 2px 0; }
+  .cliente-line span { font-weight: 700; }
+
+  /* Tabela itens */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 12px; }
+  th { background: #1e293b; color: #fff; padding: 5px 8px; text-align: left; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; }
+  .total-row td { font-weight: 700; border-top: 2px solid #1e293b; border-bottom: none; background: #f8fafc; }
+
+  /* Bloco recebimento */
+  .recebimento { border: 2px solid #1e293b; border-radius: 6px; padding: 10px; margin-top: 8px; }
+  .recebimento-title { font-size: 12px; font-weight: 700; text-align: center; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .field-line { margin-bottom: 10px; }
+  .field-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+  .field-input { border-bottom: 1px solid #333; width: 100%; height: 20px; margin-top: 2px; }
+  .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .assinatura-box { border-bottom: 1px solid #333; height: 40px; margin-top: 2px; }
+  .footer-note { font-size: 10px; color: #999; text-align: center; margin-top: 8px; }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { margin: 0; }
+    .page { width: 100%; margin: 0; }
+    @page { size: A4 portrait; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<button class="no-print" onclick="window.print()">🖨️ Imprimir Recibo A4</button>
+
+<div class="page" id="receipt">
+  <!-- Via 1: Cliente -->
+  <div class="via" id="via1">
+    <div class="via-label">VIA CLIENTE</div>
+    <div class="header">
+      <div>
+        <div class="logo-text">🔥 MOSKO GÁS</div>
+        <div class="logo-sub">Revenda de Gás e Água — Campo Grande/MS</div>
+        <div class="logo-sub">☎ (67) XXXX-XXXX | @moskogas</div>
+      </div>
+      <div class="header-right" id="hdr1"></div>
+    </div>
+    <div class="pedido-info" id="info1"></div>
+    <div class="cliente-box">
+      <div class="section-title">Dados do Cliente</div>
+      <div id="cliente1"></div>
+    </div>
+    <table id="table1"></table>
+    <div class="recebimento">
+      <div class="recebimento-title">✅ Recebi o Produto em Boas Condições</div>
+      <div class="fields-row">
+        <div class="field-line">
+          <div class="field-label">Nome Legível</div>
+          <div class="field-input"></div>
+        </div>
+        <div class="field-line">
+          <div class="field-label">CPF</div>
+          <div class="field-input"></div>
+        </div>
+      </div>
+      <div class="fields-row">
+        <div class="field-line">
+          <div class="field-label">RG (opcional)</div>
+          <div class="field-input"></div>
+        </div>
+        <div class="field-line">
+          <div class="field-label">Data de Recebimento</div>
+          <div class="field-input"></div>
+        </div>
+      </div>
+      <div class="field-line">
+        <div class="field-label">Assinatura</div>
+        <div class="assinatura-box"></div>
+      </div>
+    </div>
+    <div class="footer-note">MOSKO GÁS — Obrigado pela preferência!</div>
+  </div>
+
+  <!-- Linha de corte -->
+  <div class="corte">✂ ─── CORTE AQUI ─── ✂</div>
+
+  <!-- Via 2: Mosko Gás (retorno) -->
+  <div class="via" id="via2">
+    <div class="via-label">VIA MOSKO GÁS — RETORNO ASSINADO</div>
+    <div class="header">
+      <div>
+        <div class="logo-text">🔥 MOSKO GÁS</div>
+        <div class="logo-sub">Revenda de Gás e Água — Campo Grande/MS</div>
+      </div>
+      <div class="header-right" id="hdr2"></div>
+    </div>
+    <div class="pedido-info" id="info2"></div>
+    <div class="cliente-box">
+      <div class="section-title">Dados do Cliente</div>
+      <div id="cliente2"></div>
+    </div>
+    <table id="table2"></table>
+    <div class="recebimento">
+      <div class="recebimento-title">✅ Recebi o Produto em Boas Condições</div>
+      <div class="fields-row">
+        <div class="field-line">
+          <div class="field-label">Nome Legível</div>
+          <div class="field-input"></div>
+        </div>
+        <div class="field-line">
+          <div class="field-label">CPF</div>
+          <div class="field-input"></div>
+        </div>
+      </div>
+      <div class="fields-row">
+        <div class="field-line">
+          <div class="field-label">RG (opcional)</div>
+          <div class="field-input"></div>
+        </div>
+        <div class="field-line">
+          <div class="field-label">Data de Recebimento</div>
+          <div class="field-input"></div>
+        </div>
+      </div>
+      <div class="field-line">
+        <div class="field-label">Assinatura</div>
+        <div class="assinatura-box"></div>
+      </div>
+    </div>
+    <div class="footer-note">Guarde esta via assinada para controle interno.</div>
+  </div>
+</div>
+
+<script>
+// Receber dados via query param ou diretamente
+function getOrder() {
+  const params = new URLSearchParams(window.location.search);
+  const data = params.get('data');
+  if (data) {
+    try { return JSON.parse(decodeURIComponent(data)); } catch(_) {}
+  }
+  // Dados de exemplo para preview
+  return {
+    id: 999,
+    customer_name: 'João da Silva Exemplo',
+    phone_digits: '67999990000',
+    address_line: 'Rua das Orquídeas, 123',
+    bairro: 'Jardim Noroeste',
+    complemento: 'Casa',
+    referencia: 'Próximo ao Mercado X',
+    items_json: JSON.stringify([
+      { name: 'P13 Gás 13kg', qty: 2, price: 45 },
+      { name: 'Água 20L', qty: 1, price: 8 },
+    ]),
+    total_value: 98,
+    driver_name_cache: 'Pedro Entregador',
+    created_at: Math.floor(Date.now() / 1000),
+    notes: 'Troco para R$ 100',
+  };
+}
+
+function buildVia(order, suffix) {
+  const items = JSON.parse(order.items_json || '[]');
+  const dataHora = order.created_at
+    ? new Date(order.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })
+    : new Date().toLocaleString('pt-BR');
+
+  document.getElementById(`hdr${suffix}`).innerHTML = `
+    <div>Pedido Nº <strong style="font-size:18px;color:#f97316">#${order.id}</strong></div>
+    <div>Data/Hora: ${dataHora}</div>
+    ${order.driver_name_cache ? `<div>Entregador: <strong>${order.driver_name_cache}</strong></div>` : ''}
+  `;
+
+  document.getElementById(`info${suffix}`).innerHTML = `
+    <div>Pedido <strong>#${order.id}</strong></div>
+    <div>${dataHora}</div>
+    ${order.driver_name_cache ? `<div>Entregador: ${order.driver_name_cache}</div>` : ''}
+  `;
+
+  document.getElementById(`cliente${suffix}`).innerHTML = `
+    <div class="cliente-line">👤 <span>Nome:</span> ${order.customer_name}</div>
+    <div class="cliente-line">📞 <span>Telefone:</span> ${order.phone_digits || '—'}</div>
+    <div class="cliente-line">📍 <span>Endereço:</span> ${order.address_line}${order.bairro ? ', ' + order.bairro : ''} — Campo Grande/MS</div>
+    ${order.complemento ? `<div class="cliente-line">🏠 <span>Complemento:</span> ${order.complemento}</div>` : ''}
+    ${order.referencia  ? `<div class="cliente-line">📌 <span>Referência:</span> ${order.referencia}</div>` : ''}
+    ${order.notes ? `<div class="cliente-line">📝 <span>Obs:</span> ${order.notes}</div>` : ''}
+  `;
+
+  let total = 0;
+  const rows = items.map(i => {
+    const sub = (i.price || 0) * i.qty;
+    total += sub;
+    return `<tr>
+      <td>${i.name}</td>
+      <td style="text-align:center">${i.qty}</td>
+      <td style="text-align:right">R$ ${(i.price || 0).toFixed(2)}</td>
+      <td style="text-align:right">R$ ${sub.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  const finalTotal = order.total_value || total;
+  document.getElementById(`table${suffix}`).innerHTML = `
+    <thead>
+      <tr>
+        <th>Produto</th>
+        <th style="text-align:center;width:50px">Qtd</th>
+        <th style="text-align:right;width:80px">Unit</th>
+        <th style="text-align:right;width:90px">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="3">TOTAL</td>
+        <td style="text-align:right">R$ ${finalTotal.toFixed(2)}</td>
+      </tr>
+    </tfoot>
+  `;
+}
+
+const order = getOrder();
+buildVia(order, '1');
+buildVia(order, '2');
+document.title = `Recibo #${order.id} — MoskoGás`;
+</script>
+</body>
+</html>

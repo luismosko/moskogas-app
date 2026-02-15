@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Config — MoskoGás</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .container { max-width: 640px; margin: 0 auto; padding: 20px; }
+  h1 { color: #1e293b; font-size: 22px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .card h2 { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 14px; }
+  label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 4px; text-transform: uppercase; }
+  input, select { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; margin-bottom: 12px; }
+  input:focus { outline: none; border-color: #f97316; }
+  .btn { padding: 11px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
+  .btn-orange { background: #f97316; color: #fff; width: 100%; font-size: 16px; padding: 14px; }
+  .btn-gray   { background: #e2e8f0; color: #1e293b; }
+  .btn-red    { background: #dc2626; color: #fff; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-top: 8px; }
+  .status.ok  { background: #dcfce7; color: #16a34a; }
+  .status.err { background: #fee2e2; color: #dc2626; }
+  .driver-row { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 6px; font-size: 14px; }
+  .driver-row span { flex: 1; }
+  .driver-row small { color: #64748b; font-size: 12px; }
+  table.drivers-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.drivers-tbl td, table.drivers-tbl th { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
+  table.drivers-tbl th { background: #f1f5f9; font-weight: 700; font-size: 11px; text-transform: uppercase; color: #64748b; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>⚙️ Configurações</h1>
+
+  <!-- API Key -->
+  <div class="card">
+    <h2>🔑 Chave de Acesso (APP_API_KEY)</h2>
+    <label>Chave configurada no Cloudflare Worker</label>
+    <input type="password" id="apiKeyInput" placeholder="Cole a APP_API_KEY aqui">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-orange" onclick="saveKey()">Salvar Chave</button>
+      <button class="btn btn-green" onclick="testHealth()">🔍 Testar Conexão</button>
+    </div>
+    <div id="health-status"></div>
+  </div>
+
+  <!-- Bling OAuth -->
+  <div class="card">
+    <h2>🔗 Autorização Bling</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:12px">Conecte sua conta Bling para sincronizar contatos e pedidos. Você precisa ter o APP configurado no Bling com a URL de callback apontando para <code>https://api.moskogas.com.br/bling/oauth/callback</code></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="https://api.moskogas.com.br/bling/oauth/start" target="_blank" class="btn btn-green" style="display:inline-block;text-decoration:none">🚀 Autorizar no Bling</a>
+      <button class="btn btn-gray" onclick="testBling()">📡 Testar Token Bling</button>
+    </div>
+    <div id="bling-status"></div>
+  </div>
+
+  <!-- Entregadores -->
+  <div class="card">
+    <h2>🚚 Entregadores</h2>
+    <div id="drivers-list" style="margin-bottom:14px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div>
+        <label>Nome</label>
+        <input id="dName" placeholder="Nome do entregador">
+      </div>
+      <div>
+        <label>Telefone (5567999...)</label>
+        <input id="dPhone" placeholder="5567999990001">
+      </div>
+    </div>
+    <button class="btn btn-orange" onclick="addDriver()">➕ Adicionar Entregador</button>
+  </div>
+
+  <!-- Teste IzChat -->
+  <div class="card">
+    <h2>📱 Teste IzChat WhatsApp</h2>
+    <label>Número para teste (ex: 5567999990000)</label>
+    <input id="testTo" placeholder="5567999990000">
+    <button class="btn btn-green" onclick="testIzChat()">📲 Enviar Mensagem Teste</button>
+    <div id="izchat-status"></div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+// Carregar chave salva
+document.getElementById('apiKeyInput').value = localStorage.getItem('mg_api_key') || '';
+
+function saveKey() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  localStorage.setItem('mg_api_key', k);
+  toast('✅ Chave salva!');
+}
+
+async function testHealth() {
+  const el = document.getElementById('health-status');
+  el.innerHTML = '<div class="status">⏳ Testando...</div>';
+  try {
+    const r = await fetch('https://api.moskogas.com.br/health');
+    const d = await r.json();
+    el.innerHTML = `<div class="status ok">✅ API ok — DB: ${d.hasDB ? '✅' : '❌'} | Bucket: ${d.hasBucket ? '✅' : '❌'}</div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function testBling() {
+  const el = document.getElementById('bling-status');
+  el.innerHTML = '<div class="status">⏳ Testando token Bling...</div>';
+  try {
+    const r = await fetch('https://api.moskogas.com.br/bling/ping');
+    const d = await r.json();
+    el.innerHTML = d.ok
+      ? '<div class="status ok">✅ Bling conectado!</div>'
+      : `<div class="status err">❌ Erro ${d.status} — <a href="https://api.moskogas.com.br/bling/oauth/start" target="_blank">Re-autorizar</a></div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function testIzChat() {
+  const to = document.getElementById('testTo').value.trim();
+  const el = document.getElementById('izchat-status');
+  if (!to) { toast('Informe o número', 'error'); return; }
+  el.innerHTML = '<div class="status">⏳ Enviando...</div>';
+  try {
+    const r = await fetch(`https://api.moskogas.com.br/izchat/teste?to=${to}`);
+    const d = await r.json();
+    el.innerHTML = d.ok
+      ? '<div class="status ok">✅ Mensagem enviada!</div>'
+      : `<div class="status err">❌ ${JSON.stringify(d)}</div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function loadDrivers() {
+  if (!apiKey()) { document.getElementById('drivers-list').innerHTML = '<p style="color:#94a3b8;font-size:13px">Salve a chave de acesso primeiro.</p>'; return; }
+  const drivers = await api('/api/drivers').catch(() => []);
+  const el = document.getElementById('drivers-list');
+  if (!drivers.length) {
+    el.innerHTML = '<p style="color:#94a3b8;font-size:13px">Nenhum entregador cadastrado.</p>';
+    return;
+  }
+  el.innerHTML = `<table class="drivers-tbl">
+    <thead><tr><th>Nome</th><th>Telefone</th><th>Ativo</th><th></th></tr></thead>
+    <tbody>
+    ${drivers.map(d => `
+      <tr>
+        <td><strong>${d.name}</strong></td>
+        <td>${d.phone_e164}</td>
+        <td>${d.active ? '✅' : '❌'}</td>
+        <td><button class="btn btn-gray" style="padding:4px 8px;font-size:12px" onclick="toggleDriver(${d.id}, ${d.active})">
+          ${d.active ? 'Desativar' : 'Ativar'}
+        </button></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function addDriver() {
+  const name  = document.getElementById('dName').value.trim();
+  const phone = document.getElementById('dPhone').value.trim().replace(/\D/g, '');
+  if (!name || !phone) { toast('Nome e telefone obrigatórios', 'error'); return; }
+  try {
+    await api('/api/drivers', { method: 'POST', body: JSON.stringify({ name, phone_e164: phone }) });
+    toast('✅ Entregador adicionado!');
+    document.getElementById('dName').value = '';
+    document.getElementById('dPhone').value = '';
+    loadDrivers();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleDriver(id, active) {
+  try {
+    await api(`/api/drivers/${id}`, { method: 'PATCH', body: JSON.stringify({ active: !active }) });
+    loadDrivers();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+loadDrivers();
+</script>
+</body>
+</html>

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestão de Pedidos — MoskoGás</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; }
+  .toolbar { background: #fff; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .toolbar input, .toolbar select { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
+  .toolbar input:focus, .toolbar select:focus { outline: none; border-color: #f97316; }
+  .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-blue   { background: #2563eb; color: #fff; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .btn-gray   { background: #94a3b8; color: #fff; }
+  .btn-red    { background: #dc2626; color: #fff; }
+  .btn:hover { opacity: 0.85; }
+  table { width: 100%; border-collapse: collapse; background: #fff; }
+  th { background: #1e293b; color: #fff; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+  tr:hover td { background: #fafafa; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; }
+  select.driver-sel { border: 2px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; max-width: 130px; }
+  select.driver-sel:focus { outline: none; border-color: #f97316; }
+  .action-btns { display: flex; gap: 4px; flex-wrap: nowrap; }
+  .summary-bar { background: #1e293b; color: #fff; padding: 10px 16px; font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .summary-bar span strong { color: #f97316; }
+
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:14px; padding:24px; width:min(520px,95vw); max-height:90vh; overflow-y:auto; }
+  .modal h2 { font-size:18px; margin-bottom:16px; color:#1e293b; }
+  .modal label { display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; text-transform:uppercase; }
+  .modal select, .modal textarea, .modal input { width:100%; padding:10px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; margin-bottom:12px; }
+  .modal select:focus, .modal textarea:focus { outline:none; border-color:#f97316; }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+  .preview-msg { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; font-size:12px; white-space:pre-wrap; margin-bottom:12px; max-height:160px; overflow-y:auto; font-family:monospace; }
+  .order-summary { background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; margin-bottom:12px; line-height:1.8; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <input type="date" id="fDate" onchange="load()">
+  <select id="fStatus" onchange="load()">
+    <option value="">Todos status</option>
+    <option value="novo">🔴 Novo</option>
+    <option value="encaminhado">🟡 Encaminhado</option>
+    <option value="whatsapp_enviado">🟢 WhatsApp Enviado</option>
+    <option value="entregue">🔵 Entregue</option>
+    <option value="cancelado">⚫ Cancelado</option>
+  </select>
+  <select id="fDriver" onchange="load()">
+    <option value="">Todos entregadores</option>
+  </select>
+  <input type="text" id="fQ" placeholder="🔍 Busca..." oninput="load()" style="width:160px">
+  <button class="btn btn-orange" onclick="load()">🔄 Atualizar</button>
+  <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
+    <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
+  </label>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary-bar" id="summary-bar"></div>
+
+<!-- TABELA -->
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Hora</th>
+      <th>Cliente</th>
+      <th>Endereço</th>
+      <th>Itens</th>
+      <th>Total</th>
+      <th>Status</th>
+      <th>Entregador</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<!-- MODAL ENVIAR ENTREGADOR -->
+<div class="modal-overlay" id="modal-wa">
+  <div class="modal">
+    <h2>📱 Enviar para Entregador</h2>
+    <div class="order-summary" id="modal-order-summary"></div>
+    <label>Entregador *</label>
+    <select id="modal-driver"></select>
+    <label>Observação para o entregador</label>
+    <textarea id="modal-obs" rows="3" placeholder="Ex: Troco para R$ 100, ligar antes de chegar..."></textarea>
+    <div class="preview-msg" id="modal-preview" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal()">Cancelar</button>
+      <button class="btn" onclick="previewMsg()" style="background:#6366f1;color:#fff">👁 Prévia</button>
+      <button class="btn btn-green" onclick="sendWa()">📲 Enviar WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+checkApiKey();
+
+let drivers = [];
+let currentOrder = null;
+let autoTimer = null;
+
+// ── Init ──────────────────────────────────────────────────────
+document.getElementById('fDate').value = today();
+
+async function init() {
+  drivers = await api('/api/drivers').catch(() => []);
+  const sel = document.getElementById('fDriver');
+  sel.innerHTML = '<option value="">Todos entregadores</option>';
+  drivers.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+  load();
+}
+
+// ── Load orders ───────────────────────────────────────────────
+let loadTimer;
+async function load() {
+  clearTimeout(loadTimer);
+  loadTimer = setTimeout(_load, 150);
+}
+
+async function _load() {
+  const date     = document.getElementById('fDate').value;
+  const status   = document.getElementById('fStatus').value;
+  const driverId = document.getElementById('fDriver').value;
+  const q        = document.getElementById('fQ').value;
+
+  let url = `/api/orders/list?`;
+  if (date)     url += `&date=${date}`;
+  if (status)   url += `&status=${status}`;
+  if (driverId) url += `&driver_id=${driverId}`;
+  if (q)        url += `&q=${encodeURIComponent(q)}`;
+
+  const rows = await api(url).catch(() => []);
+  renderTable(rows);
+  renderSummary(rows);
+  document.getElementById('count-badge').textContent = `${rows.length} pedidos`;
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8">Nenhum pedido encontrado</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(o => {
+    const items = JSON.parse(o.items_json || '[]');
+    const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
+    const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
+    const hora  = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+
+    const driverOpts = `<option value="">Sem entregador</option>` +
+      drivers.map(d => `<option value="${d.id}" ${o.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
+
+    const canSendWa  = ['novo','encaminhado'].includes(o.status);
+    const canDeliver = ['whatsapp_enviado','encaminhado'].includes(o.status);
+    const canCancel  = !['cancelado','entregue'].includes(o.status);
+
+    return `
+    <tr id="row-${o.id}">
+      <td><strong>#${o.id}</strong></td>
+      <td>${hora}</td>
+      <td>
+        <div style="font-weight:700;color:#1e293b">${o.customer_name}</div>
+        <div style="font-size:11px;color:#64748b">${o.phone_digits || ''}</div>
+      </td>
+      <td>
+        <div style="font-size:12px">${o.address_line}</div>
+        <div style="font-size:11px;color:#64748b">${o.bairro || ''} ${o.referencia ? '• ' + o.referencia : ''}</div>
+      </td>
+      <td style="font-size:12px;max-width:160px">${itemsStr}</td>
+      <td style="font-weight:700;color:#1e293b">${total}</td>
+      <td>${statusBadge(o.status)}</td>
+      <td>
+        <select class="driver-sel" onchange="selectDriver(${o.id}, this.value)">
+          ${driverOpts}
+        </select>
+      </td>
+      <td>
+        <div class="action-btns">
+          ${canSendWa  ? `<button class="btn btn-green" style="font-size:11px;padding:5px 8px" onclick="openModal(${o.id})">📲 Msg</button>` : ''}
+          ${canDeliver ? `<button class="btn btn-blue"  style="font-size:11px;padding:5px 8px" onclick="markDelivered(${o.id})">✅ Entregue</button>` : ''}
+          ${canCancel  ? `<button class="btn btn-red"   style="font-size:11px;padding:5px 8px" onclick="cancelOrder(${o.id})">✕</button>` : ''}
+          <button class="btn btn-gray" style="font-size:11px;padding:5px 8px" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSummary(rows) {
+  const counts = { novo: 0, encaminhado: 0, whatsapp_enviado: 0, entregue: 0, cancelado: 0 };
+  let total = 0;
+  rows.forEach(r => { counts[r.status]++; total += r.total_value || 0; });
+
+  document.getElementById('summary-bar').innerHTML = `
+    <span>🔴 Novos: <strong>${counts.novo}</strong></span>
+    <span>🟡 Encaminhados: <strong>${counts.encaminhado}</strong></span>
+    <span>🟢 WhatsApp: <strong>${counts.whatsapp_enviado}</strong></span>
+    <span>🔵 Entregues: <strong>${counts.entregue}</strong></span>
+    <span>⚫ Cancelados: <strong>${counts.cancelado}</strong></span>
+    <span style="margin-left:auto">💰 Total: <strong>R$ ${total.toFixed(2)}</strong></span>`;
+}
+
+// ── Ações ─────────────────────────────────────────────────────
+async function selectDriver(orderId, driverId) {
+  if (!driverId) return;
+  try {
+    await api(`/api/order/${orderId}/select-driver`, { method: 'POST', body: JSON.stringify({ driver_id: parseInt(driverId) }) });
+    toast('✅ Entregador selecionado!');
+    setTimeout(load, 500);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function markDelivered(id) {
+  if (!confirm(`Marcar pedido #${id} como ENTREGUE?`)) return;
+  try {
+    await api(`/api/order/${id}/mark-delivered`, { method: 'POST' });
+    toast('✅ Pedido entregue!');
+    load();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function cancelOrder(id) {
+  if (!confirm(`Cancelar pedido #${id}?`)) return;
+  try {
+    await api(`/api/order/${id}/cancel`, { method: 'POST' });
+    toast('Pedido cancelado');
+    load();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Modal WhatsApp ────────────────────────────────────────────
+function openModal(orderId) {
+  // encontrar order no DOM
+  const rows = document.querySelectorAll('#tbody tr');
+  // re-buscar na API
+  api(`/api/order/${orderId}`).then(order => {
+    currentOrder = order;
+    const items = JSON.parse(order.items_json || '[]');
+    document.getElementById('modal-order-summary').innerHTML = `
+      <strong>Pedido #${order.id}</strong> — ${order.customer_name}<br>
+      📍 ${order.address_line}${order.bairro ? ', ' + order.bairro : ''}<br>
+      ${order.referencia ? '📌 Ref: ' + order.referencia + '<br>' : ''}
+      📦 ${items.map(i => i.qty + 'x ' + i.name).join(' | ')}
+    `;
+
+    const dSel = document.getElementById('modal-driver');
+    dSel.innerHTML = '<option value="">Selecione o entregador *</option>' +
+      drivers.map(d => `<option value="${d.id}" ${order.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
+
+    document.getElementById('modal-obs').value = '';
+    document.getElementById('modal-preview').style.display = 'none';
+    document.getElementById('modal-wa').classList.add('open');
+  }).catch(() => {
+    // fallback: abrir modal sem dados da API
+    currentOrder = { id: orderId };
+    document.getElementById('modal-wa').classList.add('open');
+  });
+}
+
+function closeModal() {
+  document.getElementById('modal-wa').classList.remove('open');
+  currentOrder = null;
+}
+
+function previewMsg() {
+  if (!currentOrder) return;
+  const obs = document.getElementById('modal-obs').value;
+  const items = JSON.parse(currentOrder.items_json || '[]');
+  const itemsList = items.map(i => `  • ${i.name} x${i.qty}`).join('\n') || '  (sem itens)';
+  const addr = `${currentOrder.address_line}${currentOrder.bairro ? ', ' + currentOrder.bairro : ''}, Campo Grande/MS`;
+  const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+
+  const msg = `🚚 *NOVA ENTREGA* — Pedido #${currentOrder.id}
+
+👤 Cliente: ${currentOrder.customer_name}
+📞 ${currentOrder.phone_digits || 'não informado'}
+
+📍 ${currentOrder.address_line}${currentOrder.bairro ? ' — ' + currentOrder.bairro : ''} — Campo Grande/MS${currentOrder.referencia ? '\nRef: ' + currentOrder.referencia : ''}
+
+📦 Itens:
+${itemsList}
+
+📝 Obs: ${obs || '—'}
+
+🗺️ ${mapsLink}`;
+
+  document.getElementById('modal-preview').textContent = msg;
+  document.getElementById('modal-preview').style.display = 'block';
+}
+
+async function sendWa() {
+  const driverId = document.getElementById('modal-driver').value;
+  const obs      = document.getElementById('modal-obs').value;
+  if (!driverId) { toast('Selecione um entregador!', 'error'); return; }
+
+  try {
+    await api(`/api/order/${currentOrder.id}/send-whatsapp`, {
+      method: 'POST',
+      body: JSON.stringify({ driver_id: parseInt(driverId), observation: obs }),
+    });
+    toast('✅ WhatsApp enviado!');
+    closeModal();
+    load();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Impressão ─────────────────────────────────────────────────
+function printOrder(order) {
+  const params = encodeURIComponent(JSON.stringify(order));
+  window.open(`print.html?data=${params}`, '_blank');
+}
+
+// ── Auto refresh ──────────────────────────────────────────────
+function toggleAuto() {
+  clearInterval(autoTimer);
+  if (document.getElementById('autoRefresh').checked) {
+    autoTimer = setInterval(load, 30000);
+  }
+}
+
+// ── Fechar modal clicando fora ────────────────────────────────
+document.getElementById('modal-wa').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+init();
+</script>
+</body>
+</html>
