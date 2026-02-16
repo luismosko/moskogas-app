@@ -73,10 +73,18 @@
       </div>
     </div>
     <div class="row" style="margin-bottom:12px">
-      <label>Endereço (Rua + Número) *</label>
-      <div class="street-wrap">
-        <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas, 123" autocomplete="off" oninput="streetAC(this,'cBairro','cAddr-ac')">
-        <div id="cAddr-ac" class="street-ac" style="display:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 100px;gap:8px">
+        <div>
+          <label>Rua *</label>
+          <div class="street-wrap">
+            <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas" autocomplete="off" oninput="streetAC(this,'cBairro','cAddr-ac')">
+            <div id="cAddr-ac" class="street-ac" style="display:none"></div>
+          </div>
+        </div>
+        <div>
+          <label>Número *</label>
+          <input id="cNum" type="text" placeholder="123" autocomplete="off">
+        </div>
       </div>
     </div>
     <div class="row row-2">
@@ -190,7 +198,12 @@ async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
   document.getElementById('cName').value   = c.name || c.customer_name || '';
   document.getElementById('cPhone').value  = c.phone_digits || '';
-  document.getElementById('cAddr').value   = c.address_line || '';
+  // Preenche rua e numero separados
+  const _al = c.address_line || '';
+  const _numMatch = _al.match(/,\s*(\d+\S*)$/);
+  document.getElementById('cAddr').value = _numMatch ? _al.slice(0, _numMatch.index) : _al;
+  const _numEl = document.getElementById('cNum');
+  if (_numEl) _numEl.value = _numMatch ? _numMatch[1] : '';
   document.getElementById('cBairro').value = c.bairro || '';
   document.getElementById('cComp').value   = c.complemento || '';
   document.getElementById('cRef').value    = c.referencia || '';
@@ -204,7 +217,13 @@ async function selectCustomer(i) {
       const det = await api(`/api/customer/bling-detail/${c.bling_contact_id}`);
       if (det && !det.error) {
         if (det.phone_digits) document.getElementById('cPhone').value  = det.phone_digits;
-        if (det.address_line) document.getElementById('cAddr').value   = det.address_line;
+        if (det.address_line) {
+          const _bl = det.address_line;
+          const _bm = _bl.match(/,\s*(\d+\S*)$/);
+          document.getElementById('cAddr').value = _bm ? _bl.slice(0, _bm.index) : _bl;
+          const _ne = document.getElementById('cNum');
+          if (_ne) _ne.value = _bm ? _bm[1] : '';
+        }
         if (det.bairro)       document.getElementById('cBairro').value = det.bairro;
         if (det.complemento)  document.getElementById('cComp').value   = det.complemento;
       }
@@ -282,7 +301,10 @@ function filterAddresses(q) {
 
 // ── Aplicar endereço selecionado ─────────────────────────────
 function applyAddress(a) {
-  document.getElementById('cAddr').value   = a.address_line || '';
+  const _aa = a.address_line || '';
+  const _am = _aa.match(/,\s*(\d+\S*)$/);
+  document.getElementById('cAddr').value = _am ? _aa.slice(0, _am.index) : _aa;
+  const _an = document.getElementById('cNum'); if (_an) _an.value = _am ? _am[1] : '';
   document.getElementById('cBairro').value = a.bairro || '';
   document.getElementById('cComp').value   = a.complemento || '';
   document.getElementById('cRef').value    = a.referencia || '';
@@ -358,14 +380,21 @@ async function streetAC(input, bairroId, dropId) {
         seen.add(road); return true;
       });
       
-      drop.innerHTML = unique.map(r => {
+      drop.innerHTML = unique.map((r,idx) => {
         const road    = r.address.road || r.address.pedestrian || r.address.path || '';
         const bairro  = r.address.suburb || r.address.neighbourhood || r.address.quarter || '';
         const cep     = r.address.postcode || '';
-        return `<div class="street-ac-item" 
+        const extra   = [bairro, cep].filter(Boolean).join(' · ');
+        return `<div class="street-ac-item"
+          style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;line-height:1.4"
+          onmouseenter="this.style.background='#ede9fe'"
+          onmouseleave="this.style.background=''"
           onclick="selectStreet('${road.replace(/'/g,"\'")}','${bairro.replace(/'/g,"\'")}','${input.id}','${bairroId}','${dropId}')">
-          <div class="street-name">${road}</div>
-          <div class="street-bairro">${[bairro,cep].filter(Boolean).join(' · ')}</div>
+          <div>
+            <div style="font-weight:700;color:#1e293b">${road}</div>
+            ${extra ? `<div style="font-size:11px;color:#6366f1;margin-top:2px">${extra}</div>` : ''}
+          </div>
+          <div style="color:#94a3b8;font-size:11px;flex-shrink:0;margin-left:8px">↵ selecionar</div>
         </div>`;
       }).join('');
     } catch(e) {
@@ -381,8 +410,11 @@ function selectStreet(road, bairro, inputId, bairroId, dropId) {
   if (bairroEl && !bairroEl.value) bairroEl.value = bairro;
   document.getElementById(dropId).style.display = 'none';
   _acActiveIdx = -1;
-  // Move foco para o próximo campo
-  inp.focus();
+  // Foca no campo Número correspondente
+  const numMap = { 'cAddr': 'cNum', 'm-addr': 'm-num' };
+  const numId = numMap[inputId];
+  const numEl = numId ? document.getElementById(numId) : null;
+  if (numEl) { setTimeout(() => numEl.focus(), 50); }
 }
 
 // Fecha dropdown ao clicar fora
@@ -411,7 +443,7 @@ function switchAddrTab(tab) {
 function showAddInModal() { switchAddrTab('novo'); }
 function hideAddInModal() {
   switchAddrTab('buscar');
-  ['m-obs','m-addr','m-bairro','m-comp','m-ref'].forEach(id => {
+  ['m-obs','m-addr','m-num','m-bairro','m-comp','m-ref'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
 }
@@ -422,10 +454,11 @@ async function saveAddrInModal() {
   document.getElementById('m-obs').style.borderColor  = '';
   document.getElementById('m-addr').style.borderColor = '';
   if (!obs)  { document.getElementById('m-obs').style.borderColor  = '#dc2626'; document.getElementById('m-obs').focus(); return; }
-  if (!line) { document.getElementById('m-addr').style.borderColor = '#dc2626'; document.getElementById('m-addr').focus(); return; }
+  if (!mRua) { document.getElementById('m-addr').style.borderColor = '#dc2626'; document.getElementById('m-addr').focus(); return; }
   if (!currentPhone) { showToast('❌ Selecione um cliente primeiro'); return; }
 
-  const btn = document.querySelector('#add-addr-form-modal button[onclick="saveAddrInModal()"]');
+  const btn = document.querySelector('button[onclick="saveAddrInModal()"]');
+  if (btn && btn.disabled) return; // já está salvando - ignora cliques extras
   const origText = btn ? btn.textContent : '';
   if (btn) { btn.textContent = '⏳ Salvando...'; btn.disabled = true; }
 
@@ -562,7 +595,9 @@ function renderItems() {
 // ── Salvar ────────────────────────────────────────────────────
 async function saveOrder() {
   const name  = document.getElementById('cName').value.trim();
-  const addr  = document.getElementById('cAddr').value.trim();
+  const addrRua = document.getElementById('cAddr').value.trim();
+  const addrNum = document.getElementById('cNum') ? document.getElementById('cNum').value.trim() : '';
+  const addr    = addrNum ? addrRua + ', ' + addrNum : addrRua;
   if (!name) { toast('Nome do cliente obrigatório', 'error'); return; }
   if (!addr) { toast('Endereço obrigatório', 'error'); return; }
 
@@ -608,7 +643,7 @@ async function saveOrder() {
       document.getElementById('addr-selected-label').textContent = '';
       document.getElementById('addr-count-badge').textContent = '0';
       allAddresses = []; currentPhone = '';
-      ['cName','cPhone','cAddr','cBairro','cComp','cRef','notes','search'].forEach(id => {
+      ['cName','cPhone','cAddr','cNum','cBairro','cComp','cRef','notes','search'].forEach(id => {
         document.getElementById(id).value = '';
       });
       items = [];
@@ -670,13 +705,20 @@ renderItems();
         <input id="m-obs" type="text" placeholder="Ex: Escola Municipal X, Clínica Saúde Plena"
           style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
       </div>
-      <div style="margin-bottom:10px">
-        <label style="font-size:11px;font-weight:700;color:#64748b">RUA + NÚMERO *</label>
-        <div class="street-wrap">
-          <input id="m-addr" type="text" placeholder="Rua das Flores, 100" autocomplete="off"
-            oninput="streetAC(this,'m-bairro','m-addr-ac')"
+      <div style="margin-bottom:10px;display:grid;grid-template-columns:1fr 90px;gap:8px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b">RUA *</label>
+          <div class="street-wrap">
+            <input id="m-addr" type="text" placeholder="Rua das Flores" autocomplete="off"
+              oninput="streetAC(this,'m-bairro','m-addr-ac')"
+              style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+            <div id="m-addr-ac" class="street-ac" style="display:none"></div>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b">NÚMERO *</label>
+          <input id="m-num" type="text" placeholder="100"
             style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-          <div id="m-addr-ac" class="street-ac" style="display:none"></div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
