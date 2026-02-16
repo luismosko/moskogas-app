@@ -43,6 +43,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.1 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.7</span></h1>
 
@@ -388,11 +389,114 @@ function selectStreet(road, bairro, inputId, bairroId, dropId) {
   if (bairroEl && !bairroEl.value) bairroEl.value = bairro;
   document.getElementById(dropId).style.display = 'none';
   _acActiveIdx = -1;
-  // Foca no campo Número correspondente
+
+  // Sempre busca bairros — rua pode passar por vários bairros (ex: Afonso Pena)
+  if (bairroEl) fetchBairrosParaRua(road, bairroEl);
+
+  // Foca no campo Número
   const numMap = { 'cAddr': 'cNum', 'm-addr': 'm-num' };
   const numId = numMap[inputId];
   const numEl = numId ? document.getElementById(numId) : null;
-  if (numEl) { setTimeout(() => numEl.focus(), 50); }
+  if (numEl && !bairroEl) { setTimeout(() => numEl.focus(), 50); }
+}
+
+// Busca bairros da rua no Nominatim via Worker e mostra seletor se houver mais de um
+async function fetchBairrosParaRua(road, bairroEl) {
+  // Mostra indicador de carregamento no campo bairro
+  const prev = bairroEl.placeholder;
+  bairroEl.placeholder = '⏳ Buscando bairros...';
+  bairroEl.readOnly = true;
+
+  // Remove seletor anterior se existir
+  const oldSel = document.getElementById('bairro-picker');
+  if (oldSel) oldSel.remove();
+
+  try {
+    const r = await api(`/api/streets/bairros?name=${encodeURIComponent(road)}`);
+    const bairros = r.bairros || [];
+
+    bairroEl.readOnly = false;
+    bairroEl.placeholder = prev;
+
+    if (bairros.length === 0) {
+      // Nenhum bairro encontrado — deixa livre para digitar
+      return;
+    }
+
+    if (bairros.length === 1) {
+      // Só um bairro — preenche automaticamente
+      bairroEl.value = bairros[0];
+      // Foca no número
+      const numMap = { 'cBairro': 'cNum', 'm-bairro': 'm-num' };
+      const numId = numMap[bairroEl.id];
+      const numEl = numId ? document.getElementById(numId) : null;
+      if (numEl) setTimeout(() => numEl.focus(), 50);
+      return;
+    }
+
+    // Múltiplos bairros — mostra dropdown para escolher
+    const picker = document.createElement('div');
+    picker.id = 'bairro-picker';
+    picker.style.cssText = `
+      position:absolute; z-index:9999; background:#fff;
+      border:2px solid #6366f1; border-radius:10px;
+      box-shadow:0 8px 24px rgba(0,0,0,0.15);
+      min-width:260px; max-width:360px; overflow:hidden;
+      font-family:system-ui,sans-serif;
+    `;
+
+    picker.innerHTML = `
+      <div style="background:#6366f1;color:#fff;padding:8px 12px;font-size:12px;font-weight:700;">
+        📍 ${road} — qual bairro?
+      </div>
+      ${bairros.map(b => `
+        <div onclick="chooseBairro('${b.replace(/'/g,"\'")}','${bairroEl.id}')"
+          style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;color:#1e293b;"
+          onmouseenter="this.style.background='#ede9fe'"
+          onmouseleave="this.style.background=''">
+          ${b}
+        </div>`).join('')}
+      <div onclick="document.getElementById('bairro-picker').remove();document.getElementById('${bairroEl.id}').readOnly=false;document.getElementById('${bairroEl.id}').focus();"
+        style="padding:8px 14px;cursor:pointer;font-size:12px;color:#94a3b8;text-align:center;"
+        onmouseenter="this.style.background='#f8fafc'"
+        onmouseleave="this.style.background=''">
+        ✏️ Digitar manualmente
+      </div>
+    `;
+
+    // Posiciona abaixo do campo bairro
+    const rect = bairroEl.getBoundingClientRect();
+    picker.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+    picker.style.left = rect.left + 'px';
+    document.body.appendChild(picker);
+
+    // Fecha ao clicar fora
+    setTimeout(() => {
+      document.addEventListener('click', function closePicker(e) {
+        if (!picker.contains(e.target) && e.target !== bairroEl) {
+          picker.remove();
+          bairroEl.readOnly = false;
+          document.removeEventListener('click', closePicker);
+        }
+      });
+    }, 100);
+
+  } catch(_) {
+    bairroEl.readOnly = false;
+    bairroEl.placeholder = prev;
+  }
+}
+
+function chooseBairro(bairro, bairroElId) {
+  const bairroEl = document.getElementById(bairroElId);
+  if (bairroEl) { bairroEl.value = bairro; bairroEl.readOnly = false; }
+  const picker = document.getElementById('bairro-picker');
+  if (picker) picker.remove();
+  // Foca no número
+  const numMap = { 'cBairro': 'cNum', 'm-bairro': 'm-num' };
+  const numId = numMap[bairroElId];
+  const numEl = numId ? document.getElementById(numId) : null;
+  if (numEl) setTimeout(() => numEl.focus(), 50);
 }
 
 // Fecha dropdown ao clicar fora
