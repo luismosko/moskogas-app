@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -235,17 +234,14 @@ async function loadSavedAddresses(phone) {
 function openAddrModal() {
   document.getElementById('addr-search-input').value = '';
   renderAddrList(allAddresses);
-  hideAddInModal();
   document.getElementById('addr-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('addr-search-input').focus(), 100);
+  // Sempre abre na aba Buscar
+  setTimeout(() => switchAddrTab('buscar'), 50);
 }
 function closeAddrModal() {
   document.getElementById('addr-modal').style.display = 'none';
 }
-document.addEventListener('click', e => {
-  const m = document.getElementById('addr-modal');
-  if (m && m.style.display === 'flex' && e.target === m) closeAddrModal();
-});
+// addr-modal: fecha apenas pelo botão X
 
 // ── Renderiza lista no modal ─────────────────────────────────
 function renderAddrList(list) {
@@ -396,15 +392,28 @@ document.addEventListener('click', e => {
   }
 });
 
-function showAddInModal() {
-  document.getElementById('add-addr-section').style.display = 'none';
-  document.getElementById('add-addr-form-modal').style.display = 'block';
-  document.getElementById('m-obs').focus();
+function switchAddrTab(tab) {
+  const isBuscar = tab === 'buscar';
+  document.getElementById('panel-buscar').style.display = isBuscar ? 'flex' : 'none';
+  document.getElementById('panel-novo').style.display   = isBuscar ? 'none' : 'block';
+  const tabB = document.getElementById('tab-buscar');
+  const tabN = document.getElementById('tab-novo');
+  tabB.style.background = isBuscar ? '#6366f1' : '#f1f5f9';
+  tabB.style.color      = isBuscar ? '#fff' : '#64748b';
+  tabN.style.background = isBuscar ? '#f1f5f9' : '#6366f1';
+  tabN.style.color      = isBuscar ? '#64748b' : '#fff';
+  if (isBuscar) {
+    document.getElementById('addr-search-input').focus();
+  } else {
+    document.getElementById('m-obs').focus();
+  }
 }
+function showAddInModal() { switchAddrTab('novo'); }
 function hideAddInModal() {
-  document.getElementById('add-addr-section').style.display = 'block';
-  document.getElementById('add-addr-form-modal').style.display = 'none';
-  ['m-obs','m-addr','m-bairro','m-comp','m-ref'].forEach(id => document.getElementById(id).value = '');
+  switchAddrTab('buscar');
+  ['m-obs','m-addr','m-bairro','m-comp','m-ref'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
 }
 
 async function saveAddrInModal() {
@@ -446,7 +455,7 @@ async function saveAddrInModal() {
     document.getElementById('addr-count-badge').textContent = allAddresses.length;
     document.getElementById('addr-search-input').value = '';
     renderAddrList(allAddresses);
-    hideAddInModal();
+    hideAddInModal(); // volta para aba Buscar e limpa campos
   } catch(e) {
     console.error('Erro saveAddrInModal:', e);
     showToast('❌ Erro: ' + (e.message || 'falha ao salvar'));
@@ -620,80 +629,85 @@ renderItems();
 
 <!-- ── MODAL ENDEREÇOS ────────────────────────────────────────── -->
 <div id="addr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:16px;width:min(94vw,560px);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-    
+  <div style="background:#fff;border-radius:16px;width:min(94vw,560px);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">
+
     <!-- Header -->
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:2px solid #e2e8f0">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:2px solid #e2e8f0;flex-shrink:0">
       <div>
-        <div style="font-size:16px;font-weight:800;color:#1e293b">📍 Endereços de Entrega</div>
-        <div id="modal-client-name" style="font-size:12px;color:#6366f1;margin-top:2px"></div>
+        <div style="font-size:15px;font-weight:800;color:#1e293b">📍 Endereços de Entrega</div>
+        <div id="modal-client-name" style="font-size:12px;color:#6366f1;margin-top:1px"></div>
       </div>
-      <button onclick="closeAddrModal()" style="background:#f1f5f9;border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer">×</button>
+      <button onclick="closeAddrModal()" style="background:#f1f5f9;border:none;border-radius:8px;width:34px;height:34px;font-size:20px;cursor:pointer;line-height:1">×</button>
     </div>
 
-    <!-- Busca -->
-    <div style="padding:12px 20px;border-bottom:1px solid #f1f5f9">
-      <input id="addr-search-input" type="text" placeholder="🔍 Buscar por nome da unidade ou rua..."
-        oninput="filterAddresses(this.value)"
-        style="width:100%;padding:9px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none"
-        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+    <!-- Tabs -->
+    <div style="display:flex;border-bottom:2px solid #e2e8f0;flex-shrink:0">
+      <button id="tab-buscar" onclick="switchAddrTab('buscar')"
+        style="flex:1;padding:10px;border:none;background:#6366f1;color:#fff;font-size:13px;font-weight:700;cursor:pointer;border-radius:0">
+        🔍 Buscar endereço
+      </button>
+      <button id="tab-novo" onclick="switchAddrTab('novo')"
+        style="flex:1;padding:10px;border:none;background:#f1f5f9;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;border-radius:0 0 0 0">
+        + Novo endereço
+      </button>
     </div>
 
-    <!-- Lista de endereços -->
-    <div id="addr-modal-list" style="flex:1;overflow-y:auto;padding:12px 20px"></div>
+    <!-- Painel BUSCAR -->
+    <div id="panel-buscar" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div style="padding:12px 20px;flex-shrink:0">
+        <input id="addr-search-input" type="text" placeholder="🔍 Digite nome da unidade ou rua..."
+          oninput="filterAddresses(this.value)" autocomplete="off"
+          style="width:100%;padding:9px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none"
+          onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <div id="addr-modal-list" style="flex:1;overflow-y:auto;padding:0 20px 12px"></div>
+    </div>
 
-    <!-- Footer: adicionar novo -->
-    <div style="padding:12px 20px;border-top:2px solid #e2e8f0">
-      <div id="add-addr-section">
-        <button type="button" onclick="showAddInModal()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;width:100%">
-          + Cadastrar novo endereço para este cliente
+    <!-- Painel NOVO -->
+    <div id="panel-novo" style="display:none;overflow-y:auto;padding:16px 20px;flex:1">
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:#64748b">NOME / UNIDADE *</label>
+        <input id="m-obs" type="text" placeholder="Ex: Escola Municipal X, Clínica Saúde Plena"
+          style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:#64748b">RUA + NÚMERO *</label>
+        <div class="street-wrap">
+          <input id="m-addr" type="text" placeholder="Rua das Flores, 100" autocomplete="off"
+            oninput="streetAC(this,'m-bairro','m-addr-ac')"
+            style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+          <div id="m-addr-ac" class="street-ac" style="display:none"></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b">BAIRRO</label>
+          <input id="m-bairro" type="text" placeholder="Jardim Noroeste"
+            style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b">COMPLEMENTO</label>
+          <input id="m-comp" type="text" placeholder="Sala 2, Bloco A"
+            style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:11px;font-weight:700;color:#64748b">PONTO DE REFERÊNCIA</label>
+        <input id="m-ref" type="text" placeholder="Próximo ao semáforo"
+          style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="saveAddrInModal()"
+          style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;flex:1">
+          💾 Salvar endereço
+        </button>
+        <button type="button" onclick="switchAddrTab('buscar')"
+          style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 16px;font-size:13px;cursor:pointer">
+          Cancelar
         </button>
       </div>
-      <div id="add-addr-form-modal" style="display:none">
-        <div style="font-size:13px;font-weight:700;color:#6366f1;margin-bottom:10px">Novo Endereço</div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px;font-weight:700;color:#64748b">NOME / UNIDADE *</label>
-          <input id="m-obs" type="text" placeholder="Ex: Escola Municipal X, Clínica Saúde Plena" 
-            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-        </div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px;font-weight:700;color:#64748b">RUA + NÚMERO *</label>
-          <div class="street-wrap">
-            <input id="m-addr" type="text" placeholder="Rua das Flores, 100" autocomplete="off"
-              oninput="streetAC(this,'m-bairro','m-addr-ac')"
-              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-            <div id="m-addr-ac" class="street-ac" style="display:none"></div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div>
-            <label style="font-size:11px;font-weight:700;color:#64748b">BAIRRO</label>
-            <input id="m-bairro" type="text" placeholder="Jardim Noroeste" 
-              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-          </div>
-          <div>
-            <label style="font-size:11px;font-weight:700;color:#64748b">COMPLEMENTO</label>
-            <input id="m-comp" type="text" placeholder="Sala 2, Bloco A" 
-              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-          </div>
-        </div>
-        <div style="margin-bottom:10px">
-          <label style="font-size:11px;font-weight:700;color:#64748b">PONTO DE REFERÊNCIA</label>
-          <input id="m-ref" type="text" placeholder="Próximo ao semáforo" 
-            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-        </div>
-        <div style="display:flex;gap:8px">
-          <button type="button" onclick="saveAddrInModal()" 
-            style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;flex:1">
-            💾 Salvar endereço
-          </button>
-          <button type="button" onclick="hideAddInModal()" 
-            style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer">
-            Cancelar
-          </button>
-        </div>
-      </div>
     </div>
+
   </div>
 </div>
 
