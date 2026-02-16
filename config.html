@@ -202,40 +202,41 @@ async function checkStreetsCount() {
 }
 
 async function importStreets() {
-  const btn = document.getElementById('btnImportStreets');
-  const prog = document.getElementById('streetsProgress');
-  const bar = document.getElementById('streetsBar');
-  const msg = document.getElementById('streetsMsg');
+  const btn    = document.getElementById('btnImportStreets');
+  const prog   = document.getElementById('streetsProgress');
+  const bar    = document.getElementById('streetsBar');
+  const msg    = document.getElementById('streetsMsg');
   const status = document.getElementById('streetsStatus');
 
   btn.disabled = true;
   btn.textContent = '⏳ Importando...';
   prog.style.display = 'block';
   status.textContent = '';
+  bar.style.background = '#6366f1';
 
-  // Simula progresso enquanto espera (request pode demorar ~30s)
-  let pct = 0;
-  const ticker = setInterval(() => {
-    pct = Math.min(pct + 2, 90);
+  function setProgress(pct, txt) {
     bar.style.width = pct + '%';
-    if (pct < 30) msg.textContent = 'Conectando ao OpenStreetMap...';
-    else if (pct < 60) msg.textContent = 'Baixando ruas de Campo Grande...';
-    else msg.textContent = 'Salvando no banco local...';
-  }, 600);
+    msg.textContent = txt;
+  }
 
   try {
+    setProgress(10, '🌐 Buscando ruas via OpenStreetMap (Worker)...');
+
+    // Worker faz o fetch do Overpass (sem CORS) e salva direto no D1
     const r = await api('/api/streets/import', { method: 'POST' });
-    clearInterval(ticker);
-    bar.style.width = '100%';
-    msg.textContent = `✅ ${r.total?.toLocaleString('pt-BR')} ruas importadas com sucesso!`;
+
+    if (r.error) throw new Error(r.error);
+
+    setProgress(100, `✅ ${r.total?.toLocaleString('pt-BR')} ruas importadas com sucesso!`);
     status.textContent = `✅ ${r.total?.toLocaleString('pt-BR')} ruas cadastradas`;
     btn.textContent = '✅ Importado!';
     setTimeout(() => { btn.disabled = false; btn.textContent = '⬇️ Importar / Atualizar Ruas'; }, 5000);
+
   } catch(e) {
-    clearInterval(ticker);
-    msg.textContent = '❌ Erro: ' + e.message;
     bar.style.width = '100%';
     bar.style.background = '#dc2626';
+    msg.textContent = '❌ ' + e.message;
+    status.textContent = '';
     btn.disabled = false;
     btn.textContent = '⬇️ Tentar novamente';
   }
