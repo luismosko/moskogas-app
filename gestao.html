@@ -471,7 +471,12 @@ function openEditModal(orderId) {
   document.getElementById('edit-order-id').textContent = `#${orderId}`;
   document.getElementById('edit-name').value  = o.customer_name || '';
   document.getElementById('edit-phone').value = o.phone_digits || '';
-  document.getElementById('edit-addr').value  = o.address_line || '';
+  // Split address_line em rua + numero
+  const _eal = o.address_line || '';
+  const _enm = _eal.match(/,\s*(\d+\S*)$/);
+  document.getElementById('edit-addr').value  = _enm ? _eal.slice(0, _enm.index) : _eal;
+  const _enum = document.getElementById('edit-num');
+  if (_enum) _enum.value = _enm ? _enm[1] : '';
   document.getElementById('edit-bairro').value = o.bairro || '';
   document.getElementById('edit-comp').value  = o.complemento || '';
   document.getElementById('edit-ref').value   = o.referencia || '';
@@ -551,7 +556,9 @@ function addEditProduct(i) {
 
 async function saveEditOrder() {
   const name  = document.getElementById('edit-name').value.trim();
-  const addr  = document.getElementById('edit-addr').value.trim();
+  const _editRua = document.getElementById('edit-addr').value.trim();
+  const _editNum = document.getElementById('edit-num') ? document.getElementById('edit-num').value.trim() : '';
+  const addr  = _editNum ? _editRua + ', ' + _editNum : _editRua;
   if (!name) { toast('Nome obrigatório', 'error'); return; }
   if (!addr) { toast('Endereço obrigatório', 'error'); return; }
   if (!editItems.length) { toast('Adicione pelo menos 1 item', 'error'); return; }
@@ -594,8 +601,16 @@ init();
         <input id="edit-phone" type="text" style="width:100%">
       </div>
       <div style="grid-column:1/-1">
-        <label style="font-size:12px;color:#64748b;font-weight:600">ENDEREÇO *</label>
-        <input id="edit-addr" type="text" style="width:100%">
+        <label style="font-size:12px;color:#64748b;font-weight:600">ENDEREÇO (RUA) *</label>
+        <div class="street-wrap" style="position:relative">
+          <input id="edit-addr" type="text" autocomplete="off" style="width:100%"
+            oninput="streetAC(this,'edit-bairro','edit-addr-ac')">
+          <div id="edit-addr-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:2px solid #6366f1;border-top:none;border-radius:0 0 8px 8px;z-index:1000;max-height:200px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.15)"></div>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:#64748b;font-weight:600">NÚMERO</label>
+        <input id="edit-num" type="text" style="width:100%" placeholder="123">
       </div>
       <div>
         <label style="font-size:12px;color:#64748b;font-weight:600">BAIRRO</label>
