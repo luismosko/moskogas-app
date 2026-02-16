@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoskoGás — Menu v1.0.0</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding-top: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .logo {
+            font-size: 48px;
+            font-weight: 800;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            font-size: 18px;
+        }
+
+        .version {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .menu-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+
+        .menu-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .menu-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .menu-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+
+        .menu-desc {
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+        .menu-badge {
+            display: inline-block;
+            background: #f97316;
+            color: white;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            color: rgba(255,255,255,0.8);
+            font-size: 14px;
+        }
+
+        @media (max-width: 600px) {
+            .menu-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🚚 MoskoGás</div>
+            <div class="subtitle">Sistema de Gestão de Pedidos</div>
+            <div class="version">v1.0.0 — menu</div>
+        </div>
+
+        <div class="menu-grid">
+            <!-- Pedido -->
+            <a href="pedido.html" class="menu-card">
+                <div class="menu-icon">📝</div>
+                <div class="menu-title">Novo Pedido</div>
+                <div class="menu-desc">Criar novo pedido de gás ou água para cliente</div>
+            </a>
+
+            <!-- Pedidos do Dia -->
+            <a href="pedidos.html" class="menu-card">
+                <div class="menu-icon">📋</div>
+                <div class="menu-title">Pedidos do Dia</div>
+                <div class="menu-desc">Visualizar pedidos e encaminhar para entregadores</div>
+            </a>
+
+            <!-- Gestão -->
+            <a href="gestao.html" class="menu-card">
+                <div class="menu-icon">⚙️</div>
+                <div class="menu-title">Gestão</div>
+                <div class="menu-desc">Administrar pedidos, status e histórico</div>
+            </a>
+
+            <!-- Pagamentos -->
+            <a href="pagamentos.html" class="menu-card">
+                <div class="menu-icon">💰</div>
+                <div class="menu-title">Pagamentos</div>
+                <div class="menu-desc">Gerenciar pagamentos pendentes e confirmações</div>
+                <div class="menu-badge">NOVO v1.0.0</div>
+            </a>
+
+            <!-- Impressão -->
+            <a href="impressao.html" class="menu-card">
+                <div class="menu-icon">🖨️</div>
+                <div class="menu-title">Impressão</div>
+                <div class="menu-desc">Imprimir recibos e comprovantes A4</div>
+            </a>
+        </div>
+
+        <div class="footer">
+            MoskoGás Backend v2.7.0 | Luis Cesar Mosko<br>
+            Campo Grande, MS
+        </div>
+    </div>
+</body>
+</html>
