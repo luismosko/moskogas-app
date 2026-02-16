@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.3.9</title>
+<title>Novo Pedido — MoskoGás v2.4.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.9 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.0 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.3.9</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.0</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -141,6 +141,46 @@
     <label>📝 Observação (opcional)</label>
     <textarea id="notes" placeholder="Urgente, horário preferido, troco para..."></textarea>
   </div>
+
+  <!-- FORMA DE PAGAMENTO + NFCe -->
+  <div class="card" style="border:3px solid #6366f1">
+    <label style="font-size:14px;font-weight:800;color:#4f46e5;letter-spacing:.5px">💳 FORMA DE PAGAMENTO <span style="color:#dc2626">*</span></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px" id="pgto-grid">
+      <button type="button" class="pgto-btn" data-key="dinheiro"       onclick="selPgto(this)">💵 Dinheiro</button>
+      <button type="button" class="pgto-btn" data-key="pix"            onclick="selPgto(this)">⚡ PIX</button>
+      <button type="button" class="pgto-btn" data-key="debito"         onclick="selPgto(this)">💳 Débito</button>
+      <button type="button" class="pgto-btn" data-key="credito"        onclick="selPgto(this)">💳 Crédito</button>
+      <button type="button" class="pgto-btn" data-key="pix_aguardando" onclick="selPgto(this)">⏳ PIX aguardando</button>
+      <button type="button" class="pgto-btn" data-key="fiado"          onclick="selPgto(this)">📋 Fiado / A prazo</button>
+    </div>
+    <input type="hidden" id="forma_pagamento_key" value="">
+
+    <div style="margin-top:18px;padding-top:14px;border-top:2px dashed #e2e8f0">
+      <label style="font-size:14px;font-weight:800;color:#1e293b;letter-spacing:.5px">🧾 EMITIR NFCe? <span style="color:#dc2626">*</span></label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+        <button type="button" id="nfce-nao" onclick="selNFCe('nao')"
+          style="padding:18px 10px;border-radius:12px;border:3px solid #e2e8f0;background:#f8fafc;font-size:15px;font-weight:800;cursor:pointer;transition:all .2s;color:#475569">
+          ❌ NÃO<br><small style="font-size:11px;font-weight:500">Só registrar internamente</small>
+        </button>
+        <button type="button" id="nfce-sim" onclick="selNFCe('sim')"
+          style="padding:18px 10px;border-radius:12px;border:3px solid #e2e8f0;background:#f8fafc;font-size:15px;font-weight:800;cursor:pointer;transition:all .2s;color:#475569">
+          ✅ SIM<br><small style="font-size:11px;font-weight:500">Gerar NFCe no Bling agora</small>
+        </button>
+      </div>
+      <input type="hidden" id="emitir_nfce" value="">
+    </div>
+  </div>
+
+  <style>
+  .pgto-btn {
+    padding:12px 8px;border-radius:10px;border:2.5px solid #e2e8f0;background:#f8fafc;
+    font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;color:#374151;
+  }
+  .pgto-btn.sel {
+    border-color:#6366f1;background:#ede9fe;color:#4f46e5;
+    box-shadow:0 0 0 3px rgba(99,102,241,.2);
+  }
+  </style>
 
   <div class="status-bar" id="status-bar"></div>
   <button class="btn-primary" id="btn-save" onclick="saveOrder()">✅ SALVAR PEDIDO</button>
@@ -759,6 +799,39 @@ function renderItems() {
   renderTotal();
 }
 
+// ── Forma de pagamento + NFCe ─────────────────────────────────
+function selPgto(btn) {
+  document.querySelectorAll('.pgto-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  document.getElementById('forma_pagamento_key').value = btn.dataset.key;
+
+  // Fiado/PIX aguardando → forçar NFCe NÃO
+  const pendentes = ['fiado','pix_aguardando'];
+  if (pendentes.includes(btn.dataset.key)) {
+    selNFCe('nao');
+    document.getElementById('nfce-sim').style.opacity = '0.4';
+    document.getElementById('nfce-sim').style.pointerEvents = 'none';
+    document.getElementById('nfce-sim').title = 'Pagamento pendente não permite NFCe imediata';
+  } else {
+    document.getElementById('nfce-sim').style.opacity = '';
+    document.getElementById('nfce-sim').style.pointerEvents = '';
+    document.getElementById('nfce-sim').title = '';
+  }
+}
+
+function selNFCe(val) {
+  const sim = document.getElementById('nfce-sim');
+  const nao = document.getElementById('nfce-nao');
+  if (val === 'sim') {
+    sim.style.borderColor = '#16a34a'; sim.style.background = '#dcfce7'; sim.style.color = '#15803d';
+    nao.style.borderColor = '#e2e8f0'; nao.style.background = '#f8fafc'; nao.style.color = '#475569';
+  } else {
+    nao.style.borderColor = '#dc2626'; nao.style.background = '#fee2e2'; nao.style.color = '#b91c1c';
+    sim.style.borderColor = '#e2e8f0'; sim.style.background = '#f8fafc'; sim.style.color = '#475569';
+  }
+  document.getElementById('emitir_nfce').value = val;
+}
+
 // ── Salvar ────────────────────────────────────────────────────
 async function saveOrder() {
   const name  = document.getElementById('cName').value.trim();
@@ -768,24 +841,32 @@ async function saveOrder() {
   if (!name) { toast('Nome do cliente obrigatório', 'error'); return; }
   if (!addr) { toast('Endereço obrigatório', 'error'); return; }
 
+  const formaPgtoKey = document.getElementById('forma_pagamento_key').value;
+  const emitirNfce   = document.getElementById('emitir_nfce').value;
+
+  if (!formaPgtoKey) { toast('⚠️ Selecione a forma de pagamento', 'error'); return; }
+  if (!emitirNfce)   { toast('⚠️ Informe se deve emitir NFCe (SIM ou NÃO)', 'error'); return; }
+
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
-  btn.textContent = '⏳ Salvando...';
+  btn.textContent = emitirNfce === 'sim' ? '⏳ Salvando e gerando NFCe...' : '⏳ Salvando...';
 
   try {
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     const result = await api('/api/order/create', {
       method: 'POST',
       body: JSON.stringify({
-        phone:       document.getElementById('cPhone').value.replace(/\D/g, ''),
+        phone:            document.getElementById('cPhone').value.replace(/\D/g, ''),
         name,
-        address_line: addr,
-        bairro:      document.getElementById('cBairro').value,
-        complemento: document.getElementById('cComp').value,
-        referencia:  document.getElementById('cRef').value,
-        items:       items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
-        total_value: total || null,
-        notes:       document.getElementById('notes').value,
+        address_line:     addr,
+        bairro:           document.getElementById('cBairro').value,
+        complemento:      document.getElementById('cComp').value,
+        referencia:       document.getElementById('cRef').value,
+        items:            items.map(i => ({ name: i.name, qty: i.qty, price: i.price, bling_id: i.bling_id })),
+        total_value:      total || null,
+        notes:            document.getElementById('notes').value,
+        forma_pagamento_key: formaPgtoKey,
+        emitir_nfce:      emitirNfce === 'sim',
       }),
     });
 
@@ -802,7 +883,15 @@ async function saveOrder() {
       }),
     }).catch(() => {});
 
-    toast(`✅ Pedido #${result.id} criado!`);
+    if (result.nfce_warning) {
+      toast(`⚠️ Pedido #${result.id} salvo, mas NFCe falhou: ${result.nfce_warning}`, 'error');
+    } else if (result.nfce?.nfceNumero) {
+      toast(`✅ Pedido #${result.id} + NFCe ${result.nfce.nfceNumero} emitida!`);
+    } else if (result.nfce?.nfceWarning) {
+      toast(`⚠️ Pedido #${result.id} no Bling. NFCe: ${result.nfce.nfceWarning}`, 'error');
+    } else {
+      toast(`✅ Pedido #${result.id} criado!`);
+    }
 
     // Limpar form
     setTimeout(() => {
@@ -812,6 +901,14 @@ async function saveOrder() {
       allAddresses = []; currentPhone = '';
       ['cName','cPhone','cAddr','cNum','cBairro','cComp','cRef','notes','search'].forEach(id => {
         document.getElementById(id).value = '';
+      });
+      document.getElementById('forma_pagamento_key').value = '';
+      document.getElementById('emitir_nfce').value = '';
+      document.querySelectorAll('.pgto-btn').forEach(b => b.classList.remove('sel'));
+      ['nfce-sim','nfce-nao'].forEach(id => {
+        const el = document.getElementById(id);
+        el.style.borderColor = '#e2e8f0'; el.style.background = '#f8fafc'; el.style.color = '#475569';
+        el.style.opacity = ''; el.style.pointerEvents = '';
       });
       items = [];
       renderItems();
