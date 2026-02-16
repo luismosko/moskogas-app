@@ -65,7 +65,7 @@ function toast(msg, type = 'success') {
 
 const NAV_HTML = `
 <nav style="background:#1e293b;padding:10px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-  <span style="color:#f97316;font-weight:900;font-size:18px;margin-right:12px;">🔥 MoskoGás</span>
+  <a href="https://moskogas.com.br" target="_blank" style="margin-right:12px;display:flex;align-items:center;"><img src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="Mosko Gás" style="height:32px;" onerror="this.style.display='none'"></a>
   <a href="pedido.html" class="nav-btn">➕ Novo Pedido</a>
   <a href="gestao.html" class="nav-btn">📋 Gestão</a>
   <a href="entregador.html" class="nav-btn">🚚 Entregador</a>
