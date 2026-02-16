@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v1.6</title>
+<title>Novo Pedido — MoskoGás v1.7</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -45,7 +45,7 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.6</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.7</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -260,16 +260,17 @@ function renderItems() {
   }
   list.innerHTML = items.map(it => `
     <div class="item-row">
-      <span style="flex:1">${it.name}</span>
+      <span style="flex:1;font-size:14px">${it.name}</span>
       <button class="qty-btn" onclick="changeQty('${it.id}',-1)">−</button>
       <span class="qty-val">${it.qty}</span>
       <button class="qty-btn" onclick="changeQty('${it.id}',1)">+</button>
       <span style="display:flex;align-items:center;gap:4px">
-        <small>R$</small>
+        <small style="color:#94a3b8">R$</small>
         <input type="number" step="0.01" value="${it.price.toFixed(2)}" 
-          style="width:70px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right"
+          style="width:65px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right;font-size:13px"
           onchange="changePrice('${it.id}',this.value)">
       </span>
+      <span style="min-width:75px;text-align:right;font-weight:800;color:#1e293b;font-size:14px">=&nbsp;R$&nbsp;${(it.price*it.qty).toFixed(2)}</span>
       <button class="btn-remove" onclick="changeQty('${it.id}',-99)">✕</button>
     </div>`).join('');
   renderTotal();
