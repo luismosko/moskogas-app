@@ -349,58 +349,36 @@ async function streetAC(input, bairroId, dropId) {
   };
 
   _acTimer = setTimeout(async () => {
-    drop.innerHTML = '<div class="street-ac-item" style="color:#94a3b8">🔍 Buscando...</div>';
+    drop.innerHTML = '<div style="padding:8px 12px;color:#94a3b8;font-size:12px">🔍 Buscando...</div>';
     drop.style.display = 'block';
     try {
-      const url = `https://nominatim.openstreetmap.org/search?` +
-        `q=${encodeURIComponent(q)}+Campo+Grande+MS&` +
-        `countrycodes=br&format=json&addressdetails=1&limit=10&` +
-        `bounded=1&viewbox=-54.91,-20.28,-54.44,-20.62`; // bounding box Campo Grande
-      
-      const resp = await fetch(url, { headers: {'Accept-Language': 'pt-BR,pt'} });
-      const data = await resp.json();
-      
-      // Filtra só resultados de Campo Grande com nome de rua
-      const streets = data.filter(r =>
-        r.address && 
-        (r.address.city === 'Campo Grande' || r.address.municipality === 'Campo Grande') &&
-        (r.address.road || r.address.pedestrian || r.address.path)
-      );
-      
-      if (!streets.length) {
-        drop.innerHTML = '<div class="street-ac-item" style="color:#94a3b8">Nenhuma rua encontrada em Campo Grande</div>';
+      // Busca no D1 local (banco de ruas de Campo Grande importado do OpenStreetMap)
+      const results = await api(`/api/streets/search?q=${encodeURIComponent(q)}`);
+
+      if (!results || !results.length) {
+        drop.innerHTML = '<div style="padding:8px 12px;color:#94a3b8;font-size:12px">Nenhuma rua encontrada — tente o nome completo</div>';
         return;
       }
-      
-      // Deduplica por nome de rua
-      const seen = new Set();
-      const unique = streets.filter(r => {
-        const road = r.address.road || r.address.pedestrian || r.address.path || '';
-        if (seen.has(road)) return false;
-        seen.add(road); return true;
-      });
-      
-      drop.innerHTML = unique.map((r,idx) => {
-        const road    = r.address.road || r.address.pedestrian || r.address.path || '';
-        const bairro  = r.address.suburb || r.address.neighbourhood || r.address.quarter || '';
-        const cep     = r.address.postcode || '';
-        const extra   = [bairro, cep].filter(Boolean).join(' · ');
-        return `<div class="street-ac-item"
-          style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;line-height:1.4"
-          onmouseenter="this.style.background='#ede9fe'"
+
+      drop.innerHTML = results.map((r, idx) => {
+        const road   = r.name || '';
+        const bairro = r.bairro || '';
+        const safe   = road.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        const safeb  = bairro.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return `<div
+          style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid #e2e8f0;font-size:13px"
+          onmouseenter="this.style.background='#ede9fe';this.style.cursor='pointer'"
           onmouseleave="this.style.background=''"
-          onclick="selectStreet('${road.replace(/'/g,"\'")}','${bairro.replace(/'/g,"\'")}','${input.id}','${bairroId}','${dropId}')">
-          <div>
-            <div style="font-weight:700;color:#1e293b">${road}</div>
-            ${extra ? `<div style="font-size:11px;color:#6366f1;margin-top:2px">${extra}</div>` : ''}
-          </div>
-          <div style="color:#94a3b8;font-size:11px;flex-shrink:0;margin-left:8px">↵ selecionar</div>
+          onclick="selectStreet('${safe}','${safeb}','${input.id}','${bairroId}','${dropId}')">
+          <div style="font-weight:700;color:#1e293b">${road}</div>
+          <div style="color:#94a3b8;font-size:11px;flex-shrink:0;margin-left:8px">↵</div>
         </div>`;
       }).join('');
     } catch(e) {
-      drop.innerHTML = '<div class="street-ac-item" style="color:#dc2626">Erro ao buscar ruas</div>';
+      // Fallback: banco de ruas não importado ainda
+      drop.innerHTML = '<div style="padding:10px 12px;color:#f97316;font-size:12px">⚠️ Banco de ruas não importado. Acesse ⚙️ Config → Importar Ruas de Campo Grande</div>';
     }
-  }, 500);
+  }, 250);
 }
 
 function selectStreet(road, bairro, inputId, bairroId, dropId) {
