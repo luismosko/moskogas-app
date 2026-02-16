@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.3.6</title>
+<title>Novo Pedido — MoskoGás v2.3.7</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.6 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.7 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.3.6</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.3.7</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -351,7 +351,7 @@ function applyAddress(a) {
   document.getElementById('cRef').value    = a.referencia || '';
   document.getElementById('addr-selected-label').textContent = '✅ ' + (a.obs || a.address_line);
   closeAddrModal();
-  showToast('📍 ' + (a.obs || a.address_line));
+  toast('📍 ' + (a.obs || a.address_line));
 }
 
 // ── Form de novo endereço no modal ───────────────────────────
@@ -577,7 +577,7 @@ async function saveAddrInModal() {
   document.getElementById('m-addr').style.borderColor = '';
   if (!obs)  { document.getElementById('m-obs').style.borderColor  = '#dc2626'; document.getElementById('m-obs').focus(); return; }
   if (!line)  { document.getElementById('m-addr').style.borderColor = '#dc2626'; document.getElementById('m-addr').focus(); return; }
-  if (!currentPhone) { showToast('❌ Selecione um cliente primeiro'); return; }
+  if (!currentPhone) { toast('❌ Selecione um cliente primeiro'); return; }
 
   const btn = document.querySelector('button[onclick="saveAddrInModal()"]');
   if (btn && btn.disabled) return; // já está salvando - ignora cliques extras
@@ -600,7 +600,7 @@ async function saveAddrInModal() {
     });
     console.log('Resultado:', result);
 
-    showToast('✅ Endereço salvo!');
+    toast('✅ Endereço salvo!');
 
     // Recarrega lista imediatamente
     try {
@@ -613,7 +613,7 @@ async function saveAddrInModal() {
     hideAddInModal(); // volta para aba Buscar e limpa campos
   } catch(e) {
     console.error('Erro saveAddrInModal:', e);
-    showToast('❌ Erro: ' + (e.message || 'falha ao salvar'));
+    toast('❌ Erro: ' + (e.message || 'falha ao salvar'));
     if (btn) { btn.textContent = origText || '💾 Salvar endereço'; btn.disabled = false; }
   }
 }
