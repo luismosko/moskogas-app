@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v1.5</title>
+<title>Novo Pedido — MoskoGás v1.6</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -45,7 +45,7 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.5</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.6</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -199,11 +199,13 @@ async function searchProducts(q) {
       const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`);
       if (!list.length) { box.style.display='none'; return; }
       box.style.display = 'block';
-      box.innerHTML = list.map((p,i) => `
-        <div class="suggestion-item" onclick="addProductFromSearch(${i})" style="display:flex;justify-content:space-between">
-          <span><strong>${p.name}</strong>${p.code ? ' <small style=color:#94a3b8>'+p.code+'</small>' : ''}</span>
-          <span style="color:#f97316;font-weight:700">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
-        </div>`).join('');
+      box.innerHTML = list.map((p,i) => {
+        const nome = p.name.length > 50 ? p.name.substring(0,50)+'…' : p.name;
+        return `
+        <div class="suggestion-item" onclick="addProductFromSearch(${i})" style="display:flex;justify-content:space-between;align-items:center">
+          <span><strong>${nome}</strong>${p.code ? ' <small style=color:#94a3b8;margin-left:4px>('+p.code+')</small>' : ''}</span>
+          <span style="color:#f97316;font-weight:700;margin-left:8px;white-space:nowrap">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
+        </div>`;}).join('');
       box._data = list;
     } catch(e) { console.error(e); }
   }, 300);
