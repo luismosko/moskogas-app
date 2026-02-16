@@ -28,7 +28,10 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <input type="date" id="fDate" onchange="load()">
+  <input type="date" id="fDateFrom" onchange="load()">
+  <span style="color:#64748b;font-size:13px">até</span>
+  <input type="date" id="fDateTo" onchange="load()">
+  <button onclick="setToday()" style="padding:8px 12px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Hoje</button>
   <select id="fStatus" onchange="load()">
     <option value="">Todos</option>
     <option value="pendente">💸 Pendente</option>
@@ -63,15 +66,24 @@
 <script>
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
-document.getElementById('fDate').value = today();
+function setToday() {
+  const t = today();
+  document.getElementById('fDateFrom').value = t;
+  document.getElementById('fDateTo').value   = t;
+  load();
+}
+setToday();
 
 async function load() {
-  const date   = document.getElementById('fDate').value;
+
   const status = document.getElementById('fStatus').value;
 
+  const dateFrom = document.getElementById('fDateFrom').value;
+  const dateTo   = document.getElementById('fDateTo').value;
   let url = '/api/payments/list?';
-  if (date)   url += `&date=${date}`;
-  if (status) url += `&status=${status}`;
+  if (dateFrom) url += `&date_from=${dateFrom}`;
+  if (dateTo)   url += `&date_to=${dateTo}`;
+  if (status)   url += `&status=${status}`;
 
   const rows = await api(url).catch(() => []);
   document.getElementById('count-lbl').textContent = `${rows.length} registros`;
