@@ -4,125 +4,117 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v1.7</title>
+<title>Gestão de Pedidos — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
-  .container { max-width: 680px; margin: 0 auto; padding: 20px; }
-  h1 { color: #1e293b; font-size: 22px; margin-bottom: 16px; }
-  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-  label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 4px; text-transform: uppercase; }
-  input, textarea, select { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 16px; transition: border 0.2s; }
-  input:focus, textarea:focus { outline: none; border-color: #f97316; }
-  .row { display: grid; gap: 12px; margin-bottom: 12px; }
-  .row-2 { grid-template-columns: 1fr 1fr; }
-  .autocomplete-box { position: relative; }
-  #suggestions { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 2px solid #f97316; border-top: none; border-radius: 0 0 8px 8px; z-index: 100; max-height: 250px; overflow-y: auto; }
-  .suggestion-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
-  .suggestion-item:hover { background: #fff7ed; }
-  .suggestion-item strong { color: #1e293b; }
-  .suggestion-item small { color: #64748b; }
-  .items-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-  .item-btn { padding: 12px 6px; border: 2px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; text-align: center; transition: all 0.15s; }
-  .item-btn:hover { border-color: #f97316; background: #fff7ed; }
-  .item-btn.selected { border-color: #f97316; background: #f97316; color: #fff; }
-  .item-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; background: #f8fafc; border-radius: 8px; padding: 8px 12px; }
-  .item-row span { flex: 1; font-weight: 600; font-size: 14px; }
-  .qty-btn { width: 32px; height: 32px; border: 2px solid #e2e8f0; border-radius: 6px; background: #fff; font-size: 18px; cursor: pointer; font-weight: 700; }
-  .qty-val { width: 36px; text-align: center; font-weight: 700; font-size: 16px; }
-  .btn-remove { background: none; border: none; color: #dc2626; cursor: pointer; font-size: 18px; }
-  .btn-primary { background: #f97316; color: #fff; border: none; border-radius: 10px; padding: 16px 24px; font-size: 18px; font-weight: 800; width: 100%; cursor: pointer; transition: background 0.2s; }
-  .btn-primary:hover { background: #ea6d0a; }
-  .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
-  .status-bar { text-align: center; padding: 8px; font-size: 13px; color: #64748b; }
-  .total-bar { background: #1e293b; color: #fff; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .total-bar .val { font-size: 22px; font-weight: 900; color: #f97316; }
-  .search-tab { padding: 8px; border: 2px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; color: #64748b; transition: all 0.15s; }
-  .search-tab.active { border-color: #f97316; background: #f97316; color: #fff; }
-  textarea { resize: vertical; height: 70px; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; }
+  .toolbar { background: #fff; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .toolbar input, .toolbar select { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
+  .toolbar input:focus, .toolbar select:focus { outline: none; border-color: #f97316; }
+  .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-blue   { background: #2563eb; color: #fff; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .btn-gray   { background: #94a3b8; color: #fff; }
+  .btn-red    { background: #dc2626; color: #fff; }
+  .btn:hover { opacity: 0.85; }
+  table { width: 100%; border-collapse: collapse; background: #fff; }
+  th { background: #1e293b; color: #fff; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+  tr:hover td { background: #fafafa; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; }
+  select.driver-sel { border: 2px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; max-width: 130px; }
+  select.driver-sel:focus { outline: none; border-color: #f97316; }
+  .action-btns { display: flex; gap: 4px; flex-wrap: nowrap; }
+  .summary-bar { background: #1e293b; color: #fff; padding: 10px 16px; font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .summary-bar span strong { color: #f97316; }
+
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:14px; padding:24px; width:min(520px,95vw); max-height:90vh; overflow-y:auto; }
+  .modal h2 { font-size:18px; margin-bottom:16px; color:#1e293b; }
+  .modal label { display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; text-transform:uppercase; }
+  .modal select, .modal textarea, .modal input { width:100%; padding:10px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; margin-bottom:12px; }
+  .modal select:focus, .modal textarea:focus { outline:none; border-color:#f97316; }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+  .preview-msg { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; font-size:12px; white-space:pre-wrap; margin-bottom:12px; max-height:160px; overflow-y:auto; font-family:monospace; }
+  .order-summary { background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; margin-bottom:12px; line-height:1.8; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.7</span></h1>
 
-  <!-- BUSCA CLIENTE -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <label style="margin:0">🔍 Buscar Cliente</label>
-      <button onclick="syncBling(this)" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px;color:#94a3b8;cursor:pointer" title="Sincronizar contatos do Bling para busca por endereço">🔄 Sync Bling</button>
-    </div>
-    <div class="search-fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-      <input id="searchPhone" type="tel" placeholder="📞 Telefone" autocomplete="off" oninput="doSearch(this.value,'phone')">
-      <input id="searchName" type="text" placeholder="👤 Nome" autocomplete="off" oninput="doSearch(this.value,'name')">
-      <input id="searchAddr" type="text" placeholder="📍 Endereço" autocomplete="off" oninput="doSearch(this.value,'address')">
-    </div>
-    <div id="suggestions" style="display:none;position:relative;"></div>
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div style="display:flex;align-items:center;gap:4px">
+    <input type="date" id="fDateFrom" onchange="load()" style="width:135px">
+    <span style="color:#94a3b8;font-size:12px">até</span>
+    <input type="date" id="fDateTo" onchange="load()" style="width:135px">
+    <button id="btnHoje" class="btn" onclick="setDateFilter('hoje')" style="background:#f97316;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Hoje</button>
+    <button id="btnOntem" class="btn" onclick="setDateFilter('ontem')" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Ontem</button>
+    <button class="btn" onclick="setDateFilter('limpar')" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
   </div>
-
-  <!-- DADOS DO CLIENTE -->
-  <div class="card">
-    <div class="row row-2">
-      <div>
-        <label>Nome do Cliente *</label>
-        <input id="cName" type="text" placeholder="Nome completo">
-      </div>
-      <div>
-        <label>Telefone</label>
-        <input id="cPhone" type="tel" placeholder="67 9...">
-      </div>
-    </div>
-    <div class="row" style="margin-bottom:12px">
-      <label>Endereço (Rua + Número) *</label>
-      <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas, 123">
-    </div>
-    <div class="row row-2">
-      <div>
-        <label>Bairro</label>
-        <input id="cBairro" type="text" placeholder="Ex: Jardim Noroeste">
-      </div>
-      <div>
-        <label>Complemento</label>
-        <input id="cComp" type="text" placeholder="Apto, Bloco...">
-      </div>
-    </div>
-    <div>
-      <label>Ponto de Referência</label>
-      <input id="cRef" type="text" placeholder="Ex: próximo ao mercado X">
-    </div>
-
-    <!-- Botão endereços adicionais (aparece ao selecionar cliente) -->
-    <div id="multi-addr-bar" style="display:none;margin-top:10px;padding-top:10px;border-top:2px dashed #e2e8f0;display:flex;align-items:center;gap:10px">
-      <button type="button" onclick="openAddrModal()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">
-        📍 Outros endereços <span id="addr-count-badge" style="background:rgba(255,255,255,0.3);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span>
-      </button>
-      <span id="addr-selected-label" style="font-size:12px;color:#6366f1;font-weight:600"></span>
+  <div style="position:relative">
+    <button id="statusBtn" onclick="toggleStatusMenu(event)" style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;min-width:140px;text-align:left">
+      <span id="statusLabel">Status ▾</span>
+    </button>
+    <div id="statusMenu" style="display:none;position:absolute;top:38px;left:0;z-index:100;background:#fff;border:2px solid #f97316;border-radius:8px;padding:8px;min-width:190px;box-shadow:0 4px 12px rgba(0,0,0,.1)">
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="novo" onchange="updateStatusFilter()" checked> 🔴 Novo</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="encaminhado" onchange="updateStatusFilter()" checked> 🟡 Encaminhado</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="whatsapp_enviado" onchange="updateStatusFilter()" checked> 🟢 WhatsApp Enviado</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="entregue" onchange="updateStatusFilter()" checked> 🔵 Entregue</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="cancelado" onchange="updateStatusFilter()"> ⚫ Cancelado</label>
     </div>
   </div>
+  <select id="fDriver" onchange="load()">
+    <option value="">Todos entregadores</option>
+  </select>
+  <input type="text" id="fQ" placeholder="🔍 Busca..." oninput="load()" style="width:160px">
+  <button class="btn btn-orange" onclick="load()">🔄 Atualizar</button>
+  <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
+    <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
+  </label>
+</div>
 
-  <!-- ITENS -->
-  <div class="card">
-    <label style="margin-bottom:10px">📦 Itens do Pedido</label>
-    <div style="position:relative;margin-bottom:10px">
-      <input id="product-search" type="text" placeholder="🔍 Buscar produto pelo nome..." autocomplete="off" oninput="searchProducts(this.value)">
-      <div id="product-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:220px;overflow-y:auto"></div>
-    </div>
-    <div id="items-list"></div>
-    <div class="total-bar" id="total-bar" style="display:none">
-      <span>TOTAL</span>
-      <span class="val" id="total-val">R$ 0,00</span>
+<!-- SUMMARY -->
+<div class="summary-bar" id="summary-bar"></div>
+
+<!-- TABELA -->
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Hora</th>
+      <th>Cliente</th>
+      <th>Endereço</th>
+      <th>Itens</th>
+      <th>Total</th>
+      <th>Status</th>
+      <th>Entregador</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<!-- MODAL ENVIAR ENTREGADOR -->
+<div class="modal-overlay" id="modal-wa">
+  <div class="modal">
+    <h2>📱 Enviar para Entregador</h2>
+    <div class="order-summary" id="modal-order-summary"></div>
+    <label>Entregador *</label>
+    <select id="modal-driver"></select>
+    <label>Observação para o entregador</label>
+    <textarea id="modal-obs" rows="3" placeholder="Ex: Troco para R$ 100, ligar antes de chegar..."></textarea>
+    <div class="preview-msg" id="modal-preview" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal()">Cancelar</button>
+      <button class="btn" onclick="previewMsg()" style="background:#6366f1;color:#fff">👁 Prévia</button>
+      <button class="btn btn-green" onclick="sendWa()">📲 Enviar WhatsApp</button>
     </div>
   </div>
-
-  <!-- OBSERVAÇÃO -->
-  <div class="card">
-    <label>📝 Observação (opcional)</label>
-    <textarea id="notes" placeholder="Urgente, horário preferido, troco para..."></textarea>
-  </div>
-
-  <div class="status-bar" id="status-bar"></div>
-  <button class="btn-primary" id="btn-save" onclick="saveOrder()">✅ SALVAR PEDIDO</button>
 </div>
 
 <script src="shared.js"></script>
@@ -130,444 +122,505 @@
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
-let items = [];
-let searchTimer;
+let drivers = [];
+let currentOrder = null;
+let autoTimer = null;
 
-async function syncBling(btn) {
-  btn.disabled = true;
-  btn.textContent = '⏳ Sincronizando...';
-  try {
-    const r = await api('/api/customer/sync-bling', { method: 'POST' });
-    btn.textContent = `✅ ${r.synced} contatos sincronizados`;
-    setTimeout(() => { btn.textContent = '🔄 Sincronizar contatos Bling'; btn.disabled = false; }, 4000);
-  } catch(e) {
-    btn.textContent = '❌ Erro — tente novamente';
-    btn.disabled = false;
-  }
-}
-
-function doSearch(val, type) {
-  // limpa os outros campos
-  const map = {phone:'searchPhone', name:'searchName', address:'searchAddr'};
-  Object.entries(map).forEach(([t, id]) => { if (t !== type) document.getElementById(id).value = ''; });
-  clearTimeout(searchTimer);
-  const q = val.trim();
-  if (q.length < 2) { hideSuggestions(); return; }
-  searchTimer = setTimeout(async () => {
-    try {
-      const results = await api(`/api/customer/search?q=${encodeURIComponent(q)}&type=${type}`);
-      showSuggestions(results);
-    } catch(e) { console.error(e); }
-  }, 280);
-}
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('.search-fields') && !e.target.closest('#suggestions')) hideSuggestions();
-});
-
-function showSuggestions(list) {
-  const box = document.getElementById('suggestions');
-  if (!list.length) { hideSuggestions(); return; }
-  box.style.display = 'block';
-  box.innerHTML = list.map((c, i) => `
-    <div class="suggestion-item" onclick="selectCustomer(${i})">
-      <strong>${c.name || c.customer_name}</strong>
-      <span style="margin-left:8px;color:#f97316">${c.phone_digits || ''}</span><br>
-      <small>${c.address_line || ''} ${c.bairro ? '— ' + c.bairro : ''}</small>
-    </div>
-  `).join('');
-  box._data = list;
-}
-
-function hideSuggestions() {
-  const box = document.getElementById('suggestions');
-  box.style.display = 'none';
-}
-
-async function selectCustomer(i) {
-  const c = document.getElementById('suggestions')._data[i];
-  document.getElementById('cName').value   = c.name || c.customer_name || '';
-  document.getElementById('cPhone').value  = c.phone_digits || '';
-  document.getElementById('cAddr').value   = c.address_line || '';
-  document.getElementById('cBairro').value = c.bairro || '';
-  document.getElementById('cComp').value   = c.complemento || '';
-  document.getElementById('cRef').value    = c.referencia || '';
-  hideSuggestions();
-  ['searchPhone','searchName','searchAddr'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  drivers = await api('/api/drivers').catch(() => []);
+  const sel = document.getElementById('fDriver');
+  sel.innerHTML = '<option value="">Todos entregadores</option>';
+  drivers.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
   });
-  // Busca detalhes Bling
-  if (c.bling_contact_id) {
-    try {
-      const det = await api(`/api/customer/bling-detail/${c.bling_contact_id}`);
-      if (det && !det.error) {
-        if (det.phone_digits) document.getElementById('cPhone').value  = det.phone_digits;
-        if (det.address_line) document.getElementById('cAddr').value   = det.address_line;
-        if (det.bairro)       document.getElementById('cBairro').value = det.bairro;
-        if (det.complemento)  document.getElementById('cComp').value   = det.complemento;
-      }
-    } catch(e) {}
+  setDateFilter('hoje');
+}
+
+// ── Load orders ───────────────────────────────────────────────
+let loadTimer;
+async function load() {
+  clearTimeout(loadTimer);
+  loadTimer = setTimeout(_load, 150);
+}
+
+// Data em Campo Grande (UTC-4)
+function todayCG() {
+  const d = new Date();
+  d.setHours(d.getHours() - 4); // UTC-4
+  return d.toISOString().slice(0, 10);
+}
+function yesterdayCG() {
+  const d = new Date();
+  d.setHours(d.getHours() - 4 - 24);
+  return d.toISOString().slice(0, 10);
+}
+
+function setDateFilter(mode) {
+  const from = document.getElementById('fDateFrom');
+  const to   = document.getElementById('fDateTo');
+  const btnH = document.getElementById('btnHoje');
+  const btnO = document.getElementById('btnOntem');
+  if (mode === 'hoje') {
+    const t = todayCG();
+    from.value = t; to.value = t;
+    btnH.style.background = '#f97316'; btnO.style.background = '#64748b';
+  } else if (mode === 'ontem') {
+    const y = yesterdayCG();
+    from.value = y; to.value = y;
+    btnO.style.background = '#f97316'; btnH.style.background = '#64748b';
+  } else {
+    from.value = ''; to.value = '';
+    btnH.style.background = '#64748b'; btnO.style.background = '#64748b';
   }
-  // Carrega endereços múltiplos
-  if (c.phone_digits) loadSavedAddresses(c.phone_digits);
+  load();
 }
 
-let currentPhone = '';
-let allAddresses = [];
+// Status multi-select state
+let lastRows = [];
+let activeStatuses = new Set(['novo','encaminhado','whatsapp_enviado','entregue']);
 
-// ── Carrega endereços e atualiza badge ───────────────────────
-async function loadSavedAddresses(phone) {
-  currentPhone = phone;
-  document.getElementById('modal-client-name').textContent = document.getElementById('cName').value;
-  try {
-    allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(phone)}`);
-  } catch(e) { allAddresses = []; }
-  // Mostra botão
-  const bar = document.getElementById('multi-addr-bar');
-  bar.style.display = 'flex';
-  document.getElementById('addr-count-badge').textContent = allAddresses.length;
+function toggleStatusMenu(event) {
+  event.stopPropagation(); // impede que o document.click feche na mesma ação
+  const m = document.getElementById('statusMenu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
 }
 
-// ── Abre modal ───────────────────────────────────────────────
-function openAddrModal() {
-  document.getElementById('addr-search-input').value = '';
-  renderAddrList(allAddresses);
-  hideAddInModal();
-  document.getElementById('addr-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('addr-search-input').focus(), 100);
+function updateStatusFilter() {
+  const boxes = document.querySelectorAll('#statusMenu input[type=checkbox]');
+  activeStatuses = new Set([...boxes].filter(b => b.checked).map(b => b.value));
+  const count = activeStatuses.size;
+  const lbl = count === 5 ? 'Todos status ▾' : count === 0 ? 'Nenhum ▾' : `${count} status ▾`;
+  document.getElementById('statusLabel').textContent = lbl;
+  load();
 }
-function closeAddrModal() {
-  document.getElementById('addr-modal').style.display = 'none';
-}
+
 document.addEventListener('click', e => {
-  const m = document.getElementById('addr-modal');
-  if (m && m.style.display === 'flex' && e.target === m) closeAddrModal();
+  if (!e.target.closest('#statusMenu') && !e.target.closest('#statusBtn')) {
+    const m = document.getElementById('statusMenu');
+    if (m) m.style.display = 'none';
+  }
 });
 
-// ── Renderiza lista no modal ─────────────────────────────────
-function renderAddrList(list) {
-  const el = document.getElementById('addr-modal-list');
-  if (!list.length) {
-    el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">Nenhum endereço cadastrado</div>';
+// Ordenação: novo > encaminhado > whatsapp_enviado > entregue > cancelado
+const STATUS_ORDER = { novo: 0, encaminhado: 1, whatsapp_enviado: 2, entregue: 3, cancelado: 4 };
+
+async function _load() {
+  const dateFrom = document.getElementById('fDateFrom').value;
+  const dateTo   = document.getElementById('fDateTo').value;
+  const driverId = document.getElementById('fDriver').value;
+  const q        = document.getElementById('fQ').value;
+
+  let url = `/api/orders/list?`;
+  if (dateFrom) url += `&date_from=${dateFrom}`;
+  if (dateTo)   url += `&date_to=${dateTo}`;
+  if (driverId) url += `&driver_id=${driverId}`;
+  if (q)        url += `&q=${encodeURIComponent(q)}`;
+
+  let rows = [];
+  try {
+    rows = await api(url);
+    if (!Array.isArray(rows)) { console.error('API retornou:', rows); rows = []; }
+  } catch(e) {
+    console.error('Erro ao carregar pedidos:', e);
+    document.getElementById('tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#dc2626">Erro ao carregar: ' + e.message + '</td></tr>';
     return;
   }
-  el.innerHTML = list.map(a => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;margin-bottom:8px;cursor:pointer;transition:border .15s"
-      onmouseover="this.style.borderColor='#6366f1'" onmouseout="this.style.borderColor='#e2e8f0'"
-      onclick="applyAddress(${JSON.stringify(a).replace(/"/g,'&quot;')})">
-      <div style="flex:1">
-        <div style="font-size:14px;font-weight:700;color:#6366f1">${a.obs || '—'}</div>
-        <div style="font-size:13px;color:#334155;margin-top:2px">${a.address_line}${a.bairro ? ' — ' + a.bairro : ''}</div>
-        ${a.complemento ? `<div style="font-size:11px;color:#94a3b8">${a.complemento}</div>` : ''}
-        ${a.referencia  ? `<div style="font-size:11px;color:#94a3b8">Ref: ${a.referencia}</div>` : ''}
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-        <button type="button" onclick="event.stopPropagation();deleteAddr(${a.id})"
-          style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:2px" title="Excluir">🗑️</button>
-        <div style="background:#6366f1;color:#fff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700">Usar →</div>
-      </div>
-    </div>
-  `).join('');
-}
 
-// ── Filtro de busca no modal ─────────────────────────────────
-function filterAddresses(q) {
-  if (!q) { renderAddrList(allAddresses); return; }
-  const ql = q.toLowerCase();
-  renderAddrList(allAddresses.filter(a =>
-    (a.obs || '').toLowerCase().includes(ql) ||
-    (a.address_line || '').toLowerCase().includes(ql) ||
-    (a.bairro || '').toLowerCase().includes(ql)
-  ));
-}
-
-// ── Aplicar endereço selecionado ─────────────────────────────
-function applyAddress(a) {
-  document.getElementById('cAddr').value   = a.address_line || '';
-  document.getElementById('cBairro').value = a.bairro || '';
-  document.getElementById('cComp').value   = a.complemento || '';
-  document.getElementById('cRef').value    = a.referencia || '';
-  document.getElementById('addr-selected-label').textContent = '✅ ' + (a.obs || a.address_line);
-  closeAddrModal();
-  showToast('📍 ' + (a.obs || a.address_line));
-}
-
-// ── Form de novo endereço no modal ───────────────────────────
-function showAddInModal() {
-  document.getElementById('add-addr-section').style.display = 'none';
-  document.getElementById('add-addr-form-modal').style.display = 'block';
-  document.getElementById('m-obs').focus();
-}
-function hideAddInModal() {
-  document.getElementById('add-addr-section').style.display = 'block';
-  document.getElementById('add-addr-form-modal').style.display = 'none';
-  ['m-obs','m-addr','m-bairro','m-comp','m-ref'].forEach(id => document.getElementById(id).value = '');
-}
-
-async function saveAddrInModal() {
-  const obs  = document.getElementById('m-obs').value.trim();
-  const line = document.getElementById('m-addr').value.trim();
-  if (!obs)  { document.getElementById('m-obs').style.borderColor  = '#dc2626'; document.getElementById('m-obs').focus(); return; }
-  if (!line) { document.getElementById('m-addr').style.borderColor = '#dc2626'; document.getElementById('m-addr').focus(); return; }
-  const btn = document.querySelector('#add-addr-form-modal button');
-  btn.textContent = '⏳ Salvando...'; btn.disabled = true;
-  try {
-    await api('/api/address/save', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        phone_digits: currentPhone, obs, address_line: line,
-        bairro:      document.getElementById('m-bairro').value,
-        complemento: document.getElementById('m-comp').value,
-        referencia:  document.getElementById('m-ref').value,
-      })
+  // Filtro de data client-side (timezone America/Campo_Grande)
+  if (dateFrom || dateTo) {
+    rows = rows.filter(r => {
+      if (!r.created_at) return true;
+      const d = new Date(r.created_at * 1000)
+        .toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' }); // YYYY-MM-DD
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo   && d > dateTo)   return false;
+      return true;
     });
-    showToast('✅ Endereço salvo!');
-    // Recarrega lista imediatamente
-    allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(currentPhone)}`);
-    document.getElementById('addr-count-badge').textContent = allAddresses.length;
-    document.getElementById('addr-search-input').value = '';
-    renderAddrList(allAddresses);
-    hideAddInModal();
-  } catch(e) {
-    showToast('Erro ao salvar', 'error');
-    btn.textContent = '💾 Salvar endereço'; btn.disabled = false;
+  }
+
+  // Filtro de status client-side (multi-select)
+  rows = rows.filter(r => activeStatuses.has(r.status));
+
+  // Ordenação: status prioritário, depois por hora (mais recente)
+  rows.sort((a, b) => {
+    const sd = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+    if (sd !== 0) return sd;
+    return b.created_at - a.created_at;
+  });
+
+  lastRows = rows;
+  renderTable(rows);
+  renderSummary(rows);
+  document.getElementById('count-badge').textContent = `${rows.length} pedidos`;
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8">Nenhum pedido encontrado</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(o => {
+    const items = JSON.parse(o.items_json || '[]');
+    const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
+    const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
+    const hora  = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+
+    const driverOpts = `<option value="">Sem entregador</option>` +
+      drivers.map(d => `<option value="${d.id}" ${o.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
+
+    const canSendWa  = ['novo','encaminhado'].includes(o.status);
+    const canDeliver = ['whatsapp_enviado','encaminhado'].includes(o.status);
+    const canCancel  = !['cancelado','entregue'].includes(o.status);
+
+    return `
+    <tr id="row-${o.id}">
+      <td><strong>#${o.id}</strong></td>
+      <td>${hora}</td>
+      <td>
+        <div style="font-weight:700;color:#1e293b">${o.customer_name}</div>
+        <div style="font-size:11px;color:#64748b">${o.phone_digits || ''}</div>
+      </td>
+      <td>
+        <div style="font-size:12px">${o.address_line}</div>
+        <div style="font-size:11px;color:#64748b">${o.bairro || ''} ${o.referencia ? '• ' + o.referencia : ''}</div>
+      </td>
+      <td style="font-size:12px;max-width:160px">${itemsStr}</td>
+      <td style="font-weight:700;color:#1e293b">${total}</td>
+      <td>${statusBadge(o.status)}</td>
+      <td>
+        <select class="driver-sel" onchange="selectDriver(${o.id}, this.value)">
+          ${driverOpts}
+        </select>
+      </td>
+      <td>
+        <div class="action-btns">
+          ${canSendWa  ? `<button class="btn btn-green" style="font-size:11px;padding:5px 8px" onclick="openModal(${o.id})">📲 Msg</button>` : ''}
+          ${canDeliver ? `<button class="btn btn-blue"  style="font-size:11px;padding:5px 8px" onclick="markDelivered(${o.id})">✅ Entregue</button>` : ''}
+          <button class="btn" style="font-size:11px;padding:5px 8px;background:#6366f1;color:#fff" onclick="openEditModal(${o.id})">✏️</button>
+          ${canCancel  ? `<button class="btn btn-red"   style="font-size:11px;padding:5px 8px" onclick="cancelOrder(${o.id})">✕</button>` : ''}
+          <button class="btn btn-gray" style="font-size:11px;padding:5px 8px" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSummary(rows) {
+  const counts = { novo: 0, encaminhado: 0, whatsapp_enviado: 0, entregue: 0, cancelado: 0 };
+  let total = 0;
+  rows.forEach(r => { counts[r.status]++; total += r.total_value || 0; });
+
+  document.getElementById('summary-bar').innerHTML = `
+    <span>🔴 Novos: <strong>${counts.novo}</strong></span>
+    <span>🟡 Encaminhados: <strong>${counts.encaminhado}</strong></span>
+    <span>🟢 WhatsApp: <strong>${counts.whatsapp_enviado}</strong></span>
+    <span>🔵 Entregues: <strong>${counts.entregue}</strong></span>
+    <span>⚫ Cancelados: <strong>${counts.cancelado}</strong></span>
+    <span style="margin-left:auto">💰 Total: <strong>R$ ${total.toFixed(2)}</strong></span>`;
+}
+
+// ── Ações ─────────────────────────────────────────────────────
+async function selectDriver(orderId, driverId) {
+  if (!driverId) return;
+  try {
+    await api(`/api/order/${orderId}/select-driver`, { method: 'POST', body: JSON.stringify({ driver_id: parseInt(driverId) }) });
+    toast('✅ Entregador selecionado!');
+    setTimeout(load, 500);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function markDelivered(id) {
+  if (!confirm(`Marcar pedido #${id} como ENTREGUE?`)) return;
+  try {
+    await api(`/api/order/${id}/mark-delivered`, { method: 'POST' });
+    toast('✅ Pedido entregue!');
+    load();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function cancelOrder(id) {
+  if (!confirm(`Cancelar pedido #${id}?`)) return;
+  try {
+    await api(`/api/order/${id}/cancel`, { method: 'POST' });
+    toast('Pedido cancelado');
+    load();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Modal WhatsApp ────────────────────────────────────────────
+function openModal(orderId) {
+  // encontrar order no DOM
+  const rows = document.querySelectorAll('#tbody tr');
+  // re-buscar na API
+  api(`/api/order/${orderId}`).then(order => {
+    currentOrder = order;
+    const items = JSON.parse(order.items_json || '[]');
+    document.getElementById('modal-order-summary').innerHTML = `
+      <strong>Pedido #${order.id}</strong> — ${order.customer_name}<br>
+      📍 ${order.address_line}${order.bairro ? ', ' + order.bairro : ''}<br>
+      ${order.referencia ? '📌 Ref: ' + order.referencia + '<br>' : ''}
+      📦 ${items.map(i => i.qty + 'x ' + i.name).join(' | ')}
+    `;
+
+    const dSel = document.getElementById('modal-driver');
+    dSel.innerHTML = '<option value="">Selecione o entregador *</option>' +
+      drivers.map(d => `<option value="${d.id}" ${order.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
+
+    document.getElementById('modal-obs').value = '';
+    document.getElementById('modal-preview').style.display = 'none';
+    document.getElementById('modal-wa').classList.add('open');
+  }).catch(() => {
+    // fallback: abrir modal sem dados da API
+    currentOrder = { id: orderId };
+    document.getElementById('modal-wa').classList.add('open');
+  });
+}
+
+function closeModal() {
+  document.getElementById('modal-wa').classList.remove('open');
+  currentOrder = null;
+}
+
+function previewMsg() {
+  if (!currentOrder) return;
+  const obs = document.getElementById('modal-obs').value;
+  const items = JSON.parse(currentOrder.items_json || '[]');
+  const itemsList = items.map(i => `  • ${i.name} x${i.qty}`).join('\n') || '  (sem itens)';
+  const addr = `${currentOrder.address_line}${currentOrder.bairro ? ', ' + currentOrder.bairro : ''}, Campo Grande/MS`;
+  const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+
+  const msg = `🚚 *NOVA ENTREGA* — Pedido #${currentOrder.id}
+
+👤 Cliente: ${currentOrder.customer_name}
+📞 ${currentOrder.phone_digits || 'não informado'}
+
+📍 ${currentOrder.address_line}${currentOrder.bairro ? ' — ' + currentOrder.bairro : ''} — Campo Grande/MS${currentOrder.referencia ? '\nRef: ' + currentOrder.referencia : ''}
+
+📦 Itens:
+${itemsList}
+
+📝 Obs: ${obs || '—'}
+
+🗺️ ${mapsLink}`;
+
+  document.getElementById('modal-preview').textContent = msg;
+  document.getElementById('modal-preview').style.display = 'block';
+}
+
+async function sendWa() {
+  const driverId = document.getElementById('modal-driver').value;
+  const obs      = document.getElementById('modal-obs').value;
+  if (!driverId) { toast('Selecione um entregador!', 'error'); return; }
+
+  try {
+    await api(`/api/order/${currentOrder.id}/send-whatsapp`, {
+      method: 'POST',
+      body: JSON.stringify({ driver_id: parseInt(driverId), observation: obs }),
+    });
+    toast('✅ WhatsApp enviado!');
+    closeModal();
+    load();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Impressão ─────────────────────────────────────────────────
+function printOrder(order) {
+  const params = encodeURIComponent(JSON.stringify(order));
+  window.open(`print.html?data=${params}`, '_blank');
+}
+
+// ── Auto refresh ──────────────────────────────────────────────
+function toggleAuto() {
+  clearInterval(autoTimer);
+  if (document.getElementById('autoRefresh').checked) {
+    autoTimer = setInterval(load, 30000);
   }
 }
 
-async function deleteAddr(id) {
-  if (!confirm('Excluir este endereço?')) return;
-  await api(`/api/address/${id}`, { method: 'DELETE' });
-  allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(currentPhone)}`);
-  document.getElementById('addr-count-badge').textContent = allAddresses.length;
-  renderAddrList(allAddresses);
+// ── Fechar modal clicando fora ────────────────────────────────
+document.getElementById('modal-wa').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+
+// ── Editar Pedido ─────────────────────────────────────────────
+let editOrderId = null;
+let editItems = [];
+
+function openEditModal(orderId) {
+  const o = lastRows.find(r => r.id === orderId);
+  if (!o) { toast('Pedido não encontrado', 'error'); return; }
+
+  editOrderId = orderId;
+  editItems = JSON.parse(o.items_json || '[]').map(i => ({...i}));
+
+  document.getElementById('edit-order-id').textContent = `#${orderId}`;
+  document.getElementById('edit-name').value  = o.customer_name || '';
+  document.getElementById('edit-phone').value = o.phone_digits || '';
+  document.getElementById('edit-addr').value  = o.address_line || '';
+  document.getElementById('edit-bairro').value = o.bairro || '';
+  document.getElementById('edit-comp').value  = o.complemento || '';
+  document.getElementById('edit-ref').value   = o.referencia || '';
+  document.getElementById('edit-notes').value = o.notes || '';
+  document.getElementById('edit-prod-search').value = '';
+  document.getElementById('edit-prod-suggestions').style.display = 'none';
+
+  renderEditItems();
+  document.getElementById('modal-edit').style.display = 'flex';
 }
 
-// ── Produtos ──────────────────────────────────────────────────
-let productTimer;
-async function searchProducts(q) {
-  clearTimeout(productTimer);
-  const box = document.getElementById('product-suggestions');
+function closeEditModal() {
+  document.getElementById('modal-edit').style.display = 'none';
+}
+
+function renderEditItems() {
+  const list = document.getElementById('edit-items-list');
+  if (!editItems.length) {
+    list.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:8px">Nenhum item</div>';
+    document.getElementById('edit-total').textContent = 'R$ 0,00';
+    return;
+  }
+  let total = 0;
+  list.innerHTML = editItems.map((it, i) => {
+    total += (it.price||0) * (it.qty||1);
+    return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #f1f5f9">
+      <span style="flex:1;font-size:13px">${it.name}</span>
+      <button onclick="editQty(${i},-1)" style="background:#e2e8f0;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px">−</button>
+      <span style="min-width:20px;text-align:center;font-weight:700">${it.qty}</span>
+      <button onclick="editQty(${i},1)" style="background:#e2e8f0;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px">+</button>
+      <span style="font-size:11px;color:#94a3b8">R$</span>
+      <input type="number" step="0.01" value="${parseFloat(it.price||0).toFixed(2)}" style="width:65px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right;font-size:13px" onchange="editPrice(${i},this.value)">
+      <span style="min-width:70px;text-align:right;font-weight:700;font-size:13px">= R$ ${((it.price||0)*(it.qty||1)).toFixed(2)}</span>
+      <button onclick="editRemove(${i})" style="background:#fee2e2;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;color:#ef4444">✕</button>
+    </div>`;
+  }).join('');
+  document.getElementById('edit-total').textContent = `R$ ${total.toFixed(2)}`;
+}
+
+function editQty(i, d) {
+  editItems[i].qty = (editItems[i].qty||1) + d;
+  if (editItems[i].qty <= 0) editItems.splice(i, 1);
+  renderEditItems();
+}
+function editPrice(i, v) { editItems[i].price = parseFloat(v)||0; renderEditItems(); }
+function editRemove(i) { editItems.splice(i, 1); renderEditItems(); }
+
+let editProdTimer;
+async function searchEditProduct(q) {
+  clearTimeout(editProdTimer);
+  const box = document.getElementById('edit-prod-suggestions');
   if (q.length < 2) { box.style.display='none'; return; }
-  productTimer = setTimeout(async () => {
-    try {
-      const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`);
-      if (!list.length) { box.style.display='none'; return; }
-      box.style.display = 'block';
-      box.innerHTML = list.map((p,i) => {
-        const nome = p.name.length > 50 ? p.name.substring(0,50)+'…' : p.name;
-        return `
-        <div class="suggestion-item" onclick="addProductFromSearch(${i})" style="display:flex;justify-content:space-between;align-items:center">
-          <span><strong>${nome}</strong>${p.code ? ' <small style=color:#94a3b8;margin-left:4px>('+p.code+')</small>' : ''}</span>
-          <span style="color:#f97316;font-weight:700;margin-left:8px;white-space:nowrap">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
-        </div>`;}).join('');
-      box._data = list;
-    } catch(e) { console.error(e); }
+  editProdTimer = setTimeout(async () => {
+    const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`).catch(() => []);
+    if (!list.length) { box.style.display='none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = list.map((p,i) => {
+      const nome = p.name.length > 45 ? p.name.substring(0,45)+'…' : p.name;
+      return `<div class="suggestion-item" onclick="addEditProduct(${i})" style="display:flex;justify-content:space-between;align-items:center">
+        <span><strong>${nome}</strong></span>
+        <span style="color:#f97316;font-weight:700;margin-left:8px">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    box._data = list;
   }, 300);
 }
 
-function addProductFromSearch(i) {
-  const p = document.getElementById('product-suggestions')._data[i];
-  document.getElementById('product-search').value = '';
-  document.getElementById('product-suggestions').style.display = 'none';
-  addItem(String(p.id), p.name, parseFloat(p.price)||0);
+function addEditProduct(i) {
+  const p = document.getElementById('edit-prod-suggestions')._data[i];
+  document.getElementById('edit-prod-search').value = '';
+  document.getElementById('edit-prod-suggestions').style.display = 'none';
+  const existing = editItems.find(x => String(x.id) === String(p.id));
+  if (existing) existing.qty++;
+  else editItems.push({ id: String(p.id), name: p.name, qty: 1, price: parseFloat(p.price)||0 });
+  renderEditItems();
 }
 
-document.addEventListener('click', e => {
-  if (!e.target.closest('#product-search') && !e.target.closest('#product-suggestions'))
-    document.getElementById('product-suggestions').style.display='none';
-});
-
-// ── Itens ─────────────────────────────────────────────────────
-function addItem(id, name, price) {
-  const existing = items.find(i => i.id === id);
-  if (existing) { existing.qty++; }
-  else { items.push({ id, name, qty: 1, price }); }
-  renderItems();
-}
-
-function changeQty(id, delta) {
-  const item = items.find(i => i.id === id);
-  if (!item) return;
-  item.qty += delta;
-  if (item.qty <= 0) items = items.filter(i => i.id !== id);
-  renderItems();
-}
-
-function changePrice(id, val) {
-  const item = items.find(i => i.id === id);
-  if (item) { item.price = parseFloat(val)||0; renderTotal(); }
-}
-
-function renderTotal() {
-  let total = 0;
-  items.forEach(it => total += it.price * it.qty);
-  document.getElementById('total-bar').style.display = items.length ? 'flex' : 'none';
-  document.getElementById('total-val').textContent = `R$ ${total.toFixed(2)}`;
-}
-
-function renderItems() {
-  const list = document.getElementById('items-list');
-  if (!items.length) {
-    list.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:12px">Nenhum item adicionado</div>';
-    document.getElementById('total-bar').style.display = 'none';
-    return;
-  }
-  list.innerHTML = items.map(it => `
-    <div class="item-row">
-      <span style="flex:1;font-size:14px">${it.name}</span>
-      <button class="qty-btn" onclick="changeQty('${it.id}',-1)">−</button>
-      <span class="qty-val">${it.qty}</span>
-      <button class="qty-btn" onclick="changeQty('${it.id}',1)">+</button>
-      <span style="display:flex;align-items:center;gap:4px">
-        <small style="color:#94a3b8">R$</small>
-        <input type="number" step="0.01" value="${it.price.toFixed(2)}" 
-          style="width:65px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right;font-size:13px"
-          onchange="changePrice('${it.id}',this.value)">
-      </span>
-      <span style="min-width:75px;text-align:right;font-weight:800;color:#1e293b;font-size:14px">=&nbsp;R$&nbsp;${(it.price*it.qty).toFixed(2)}</span>
-      <button class="btn-remove" onclick="changeQty('${it.id}',-99)">✕</button>
-    </div>`).join('');
-  renderTotal();
-}
-
-// ── Salvar ────────────────────────────────────────────────────
-async function saveOrder() {
-  const name  = document.getElementById('cName').value.trim();
-  const addr  = document.getElementById('cAddr').value.trim();
-  if (!name) { toast('Nome do cliente obrigatório', 'error'); return; }
+async function saveEditOrder() {
+  const name  = document.getElementById('edit-name').value.trim();
+  const addr  = document.getElementById('edit-addr').value.trim();
+  if (!name) { toast('Nome obrigatório', 'error'); return; }
   if (!addr) { toast('Endereço obrigatório', 'error'); return; }
+  if (!editItems.length) { toast('Adicione pelo menos 1 item', 'error'); return; }
 
-  const btn = document.getElementById('btn-save');
-  btn.disabled = true;
-  btn.textContent = '⏳ Salvando...';
+  const total = editItems.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0);
+  const body = {
+    customer_name: name,
+    phone_digits: document.getElementById('edit-phone').value.replace(/\D/g,''),
+    address_line: addr,
+    bairro: document.getElementById('edit-bairro').value,
+    complemento: document.getElementById('edit-comp').value,
+    referencia: document.getElementById('edit-ref').value,
+    items: editItems,
+    total_value: total,
+    notes: document.getElementById('edit-notes').value,
+  };
 
   try {
-    const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-    const result = await api('/api/order/create', {
-      method: 'POST',
-      body: JSON.stringify({
-        phone:       document.getElementById('cPhone').value.replace(/\D/g, ''),
-        name,
-        address_line: addr,
-        bairro:      document.getElementById('cBairro').value,
-        complemento: document.getElementById('cComp').value,
-        referencia:  document.getElementById('cRef').value,
-        items:       items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
-        total_value: total || null,
-        notes:       document.getElementById('notes').value,
-      }),
-    });
-
-    // Salvar cliente no cache
-    await api('/api/customer/upsert', {
-      method: 'POST',
-      body: JSON.stringify({
-        phone: document.getElementById('cPhone').value.replace(/\D/g, ''),
-        name,
-        address_line: addr,
-        bairro:      document.getElementById('cBairro').value,
-        complemento: document.getElementById('cComp').value,
-        referencia:  document.getElementById('cRef').value,
-      }),
-    }).catch(() => {});
-
-    toast(`✅ Pedido #${result.id} criado!`);
-
-    // Limpar form
-    setTimeout(() => {
-      document.getElementById('multi-addr-bar').style.display = 'none';
-      document.getElementById('addr-selected-label').textContent = '';
-      document.getElementById('addr-count-badge').textContent = '0';
-      allAddresses = []; currentPhone = '';
-      ['cName','cPhone','cAddr','cBairro','cComp','cRef','notes','search'].forEach(id => {
-        document.getElementById(id).value = '';
-      });
-      items = [];
-      renderItems();
-      btn.disabled = false;
-      btn.textContent = '✅ SALVAR PEDIDO';
-    }, 800);
-
-  } catch(e) {
-    toast(e.message, 'error');
-    btn.disabled = false;
-    btn.textContent = '✅ SALVAR PEDIDO';
-  }
+    await api(`/api/order/${editOrderId}/update`, { method: 'POST', body: JSON.stringify(body) });
+    toast('✅ Pedido atualizado!');
+    closeEditModal();
+    load();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
-renderItems();
+init();
 </script>
 
-<!-- ── MODAL ENDEREÇOS ────────────────────────────────────────── -->
-<div id="addr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:16px;width:min(94vw,560px);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-    
-    <!-- Header -->
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:2px solid #e2e8f0">
+<!-- MODAL EDITAR PEDIDO -->
+<div class="modal-overlay" id="modal-edit" style="display:none">
+  <div class="modal" style="max-width:620px;width:95%;max-height:90vh;overflow-y:auto">
+    <h2>✏️ Editar Pedido <span id="edit-order-id" style="color:#f97316"></span></h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
-        <div style="font-size:16px;font-weight:800;color:#1e293b">📍 Endereços de Entrega</div>
-        <div id="modal-client-name" style="font-size:12px;color:#6366f1;margin-top:2px"></div>
+        <label style="font-size:12px;color:#64748b;font-weight:600">CLIENTE *</label>
+        <input id="edit-name" type="text" style="width:100%">
       </div>
-      <button onclick="closeAddrModal()" style="background:#f1f5f9;border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer">×</button>
+      <div>
+        <label style="font-size:12px;color:#64748b;font-weight:600">TELEFONE</label>
+        <input id="edit-phone" type="text" style="width:100%">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:12px;color:#64748b;font-weight:600">ENDEREÇO *</label>
+        <input id="edit-addr" type="text" style="width:100%">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#64748b;font-weight:600">BAIRRO</label>
+        <input id="edit-bairro" type="text" style="width:100%">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#64748b;font-weight:600">COMPLEMENTO</label>
+        <input id="edit-comp" type="text" style="width:100%">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:12px;color:#64748b;font-weight:600">REFERÊNCIA</label>
+        <input id="edit-ref" type="text" style="width:100%">
+      </div>
     </div>
 
-    <!-- Busca -->
-    <div style="padding:12px 20px;border-bottom:1px solid #f1f5f9">
-      <input id="addr-search-input" type="text" placeholder="🔍 Buscar por nome da unidade ou rua..."
-        oninput="filterAddresses(this.value)"
-        style="width:100%;padding:9px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none"
-        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+    <label style="font-size:12px;color:#64748b;font-weight:600">ITENS</label>
+    <div style="display:flex;gap:8px;margin-bottom:8px;position:relative">
+      <input id="edit-prod-search" type="text" placeholder="🔍 Adicionar produto..." style="flex:1" oninput="searchEditProduct(this.value)">
+      <div id="edit-prod-suggestions" style="display:none;position:absolute;top:38px;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:200px;overflow-y:auto"></div>
+    </div>
+    <div id="edit-items-list" style="margin-bottom:12px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:2px solid #f97316;margin-bottom:12px">
+      <span style="font-weight:700">TOTAL</span>
+      <span id="edit-total" style="font-size:20px;font-weight:900;color:#f97316">R$ 0,00</span>
     </div>
 
-    <!-- Lista de endereços -->
-    <div id="addr-modal-list" style="flex:1;overflow-y:auto;padding:12px 20px"></div>
+    <div>
+      <label style="font-size:12px;color:#64748b;font-weight:600">OBSERVAÇÃO</label>
+      <textarea id="edit-notes" rows="2" style="width:100%;resize:vertical"></textarea>
+    </div>
 
-    <!-- Footer: adicionar novo -->
-    <div style="padding:12px 20px;border-top:2px solid #e2e8f0">
-      <div id="add-addr-section">
-        <button type="button" onclick="showAddInModal()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;width:100%">
-          + Cadastrar novo endereço para este cliente
-        </button>
-      </div>
-      <div id="add-addr-form-modal" style="display:none">
-        <div style="font-size:13px;font-weight:700;color:#6366f1;margin-bottom:10px">Novo Endereço</div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px;font-weight:700;color:#64748b">NOME / UNIDADE *</label>
-          <input id="m-obs" type="text" placeholder="Ex: Escola Municipal X, Clínica Saúde Plena" 
-            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-        </div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px;font-weight:700;color:#64748b">RUA + NÚMERO *</label>
-          <input id="m-addr" type="text" placeholder="Rua das Flores, 100" 
-            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div>
-            <label style="font-size:11px;font-weight:700;color:#64748b">BAIRRO</label>
-            <input id="m-bairro" type="text" placeholder="Jardim Noroeste" 
-              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-          </div>
-          <div>
-            <label style="font-size:11px;font-weight:700;color:#64748b">COMPLEMENTO</label>
-            <input id="m-comp" type="text" placeholder="Sala 2, Bloco A" 
-              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-          </div>
-        </div>
-        <div style="margin-bottom:10px">
-          <label style="font-size:11px;font-weight:700;color:#64748b">PONTO DE REFERÊNCIA</label>
-          <input id="m-ref" type="text" placeholder="Próximo ao semáforo" 
-            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
-        </div>
-        <div style="display:flex;gap:8px">
-          <button type="button" onclick="saveAddrInModal()" 
-            style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;flex:1">
-            💾 Salvar endereço
-          </button>
-          <button type="button" onclick="hideAddInModal()" 
-            style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer">
-            Cancelar
-          </button>
-        </div>
-      </div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-gray" onclick="closeEditModal()">Cancelar</button>
+      <button class="btn btn-orange" onclick="saveEditOrder()">💾 Salvar Alterações</button>
     </div>
   </div>
 </div>
