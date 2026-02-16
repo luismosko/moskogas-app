@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.3.7</title>
+<title>Novo Pedido — MoskoGás v2.3.8</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.7 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.8 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.3.7</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.3.8</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -631,29 +631,52 @@ let productTimer;
 async function searchProducts(q) {
   clearTimeout(productTimer);
   const box = document.getElementById('product-suggestions');
-  if (q.length < 2) { box.style.display='none'; return; }
+  if (q.length < 2) { box.style.display='none'; box._data = []; return; }
+
+  // Mostra loading
+  box.style.display = 'block';
+  box.innerHTML = '<div style="padding:10px 14px;color:#94a3b8;font-size:12px">🔍 Buscando...</div>';
+  box._data = [];
+
   productTimer = setTimeout(async () => {
     try {
       const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`);
-      if (!list.length) { box.style.display='none'; return; }
-      box.style.display = 'block';
-      box.innerHTML = list.map((p,i) => {
-        const nome = p.name.length > 50 ? p.name.substring(0,50)+'…' : p.name;
-        return `
-        <div class="suggestion-item" onclick="addProductFromSearch(${i})" style="display:flex;justify-content:space-between;align-items:center">
-          <span><strong>${nome}</strong>${p.code ? ' <small style=color:#94a3b8;margin-left:4px>('+p.code+')</small>' : ''}</span>
-          <span style="color:#f97316;font-weight:700;margin-left:8px;white-space:nowrap">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
-        </div>`;}).join('');
+      if (!list || !list.length) {
+        box.innerHTML = '<div style="padding:10px 14px;color:#94a3b8;font-size:12px">Nenhum produto encontrado para "' + q + '"</div>';
+        box._data = [];
+        return;
+      }
       box._data = list;
-    } catch(e) { console.error(e); }
+      box.style.display = 'block';
+      box.innerHTML = list.map((p, idx) => {
+        const nome = (p.name||'').length > 55 ? (p.name||'').substring(0,55)+'…' : (p.name||'Produto');
+        const preco = parseFloat(p.price||0).toFixed(2);
+        return `<div class="suggestion-item" onclick="addProductFromSearch(${idx})"
+          style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span>
+            <strong>${nome}</strong>
+            ${p.code ? `<small style="color:#94a3b8;margin-left:6px">(${p.code})</small>` : ''}
+          </span>
+          <span style="color:#f97316;font-weight:700;white-space:nowrap">R$ ${preco}</span>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      console.error('Erro busca produto:', e);
+      box.innerHTML = `<div style="padding:10px 14px;color:#dc2626;font-size:12px">❌ Erro: ${e.message}</div>`;
+      box._data = [];
+    }
   }, 300);
 }
 
-function addProductFromSearch(i) {
-  const p = document.getElementById('product-suggestions')._data[i];
+function addProductFromSearch(idx) {
+  const box = document.getElementById('product-suggestions');
+  const list = box._data || [];
+  const p = list[idx];
+  if (!p) { toast('❌ Produto não encontrado', 'error'); return; }
+  box.style.display = 'none';
+  box._data = [];
   document.getElementById('product-search').value = '';
-  document.getElementById('product-suggestions').style.display = 'none';
-  addItem(String(p.id), p.name, parseFloat(p.price)||0);
+  addItem(String(p.id), p.name || 'Produto', parseFloat(p.price) || 0);
 }
 
 document.addEventListener('click', e => {
