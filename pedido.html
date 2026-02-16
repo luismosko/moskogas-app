@@ -410,29 +410,47 @@ function hideAddInModal() {
 async function saveAddrInModal() {
   const obs  = document.getElementById('m-obs').value.trim();
   const line = document.getElementById('m-addr').value.trim();
+  document.getElementById('m-obs').style.borderColor  = '';
+  document.getElementById('m-addr').style.borderColor = '';
   if (!obs)  { document.getElementById('m-obs').style.borderColor  = '#dc2626'; document.getElementById('m-obs').focus(); return; }
   if (!line) { document.getElementById('m-addr').style.borderColor = '#dc2626'; document.getElementById('m-addr').focus(); return; }
-  const btn = document.querySelector('#add-addr-form-modal button');
-  btn.textContent = '⏳ Salvando...'; btn.disabled = true;
+  if (!currentPhone) { showToast('❌ Selecione um cliente primeiro'); return; }
+
+  const btn = document.querySelector('#add-addr-form-modal button[onclick="saveAddrInModal()"]');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '⏳ Salvando...'; btn.disabled = true; }
+
   try {
-    await api('/api/address/save', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        phone_digits: currentPhone, obs, address_line: line,
-        bairro:      document.getElementById('m-bairro').value,
-        complemento: document.getElementById('m-comp').value,
-        referencia:  document.getElementById('m-ref').value,
-      })
+    const payload = {
+      phone_digits: currentPhone, obs, address_line: line,
+      bairro:      document.getElementById('m-bairro').value || '',
+      complemento: document.getElementById('m-comp').value  || '',
+      referencia:  document.getElementById('m-ref').value   || '',
+    };
+    console.log('Salvando endereço:', payload);
+
+    const result = await api('/api/address/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
+    console.log('Resultado:', result);
+
     showToast('✅ Endereço salvo!');
+
     // Recarrega lista imediatamente
-    allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(currentPhone)}`);
+    try {
+      allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(currentPhone)}`);
+    } catch(le) { console.error('Erro ao recarregar lista:', le); allAddresses = []; }
+
     document.getElementById('addr-count-badge').textContent = allAddresses.length;
     document.getElementById('addr-search-input').value = '';
     renderAddrList(allAddresses);
     hideAddInModal();
   } catch(e) {
-    showToast('Erro ao salvar', 'error');
-    btn.textContent = '💾 Salvar endereço'; btn.disabled = false;
+    console.error('Erro saveAddrInModal:', e);
+    showToast('❌ Erro: ' + (e.message || 'falha ao salvar'));
+    if (btn) { btn.textContent = origText || '💾 Salvar endereço'; btn.disabled = false; }
   }
 }
 
