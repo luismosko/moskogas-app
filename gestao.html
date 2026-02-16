@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -89,6 +88,7 @@
   <thead>
     <tr>
       <th>#</th>
+      <th>Data</th>
       <th>Hora</th>
       <th>Cliente</th>
       <th>Endereço</th>
@@ -232,7 +232,7 @@ async function _load() {
     if (!Array.isArray(rows)) { console.error('API retornou:', rows); rows = []; }
   } catch(e) {
     console.error('Erro ao carregar pedidos:', e);
-    document.getElementById('tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#dc2626">Erro ao carregar: ' + e.message + '</td></tr>';
+    document.getElementById('tbody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:#dc2626">Erro ao carregar: ' + e.message + '</td></tr>';
     return;
   }
 
@@ -267,7 +267,7 @@ async function _load() {
 function renderTable(rows) {
   const tbody = document.getElementById('tbody');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8">Nenhum pedido encontrado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:#94a3b8">Nenhum pedido encontrado</td></tr>';
     return;
   }
 
@@ -276,6 +276,7 @@ function renderTable(rows) {
     const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
     const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
     const hora  = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+    const data  = o.created_at ? new Date(o.created_at * 1000).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
 
     const driverOpts = `<option value="">Sem entregador</option>` +
       drivers.map(d => `<option value="${d.id}" ${o.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
@@ -287,7 +288,8 @@ function renderTable(rows) {
     return `
     <tr id="row-${o.id}">
       <td><strong>#${o.id}</strong></td>
-      <td>${hora}</td>
+      <td style="white-space:nowrap;color:#64748b;font-size:12px">${data}</td>
+      <td style="white-space:nowrap">${hora}</td>
       <td>
         <div style="font-weight:700;color:#1e293b">${o.customer_name}</div>
         <div style="font-size:11px;color:#64748b">${o.phone_digits || ''}</div>
