@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.4.0</title>
+<title>Novo Pedido — MoskoGás v2.4.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.0 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.1 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.0</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.1</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -900,7 +900,7 @@ async function saveOrder() {
       document.getElementById('addr-count-badge').textContent = '0';
       allAddresses = []; currentPhone = '';
       ['cName','cPhone','cAddr','cNum','cBairro','cComp','cRef','notes','search'].forEach(id => {
-        document.getElementById(id).value = '';
+        const el = document.getElementById(id); if (el) el.value = '';
       });
       document.getElementById('forma_pagamento_key').value = '';
       document.getElementById('emitir_nfce').value = '';
