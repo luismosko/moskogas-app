@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -49,16 +50,12 @@
   <!-- BUSCA CLIENTE -->
   <div class="card">
     <label>🔍 Buscar Cliente</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px">
-      <button class="search-tab active" onclick="setSearchType('phone',this)">📞 Telefone</button>
-      <button class="search-tab" onclick="setSearchType('name',this)">👤 Nome</button>
-      <button class="search-tab" onclick="setSearchType('address',this)">📍 Endereço</button>
+    <div class="search-fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+      <input id="searchPhone" type="tel" placeholder="📞 Telefone" autocomplete="off" oninput="doSearch(this.value,'phone')">
+      <input id="searchName" type="text" placeholder="👤 Nome" autocomplete="off" oninput="doSearch(this.value,'name')">
+      <input id="searchAddr" type="text" placeholder="📍 Endereço" autocomplete="off" oninput="doSearch(this.value,'address')">
     </div>
-    <div class="autocomplete-box">
-      <input id="search" type="text" placeholder="Digite para buscar..." autocomplete="off">
-      <div id="suggestions" style="display:none;"></div>
-    </div>
-    <div id="search-hint" style="font-size:11px;color:#94a3b8;margin-top:4px">📞 Digite o telefone com DDD</div>
+    <div id="suggestions" style="display:none;position:relative;"></div>
   </div>
 
   <!-- DADOS DO CLIENTE -->
@@ -126,42 +123,26 @@
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
-let searchType = 'phone';
-const hints = {
-  phone: '📞 Digite o telefone com DDD (ex: 67999...)',
-  name: '👤 Digite o nome do cliente',
-  address: '📍 Digite a rua ou bairro'
-};
-
-function setSearchType(type, btn) {
-  searchType = type;
-  document.querySelectorAll('.search-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('search').value = '';
-  document.getElementById('search-hint').textContent = hints[type];
-  hideSuggestions();
-  document.getElementById('search').focus();
-}
 let items = [];
 let searchTimer;
 
-async function searchCustomer(q) {
-  try {
-    const results = await api(`/api/customer/search?q=${encodeURIComponent(q)}&type=${searchType}`);
-    showSuggestions(results);
-  } catch(e) { console.error(e); }
+function doSearch(val, type) {
+  // limpa os outros campos
+  const map = {phone:'searchPhone', name:'searchName', address:'searchAddr'};
+  Object.entries(map).forEach(([t, id]) => { if (t !== type) document.getElementById(id).value = ''; });
+  clearTimeout(searchTimer);
+  const q = val.trim();
+  if (q.length < 2) { hideSuggestions(); return; }
+  searchTimer = setTimeout(async () => {
+    try {
+      const results = await api(`/api/customer/search?q=${encodeURIComponent(q)}&type=${type}`);
+      showSuggestions(results);
+    } catch(e) { console.error(e); }
+  }, 280);
 }
 
-// ── Autocomplete ──────────────────────────────────────────────
-document.getElementById('search').addEventListener('input', function() {
-  clearTimeout(searchTimer);
-  const q = this.value.trim();
-  if (q.length < 2) { hideSuggestions(); return; }
-  searchTimer = setTimeout(() => searchCustomer(q), 280);
-});
-
 document.addEventListener('click', e => {
-  if (!e.target.closest('.autocomplete-box')) hideSuggestions();
+  if (!e.target.closest('.search-fields') && !e.target.closest('#suggestions')) hideSuggestions();
 });
 
 function showSuggestions(list) {
@@ -301,7 +282,6 @@ async function saveOrder() {
   }
 }
 
- 
 renderItems();
 </script>
 </body>
