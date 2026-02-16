@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão de Pedidos — MoskoGás</title>
+<title>Gestão v1.8 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -56,23 +56,26 @@
     <button class="btn" onclick="setDateFilter('limpar')" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
   </div>
   <div style="position:relative">
-    <button id="statusBtn" onclick="toggleStatusMenu()" style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;min-width:140px;text-align:left">
+    <button id="statusBtn" onclick="toggleStatusMenu()" style="background:#fff;border:2px solid #e2e8f0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;min-width:140px;text-align:left">
       <span id="statusLabel">Status ▾</span>
     </button>
-    <div id="statusMenu" style="display:none;position:absolute;top:38px;left:0;z-index:100;background:#fff;border:2px solid #f97316;border-radius:8px;padding:8px;min-width:190px;box-shadow:0 4px 12px rgba(0,0,0,.1)">
-      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="novo" onchange="updateStatusFilter()" checked> 🔴 Novo</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="encaminhado" onchange="updateStatusFilter()" checked> 🟡 Encaminhado</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="whatsapp_enviado" onchange="updateStatusFilter()" checked> 🟢 WhatsApp Enviado</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="entregue" onchange="updateStatusFilter()" checked> 🔵 Entregue</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px"><input type="checkbox" value="cancelado" onchange="updateStatusFilter()"> ⚫ Cancelado</label>
+    <div id="statusMenu" style="display:none;position:absolute;top:42px;left:0;z-index:200;background:#fff;border:2px solid #f97316;border-radius:8px;padding:8px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="novo" onchange="updateStatusFilter()" checked> 🔴 Novo</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="encaminhado" onchange="updateStatusFilter()" checked> 🟡 Encaminhado</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="whatsapp_enviado" onchange="updateStatusFilter()" checked> 🟢 WhatsApp Enviado</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="entregue" onchange="updateStatusFilter()" checked> 🔵 Entregue</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="cancelado" onchange="updateStatusFilter()"> ⚫ Cancelado</label>
     </div>
   </div>
+  <!-- overlay invisível que fecha o status menu ao clicar fora -->
+  <div id="statusOverlay" onclick="closeStatusMenu()" style="display:none;position:fixed;inset:0;z-index:199"></div>
   <select id="fDriver" onchange="load()">
     <option value="">Todos entregadores</option>
   </select>
   <input type="text" id="fQ" placeholder="🔍 Busca..." oninput="load()" style="width:160px">
   <button class="btn btn-orange" onclick="load()">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.0</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -127,8 +130,6 @@ let currentOrder = null;
 let autoTimer = null;
 
 // ── Init ──────────────────────────────────────────────────────
-document.getElementById('fDate').value = today();
-
 async function init() {
   drivers = await api('/api/drivers').catch(() => []);
   const sel = document.getElementById('fDriver');
@@ -148,15 +149,18 @@ async function load() {
   loadTimer = setTimeout(_load, 150);
 }
 
-// Data em Campo Grande (UTC-4)
+// Data em Campo Grande — sempre via IANA timezone (correto em qualquer browser)
 function todayCG() {
-  const d = new Date();
-  d.setHours(d.getHours() - 4); // UTC-4
-  return d.toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
 }
 function yesterdayCG() {
   const d = new Date();
-  d.setHours(d.getHours() - 4 - 24);
+  d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+}
+function _yesterdayCG_unused() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
   return d.toISOString().slice(0, 10);
 }
 
@@ -186,10 +190,14 @@ let activeStatuses = new Set(['novo','encaminhado','whatsapp_enviado','entregue'
 
 function toggleStatusMenu() {
   const m = document.getElementById('statusMenu');
-  // Small delay so document click handler fires first on outside clicks
-  setTimeout(() => {
-    m.style.display = m.style.display === 'none' ? 'block' : 'none';
-  }, 0);
+  const ov = document.getElementById('statusOverlay');
+  const isOpen = m.style.display !== 'none';
+  m.style.display  = isOpen ? 'none' : 'block';
+  ov.style.display = isOpen ? 'none' : 'block';
+}
+function closeStatusMenu() {
+  document.getElementById('statusMenu').style.display  = 'none';
+  document.getElementById('statusOverlay').style.display = 'none';
 }
 
 function updateStatusFilter() {
@@ -201,12 +209,7 @@ function updateStatusFilter() {
   load();
 }
 
-document.addEventListener('click', e => {
-  if (!e.target.closest('#statusMenu') && !e.target.closest('#statusBtn')) {
-    const m = document.getElementById('statusMenu');
-    if (m) m.style.display = 'none';
-  }
-});
+// status dropdown closed via overlay div
 
 // Ordenação: novo > encaminhado > whatsapp_enviado > entregue > cancelado
 const STATUS_ORDER = { novo: 0, encaminhado: 1, whatsapp_enviado: 2, entregue: 3, cancelado: 4 };
@@ -223,7 +226,15 @@ async function _load() {
   if (driverId) url += `&driver_id=${driverId}`;
   if (q)        url += `&q=${encodeURIComponent(q)}`;
 
-  let rows = await api(url).catch(() => []);
+  let rows = [];
+  try {
+    rows = await api(url);
+    if (!Array.isArray(rows)) { console.error('API retornou:', rows); rows = []; }
+  } catch(e) {
+    console.error('Erro ao carregar pedidos:', e);
+    document.getElementById('tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#dc2626">Erro ao carregar: ' + e.message + '</td></tr>';
+    return;
+  }
 
   // Filtro de data client-side (timezone America/Campo_Grande)
   if (dateFrom || dateTo) {
