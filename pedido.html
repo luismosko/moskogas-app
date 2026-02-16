@@ -43,7 +43,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.1 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.3.2 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.7</span></h1>
 
@@ -54,10 +54,20 @@
       <button onclick="syncBling(this)" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px;color:#94a3b8;cursor:pointer" title="Sincronizar contatos do Bling para busca por endereço">🔄 Sync Bling</button>
     </div>
     <div class="search-fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-      <input id="searchPhone" type="tel" placeholder="📞 Telefone" autocomplete="off" oninput="doSearch(this.value,'phone')">
-      <input id="searchName" type="text" placeholder="👤 Nome" autocomplete="off" oninput="doSearch(this.value,'name')">
-      <input id="searchAddr" type="text" placeholder="📍 Endereço" autocomplete="off" oninput="doSearch(this.value,'address')">
+      <div style="position:relative">
+        <input id="searchPhone" type="tel" placeholder="📞 Telefone" autocomplete="off" oninput="doSearch(this.value,'phone')" style="width:100%;padding-right:28px">
+        <span onclick="clearSearch('searchPhone')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:#94a3b8;font-size:14px;display:none" id="clr-phone">✕</span>
+      </div>
+      <div style="position:relative">
+        <input id="searchName" type="text" placeholder="👤 Nome" autocomplete="off" oninput="doSearch(this.value,'name')" style="width:100%;padding-right:28px">
+        <span onclick="clearSearch('searchName')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:#94a3b8;font-size:14px;display:none" id="clr-name">✕</span>
+      </div>
+      <div style="position:relative">
+        <input id="searchAddr" type="text" placeholder="📍 Endereço" autocomplete="off" oninput="doSearch(this.value,'address')" style="width:100%;padding-right:28px">
+        <span onclick="clearSearch('searchAddr')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:#94a3b8;font-size:14px;display:none" id="clr-addr">✕</span>
+      </div>
     </div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:4px">💡 Você pode combinar campos — ex: nome <strong>"luis"</strong> + endereço <strong>"afonso"</strong></div>
     <div id="suggestions" style="display:none;position:relative;"></div>
   </div>
 
@@ -158,15 +168,24 @@ async function syncBling(btn) {
 }
 
 function doSearch(val, type) {
-  // limpa os outros campos
-  const map = {phone:'searchPhone', name:'searchName', address:'searchAddr'};
-  Object.entries(map).forEach(([t, id]) => { if (t !== type) document.getElementById(id).value = ''; });
   clearTimeout(searchTimer);
-  const q = val.trim();
-  if (q.length < 2) { hideSuggestions(); return; }
+  // Coleta todos os campos ativos simultaneamente
+  const phone = document.getElementById('searchPhone').value.trim();
+  const name  = document.getElementById('searchName').value.trim();
+  const addr  = document.getElementById('searchAddr').value.trim();
+
+  // Precisa de pelo menos um campo com 2+ chars
+  if (Math.max(phone.length, name.length, addr.length) < 2) { hideSuggestions(); return; }
+
   searchTimer = setTimeout(async () => {
     try {
-      const results = await api(`/api/customer/search?q=${encodeURIComponent(q)}&type=${type}`);
+      // Busca combinada: envia todos os filtros preenchidos ao mesmo tempo
+      const params = new URLSearchParams();
+      if (phone.length >= 2) params.set('phone', phone);
+      if (name.length  >= 2) params.set('name',  name);
+      if (addr.length  >= 2) params.set('addr',  addr);
+
+      const results = await api(`/api/customer/search-multi?${params.toString()}`);
       showSuggestions(results);
     } catch(e) { console.error(e); }
   }, 280);
@@ -194,6 +213,25 @@ function hideSuggestions() {
   const box = document.getElementById('suggestions');
   box.style.display = 'none';
 }
+
+function clearSearch(inputId) {
+  const inp = document.getElementById(inputId);
+  if (inp) { inp.value = ''; inp.focus(); }
+  const clrMap = { searchPhone: 'clr-phone', searchName: 'clr-name', searchAddr: 'clr-addr' };
+  const clrEl = document.getElementById(clrMap[inputId]);
+  if (clrEl) clrEl.style.display = 'none';
+  doSearch('', inputId.replace('search','').toLowerCase());
+}
+
+// Mostra/oculta botão X ao digitar
+['searchPhone','searchName','searchAddr'].forEach(id => {
+  const clrMap = { searchPhone: 'clr-phone', searchName: 'clr-name', searchAddr: 'clr-addr' };
+  const inp = document.getElementById(id);
+  if (inp) inp.addEventListener('input', () => {
+    const clr = document.getElementById(clrMap[id]);
+    if (clr) clr.style.display = inp.value ? 'block' : 'none';
+  });
+});
 
 async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
