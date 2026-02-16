@@ -92,44 +92,12 @@
       <input id="cRef" type="text" placeholder="Ex: próximo ao mercado X">
     </div>
 
-    <!-- ENDEREÇOS SALVOS DO CLIENTE -->
-    <div id="saved-addresses" style="display:none;margin-top:12px;border-top:2px dashed #e2e8f0;padding-top:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <label style="margin:0;color:#6366f1">📍 Endereços cadastrados deste cliente</label>
-        <button type="button" onclick="showAddAddressForm()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;font-weight:700">+ Novo endereço</button>
-      </div>
-      <div id="addr-list"></div>
-
-      <!-- Formulário para novo endereço -->
-      <div id="add-addr-form" style="display:none;background:#f8fafc;border-radius:8px;padding:12px;margin-top:8px">
-        <div style="font-size:12px;font-weight:700;color:#6366f1;margin-bottom:8px">Novo Endereço</div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px">Nome/Unidade (ex: Escola Municipal X, Filial Centro)</label>
-          <input id="new-addr-obs" type="text" placeholder="Ex: Clínica Saúde Plena — Unidade Norte" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
-        </div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px">Endereço (Rua + Número)</label>
-          <input id="new-addr-line" type="text" placeholder="Rua das Flores, 100" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div>
-            <label style="font-size:11px">Bairro</label>
-            <input id="new-addr-bairro" type="text" placeholder="Jardim Noroeste" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
-          </div>
-          <div>
-            <label style="font-size:11px">Complemento</label>
-            <input id="new-addr-comp" type="text" placeholder="Sala 2" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
-          </div>
-        </div>
-        <div style="margin-bottom:10px">
-          <label style="font-size:11px">Ponto de Referência</label>
-          <input id="new-addr-ref" type="text" placeholder="Próximo ao semáforo" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
-        </div>
-        <div style="display:flex;gap:8px">
-          <button type="button" onclick="saveNewAddress()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">💾 Salvar endereço</button>
-          <button type="button" onclick="document.getElementById('add-addr-form').style.display='none'" style="background:#e2e8f0;color:#64748b;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">Cancelar</button>
-        </div>
-      </div>
+    <!-- Botão endereços adicionais (aparece ao selecionar cliente) -->
+    <div id="multi-addr-bar" style="display:none;margin-top:10px;padding-top:10px;border-top:2px dashed #e2e8f0;display:flex;align-items:center;gap:10px">
+      <button type="button" onclick="openAddrModal()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">
+        📍 Outros endereços <span id="addr-count-badge" style="background:rgba(255,255,255,0.3);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span>
+      </button>
+      <span id="addr-selected-label" style="font-size:12px;color:#6366f1;font-weight:600"></span>
     </div>
   </div>
 
@@ -245,68 +213,132 @@ async function selectCustomer(i) {
 }
 
 let currentPhone = '';
+let allAddresses = [];
 
+// ── Carrega endereços e atualiza badge ───────────────────────
 async function loadSavedAddresses(phone) {
   currentPhone = phone;
-  const panel = document.getElementById('saved-addresses');
-  const list  = document.getElementById('addr-list');
+  document.getElementById('modal-client-name').textContent = document.getElementById('cName').value;
   try {
-    const addrs = await api(`/api/address/list?phone=${phone}`);
-    panel.style.display = 'block';
-    if (!addrs.length) {
-      list.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:4px 0">Nenhum endereço extra cadastrado</div>';
-      return;
-    }
-    list.innerHTML = addrs.map(a => `
-      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="applyAddress(${JSON.stringify(a).replace(/"/g,'&quot;')})">
-        <div style="flex:1">
-          <div style="font-size:13px;font-weight:700;color:#6366f1">${a.obs || '—'}</div>
-          <div style="font-size:12px;color:#475569">${a.address_line}${a.bairro ? ' — ' + a.bairro : ''}</div>
-          ${a.complemento ? `<div style="font-size:11px;color:#94a3b8">${a.complemento}</div>` : ''}
-        </div>
-        <button type="button" onclick="event.stopPropagation();deleteAddress(${a.id})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px" title="Excluir">🗑️</button>
-        <div style="background:#6366f1;color:#fff;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:700">Usar</div>
-      </div>
-    `).join('');
-  } catch(e) { panel.style.display = 'block'; }
+    allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(phone)}`);
+  } catch(e) { allAddresses = []; }
+  // Mostra botão
+  const bar = document.getElementById('multi-addr-bar');
+  bar.style.display = 'flex';
+  document.getElementById('addr-count-badge').textContent = allAddresses.length;
 }
 
+// ── Abre modal ───────────────────────────────────────────────
+function openAddrModal() {
+  document.getElementById('addr-search-input').value = '';
+  renderAddrList(allAddresses);
+  hideAddInModal();
+  document.getElementById('addr-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('addr-search-input').focus(), 100);
+}
+function closeAddrModal() {
+  document.getElementById('addr-modal').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  const m = document.getElementById('addr-modal');
+  if (m && m.style.display === 'flex' && e.target === m) closeAddrModal();
+});
+
+// ── Renderiza lista no modal ─────────────────────────────────
+function renderAddrList(list) {
+  const el = document.getElementById('addr-modal-list');
+  if (!list.length) {
+    el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">Nenhum endereço cadastrado</div>';
+    return;
+  }
+  el.innerHTML = list.map(a => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;margin-bottom:8px;cursor:pointer;transition:border .15s"
+      onmouseover="this.style.borderColor='#6366f1'" onmouseout="this.style.borderColor='#e2e8f0'"
+      onclick="applyAddress(${JSON.stringify(a).replace(/"/g,'&quot;')})">
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700;color:#6366f1">${a.obs || '—'}</div>
+        <div style="font-size:13px;color:#334155;margin-top:2px">${a.address_line}${a.bairro ? ' — ' + a.bairro : ''}</div>
+        ${a.complemento ? `<div style="font-size:11px;color:#94a3b8">${a.complemento}</div>` : ''}
+        ${a.referencia  ? `<div style="font-size:11px;color:#94a3b8">Ref: ${a.referencia}</div>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <button type="button" onclick="event.stopPropagation();deleteAddr(${a.id})"
+          style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:2px" title="Excluir">🗑️</button>
+        <div style="background:#6366f1;color:#fff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700">Usar →</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Filtro de busca no modal ─────────────────────────────────
+function filterAddresses(q) {
+  if (!q) { renderAddrList(allAddresses); return; }
+  const ql = q.toLowerCase();
+  renderAddrList(allAddresses.filter(a =>
+    (a.obs || '').toLowerCase().includes(ql) ||
+    (a.address_line || '').toLowerCase().includes(ql) ||
+    (a.bairro || '').toLowerCase().includes(ql)
+  ));
+}
+
+// ── Aplicar endereço selecionado ─────────────────────────────
 function applyAddress(a) {
   document.getElementById('cAddr').value   = a.address_line || '';
   document.getElementById('cBairro').value = a.bairro || '';
   document.getElementById('cComp').value   = a.complemento || '';
   document.getElementById('cRef').value    = a.referencia || '';
-  showToast('✅ Endereço: ' + (a.obs || a.address_line));
+  document.getElementById('addr-selected-label').textContent = '✅ ' + (a.obs || a.address_line);
+  closeAddrModal();
+  showToast('📍 ' + (a.obs || a.address_line));
 }
 
-function showAddAddressForm() {
-  document.getElementById('add-addr-form').style.display = 'block';
-  document.getElementById('new-addr-obs').focus();
+// ── Form de novo endereço no modal ───────────────────────────
+function showAddInModal() {
+  document.getElementById('add-addr-section').style.display = 'none';
+  document.getElementById('add-addr-form-modal').style.display = 'block';
+  document.getElementById('m-obs').focus();
+}
+function hideAddInModal() {
+  document.getElementById('add-addr-section').style.display = 'block';
+  document.getElementById('add-addr-form-modal').style.display = 'none';
+  ['m-obs','m-addr','m-bairro','m-comp','m-ref'].forEach(id => document.getElementById(id).value = '');
 }
 
-async function saveNewAddress() {
-  const obs  = document.getElementById('new-addr-obs').value.trim();
-  const line = document.getElementById('new-addr-line').value.trim();
-  if (!obs || !line) { showToast('Preencha Nome e Endereço', 'error'); return; }
-  await api('/api/address/save', { method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      phone_digits: currentPhone,
-      obs, address_line: line,
-      bairro:      document.getElementById('new-addr-bairro').value,
-      complemento: document.getElementById('new-addr-comp').value,
-      referencia:  document.getElementById('new-addr-ref').value,
-    })
-  });
-  document.getElementById('add-addr-form').style.display = 'none';
-  ['new-addr-obs','new-addr-line','new-addr-bairro','new-addr-comp','new-addr-ref'].forEach(id => document.getElementById(id).value = '');
-  showToast('✅ Endereço salvo!');
-  loadSavedAddresses(currentPhone);
+async function saveAddrInModal() {
+  const obs  = document.getElementById('m-obs').value.trim();
+  const line = document.getElementById('m-addr').value.trim();
+  if (!obs)  { document.getElementById('m-obs').style.borderColor  = '#dc2626'; document.getElementById('m-obs').focus(); return; }
+  if (!line) { document.getElementById('m-addr').style.borderColor = '#dc2626'; document.getElementById('m-addr').focus(); return; }
+  const btn = document.querySelector('#add-addr-form-modal button');
+  btn.textContent = '⏳ Salvando...'; btn.disabled = true;
+  try {
+    await api('/api/address/save', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        phone_digits: currentPhone, obs, address_line: line,
+        bairro:      document.getElementById('m-bairro').value,
+        complemento: document.getElementById('m-comp').value,
+        referencia:  document.getElementById('m-ref').value,
+      })
+    });
+    showToast('✅ Endereço salvo!');
+    // Recarrega lista imediatamente
+    allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(currentPhone)}`);
+    document.getElementById('addr-count-badge').textContent = allAddresses.length;
+    document.getElementById('addr-search-input').value = '';
+    renderAddrList(allAddresses);
+    hideAddInModal();
+  } catch(e) {
+    showToast('Erro ao salvar', 'error');
+    btn.textContent = '💾 Salvar endereço'; btn.disabled = false;
+  }
 }
 
-async function deleteAddress(id) {
+async function deleteAddr(id) {
   if (!confirm('Excluir este endereço?')) return;
   await api(`/api/address/${id}`, { method: 'DELETE' });
-  loadSavedAddresses(currentPhone);
+  allAddresses = await api(`/api/address/list?phone=${encodeURIComponent(currentPhone)}`);
+  document.getElementById('addr-count-badge').textContent = allAddresses.length;
+  renderAddrList(allAddresses);
 }
 
 // ── Produtos ──────────────────────────────────────────────────
@@ -442,9 +474,10 @@ async function saveOrder() {
 
     // Limpar form
     setTimeout(() => {
-      document.getElementById('saved-addresses').style.display = 'none';
-      document.getElementById('addr-list').innerHTML = '';
-      currentPhone = '';
+      document.getElementById('multi-addr-bar').style.display = 'none';
+      document.getElementById('addr-selected-label').textContent = '';
+      document.getElementById('addr-count-badge').textContent = '0';
+      allAddresses = []; currentPhone = '';
       ['cName','cPhone','cAddr','cBairro','cComp','cRef','notes','search'].forEach(id => {
         document.getElementById(id).value = '';
       });
@@ -463,5 +496,81 @@ async function saveOrder() {
 
 renderItems();
 </script>
+
+<!-- ── MODAL ENDEREÇOS ────────────────────────────────────────── -->
+<div id="addr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;width:min(94vw,560px);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:2px solid #e2e8f0">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:#1e293b">📍 Endereços de Entrega</div>
+        <div id="modal-client-name" style="font-size:12px;color:#6366f1;margin-top:2px"></div>
+      </div>
+      <button onclick="closeAddrModal()" style="background:#f1f5f9;border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer">×</button>
+    </div>
+
+    <!-- Busca -->
+    <div style="padding:12px 20px;border-bottom:1px solid #f1f5f9">
+      <input id="addr-search-input" type="text" placeholder="🔍 Buscar por nome da unidade ou rua..."
+        oninput="filterAddresses(this.value)"
+        style="width:100%;padding:9px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none"
+        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+    </div>
+
+    <!-- Lista de endereços -->
+    <div id="addr-modal-list" style="flex:1;overflow-y:auto;padding:12px 20px"></div>
+
+    <!-- Footer: adicionar novo -->
+    <div style="padding:12px 20px;border-top:2px solid #e2e8f0">
+      <div id="add-addr-section">
+        <button type="button" onclick="showAddInModal()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;width:100%">
+          + Cadastrar novo endereço para este cliente
+        </button>
+      </div>
+      <div id="add-addr-form-modal" style="display:none">
+        <div style="font-size:13px;font-weight:700;color:#6366f1;margin-bottom:10px">Novo Endereço</div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;font-weight:700;color:#64748b">NOME / UNIDADE *</label>
+          <input id="m-obs" type="text" placeholder="Ex: Escola Municipal X, Clínica Saúde Plena" 
+            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;font-weight:700;color:#64748b">RUA + NÚMERO *</label>
+          <input id="m-addr" type="text" placeholder="Rua das Flores, 100" 
+            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">BAIRRO</label>
+            <input id="m-bairro" type="text" placeholder="Jardim Noroeste" 
+              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">COMPLEMENTO</label>
+            <input id="m-comp" type="text" placeholder="Sala 2, Bloco A" 
+              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px;font-weight:700;color:#64748b">PONTO DE REFERÊNCIA</label>
+          <input id="m-ref" type="text" placeholder="Próximo ao semáforo" 
+            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="button" onclick="saveAddrInModal()" 
+            style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;flex:1">
+            💾 Salvar endereço
+          </button>
+          <button type="button" onclick="hideAddInModal()" 
+            style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
