@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -172,7 +171,11 @@ function selectCustomer(i) {
   document.getElementById('cBairro').value = c.bairro || '';
   document.getElementById('cComp').value   = c.complemento || '';
   document.getElementById('cRef').value    = c.referencia || '';
-  document.getElementById('search').value  = c.name || '';
+  // Limpa campos de busca
+  ['searchPhone','searchName','searchAddr'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   hideSuggestions();
 }
 
