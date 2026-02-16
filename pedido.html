@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v1.4</title>
+<title>Novo Pedido — MoskoGás v1.5</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -45,7 +45,7 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.4</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.5</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -93,13 +93,9 @@
   <!-- ITENS -->
   <div class="card">
     <label style="margin-bottom:10px">📦 Itens do Pedido</label>
-    <div class="items-grid">
-      <button class="item-btn" onclick="addItem('P13 Gás 13kg','P13 Gás 13kg', 45)">🔵 P13<br><small>Gás 13kg</small></button>
-      <button class="item-btn" onclick="addItem('P20 Gás 20kg','P20 Gás 20kg', 85)">🟠 P20<br><small>Gás 20kg</small></button>
-      <button class="item-btn" onclick="addItem('P45 Gás 45kg','P45 Gás 45kg', 190)">🔴 P45<br><small>Gás 45kg</small></button>
-      <button class="item-btn" onclick="addItem('Água 20L','Água 20L', 8)">💧 Água<br><small>20 Litros</small></button>
-      <button class="item-btn" onclick="addItem('Água 10L','Água 10L', 5)">💧 Água<br><small>10 Litros</small></button>
-      <button class="item-btn" onclick="addItem('P8 Gás 8kg','P8 Gás 8kg', 30)">🟢 P8<br><small>Gás 8kg</small></button>
+    <div style="position:relative;margin-bottom:10px">
+      <input id="product-search" type="text" placeholder="🔍 Buscar produto pelo nome..." autocomplete="off" oninput="searchProducts(this.value)">
+      <div id="product-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:220px;overflow-y:auto"></div>
     </div>
     <div id="items-list"></div>
     <div class="total-bar" id="total-bar" style="display:none">
@@ -192,6 +188,39 @@ async function selectCustomer(i) {
   }
 }
 
+// ── Produtos ──────────────────────────────────────────────────
+let productTimer;
+async function searchProducts(q) {
+  clearTimeout(productTimer);
+  const box = document.getElementById('product-suggestions');
+  if (q.length < 2) { box.style.display='none'; return; }
+  productTimer = setTimeout(async () => {
+    try {
+      const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`);
+      if (!list.length) { box.style.display='none'; return; }
+      box.style.display = 'block';
+      box.innerHTML = list.map((p,i) => `
+        <div class="suggestion-item" onclick="addProductFromSearch(${i})" style="display:flex;justify-content:space-between">
+          <span><strong>${p.name}</strong>${p.code ? ' <small style=color:#94a3b8>'+p.code+'</small>' : ''}</span>
+          <span style="color:#f97316;font-weight:700">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
+        </div>`).join('');
+      box._data = list;
+    } catch(e) { console.error(e); }
+  }, 300);
+}
+
+function addProductFromSearch(i) {
+  const p = document.getElementById('product-suggestions')._data[i];
+  document.getElementById('product-search').value = '';
+  document.getElementById('product-suggestions').style.display = 'none';
+  addItem(String(p.id), p.name, parseFloat(p.price)||0);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#product-search') && !e.target.closest('#product-suggestions'))
+    document.getElementById('product-suggestions').style.display='none';
+});
+
 // ── Itens ─────────────────────────────────────────────────────
 function addItem(id, name, price) {
   const existing = items.find(i => i.id === id);
@@ -208,33 +237,40 @@ function changeQty(id, delta) {
   renderItems();
 }
 
+function changePrice(id, val) {
+  const item = items.find(i => i.id === id);
+  if (item) { item.price = parseFloat(val)||0; renderTotal(); }
+}
+
+function renderTotal() {
+  let total = 0;
+  items.forEach(it => total += it.price * it.qty);
+  document.getElementById('total-bar').style.display = items.length ? 'flex' : 'none';
+  document.getElementById('total-val').textContent = `R$ ${total.toFixed(2)}`;
+}
+
 function renderItems() {
   const list = document.getElementById('items-list');
-  const totalBar = document.getElementById('total-bar');
-  const totalVal = document.getElementById('total-val');
-
   if (!items.length) {
     list.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:12px">Nenhum item adicionado</div>';
-    totalBar.style.display = 'none';
+    document.getElementById('total-bar').style.display = 'none';
     return;
   }
-
-  let total = 0;
-  list.innerHTML = items.map(it => {
-    total += it.price * it.qty;
-    return `
-      <div class="item-row">
-        <span>${it.name}</span>
-        <button class="qty-btn" onclick="changeQty('${it.id}',-1)">−</button>
-        <span class="qty-val">${it.qty}</span>
-        <button class="qty-btn" onclick="changeQty('${it.id}',1)">+</button>
-        <span style="font-weight:700;min-width:70px;text-align:right">R$ ${(it.price*it.qty).toFixed(2)}</span>
-        <button class="btn-remove" onclick="changeQty('${it.id}',-99)">✕</button>
-      </div>`;
-  }).join('');
-
-  totalBar.style.display = 'flex';
-  totalVal.textContent = `R$ ${total.toFixed(2)}`;
+  list.innerHTML = items.map(it => `
+    <div class="item-row">
+      <span style="flex:1">${it.name}</span>
+      <button class="qty-btn" onclick="changeQty('${it.id}',-1)">−</button>
+      <span class="qty-val">${it.qty}</span>
+      <button class="qty-btn" onclick="changeQty('${it.id}',1)">+</button>
+      <span style="display:flex;align-items:center;gap:4px">
+        <small>R$</small>
+        <input type="number" step="0.01" value="${it.price.toFixed(2)}" 
+          style="width:70px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right"
+          onchange="changePrice('${it.id}',this.value)">
+      </span>
+      <button class="btn-remove" onclick="changeQty('${it.id}',-99)">✕</button>
+    </div>`).join('');
+  renderTotal();
 }
 
 // ── Salvar ────────────────────────────────────────────────────
