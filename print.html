@@ -1,59 +1,78 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Recibo — MoskoGás</title>
+<title>Recibo — Mosko Gás e Água</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  
-  body { font-family: Arial, Helvetica, sans-serif; background: #fff; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #f1f5f9; }
 
-  /* Botão imprimir (some na impressão) */
-  .no-print { background: #f97316; color: #fff; border: none; padding: 12px 24px; font-size: 16px; font-weight: 700; cursor: pointer; border-radius: 8px; margin: 20px auto; display: block; }
+  .no-print {
+    background: #f97316; color: #fff; border: none; padding: 12px 32px;
+    font-size: 15px; font-weight: 700; cursor: pointer; border-radius: 8px;
+    margin: 16px auto; display: block; width: fit-content;
+  }
 
-  /* Layout das 2 vias */
-  .page { width: 210mm; margin: 0 auto; }
-  .via { width: 100%; padding: 12mm 14mm; }
-  
-  /* Separador */
-  .corte { border-top: 2px dashed #999; text-align: center; color: #999; font-size: 11px; padding: 4px 0; letter-spacing: 2px; margin: 0 14mm; }
+  .page { width: 210mm; margin: 0 auto; background: #fff; }
+
+  /* Cada via ocupa metade da folha A4 (~148mm) */
+  .via { width: 100%; padding: 8mm 12mm; }
+
+  /* Linha de corte */
+  .corte {
+    border-top: 2px dashed #aaa;
+    text-align: center; color: #aaa; font-size: 10px;
+    padding: 3px 0; letter-spacing: 3px;
+    margin: 0 12mm;
+  }
 
   /* Cabeçalho */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 2px solid #f97316; padding-bottom: 10px; }
-  .logo-text { font-size: 24px; font-weight: 900; color: #f97316; }
-  .logo-sub { font-size: 11px; color: #666; }
-  .header-right { text-align: right; font-size: 11px; color: #555; }
-  .via-label { background: #1e293b; color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 700; margin-bottom: 8px; display: inline-block; }
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 2px solid #f97316; padding-bottom: 6px; margin-bottom: 8px;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .logo { height: 40px; }
+  .company-info { font-size: 9px; color: #555; line-height: 1.6; }
+  .company-info strong { font-size: 11px; color: #1e293b; }
+  .header-right { text-align: right; font-size: 10px; color: #444; line-height: 1.7; }
+  .pedido-num { font-size: 18px; font-weight: 900; color: #f97316; }
 
-  /* Info pedido */
-  .pedido-info { background: #f8fafc; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
-  .pedido-info strong { color: #f97316; font-size: 16px; }
+  .via-label {
+    display: inline-block; background: #1e293b; color: #fff;
+    padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 700;
+    margin-bottom: 4px; letter-spacing: 1px;
+  }
 
-  /* Dados cliente */
-  .section-title { font-size: 10px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-  .cliente-box { margin-bottom: 10px; }
-  .cliente-line { font-size: 12px; padding: 2px 0; }
-  .cliente-line span { font-weight: 700; }
+  /* Dados do cliente — 2 colunas */
+  .section-title { font-size: 9px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+  .cliente-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 16px; margin-bottom: 7px; font-size: 11px; }
+  .cliente-grid .full { grid-column: 1 / -1; }
+  .lbl { font-weight: 700; color: #1e293b; }
+  .obs-line { font-size: 11px; margin-bottom: 7px; }
 
-  /* Tabela itens */
-  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 12px; }
-  th { background: #1e293b; color: #fff; padding: 5px 8px; text-align: left; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; }
-  .total-row td { font-weight: 700; border-top: 2px solid #1e293b; border-bottom: none; background: #f8fafc; }
+  /* Tabela de itens */
+  table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 6px; }
+  thead th { background: #1e293b; color: #fff; padding: 4px 6px; text-align: left; }
+  thead th:last-child { text-align: right; }
+  td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
+  td.num { text-align: center; }
+  td.right { text-align: right; }
+  .total-row td { font-weight: 700; border-top: 2px solid #1e293b; border-bottom: none; font-size: 12px; background: #f8fafc; }
 
   /* Bloco recebimento */
-  .recebimento { border: 2px solid #1e293b; border-radius: 6px; padding: 10px; margin-top: 8px; }
-  .recebimento-title { font-size: 12px; font-weight: 700; text-align: center; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
-  .field-line { margin-bottom: 10px; }
-  .field-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
-  .field-input { border-bottom: 1px solid #333; width: 100%; height: 20px; margin-top: 2px; }
-  .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .assinatura-box { border-bottom: 1px solid #333; height: 40px; margin-top: 2px; }
-  .footer-note { font-size: 10px; color: #999; text-align: center; margin-top: 8px; }
+  .recebimento { border: 1.5px solid #334155; border-radius: 5px; padding: 7px 10px; margin-top: 6px; }
+  .recebimento-title { font-size: 11px; font-weight: 700; text-align: center; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 1px; }
+  .fields-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-bottom: 4px; }
+  .field-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1px; }
+  .field-line { border-bottom: 1px solid #333; height: 17px; }
+  .assinatura-line { border-bottom: 1px solid #333; height: 28px; margin-top: 2px; }
+  .footer { font-size: 9px; color: #aaa; text-align: center; margin-top: 5px; }
 
   @media print {
     .no-print { display: none !important; }
-    body { margin: 0; }
+    body { background: #fff; margin: 0; }
     .page { width: 100%; margin: 0; }
     @page { size: A4 portrait; margin: 0; }
   }
@@ -61,197 +80,146 @@
 </head>
 <body>
 
-<button class="no-print" onclick="window.print()">🖨️ Imprimir Recibo A4</button>
+<button class="no-print" onclick="window.print()">🖨️ Imprimir</button>
 
 <div class="page" id="receipt">
-  <!-- Via 1: Cliente -->
-  <div class="via" id="via1">
+  <!-- VIA 1: CLIENTE -->
+  <div class="via">
     <div class="via-label">VIA CLIENTE</div>
     <div class="header">
-      <div>
-        <div class="logo-text">🔥 MOSKO GÁS</div>
-        <div class="logo-sub">Revenda de Gás e Água — Campo Grande/MS</div>
-        <div class="logo-sub">☎ (67) XXXX-XXXX | @moskogas</div>
+      <div class="header-left">
+        <img class="logo" src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="Mosko Gás" onerror="this.style.display='none';this.nextSibling.style.display='block'">
+        <div style="display:none;font-size:18px;font-weight:900;color:#f97316">🔥 MOSKO GÁS</div>
+        <div class="company-info">
+          <strong>Mosko Ltda</strong> — CNPJ 12.979.010/0011-17<br>
+          Av. Panamericana, 295 – Estrela Dalva – Campo Grande/MS<br>
+          ☎ (67) 99333-0303 | contato@moskogas.com.br | moskogas.com.br
+        </div>
       </div>
       <div class="header-right" id="hdr1"></div>
     </div>
-    <div class="pedido-info" id="info1"></div>
-    <div class="cliente-box">
-      <div class="section-title">Dados do Cliente</div>
-      <div id="cliente1"></div>
-    </div>
+    <div class="section-title">Dados do Cliente</div>
+    <div class="cliente-grid" id="cliente1"></div>
+    <div id="obs1"></div>
     <table id="table1"></table>
     <div class="recebimento">
       <div class="recebimento-title">✅ Recebi o Produto em Boas Condições</div>
-      <div class="fields-row">
-        <div class="field-line">
-          <div class="field-label">Nome Legível</div>
-          <div class="field-input"></div>
-        </div>
-        <div class="field-line">
-          <div class="field-label">CPF</div>
-          <div class="field-input"></div>
-        </div>
+      <div class="fields-2">
+        <div><div class="field-label">Nome Legível</div><div class="field-line"></div></div>
+        <div><div class="field-label">CPF</div><div class="field-line"></div></div>
+        <div style="grid-column:1/-1"><div class="field-label">Data de Recebimento</div><div class="field-line"></div></div>
       </div>
-      <div class="fields-row">
-        <div class="field-line">
-          <div class="field-label">RG (opcional)</div>
-          <div class="field-input"></div>
-        </div>
-        <div class="field-line">
-          <div class="field-label">Data de Recebimento</div>
-          <div class="field-input"></div>
-        </div>
-      </div>
-      <div class="field-line">
+      <div style="margin-top:4px">
         <div class="field-label">Assinatura</div>
-        <div class="assinatura-box"></div>
+        <div class="assinatura-line"></div>
       </div>
     </div>
-    <div class="footer-note">MOSKO GÁS — Obrigado pela preferência!</div>
+    <div class="footer">MOSKO GÁS — Obrigado pela preferência!</div>
   </div>
 
-  <!-- Linha de corte -->
-  <div class="corte">✂ ─── CORTE AQUI ─── ✂</div>
+  <!-- CORTE -->
+  <div class="corte">✂ &nbsp;—— CORTE AQUI ——&nbsp; ✂</div>
 
-  <!-- Via 2: Mosko Gás (retorno) -->
-  <div class="via" id="via2">
+  <!-- VIA 2: MOSKO GÁS — RETORNO -->
+  <div class="via">
     <div class="via-label">VIA MOSKO GÁS — RETORNO ASSINADO</div>
     <div class="header">
-      <div>
-        <div class="logo-text">🔥 MOSKO GÁS</div>
-        <div class="logo-sub">Revenda de Gás e Água — Campo Grande/MS</div>
+      <div class="header-left">
+        <img class="logo" src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="Mosko Gás" onerror="this.style.display='none';this.nextSibling.style.display='block'">
+        <div style="display:none;font-size:18px;font-weight:900;color:#f97316">🔥 MOSKO GÁS</div>
+        <div class="company-info">
+          <strong>Mosko Ltda</strong> — CNPJ 12.979.010/0011-17<br>
+          Av. Panamericana, 295 – Estrela Dalva – Campo Grande/MS<br>
+          ☎ (67) 99333-0303 | contato@moskogas.com.br | moskogas.com.br
+        </div>
       </div>
       <div class="header-right" id="hdr2"></div>
     </div>
-    <div class="pedido-info" id="info2"></div>
-    <div class="cliente-box">
-      <div class="section-title">Dados do Cliente</div>
-      <div id="cliente2"></div>
-    </div>
+    <div class="section-title">Dados do Cliente</div>
+    <div class="cliente-grid" id="cliente2"></div>
+    <div id="obs2"></div>
     <table id="table2"></table>
     <div class="recebimento">
       <div class="recebimento-title">✅ Recebi o Produto em Boas Condições</div>
-      <div class="fields-row">
-        <div class="field-line">
-          <div class="field-label">Nome Legível</div>
-          <div class="field-input"></div>
-        </div>
-        <div class="field-line">
-          <div class="field-label">CPF</div>
-          <div class="field-input"></div>
-        </div>
+      <div class="fields-2">
+        <div><div class="field-label">Nome Legível</div><div class="field-line"></div></div>
+        <div><div class="field-label">CPF</div><div class="field-line"></div></div>
+        <div style="grid-column:1/-1"><div class="field-label">Data de Recebimento</div><div class="field-line"></div></div>
       </div>
-      <div class="fields-row">
-        <div class="field-line">
-          <div class="field-label">RG (opcional)</div>
-          <div class="field-input"></div>
-        </div>
-        <div class="field-line">
-          <div class="field-label">Data de Recebimento</div>
-          <div class="field-input"></div>
-        </div>
-      </div>
-      <div class="field-line">
+      <div style="margin-top:4px">
         <div class="field-label">Assinatura</div>
-        <div class="assinatura-box"></div>
+        <div class="assinatura-line"></div>
       </div>
     </div>
-    <div class="footer-note">Guarde esta via assinada para controle interno.</div>
+    <div class="footer">MOSKO GÁS — Obrigado pela preferência!</div>
   </div>
 </div>
 
 <script>
-// Receber dados via query param ou diretamente
-function getOrder() {
-  const params = new URLSearchParams(window.location.search);
-  const data = params.get('data');
-  if (data) {
-    try { return JSON.parse(decodeURIComponent(data)); } catch(_) {}
-  }
-  // Dados de exemplo para preview
-  return {
-    id: 999,
-    customer_name: 'João da Silva Exemplo',
-    phone_digits: '67999990000',
-    address_line: 'Rua das Orquídeas, 123',
-    bairro: 'Jardim Noroeste',
-    complemento: 'Casa',
-    referencia: 'Próximo ao Mercado X',
-    items_json: JSON.stringify([
-      { name: 'P13 Gás 13kg', qty: 2, price: 45 },
-      { name: 'Água 20L', qty: 1, price: 8 },
-    ]),
-    total_value: 98,
-    driver_name_cache: 'Pedro Entregador',
-    created_at: Math.floor(Date.now() / 1000),
-    notes: 'Troco para R$ 100',
-  };
+const params = new URLSearchParams(window.location.search);
+let order;
+try { order = JSON.parse(decodeURIComponent(params.get('data') || '{}')); } catch(e) { order = {}; }
+
+const items = JSON.parse(order.items_json || '[]');
+const hora = order.created_at
+  ? new Date(order.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+  : '—';
+const driver = order.driver_name_cache || order.driver_name_db || '—';
+
+function buildHeader(id) {
+  document.getElementById(id).innerHTML = `
+    Pedido Nº <span class="pedido-num">#${order.id || '—'}</span><br>
+    Data/Hora: ${hora}<br>
+    Entregador: <strong>${driver}</strong>`;
 }
 
-function buildVia(order, suffix) {
-  const items = JSON.parse(order.items_json || '[]');
-  const dataHora = order.created_at
-    ? new Date(order.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })
-    : new Date().toLocaleString('pt-BR');
+function buildCliente(id) {
+  const end = [order.address_line, order.bairro].filter(Boolean).join(' — ') + ' — Campo Grande/MS';
+  document.getElementById(id).innerHTML = `
+    <div><span class="lbl">👤 Nome:</span> ${order.customer_name || '—'}</div>
+    <div><span class="lbl">📞 Telefone:</span> ${order.phone_digits || '—'}</div>
+    <div class="full"><span class="lbl">📍 Endereço:</span> ${end}</div>
+    ${order.complemento ? `<div><span class="lbl">Complemento:</span> ${order.complemento}</div>` : ''}
+    ${order.referencia  ? `<div><span class="lbl">Referência:</span> ${order.referencia}</div>` : ''}`;
+}
 
-  document.getElementById(`hdr${suffix}`).innerHTML = `
-    <div>Pedido Nº <strong style="font-size:18px;color:#f97316">#${order.id}</strong></div>
-    <div>Data/Hora: ${dataHora}</div>
-    ${order.driver_name_cache ? `<div>Entregador: <strong>${order.driver_name_cache}</strong></div>` : ''}
-  `;
+function buildObs(id) {
+  if (order.notes) {
+    document.getElementById(id).innerHTML = `<div class="obs-line"><span class="lbl">📝 Obs:</span> ${order.notes}</div>`;
+  }
+}
 
-  document.getElementById(`info${suffix}`).innerHTML = `
-    <div>Pedido <strong>#${order.id}</strong></div>
-    <div>${dataHora}</div>
-    ${order.driver_name_cache ? `<div>Entregador: ${order.driver_name_cache}</div>` : ''}
-  `;
-
-  document.getElementById(`cliente${suffix}`).innerHTML = `
-    <div class="cliente-line">👤 <span>Nome:</span> ${order.customer_name}</div>
-    <div class="cliente-line">📞 <span>Telefone:</span> ${order.phone_digits || '—'}</div>
-    <div class="cliente-line">📍 <span>Endereço:</span> ${order.address_line}${order.bairro ? ', ' + order.bairro : ''} — Campo Grande/MS</div>
-    ${order.complemento ? `<div class="cliente-line">🏠 <span>Complemento:</span> ${order.complemento}</div>` : ''}
-    ${order.referencia  ? `<div class="cliente-line">📌 <span>Referência:</span> ${order.referencia}</div>` : ''}
-    ${order.notes ? `<div class="cliente-line">📝 <span>Obs:</span> ${order.notes}</div>` : ''}
-  `;
-
-  let total = 0;
-  const rows = items.map(i => {
-    const sub = (i.price || 0) * i.qty;
-    total += sub;
+function buildTable(id) {
+  let rows = items.map(i => {
+    const sub = ((i.price||0)*(i.qty||1)).toFixed(2);
+    const name = i.name.length > 55 ? i.name.substring(0,55)+'…' : i.name;
     return `<tr>
-      <td>${i.name}</td>
-      <td style="text-align:center">${i.qty}</td>
-      <td style="text-align:right">R$ ${(i.price || 0).toFixed(2)}</td>
-      <td style="text-align:right">R$ ${sub.toFixed(2)}</td>
+      <td>${name}</td>
+      <td class="num">${i.qty}</td>
+      <td class="right">R$ ${parseFloat(i.price||0).toFixed(2)}</td>
+      <td class="right">R$ ${sub}</td>
     </tr>`;
   }).join('');
-
-  const finalTotal = order.total_value || total;
-  document.getElementById(`table${suffix}`).innerHTML = `
-    <thead>
-      <tr>
-        <th>Produto</th>
-        <th style="text-align:center;width:50px">Qtd</th>
-        <th style="text-align:right;width:80px">Unit</th>
-        <th style="text-align:right;width:90px">Subtotal</th>
-      </tr>
-    </thead>
+  const total = items.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0).toFixed(2);
+  document.getElementById(id).innerHTML = `
+    <thead><tr>
+      <th>Produto</th><th style="text-align:center">Qtd</th>
+      <th style="text-align:right">Unit</th><th style="text-align:right">Subtotal</th>
+    </tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td colspan="3">TOTAL</td>
-        <td style="text-align:right">R$ ${finalTotal.toFixed(2)}</td>
-      </tr>
-    </tfoot>
-  `;
+    <tfoot><tr class="total-row">
+      <td colspan="3">TOTAL</td>
+      <td class="right">R$ ${total}</td>
+    </tr></tfoot>`;
 }
 
-const order = getOrder();
-buildVia(order, '1');
-buildVia(order, '2');
-document.title = `Recibo #${order.id} — MoskoGás`;
+// Populate both vias
+['1','2'].forEach(n => {
+  buildHeader('hdr'+n);
+  buildCliente('cliente'+n);
+  buildObs('obs'+n);
+  buildTable('table'+n);
+});
 </script>
 </body>
 </html>
