@@ -3,13 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.0.0</title>
+<title>Pagamentos — MoskoGás v1.1.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
   .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
   h1 { color: #1e293b; font-size: 22px; margin-bottom: 16px; }
   .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+  /* Toolbar de filtros */
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #f1f5f9; }
+  .filters input, .filters select { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: #f8fafc; }
+  .filters input:focus, .filters select:focus { outline: none; border-color: #f97316; }
+  .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-gray { background: #94a3b8; color: #fff; }
+  .btn:hover { opacity: 0.85; }
+
   table { width: 100%; border-collapse: collapse; }
   th { background: #f8fafc; color: #64748b; text-align: left; padding: 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; }
   td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
@@ -21,14 +31,17 @@
   .btn-pago { background: #16a34a; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .btn-pago:hover { background: #15803d; }
   .empty { text-align: center; padding: 40px; color: #94a3b8; }
+  .tipo-badge { padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .count-badge { font-size: 12px; color: #64748b; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.0.0 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.1.0 — pagamentos</div>
 <div class="container">
-  <h1>💰 Gestão de Pagamentos <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.0.0</span></h1>
+  <h1>💰 Gestão de Pagamentos <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.1.0</span></h1>
 
+  <!-- Resumo -->
   <div class="card">
     <div id="summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid #f1f5f9">
       <div>
@@ -45,11 +58,31 @@
       </div>
     </div>
 
+    <!-- Filtros -->
+    <div class="filters">
+      <input type="text" id="fCliente" placeholder="🔍 Buscar cliente..." oninput="applyFilters()" style="width:200px">
+      <div style="display:flex;align-items:center;gap:4px">
+        <input type="date" id="fDateFrom" onchange="applyFilters()" style="width:135px">
+        <span style="color:#94a3b8;font-size:12px">até</span>
+        <input type="date" id="fDateTo" onchange="applyFilters()" style="width:135px">
+      </div>
+      <select id="fTipo" onchange="applyFilters()">
+        <option value="">Todos os tipos</option>
+        <option value="pix_receber">⏳ PIX a receber</option>
+        <option value="mensalista">📅 Mensalista</option>
+        <option value="boleto">🧾 Boleto/Órgão</option>
+      </select>
+      <button class="btn btn-orange" onclick="loadPagamentos()">🔄 Atualizar</button>
+      <button class="btn btn-gray" onclick="clearFilters()">✕ Limpar</button>
+      <span id="filter-count" class="count-badge"></span>
+    </div>
+
     <div style="overflow-x:auto">
       <table>
         <thead>
           <tr>
             <th>#</th>
+            <th>Data</th>
             <th>Cliente</th>
             <th>Endereço</th>
             <th>Valor</th>
@@ -67,95 +100,157 @@
   </div>
 </div>
 
+<script src="shared.js"></script>
 <script>
-const API_BASE = 'https://api.moskogas.com.br';
+// ── Nav ──
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+checkApiKey();
 
+// ── State ──
+let allData = [];
+
+// ── Tipos ──
+const tipoLabels = {
+  dinheiro:     '💵 Dinheiro',
+  pix_vista:    '⚡ PIX à vista',
+  pix_receber:  '⏳ PIX a receber',
+  mensalista:   '📅 Mensalista',
+  boleto:       '🧾 Boleto/Órgão'
+};
+
+const tipoColors = {
+  pix_receber: 'background:#fef3c7;color:#92400e',
+  mensalista:  'background:#dbeafe;color:#1e40af',
+  boleto:      'background:#f1f5f9;color:#475569',
+  dinheiro:    'background:#dcfce7;color:#15803d',
+  pix_vista:   'background:#ecfdf5;color:#065f46'
+};
+
+// ── Load da API ──
 async function loadPagamentos() {
   try {
-    const resp = await fetch(\`\${API_BASE}/api/pagamentos\`);
-    const data = await resp.json();
-    
-    if (!data || data.length === 0) {
-      document.getElementById('tbody').innerHTML = '';
-      document.getElementById('empty-msg').style.display = 'block';
-      document.getElementById('total-pendente').textContent = 'R$ 0,00';
-      document.getElementById('count-bling').textContent = '0';
-      document.getElementById('count-pendente').textContent = '0';
-      return;
-    }
-
-    document.getElementById('empty-msg').style.display = 'none';
-    
-    let totalPendente = 0;
-    let countBling = 0;
-    let countPendente = 0;
-
-    const html = data.map(p => {
-      totalPendente += p.total_value || 0;
-      if (p.bling_pedido_id) countBling++; else countPendente++;
-
-      const tipoLabels = {
-        dinheiro: '💵 Dinheiro',
-        pix_vista: '⚡ PIX à vista',
-        pix_receber: '⏳ PIX a receber',
-        mensalista: '📅 Mensalista',
-        boleto: '🧾 Boleto/Órgão'
-      };
-
-      const statusBadge = p.bling_pedido_id 
-        ? \`<span class="badge badge-green">✅ Venda #\${p.bling_pedido_num || p.bling_pedido_id}</span>\`
-        : \`<span class="badge badge-gray">⏳ Aguardando emissão</span>\`;
-
-      return \`<tr>
-        <td><strong>#\${p.id}</strong></td>
-        <td>\${p.customer_name || '-'}</td>
-        <td style="font-size:12px;color:#64748b">\${p.address_line || '-'}</td>
-        <td><strong>R$ \${(p.total_value || 0).toFixed(2)}</strong></td>
-        <td>\${tipoLabels[p.tipo_pagamento] || p.tipo_pagamento}</td>
-        <td>\${statusBadge}</td>
-        <td><button class="btn-pago" onclick="marcarPago(\${p.id})">✅ Marcar Pago</button></td>
-      </tr>\`;
-    }).join('');
-
-    document.getElementById('tbody').innerHTML = html;
-    document.getElementById('total-pendente').textContent = 'R$ ' + totalPendente.toFixed(2);
-    document.getElementById('count-bling').textContent = countBling;
-    document.getElementById('count-pendente').textContent = countPendente;
-
+    const data = await api('/api/pagamentos');
+    allData = data || [];
+    applyFilters();
   } catch(e) {
-    alert('Erro ao carregar pagamentos: ' + e.message);
+    toast('❌ Erro ao carregar: ' + e.message, 'error');
   }
 }
 
+// ── Filtragem local ──
+function applyFilters() {
+  const qCliente = document.getElementById('fCliente').value.trim().toLowerCase();
+  const dateFrom = document.getElementById('fDateFrom').value;
+  const dateTo   = document.getElementById('fDateTo').value;
+  const tipo     = document.getElementById('fTipo').value;
+
+  let filtered = allData.filter(p => {
+    // Filtro por cliente (nome, telefone ou endereço)
+    if (qCliente && !(p.customer_name || '').toLowerCase().includes(qCliente)
+                  && !(p.phone_digits || '').includes(qCliente)
+                  && !(p.address_line || '').toLowerCase().includes(qCliente)) return false;
+
+    // Filtro por data
+    if (dateFrom || dateTo) {
+      const orderDate = p.created_at
+        ? new Date(p.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' })
+        : null;
+      if (!orderDate) return false;
+      if (dateFrom && orderDate < dateFrom) return false;
+      if (dateTo && orderDate > dateTo) return false;
+    }
+
+    // Filtro por tipo
+    if (tipo && p.tipo_pagamento !== tipo) return false;
+
+    return true;
+  });
+
+  renderTable(filtered);
+}
+
+// ── Render ──
+function renderTable(data) {
+  const tbody = document.getElementById('tbody');
+  const emptyEl = document.getElementById('empty-msg');
+
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '';
+    emptyEl.style.display = 'block';
+    document.getElementById('total-pendente').textContent = 'R$ 0,00';
+    document.getElementById('count-bling').textContent = '0';
+    document.getElementById('count-pendente').textContent = '0';
+    document.getElementById('filter-count').textContent = allData.length > 0 ? '0 de ' + allData.length : '';
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+
+  let totalPendente = 0;
+  let countBling = 0;
+  let countPendente = 0;
+
+  const html = data.map(p => {
+    totalPendente += p.total_value || 0;
+    if (p.bling_pedido_id) countBling++; else countPendente++;
+
+    const blingBadge = p.bling_pedido_id
+      ? `<span class="badge badge-green">✅ Venda #${p.bling_pedido_num || p.bling_pedido_id}</span>`
+      : `<span class="badge badge-gray">⏳ Aguardando emissão</span>`;
+
+    const tipoStyle = tipoColors[p.tipo_pagamento] || 'background:#f1f5f9;color:#64748b';
+    const dateStr = fmtDate(p.created_at);
+
+    return `<tr>
+      <td><strong>#${p.id}</strong></td>
+      <td style="font-size:12px;color:#64748b;white-space:nowrap">${dateStr}</td>
+      <td>${p.customer_name || '—'}<br><small style="color:#94a3b8">${p.phone_digits || ''}</small></td>
+      <td style="font-size:12px;color:#64748b">${p.address_line || '—'}</td>
+      <td><strong>R$ ${(p.total_value || 0).toFixed(2)}</strong></td>
+      <td><span class="tipo-badge" style="${tipoStyle}">${tipoLabels[p.tipo_pagamento] || p.tipo_pagamento}</span></td>
+      <td>${blingBadge}</td>
+      <td><button class="btn-pago" onclick="marcarPago(${p.id})">✅ Pago</button></td>
+    </tr>`;
+  }).join('');
+
+  tbody.innerHTML = html;
+  document.getElementById('total-pendente').textContent = 'R$ ' + totalPendente.toFixed(2);
+  document.getElementById('count-bling').textContent = countBling;
+  document.getElementById('count-pendente').textContent = countPendente;
+
+  const fc = document.getElementById('filter-count');
+  fc.textContent = data.length < allData.length
+    ? data.length + ' de ' + allData.length + ' registros'
+    : data.length + ' registros';
+}
+
+// ── Ações ──
 async function marcarPago(orderId) {
-  if (!confirm('Confirmar que este pedido foi pago?')) return;
-  
+  if (!confirm('Confirmar que o pedido #' + orderId + ' foi pago?')) return;
   try {
-    const resp = await fetch(\`\${API_BASE}/api/pagamentos/\${orderId}\`, { method: 'PATCH' });
-    const data = await resp.json();
-    
+    const data = await api('/api/pagamentos/' + orderId, { method: 'PATCH' });
     if (data.ok) {
-      alert('✅ Pedido marcado como pago!');
+      toast('✅ Pedido #' + orderId + ' marcado como pago!');
       loadPagamentos();
     } else {
-      alert('❌ Erro: ' + (data.error || 'Falha ao marcar como pago'));
+      toast('❌ ' + (data.error || 'Falha'), 'error');
     }
   } catch(e) {
-    alert('Erro: ' + e.message);
+    toast('❌ Erro: ' + e.message, 'error');
   }
 }
 
-// Carregar ao abrir a página
+function clearFilters() {
+  document.getElementById('fCliente').value = '';
+  document.getElementById('fDateFrom').value = '';
+  document.getElementById('fDateTo').value = '';
+  document.getElementById('fTipo').value = '';
+  applyFilters();
+}
+
+// ── Init ──
 loadPagamentos();
-
-// Atualizar a cada 30 segundos
 setInterval(loadPagamentos, 30000);
-
-// ── Nav compartilhada ──────────────────────────────────────────
-fetch('https://moskogas.github.io/app/nav.html')
-  .then(r => r.text())
-  .then(html => { document.getElementById('nav-placeholder').innerHTML = html; })
-  .catch(() => {});
 </script>
 </body>
 </html>
