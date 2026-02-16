@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -185,7 +186,10 @@ let activeStatuses = new Set(['novo','encaminhado','whatsapp_enviado','entregue'
 
 function toggleStatusMenu() {
   const m = document.getElementById('statusMenu');
-  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  // Small delay so document click handler fires first on outside clicks
+  setTimeout(() => {
+    m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  }, 0);
 }
 
 function updateStatusFilter() {
@@ -198,8 +202,10 @@ function updateStatusFilter() {
 }
 
 document.addEventListener('click', e => {
-  if (!e.target.closest('#statusMenu') && !e.target.closest('#statusBtn'))
-    document.getElementById('statusMenu').style.display = 'none';
+  if (!e.target.closest('#statusMenu') && !e.target.closest('#statusBtn')) {
+    const m = document.getElementById('statusMenu');
+    if (m) m.style.display = 'none';
+  }
 });
 
 // Ordenação: novo > encaminhado > whatsapp_enviado > entregue > cancelado
@@ -218,6 +224,18 @@ async function _load() {
   if (q)        url += `&q=${encodeURIComponent(q)}`;
 
   let rows = await api(url).catch(() => []);
+
+  // Filtro de data client-side (timezone America/Campo_Grande)
+  if (dateFrom || dateTo) {
+    rows = rows.filter(r => {
+      if (!r.created_at) return true;
+      const d = new Date(r.created_at * 1000)
+        .toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' }); // YYYY-MM-DD
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo   && d > dateTo)   return false;
+      return true;
+    });
+  }
 
   // Filtro de status client-side (multi-select)
   rows = rows.filter(r => activeStatuses.has(r.status));
