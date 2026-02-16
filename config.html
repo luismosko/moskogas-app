@@ -32,7 +32,7 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.1.0 — config</div>
+  <div class="version-badge">v2.2.0 — config</div>
   <h1>⚙️ Configurações</h1>
 
   <!-- API Key -->
@@ -239,110 +239,78 @@ async function checkStreetsCount() {
   } catch(e) { return 0; }
 }
 
-let _importPolling = null;
+// ── Import letra por letra ────────────────────────────────────
+const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split('');
+let _importRunning = false;
 
 async function importStreets() {
-  const btn    = document.getElementById('btnImportStreets');
-  const prog   = document.getElementById('streetsProgress');
-  const bar    = document.getElementById('streetsBar');
-  const msg    = document.getElementById('streetsMsg');
-  const status = document.getElementById('streetsStatus');
+  if (_importRunning) return;
+  _importRunning = true;
+
+  const btn  = document.getElementById('btnImportStreets');
+  const prog = document.getElementById('streetsProgress');
+  const bar  = document.getElementById('streetsBar');
+  const msg  = document.getElementById('streetsMsg');
 
   btn.disabled = true;
   btn.textContent = '⏳ Importando...';
-  btn.style.animation = 'none';
   prog.style.display = 'block';
-  status.textContent = '';
   bar.style.background = '#6366f1';
-  bar.style.width = '5%';
-  msg.textContent = '🚀 Iniciando import em background...';
+  bar.style.width = '2%';
+  msg.textContent = '🚀 Iniciando import letra por letra...';
 
-  try {
-    // ✅ Worker responde imediatamente e processa em background (sem timeout)
-    const r = await api('/api/streets/import', { method: 'POST' });
+  let totalRuas = 0;
+  const erros = [];
 
-    if (r.error) throw new Error(r.error);
+  for (let i = 0; i < LETRAS.length; i++) {
+    const letra = LETRAS[i];
+    const pct = Math.round(((i) / LETRAS.length) * 95) + 2;
+    bar.style.width = pct + '%';
+    msg.textContent = `📥 Buscando letra ${letra}... (${i+1}/${LETRAS.length}) — ${totalRuas.toLocaleString('pt-BR')} ruas salvas`;
 
-    // Se retornou resultado direto (import rápido / já pronto)
-    if (r.total) {
-      bar.style.width = '100%';
-      msg.textContent = `✅ ${r.total.toLocaleString('pt-BR')} ruas importadas!`;
-      status.textContent = `✅ ${r.total.toLocaleString('pt-BR')} ruas cadastradas`;
-      btn.disabled = false;
-      btn.textContent = '✅ Importado!';
-      setTimeout(() => { btn.textContent = '⬇️ Importar / Atualizar Ruas'; }, 5000);
-      return;
+    let ok = false;
+    let tentativas = 0;
+    while (!ok && tentativas < 3) {
+      tentativas++;
+      try {
+        const r = await api('/api/streets/import-letter', {
+          method: 'POST',
+          body: JSON.stringify({ letter: letra, first: (i === 0 && tentativas === 1) })
+        });
+        if (r.ok) {
+          totalRuas = r.total || totalRuas;
+          ok = true;
+        } else {
+          throw new Error(r.error || 'Erro desconhecido');
+        }
+      } catch(e) {
+        if (tentativas < 3) {
+          msg.textContent = `⚠️ Letra ${letra}: ${e.message} — tentativa ${tentativas+1}/3...`;
+          await new Promise(res => setTimeout(res, 3000));
+        } else {
+          erros.push(letra);
+        }
+      }
     }
+  }
 
-    // Import em background: polling a cada 3 segundos
-    msg.textContent = '⏳ Processando via OpenStreetMap... aguarde ~60s';
-    bar.style.width = '15%';
+  // Finalizado
+  _importRunning = false;
+  bar.style.width = '100%';
 
-    let prevCount = 0;
-    let stableRounds = 0;
-    let elapsed = 0;
-    const MAX_WAIT = 150; // 150s timeout
-
-    if (_importPolling) clearInterval(_importPolling);
-    _importPolling = setInterval(async () => {
-      elapsed += 3;
-      const count = await checkStreetsCount();
-
-      if (count > 0) {
-        // Progresso animado baseado no tempo (esperamos ~7000 ruas)
-        const pct = Math.min(15 + Math.round((count / 7000) * 80), 95);
-        bar.style.width = pct + '%';
-        msg.textContent = `⏳ ${count.toLocaleString('pt-BR')} ruas salvas... aguardando finalizar`;
-
-        if (count === prevCount) {
-          stableRounds++;
-          if (stableRounds >= 2) {
-            // Contagem estável = import finalizado
-            clearInterval(_importPolling);
-            _importPolling = null;
-            bar.style.width = '100%';
-            msg.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas importadas com sucesso!`;
-            status.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas cadastradas`;
-            btn.disabled = false;
-            btn.textContent = '✅ Importado!';
-            setTimeout(() => { btn.textContent = '⬇️ Importar / Atualizar Ruas'; }, 5000);
-          }
-        } else {
-          stableRounds = 0;
-        }
-        prevCount = count;
-      } else {
-        // Ainda buscando do Overpass
-        const pct = Math.min(5 + elapsed, 50);
-        bar.style.width = pct + '%';
-        msg.textContent = `🌐 Buscando ruas via OpenStreetMap... (${elapsed}s)`;
-      }
-
-      if (elapsed >= MAX_WAIT) {
-        clearInterval(_importPolling);
-        _importPolling = null;
-        if (count > 0) {
-          bar.style.width = '100%';
-          msg.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas importadas (timeout atingido)`;
-          status.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas cadastradas`;
-          btn.textContent = '✅ Importado!';
-        } else {
-          bar.style.background = '#dc2626';
-          bar.style.width = '100%';
-          msg.textContent = '❌ Timeout — OpenStreetMap não respondeu. Tente novamente.';
-          btn.textContent = '⬇️ Tentar novamente';
-        }
-        btn.disabled = false;
-      }
-    }, 3000);
-
-  } catch(e) {
-    bar.style.width = '100%';
-    bar.style.background = '#dc2626';
-    msg.textContent = '❌ ' + e.message;
-    status.textContent = '';
+  const statusEl = document.getElementById('streetsStatus');
+  if (erros.length === 0) {
+    bar.style.background = '#16a34a';
+    msg.textContent = `✅ ${totalRuas.toLocaleString('pt-BR')} ruas importadas com sucesso!`;
+    statusEl.textContent = `✅ ${totalRuas.toLocaleString('pt-BR')} ruas cadastradas`;
+    btn.textContent = '✅ Importado!';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '⬇️ Reimportar'; }, 4000);
+  } else {
+    bar.style.background = '#f97316';
+    msg.textContent = `⚠️ ${totalRuas.toLocaleString('pt-BR')} ruas salvas. Letras com erro: ${erros.join(', ')} — clique para tentar novamente`;
+    statusEl.textContent = `⚠️ ${totalRuas.toLocaleString('pt-BR')} ruas (incompleto)`;
     btn.disabled = false;
-    btn.textContent = '⬇️ Tentar novamente';
+    btn.textContent = '🔄 Tentar letras com erro';
   }
 }
 
