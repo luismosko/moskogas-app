@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -49,7 +48,10 @@
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
-    <label>🔍 Buscar Cliente</label>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <label style="margin:0">🔍 Buscar Cliente</label>
+      <button onclick="syncBling(this)" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px;color:#94a3b8;cursor:pointer" title="Sincronizar contatos do Bling para busca por endereço">🔄 Sync Bling</button>
+    </div>
     <div class="search-fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
       <input id="searchPhone" type="tel" placeholder="📞 Telefone" autocomplete="off" oninput="doSearch(this.value,'phone')">
       <input id="searchName" type="text" placeholder="👤 Nome" autocomplete="off" oninput="doSearch(this.value,'name')">
@@ -121,6 +123,19 @@ checkApiKey();
 
 let items = [];
 let searchTimer;
+
+async function syncBling(btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ Sincronizando...';
+  try {
+    const r = await api('/api/customer/sync-bling', { method: 'POST' });
+    btn.textContent = `✅ ${r.synced} contatos sincronizados`;
+    setTimeout(() => { btn.textContent = '🔄 Sincronizar contatos Bling'; btn.disabled = false; }, 4000);
+  } catch(e) {
+    btn.textContent = '❌ Erro — tente novamente';
+    btn.disabled = false;
+  }
+}
 
 function doSearch(val, type) {
   // limpa os outros campos
