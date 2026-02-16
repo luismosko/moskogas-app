@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -90,6 +91,46 @@
       <label>Ponto de Referência</label>
       <input id="cRef" type="text" placeholder="Ex: próximo ao mercado X">
     </div>
+
+    <!-- ENDEREÇOS SALVOS DO CLIENTE -->
+    <div id="saved-addresses" style="display:none;margin-top:12px;border-top:2px dashed #e2e8f0;padding-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label style="margin:0;color:#6366f1">📍 Endereços cadastrados deste cliente</label>
+        <button type="button" onclick="showAddAddressForm()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;font-weight:700">+ Novo endereço</button>
+      </div>
+      <div id="addr-list"></div>
+
+      <!-- Formulário para novo endereço -->
+      <div id="add-addr-form" style="display:none;background:#f8fafc;border-radius:8px;padding:12px;margin-top:8px">
+        <div style="font-size:12px;font-weight:700;color:#6366f1;margin-bottom:8px">Novo Endereço</div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px">Nome/Unidade (ex: Escola Municipal X, Filial Centro)</label>
+          <input id="new-addr-obs" type="text" placeholder="Ex: Clínica Saúde Plena — Unidade Norte" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px">Endereço (Rua + Número)</label>
+          <input id="new-addr-line" type="text" placeholder="Rua das Flores, 100" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:11px">Bairro</label>
+            <input id="new-addr-bairro" type="text" placeholder="Jardim Noroeste" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:11px">Complemento</label>
+            <input id="new-addr-comp" type="text" placeholder="Sala 2" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px">Ponto de Referência</label>
+          <input id="new-addr-ref" type="text" placeholder="Próximo ao semáforo" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="button" onclick="saveNewAddress()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">💾 Salvar endereço</button>
+          <button type="button" onclick="document.getElementById('add-addr-form').style.display='none'" style="background:#e2e8f0;color:#64748b;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">Cancelar</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ITENS -->
@@ -177,7 +218,6 @@ function hideSuggestions() {
 
 async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
-  // Preenche o que já temos
   document.getElementById('cName').value   = c.name || c.customer_name || '';
   document.getElementById('cPhone').value  = c.phone_digits || '';
   document.getElementById('cAddr').value   = c.address_line || '';
@@ -185,11 +225,10 @@ async function selectCustomer(i) {
   document.getElementById('cComp').value   = c.complemento || '';
   document.getElementById('cRef').value    = c.referencia || '';
   hideSuggestions();
-  // Limpa campos de busca
   ['searchPhone','searchName','searchAddr'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  // Busca detalhes completos do Bling sempre que tiver bling_contact_id
+  // Busca detalhes Bling
   if (c.bling_contact_id) {
     try {
       const det = await api(`/api/customer/bling-detail/${c.bling_contact_id}`);
@@ -199,8 +238,75 @@ async function selectCustomer(i) {
         if (det.bairro)       document.getElementById('cBairro').value = det.bairro;
         if (det.complemento)  document.getElementById('cComp').value   = det.complemento;
       }
-    } catch(e) { console.error('Detalhe Bling:', e); }
+    } catch(e) {}
   }
+  // Carrega endereços múltiplos
+  if (c.phone_digits) loadSavedAddresses(c.phone_digits);
+}
+
+let currentPhone = '';
+
+async function loadSavedAddresses(phone) {
+  currentPhone = phone;
+  const panel = document.getElementById('saved-addresses');
+  const list  = document.getElementById('addr-list');
+  try {
+    const addrs = await api(`/api/address/list?phone=${phone}`);
+    panel.style.display = 'block';
+    if (!addrs.length) {
+      list.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:4px 0">Nenhum endereço extra cadastrado</div>';
+      return;
+    }
+    list.innerHTML = addrs.map(a => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="applyAddress(${JSON.stringify(a).replace(/"/g,'&quot;')})">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:#6366f1">${a.obs || '—'}</div>
+          <div style="font-size:12px;color:#475569">${a.address_line}${a.bairro ? ' — ' + a.bairro : ''}</div>
+          ${a.complemento ? `<div style="font-size:11px;color:#94a3b8">${a.complemento}</div>` : ''}
+        </div>
+        <button type="button" onclick="event.stopPropagation();deleteAddress(${a.id})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px" title="Excluir">🗑️</button>
+        <div style="background:#6366f1;color:#fff;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:700">Usar</div>
+      </div>
+    `).join('');
+  } catch(e) { panel.style.display = 'block'; }
+}
+
+function applyAddress(a) {
+  document.getElementById('cAddr').value   = a.address_line || '';
+  document.getElementById('cBairro').value = a.bairro || '';
+  document.getElementById('cComp').value   = a.complemento || '';
+  document.getElementById('cRef').value    = a.referencia || '';
+  showToast('✅ Endereço: ' + (a.obs || a.address_line));
+}
+
+function showAddAddressForm() {
+  document.getElementById('add-addr-form').style.display = 'block';
+  document.getElementById('new-addr-obs').focus();
+}
+
+async function saveNewAddress() {
+  const obs  = document.getElementById('new-addr-obs').value.trim();
+  const line = document.getElementById('new-addr-line').value.trim();
+  if (!obs || !line) { showToast('Preencha Nome e Endereço', 'error'); return; }
+  await api('/api/address/save', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      phone_digits: currentPhone,
+      obs, address_line: line,
+      bairro:      document.getElementById('new-addr-bairro').value,
+      complemento: document.getElementById('new-addr-comp').value,
+      referencia:  document.getElementById('new-addr-ref').value,
+    })
+  });
+  document.getElementById('add-addr-form').style.display = 'none';
+  ['new-addr-obs','new-addr-line','new-addr-bairro','new-addr-comp','new-addr-ref'].forEach(id => document.getElementById(id).value = '');
+  showToast('✅ Endereço salvo!');
+  loadSavedAddresses(currentPhone);
+}
+
+async function deleteAddress(id) {
+  if (!confirm('Excluir este endereço?')) return;
+  await api(`/api/address/${id}`, { method: 'DELETE' });
+  loadSavedAddresses(currentPhone);
 }
 
 // ── Produtos ──────────────────────────────────────────────────
@@ -336,6 +442,9 @@ async function saveOrder() {
 
     // Limpar form
     setTimeout(() => {
+      document.getElementById('saved-addresses').style.display = 'none';
+      document.getElementById('addr-list').innerHTML = '';
+      currentPhone = '';
       ['cName','cPhone','cAddr','cBairro','cComp','cRef','notes','search'].forEach(id => {
         document.getElementById(id).value = '';
       });
