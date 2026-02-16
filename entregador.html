@@ -3,33 +3,58 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedidos do Dia — MoskoGás</title>
+<title>Entregador — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f1f5f9; }
-  .toolbar { background: #fff; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; }
-  select, input[type=date] { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
-  .btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
-  .btn-blue { background: #2563eb; color: #fff; }
-  .btn-orange { background: #f97316; color: #fff; }
-  .container { padding: 16px; max-width: 900px; margin: 0 auto; }
-  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); border-left: 5px solid #e2e8f0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .toolbar { background: #1e293b; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 50; }
+  .toolbar select, .toolbar input[type=date] { padding: 8px 12px; border: none; border-radius: 8px; font-size: 14px; background: #334155; color: #fff; }
+  .toolbar select option { background: #1e293b; }
+  .btn { padding: 9px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
+  .btn-refresh { background: #f97316; color: #fff; }
+  .auto-lbl { color: #94a3b8; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .auto-lbl input { accent-color: #f97316; }
+
+  .summary-bar { background: #0f172a; color: #fff; padding: 8px 16px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; }
+  .summary-bar .chip { display: flex; align-items: center; gap: 6px; }
+  .summary-bar strong { color: #f97316; }
+
+  .container { padding: 12px 16px; max-width: 700px; margin: 0 auto; }
+
+  .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 6px solid #e2e8f0; position: relative; }
   .card.novo             { border-left-color: #dc2626; }
   .card.encaminhado      { border-left-color: #d97706; }
   .card.whatsapp_enviado { border-left-color: #16a34a; }
-  .card.entregue         { border-left-color: #2563eb; }
-  .card.cancelado        { border-left-color: #9ca3af; opacity: 0.6; }
-  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .card-title { font-size: 16px; font-weight: 800; color: #1e293b; }
-  .card-body { font-size: 14px; color: #374151; line-height: 1.8; }
-  .card-body .addr { font-size: 13px; color: #64748b; }
-  .card-footer { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .btn-sm { padding: 8px 14px; font-size: 13px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
-  .btn-maps { background: #f0fdf4; color: #16a34a; border: 2px solid #bbf7d0; }
-  .btn-delivered { background: #2563eb; color: #fff; }
-  .items-list { background: #f8fafc; border-radius: 6px; padding: 8px 12px; margin-top: 8px; font-size: 13px; }
-  .empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 16px; }
-  .badge { display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;color:#fff; }
+  .card.entregue         { border-left-color: #2563eb; opacity: 0.7; }
+  .card.cancelado        { border-left-color: #9ca3af; opacity: 0.5; }
+
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .card-id  { font-size: 12px; color: #94a3b8; font-weight: 700; }
+  .card-client { font-size: 17px; font-weight: 800; color: #1e293b; margin-top: 2px; }
+  .card-time  { font-size: 12px; color: #64748b; }
+
+  .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:800; }
+  .badge-novo   { background:#fee2e2; color:#dc2626; }
+  .badge-enc    { background:#fef3c7; color:#d97706; }
+  .badge-wa     { background:#dcfce7; color:#16a34a; }
+  .badge-entregue { background:#dbeafe; color:#2563eb; }
+  .badge-cancel { background:#f1f5f9; color:#6b7280; }
+
+  .card-addr { background: #f8fafc; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; color: #374151; line-height: 1.7; }
+  .card-addr .ref { color: #7c3aed; font-size: 12px; }
+
+  .card-items { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 10px; }
+  .card-total { font-size: 18px; font-weight: 900; color: #16a34a; }
+
+  .card-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn-maps     { background: #dcfce7; color: #16a34a; border: 2px solid #86efac; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  .btn-phone    { background: #dbeafe; color: #2563eb; border: 2px solid #93c5fd; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  .btn-deliver  { background: #2563eb; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; margin-left: auto; }
+  .btn-deliver:active { transform: scale(0.97); }
+
+  .notes-box { background: #faf5ff; border-left: 3px solid #7c3aed; padding: 8px 12px; border-radius: 0 8px 8px 0; font-size: 13px; color: #7c3aed; margin-bottom: 10px; }
+  .empty { text-align: center; padding: 60px 20px; color: #94a3b8; font-size: 16px; }
+  .hour-chip { background:#e2e8f0; color:#475569; border-radius:6px; padding:2px 7px; font-size:11px; font-weight:700; }
 </style>
 </head>
 <body>
@@ -41,14 +66,16 @@
     <option value="">Todos entregadores</option>
   </select>
   <select id="fStatus" onchange="load()">
-    <option value="">Todos status</option>
+    <option value="">Todos</option>
     <option value="encaminhado">🟡 Encaminhado</option>
     <option value="whatsapp_enviado">🟢 WhatsApp Enviado</option>
     <option value="entregue">🔵 Entregue</option>
   </select>
-  <button class="btn btn-orange" onclick="load()">🔄</button>
-  <span id="count-lbl" style="font-size:13px;color:#64748b"></span>
+  <button class="btn btn-refresh" onclick="load()">🔄</button>
+  <label class="auto-lbl"><input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)</label>
 </div>
+
+<div class="summary-bar" id="summary-bar"></div>
 
 <div class="container">
   <div id="list"></div>
@@ -58,8 +85,9 @@
 <script>
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
-
 document.getElementById('fDate').value = today();
+
+let autoTimer;
 
 async function init() {
   const drivers = await api('/api/drivers').catch(() => []);
@@ -83,8 +111,20 @@ async function load() {
   if (status)   url += `&status=${status}`;
 
   const rows = await api(url).catch(() => []);
-  document.getElementById('count-lbl').textContent = `${rows.length} pedidos`;
+  renderSummary(rows);
   render(rows);
+}
+
+function renderSummary(rows) {
+  const ativos = rows.filter(r => !['cancelado','entregue'].includes(r.status));
+  const entregues = rows.filter(r => r.status === 'entregue');
+  const totalVal = rows.reduce((s,r) => s + (r.total_value||0), 0);
+  document.getElementById('summary-bar').innerHTML = `
+    <span class="chip">📦 <strong>${ativos.length}</strong> pendentes</span>
+    <span class="chip">✅ <strong>${entregues.length}</strong> entregues</span>
+    <span class="chip">💰 Total: <strong>R$ ${totalVal.toFixed(2)}</strong></span>
+    <span class="chip" style="margin-left:auto;color:#64748b">${rows.length} pedidos</span>
+  `;
 }
 
 function render(rows) {
@@ -96,43 +136,67 @@ function render(rows) {
 
   el.innerHTML = rows.map(o => {
     const items = JSON.parse(o.items_json || '[]');
-    const itemsStr = items.map(i => `${i.qty}× ${i.name}`).join(' | ') || '—';
+    const itemsStr = items.map(i => `${i.qty}× ${i.name}`).join('  |  ') || '—';
     const hora = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
     const addr = `${o.address_line}${o.bairro ? ', ' + o.bairro : ''}, Campo Grande/MS`;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+    const phoneClean = (o.phone_digits||'').replace(/\D/g,'');
 
     const canDeliver = ['whatsapp_enviado','encaminhado'].includes(o.status);
 
+    const badgeMap = {
+      novo: '<span class="badge badge-novo">🔴 NOVO</span>',
+      encaminhado: '<span class="badge badge-enc">🟡 ENCAMINHADO</span>',
+      whatsapp_enviado: '<span class="badge badge-wa">🟢 WHATS ENVIADO</span>',
+      entregue: '<span class="badge badge-entregue">🔵 ENTREGUE</span>',
+      cancelado: '<span class="badge badge-cancel">⚫ CANCELADO</span>',
+    };
+
     return `
     <div class="card ${o.status}">
-      <div class="card-header">
-        <span class="card-title">#${o.id} — ${o.customer_name}</span>
-        ${statusBadge(o.status)}
+      <div class="card-top">
+        <div>
+          <div class="card-id">#${o.id} &nbsp;<span class="hour-chip">${hora}</span>${o.driver_name_cache ? ` &nbsp;🚚 ${o.driver_name_cache}` : ''}</div>
+          <div class="card-client">${o.customer_name}</div>
+        </div>
+        ${badgeMap[o.status] || ''}
       </div>
-      <div class="card-body">
-        <div>📞 ${o.phone_digits || '—'}</div>
-        <div class="addr">📍 ${o.address_line}${o.bairro ? ' — ' + o.bairro : ''}</div>
-        ${o.referencia ? `<div class="addr">📌 Ref: ${o.referencia}</div>` : ''}
-        ${o.driver_name_cache ? `<div class="addr">🚚 Entregador: <strong>${o.driver_name_cache}</strong></div>` : ''}
-        <div class="items-list">📦 ${itemsStr}</div>
-        ${o.notes ? `<div style="margin-top:6px;font-size:12px;color:#7c3aed">📝 ${o.notes}</div>` : ''}
+
+      <div class="card-addr">
+        📍 <strong>${o.address_line}</strong>${o.bairro ? ` — ${o.bairro}` : ''}
+        ${o.complemento ? `<br>🏢 ${o.complemento}` : ''}
+        ${o.referencia ? `<br><span class="ref">📌 Ref: ${o.referencia}</span>` : ''}
       </div>
-      <div class="card-footer">
-        <a class="btn-sm btn-maps" href="${mapsUrl}" target="_blank">🗺️ Abrir Mapa</a>
-        ${canDeliver ? `<button class="btn-sm btn-delivered" onclick="deliver(${o.id})">✅ Marcar Entregue</button>` : ''}
-        ${o.total_value ? `<span style="font-weight:800;font-size:15px;color:#1e293b;margin-left:auto">💰 R$ ${o.total_value.toFixed(2)}</span>` : ''}
+
+      ${o.notes ? `<div class="notes-box">📝 ${o.notes}</div>` : ''}
+
+      <div class="card-items">📦 ${itemsStr}</div>
+
+      <div class="card-btns">
+        <a class="btn-maps" href="${mapsUrl}" target="_blank">🗺️ Mapa</a>
+        ${phoneClean ? `<a class="btn-phone" href="tel:+55${phoneClean}">📞 Ligar</a>` : ''}
+        ${o.total_value ? `<span class="card-total">💰 R$ ${o.total_value.toFixed(2)}</span>` : ''}
+        ${canDeliver ? `<button class="btn-deliver" onclick="deliver(${o.id})">✅ Entregue!</button>` : ''}
       </div>
     </div>`;
   }).join('');
 }
 
 async function deliver(id) {
-  if (!confirm(`Marcar pedido #${id} como entregue?`)) return;
+  if (!confirm(`Confirma entrega do pedido #${id}?`)) return;
   try {
     await api(`/api/order/${id}/mark-delivered`, { method: 'POST' });
     toast('✅ Entregue!');
     load();
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function toggleAuto() {
+  clearInterval(autoTimer);
+  if (document.getElementById('autoRefresh').checked) {
+    autoTimer = setInterval(load, 30000);
+    toast('Auto-refresh ativado (30s)');
+  }
 }
 
 init();
