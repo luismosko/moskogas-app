@@ -22,17 +22,17 @@
   .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-top: 8px; }
   .status.ok  { background: #dcfce7; color: #16a34a; }
   .status.err { background: #fee2e2; color: #dc2626; }
-  .driver-row { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 6px; font-size: 14px; }
-  .driver-row span { flex: 1; }
-  .driver-row small { color: #64748b; font-size: 12px; }
   table.drivers-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.drivers-tbl td, table.drivers-tbl th { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
   table.drivers-tbl th { background: #f1f5f9; font-weight: 700; font-size: 11px; text-transform: uppercase; color: #64748b; }
+  .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 4px 0 10px; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
+  <div class="version-badge">v2.1.0 — config</div>
   <h1>⚙️ Configurações</h1>
 
   <!-- API Key -->
@@ -83,13 +83,35 @@
     <button class="btn btn-green" onclick="testIzChat()">📲 Enviar Mensagem Teste</button>
     <div id="izchat-status"></div>
   </div>
-</div>
+
+  <!-- Banco de Ruas (DENTRO do container, ANTES de fechar) -->
+  <div class="card">
+    <h2>🗺️ Banco de Ruas — Campo Grande/MS</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:12px">
+      Importa todas as ruas de Campo Grande via OpenStreetMap. Precisa fazer <strong>apenas uma vez</strong> (ou quando quiser atualizar).
+      O import roda em <strong>background</strong> (~60s). Depois o autocomplete de endereço funciona com qualquer palavra — "rio", "mato", "av", etc.
+    </p>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button onclick="importStreets()" id="btnImportStreets"
+        style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">
+        ⬇️ Importar / Atualizar Ruas
+      </button>
+      <div id="streetsStatus" style="font-size:13px;color:#64748b"></div>
+    </div>
+    <div id="streetsProgress" style="display:none;margin-top:12px">
+      <div style="background:#e2e8f0;border-radius:99px;height:8px;overflow:hidden">
+        <div id="streetsBar" style="background:#6366f1;height:100%;width:0%;transition:width 0.5s"></div>
+      </div>
+      <div id="streetsMsg" style="font-size:12px;color:#64748b;margin-top:6px">Aguardando...</div>
+    </div>
+  </div>
+
+</div><!-- /container -->
 
 <script src="shared.js"></script>
 <script>
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 
-// Carregar chave salva
 document.getElementById('apiKeyInput').value = localStorage.getItem('mg_api_key') || '';
 
 function saveKey() {
@@ -141,7 +163,10 @@ async function testIzChat() {
 }
 
 async function loadDrivers() {
-  if (!apiKey()) { document.getElementById('drivers-list').innerHTML = '<p style="color:#94a3b8;font-size:13px">Salve a chave de acesso primeiro.</p>'; return; }
+  if (!apiKey()) {
+    document.getElementById('drivers-list').innerHTML = '<p style="color:#94a3b8;font-size:13px">Salve a chave de acesso primeiro.</p>';
+    return;
+  }
   const drivers = await api('/api/drivers').catch(() => []);
   const el = document.getElementById('drivers-list');
   if (!drivers.length) {
@@ -184,8 +209,7 @@ async function toggleDriver(id, active) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
-loadDrivers();
-checkStreetsCount();
+// ── Banco de Ruas ──────────────────────────────────────────────
 
 async function checkStreetsCount() {
   try {
@@ -198,8 +222,11 @@ async function checkStreetsCount() {
       const btn = document.getElementById('btnImportStreets');
       if (btn) btn.style.animation = 'pulse 2s infinite';
     }
-  } catch(e) {}
+    return r.count || 0;
+  } catch(e) { return 0; }
 }
+
+let _importPolling = null;
 
 async function importStreets() {
   const btn    = document.getElementById('btnImportStreets');
@@ -210,27 +237,91 @@ async function importStreets() {
 
   btn.disabled = true;
   btn.textContent = '⏳ Importando...';
+  btn.style.animation = 'none';
   prog.style.display = 'block';
   status.textContent = '';
   bar.style.background = '#6366f1';
-
-  function setProgress(pct, txt) {
-    bar.style.width = pct + '%';
-    msg.textContent = txt;
-  }
+  bar.style.width = '5%';
+  msg.textContent = '🚀 Iniciando import em background...';
 
   try {
-    setProgress(10, '🌐 Buscando ruas via OpenStreetMap (Worker)...');
-
-    // Worker faz o fetch do Overpass (sem CORS) e salva direto no D1
+    // ✅ Worker responde imediatamente e processa em background (sem timeout)
     const r = await api('/api/streets/import', { method: 'POST' });
 
     if (r.error) throw new Error(r.error);
 
-    setProgress(100, `✅ ${r.total?.toLocaleString('pt-BR')} ruas importadas com sucesso!`);
-    status.textContent = `✅ ${r.total?.toLocaleString('pt-BR')} ruas cadastradas`;
-    btn.textContent = '✅ Importado!';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '⬇️ Importar / Atualizar Ruas'; }, 5000);
+    // Se retornou resultado direto (import rápido / já pronto)
+    if (r.total) {
+      bar.style.width = '100%';
+      msg.textContent = `✅ ${r.total.toLocaleString('pt-BR')} ruas importadas!`;
+      status.textContent = `✅ ${r.total.toLocaleString('pt-BR')} ruas cadastradas`;
+      btn.disabled = false;
+      btn.textContent = '✅ Importado!';
+      setTimeout(() => { btn.textContent = '⬇️ Importar / Atualizar Ruas'; }, 5000);
+      return;
+    }
+
+    // Import em background: polling a cada 3 segundos
+    msg.textContent = '⏳ Processando via OpenStreetMap... aguarde ~60s';
+    bar.style.width = '15%';
+
+    let prevCount = 0;
+    let stableRounds = 0;
+    let elapsed = 0;
+    const MAX_WAIT = 150; // 150s timeout
+
+    if (_importPolling) clearInterval(_importPolling);
+    _importPolling = setInterval(async () => {
+      elapsed += 3;
+      const count = await checkStreetsCount();
+
+      if (count > 0) {
+        // Progresso animado baseado no tempo (esperamos ~7000 ruas)
+        const pct = Math.min(15 + Math.round((count / 7000) * 80), 95);
+        bar.style.width = pct + '%';
+        msg.textContent = `⏳ ${count.toLocaleString('pt-BR')} ruas salvas... aguardando finalizar`;
+
+        if (count === prevCount) {
+          stableRounds++;
+          if (stableRounds >= 2) {
+            // Contagem estável = import finalizado
+            clearInterval(_importPolling);
+            _importPolling = null;
+            bar.style.width = '100%';
+            msg.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas importadas com sucesso!`;
+            status.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas cadastradas`;
+            btn.disabled = false;
+            btn.textContent = '✅ Importado!';
+            setTimeout(() => { btn.textContent = '⬇️ Importar / Atualizar Ruas'; }, 5000);
+          }
+        } else {
+          stableRounds = 0;
+        }
+        prevCount = count;
+      } else {
+        // Ainda buscando do Overpass
+        const pct = Math.min(5 + elapsed, 50);
+        bar.style.width = pct + '%';
+        msg.textContent = `🌐 Buscando ruas via OpenStreetMap... (${elapsed}s)`;
+      }
+
+      if (elapsed >= MAX_WAIT) {
+        clearInterval(_importPolling);
+        _importPolling = null;
+        if (count > 0) {
+          bar.style.width = '100%';
+          msg.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas importadas (timeout atingido)`;
+          status.textContent = `✅ ${count.toLocaleString('pt-BR')} ruas cadastradas`;
+          btn.textContent = '✅ Importado!';
+        } else {
+          bar.style.background = '#dc2626';
+          bar.style.width = '100%';
+          msg.textContent = '❌ Timeout — OpenStreetMap não respondeu. Tente novamente.';
+          btn.textContent = '⬇️ Tentar novamente';
+        }
+        btn.disabled = false;
+      }
+    }, 3000);
 
   } catch(e) {
     bar.style.width = '100%';
@@ -241,29 +332,10 @@ async function importStreets() {
     btn.textContent = '⬇️ Tentar novamente';
   }
 }
+
+// ── Init ──────────────────────────────────────────────────────
+loadDrivers();
+checkStreetsCount();
 </script>
-
-  <!-- Ruas de Campo Grande -->
-  <div class="card">
-    <h2>🗺️ Banco de Ruas — Campo Grande/MS</h2>
-    <p style="font-size:13px;color:#64748b;margin-bottom:12px">
-      Importa todas as ruas de Campo Grande via OpenStreetMap. Precisa fazer <strong>apenas uma vez</strong> (ou quando quiser atualizar).
-      Leva ~30 segundos. Depois o autocomplete de endereço funciona com qualquer palavra — "rio", "mato", "av", etc.
-    </p>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <button onclick="importStreets()" id="btnImportStreets"
-        style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">
-        ⬇️ Importar / Atualizar Ruas
-      </button>
-      <div id="streetsStatus" style="font-size:13px;color:#64748b"></div>
-    </div>
-    <div id="streetsProgress" style="display:none;margin-top:12px">
-      <div style="background:#e2e8f0;border-radius:99px;height:8px;overflow:hidden">
-        <div id="streetsBar" style="background:#6366f1;height:100%;width:0%;transition:width 0.5s"></div>
-      </div>
-      <div id="streetsMsg" style="font-size:12px;color:#64748b;margin-top:6px">Conectando ao OpenStreetMap...</div>
-    </div>
-  </div>
-
 </body>
 </html>
