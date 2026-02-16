@@ -185,6 +185,84 @@ async function toggleDriver(id, active) {
 }
 
 loadDrivers();
+checkStreetsCount();
+
+async function checkStreetsCount() {
+  try {
+    const r = await api('/api/streets/count');
+    const el = document.getElementById('streetsStatus');
+    if (el) el.textContent = r.count > 0
+      ? `✅ ${r.count.toLocaleString('pt-BR')} ruas cadastradas`
+      : '⚠️ Nenhuma rua importada ainda — autocomplete de endereço não funcionará';
+    if (r.count === 0) {
+      const btn = document.getElementById('btnImportStreets');
+      if (btn) btn.style.animation = 'pulse 2s infinite';
+    }
+  } catch(e) {}
+}
+
+async function importStreets() {
+  const btn = document.getElementById('btnImportStreets');
+  const prog = document.getElementById('streetsProgress');
+  const bar = document.getElementById('streetsBar');
+  const msg = document.getElementById('streetsMsg');
+  const status = document.getElementById('streetsStatus');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Importando...';
+  prog.style.display = 'block';
+  status.textContent = '';
+
+  // Simula progresso enquanto espera (request pode demorar ~30s)
+  let pct = 0;
+  const ticker = setInterval(() => {
+    pct = Math.min(pct + 2, 90);
+    bar.style.width = pct + '%';
+    if (pct < 30) msg.textContent = 'Conectando ao OpenStreetMap...';
+    else if (pct < 60) msg.textContent = 'Baixando ruas de Campo Grande...';
+    else msg.textContent = 'Salvando no banco local...';
+  }, 600);
+
+  try {
+    const r = await api('/api/streets/import', { method: 'POST' });
+    clearInterval(ticker);
+    bar.style.width = '100%';
+    msg.textContent = `✅ ${r.total?.toLocaleString('pt-BR')} ruas importadas com sucesso!`;
+    status.textContent = `✅ ${r.total?.toLocaleString('pt-BR')} ruas cadastradas`;
+    btn.textContent = '✅ Importado!';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '⬇️ Importar / Atualizar Ruas'; }, 5000);
+  } catch(e) {
+    clearInterval(ticker);
+    msg.textContent = '❌ Erro: ' + e.message;
+    bar.style.width = '100%';
+    bar.style.background = '#dc2626';
+    btn.disabled = false;
+    btn.textContent = '⬇️ Tentar novamente';
+  }
+}
 </script>
+
+  <!-- Ruas de Campo Grande -->
+  <div class="card">
+    <h2>🗺️ Banco de Ruas — Campo Grande/MS</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:12px">
+      Importa todas as ruas de Campo Grande via OpenStreetMap. Precisa fazer <strong>apenas uma vez</strong> (ou quando quiser atualizar).
+      Leva ~30 segundos. Depois o autocomplete de endereço funciona com qualquer palavra — "rio", "mato", "av", etc.
+    </p>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button onclick="importStreets()" id="btnImportStreets"
+        style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">
+        ⬇️ Importar / Atualizar Ruas
+      </button>
+      <div id="streetsStatus" style="font-size:13px;color:#64748b"></div>
+    </div>
+    <div id="streetsProgress" style="display:none;margin-top:12px">
+      <div style="background:#e2e8f0;border-radius:99px;height:8px;overflow:hidden">
+        <div id="streetsBar" style="background:#6366f1;height:100%;width:0%;transition:width 0.5s"></div>
+      </div>
+      <div id="streetsMsg" style="font-size:12px;color:#64748b;margin-top:6px">Conectando ao OpenStreetMap...</div>
+    </div>
+  </div>
+
 </body>
 </html>
