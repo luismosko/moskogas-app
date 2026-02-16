@@ -36,6 +36,8 @@
   .status-bar { text-align: center; padding: 8px; font-size: 13px; color: #64748b; }
   .total-bar { background: #1e293b; color: #fff; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .total-bar .val { font-size: 22px; font-weight: 900; color: #f97316; }
+  .search-tab { padding: 8px; border: 2px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; color: #64748b; transition: all 0.15s; }
+  .search-tab.active { border-color: #f97316; background: #f97316; color: #fff; }
   textarea { resize: vertical; height: 70px; }
 </style>
 </head>
@@ -46,11 +48,17 @@
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
-    <label>🔍 Buscar Cliente (telefone, nome ou endereço)</label>
+    <label>🔍 Buscar Cliente</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px">
+      <button class="search-tab active" onclick="setSearchType('phone',this)">📞 Telefone</button>
+      <button class="search-tab" onclick="setSearchType('name',this)">👤 Nome</button>
+      <button class="search-tab" onclick="setSearchType('address',this)">📍 Endereço</button>
+    </div>
     <div class="autocomplete-box">
-      <input id="search" type="text" placeholder="Ex: 67999... ou João Silva ou Rua das Flores" autocomplete="off">
+      <input id="search" type="text" placeholder="Digite para buscar..." autocomplete="off">
       <div id="suggestions" style="display:none;"></div>
     </div>
+    <div id="search-hint" style="font-size:11px;color:#94a3b8;margin-top:4px">📞 Digite o telefone com DDD</div>
   </div>
 
   <!-- DADOS DO CLIENTE -->
@@ -118,8 +126,31 @@
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
+let searchType = 'phone';
+const hints = {
+  phone: '📞 Digite o telefone com DDD (ex: 67999...)',
+  name: '👤 Digite o nome do cliente',
+  address: '📍 Digite a rua ou bairro'
+};
+
+function setSearchType(type, btn) {
+  searchType = type;
+  document.querySelectorAll('.search-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('search').value = '';
+  document.getElementById('search-hint').textContent = hints[type];
+  hideSuggestions();
+  document.getElementById('search').focus();
+}
 let items = [];
 let searchTimer;
+
+async function searchCustomer(q) {
+  try {
+    const results = await api(`/api/customer/search?q=${encodeURIComponent(q)}&type=${searchType}`);
+    showSuggestions(results);
+  } catch(e) { console.error(e); }
+}
 
 // ── Autocomplete ──────────────────────────────────────────────
 document.getElementById('search').addEventListener('input', function() {
@@ -132,13 +163,6 @@ document.getElementById('search').addEventListener('input', function() {
 document.addEventListener('click', e => {
   if (!e.target.closest('.autocomplete-box')) hideSuggestions();
 });
-
-async function searchCustomer(q) {
-  try {
-    const results = await api(`/api/customer/search?q=${encodeURIComponent(q)}`);
-    showSuggestions(results);
-  } catch(e) { console.error(e); }
-}
 
 function showSuggestions(list) {
   const box = document.getElementById('suggestions');
