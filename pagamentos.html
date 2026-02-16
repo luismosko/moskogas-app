@@ -3,43 +3,77 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.1.0</title>
+<title>Pagamentos — MoskoGás v1.2.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; padding-bottom: 80px; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 20px; }
   h1 { color: #1e293b; font-size: 22px; margin-bottom: 16px; }
   .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
 
-  /* Toolbar de filtros */
+  /* Filtros */
   .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #f1f5f9; }
   .filters input, .filters select { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: #f8fafc; }
   .filters input:focus, .filters select:focus { outline: none; border-color: #f97316; }
   .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
   .btn-orange { background: #f97316; color: #fff; }
-  .btn-gray { background: #94a3b8; color: #fff; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .btn-blue   { background: #2563eb; color: #fff; }
+  .btn-gray   { background: #94a3b8; color: #fff; }
+  .btn-red    { background: #dc2626; color: #fff; }
   .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  /* Tabela */
   table { width: 100%; border-collapse: collapse; }
   th { background: #f8fafc; color: #64748b; text-align: left; padding: 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; }
-  td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
-  tr:hover { background: #fef3c7; }
+  td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+  tr:hover td { background: #fffbeb; }
+  tr.selected td { background: #fef3c7; }
   .badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; display: inline-block; }
   .badge-green { background: #dcfce7; color: #15803d; }
-  .badge-yellow { background: #fef3c7; color: #a16207; }
   .badge-gray { background: #f1f5f9; color: #64748b; }
-  .btn-pago { background: #16a34a; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-pago { background: #16a34a; color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
   .btn-pago:hover { background: #15803d; }
   .empty { text-align: center; padding: 40px; color: #94a3b8; }
   .tipo-badge { padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
   .count-badge { font-size: 12px; color: #64748b; }
+
+  /* Checkbox */
+  input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #f97316; }
+
+  /* Barra de ações flutuante */
+  .action-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: #1e293b; color: #fff; padding: 12px 24px;
+    display: none; align-items: center; justify-content: space-between;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+    animation: slideUp 0.2s ease;
+  }
+  .action-bar.visible { display: flex; flex-wrap: wrap; gap: 10px; }
+  .action-bar .info { font-size: 14px; font-weight: 700; }
+  .action-bar .info strong { color: #f97316; font-size: 18px; }
+  .action-bar .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  .action-bar .buttons .btn { padding: 10px 18px; font-size: 14px; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  /* Modal NFe */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:300; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:14px; padding:24px; width:min(620px,95vw); max-height:90vh; overflow-y:auto; }
+  .modal h2 { font-size:18px; margin-bottom:16px; color:#1e293b; }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .nfe-summary { background:#f8fafc; border-radius:8px; padding:14px; font-size:13px; line-height:1.8; margin-bottom:12px; }
+  .nfe-summary table { font-size: 13px; }
+  .nfe-summary th { background: #e2e8f0; padding: 6px 10px; font-size: 11px; }
+  .nfe-summary td { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.1.0 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.2.0 — pagamentos</div>
 <div class="container">
-  <h1>💰 Gestão de Pagamentos <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.1.0</span></h1>
+  <h1>💰 Gestão de Pagamentos <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.2.0</span></h1>
 
   <!-- Resumo -->
   <div class="card">
@@ -81,6 +115,7 @@
       <table>
         <thead>
           <tr>
+            <th style="width:40px"><input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)" title="Selecionar todos"></th>
             <th>#</th>
             <th>Data</th>
             <th>Cliente</th>
@@ -100,16 +135,48 @@
   </div>
 </div>
 
+<!-- Barra de ações flutuante -->
+<div id="actionBar" class="action-bar">
+  <div class="info">
+    <strong id="selCount">0</strong> selecionados — Total: <strong id="selTotal">R$ 0,00</strong>
+  </div>
+  <div class="buttons">
+    <button class="btn btn-green" onclick="bulkMarcarPago()" title="Marcar selecionados como pagos e criar venda no Bling">
+      ✅ Baixar como Pago
+    </button>
+    <button class="btn btn-blue" onclick="abrirModalNFe()" title="Agrupar pedidos e gerar NFe no Bling (mensalistas/boleto)">
+      🧾 Gerar NFe Agrupada
+    </button>
+    <button class="btn btn-gray" onclick="deselectAll()">✕ Cancelar</button>
+  </div>
+</div>
+
+<!-- Modal NFe Agrupada -->
+<div id="nfeModal" class="modal-overlay" onclick="if(event.target===this)fecharModalNFe()">
+  <div class="modal">
+    <h2>🧾 Gerar NFe Agrupada</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:16px">
+      Os pedidos selecionados serão agrupados por cliente. Os produtos serão somados e uma única NFe será gerada no Bling para cada cliente.
+    </p>
+    <div id="nfe-preview"></div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="fecharModalNFe()">Cancelar</button>
+      <button class="btn btn-blue" id="btnConfirmNFe" onclick="confirmarNFe()">🧾 Confirmar e Gerar NFe</button>
+    </div>
+  </div>
+</div>
+
 <script src="shared.js"></script>
 <script>
-// ── Nav ──
+// v1.2.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
 // ── State ──
 let allData = [];
+let filteredData = [];
+let selectedIds = new Set();
 
-// ── Tipos ──
 const tipoLabels = {
   dinheiro:     '💵 Dinheiro',
   pix_vista:    '⚡ PIX à vista',
@@ -117,7 +184,6 @@ const tipoLabels = {
   mensalista:   '📅 Mensalista',
   boleto:       '🧾 Boleto/Órgão'
 };
-
 const tipoColors = {
   pix_receber: 'background:#fef3c7;color:#92400e',
   mensalista:  'background:#dbeafe;color:#1e40af',
@@ -126,53 +192,54 @@ const tipoColors = {
   pix_vista:   'background:#ecfdf5;color:#065f46'
 };
 
-// ── Load da API ──
+// ── Load ──
 async function loadPagamentos() {
   try {
     const data = await api('/api/pagamentos');
     allData = data || [];
+    selectedIds.clear();
     applyFilters();
   } catch(e) {
     toast('❌ Erro ao carregar: ' + e.message, 'error');
   }
 }
 
-// ── Filtragem local ──
+// ── Filtros ──
 function applyFilters() {
   const qCliente = document.getElementById('fCliente').value.trim().toLowerCase();
   const dateFrom = document.getElementById('fDateFrom').value;
   const dateTo   = document.getElementById('fDateTo').value;
   const tipo     = document.getElementById('fTipo').value;
 
-  let filtered = allData.filter(p => {
-    // Filtro por cliente (nome, telefone ou endereço)
+  filteredData = allData.filter(p => {
     if (qCliente && !(p.customer_name || '').toLowerCase().includes(qCliente)
                   && !(p.phone_digits || '').includes(qCliente)
                   && !(p.address_line || '').toLowerCase().includes(qCliente)) return false;
-
-    // Filtro por data
     if (dateFrom || dateTo) {
-      const orderDate = p.created_at
-        ? new Date(p.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' })
-        : null;
-      if (!orderDate) return false;
-      if (dateFrom && orderDate < dateFrom) return false;
-      if (dateTo && orderDate > dateTo) return false;
+      const d = p.created_at ? new Date(p.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' }) : null;
+      if (!d) return false;
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
     }
-
-    // Filtro por tipo
     if (tipo && p.tipo_pagamento !== tipo) return false;
-
     return true;
   });
 
-  renderTable(filtered);
+  // Limpar seleções que não estão mais visíveis
+  const visibleIds = new Set(filteredData.map(p => p.id));
+  for (const id of selectedIds) {
+    if (!visibleIds.has(id)) selectedIds.delete(id);
+  }
+
+  renderTable();
+  updateActionBar();
 }
 
 // ── Render ──
-function renderTable(data) {
+function renderTable() {
   const tbody = document.getElementById('tbody');
   const emptyEl = document.getElementById('empty-msg');
+  const data = filteredData;
 
   if (!data || data.length === 0) {
     tbody.innerHTML = '';
@@ -181,32 +248,32 @@ function renderTable(data) {
     document.getElementById('count-bling').textContent = '0';
     document.getElementById('count-pendente').textContent = '0';
     document.getElementById('filter-count').textContent = allData.length > 0 ? '0 de ' + allData.length : '';
+    document.getElementById('checkAll').checked = false;
     return;
   }
 
   emptyEl.style.display = 'none';
-
-  let totalPendente = 0;
-  let countBling = 0;
-  let countPendente = 0;
+  let totalPendente = 0, countBling = 0, countPendente = 0;
 
   const html = data.map(p => {
     totalPendente += p.total_value || 0;
     if (p.bling_pedido_id) countBling++; else countPendente++;
 
+    const checked = selectedIds.has(p.id);
+    const rowClass = checked ? ' class="selected"' : '';
     const blingBadge = p.bling_pedido_id
-      ? `<span class="badge badge-green">✅ Venda #${p.bling_pedido_num || p.bling_pedido_id}</span>`
-      : `<span class="badge badge-gray">⏳ Aguardando emissão</span>`;
-
+      ? `<span class="badge badge-green">✅ #${p.bling_pedido_num || p.bling_pedido_id}</span>`
+      : `<span class="badge badge-gray">⏳ Sem venda</span>`;
     const tipoStyle = tipoColors[p.tipo_pagamento] || 'background:#f1f5f9;color:#64748b';
     const dateStr = fmtDate(p.created_at);
 
-    return `<tr>
+    return `<tr${rowClass}>
+      <td><input type="checkbox" data-id="${p.id}" ${checked ? 'checked' : ''} onchange="toggleItem(${p.id}, this.checked)"></td>
       <td><strong>#${p.id}</strong></td>
       <td style="font-size:12px;color:#64748b;white-space:nowrap">${dateStr}</td>
       <td>${p.customer_name || '—'}<br><small style="color:#94a3b8">${p.phone_digits || ''}</small></td>
-      <td style="font-size:12px;color:#64748b">${p.address_line || '—'}</td>
-      <td><strong>R$ ${(p.total_value || 0).toFixed(2)}</strong></td>
+      <td style="font-size:12px;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis">${p.address_line || '—'}</td>
+      <td style="white-space:nowrap"><strong>R$ ${(p.total_value || 0).toFixed(2)}</strong></td>
       <td><span class="tipo-badge" style="${tipoStyle}">${tipoLabels[p.tipo_pagamento] || p.tipo_pagamento}</span></td>
       <td>${blingBadge}</td>
       <td><button class="btn-pago" onclick="marcarPago(${p.id})">✅ Pago</button></td>
@@ -220,11 +287,62 @@ function renderTable(data) {
 
   const fc = document.getElementById('filter-count');
   fc.textContent = data.length < allData.length
-    ? data.length + ' de ' + allData.length + ' registros'
+    ? data.length + ' de ' + allData.length
     : data.length + ' registros';
+
+  // Atualiza checkAll
+  document.getElementById('checkAll').checked = data.length > 0 && data.every(p => selectedIds.has(p.id));
 }
 
-// ── Ações ──
+// ══════════════════════════════════════════
+// SELEÇÃO
+// ══════════════════════════════════════════
+function toggleItem(id, checked) {
+  if (checked) selectedIds.add(id); else selectedIds.delete(id);
+  // Atualiza visual da row sem re-render completo
+  const cb = document.querySelector(`input[data-id="${id}"]`);
+  if (cb) cb.closest('tr').classList.toggle('selected', checked);
+  document.getElementById('checkAll').checked = filteredData.length > 0 && filteredData.every(p => selectedIds.has(p.id));
+  updateActionBar();
+}
+
+function toggleAll(checked) {
+  filteredData.forEach(p => {
+    if (checked) selectedIds.add(p.id); else selectedIds.delete(p.id);
+  });
+  renderTable();
+  updateActionBar();
+}
+
+function deselectAll() {
+  selectedIds.clear();
+  document.getElementById('checkAll').checked = false;
+  renderTable();
+  updateActionBar();
+}
+
+function updateActionBar() {
+  const bar = document.getElementById('actionBar');
+  const count = selectedIds.size;
+  if (count === 0) {
+    bar.classList.remove('visible');
+    return;
+  }
+  bar.classList.add('visible');
+  document.getElementById('selCount').textContent = count;
+
+  // Soma valor dos selecionados
+  const total = allData.filter(p => selectedIds.has(p.id)).reduce((s, p) => s + (p.total_value || 0), 0);
+  document.getElementById('selTotal').textContent = 'R$ ' + total.toFixed(2);
+}
+
+function getSelected() {
+  return allData.filter(p => selectedIds.has(p.id));
+}
+
+// ══════════════════════════════════════════
+// AÇÕES INDIVIDUAIS
+// ══════════════════════════════════════════
 async function marcarPago(orderId) {
   if (!confirm('Confirmar que o pedido #' + orderId + ' foi pago?')) return;
   try {
@@ -240,6 +358,140 @@ async function marcarPago(orderId) {
   }
 }
 
+// ══════════════════════════════════════════
+// AÇÃO EM LOTE: BAIXAR COMO PAGO
+// ══════════════════════════════════════════
+async function bulkMarcarPago() {
+  const sel = getSelected();
+  if (sel.length === 0) return;
+
+  const total = sel.reduce((s, p) => s + (p.total_value || 0), 0);
+  const msg = `Confirmar pagamento de ${sel.length} pedido(s)?\n\nTotal: R$ ${total.toFixed(2)}\n\nPedidos: ${sel.map(p => '#' + p.id).join(', ')}\n\nIsso irá:\n• Marcar como pago no sistema\n• Criar venda no Bling (se ainda não criada)`;
+
+  if (!confirm(msg)) return;
+
+  let ok = 0, errs = 0;
+  for (const p of sel) {
+    try {
+      const res = await api('/api/pagamentos/' + p.id, { method: 'PATCH' });
+      if (res.ok) ok++; else errs++;
+    } catch(e) {
+      errs++;
+    }
+  }
+
+  if (ok > 0) toast(`✅ ${ok} pedido(s) marcados como pago!`);
+  if (errs > 0) toast(`❌ ${errs} erro(s) ao processar`, 'error');
+  loadPagamentos();
+}
+
+// ══════════════════════════════════════════
+// AÇÃO EM LOTE: GERAR NFe AGRUPADA
+// ══════════════════════════════════════════
+function abrirModalNFe() {
+  const sel = getSelected();
+  if (sel.length === 0) return;
+
+  // Verificar: só mensalista/boleto podem gerar NFe agrupada
+  const invalidos = sel.filter(p => !['mensalista', 'boleto'].includes(p.tipo_pagamento));
+  if (invalidos.length > 0) {
+    toast('⚠️ NFe agrupada só para Mensalista ou Boleto. Remova os pedidos: ' + invalidos.map(p => '#' + p.id).join(', '), 'error');
+    return;
+  }
+
+  // Agrupar por cliente (phone_digits como chave)
+  const grupos = {};
+  sel.forEach(p => {
+    const key = p.phone_digits || p.customer_name || 'sem_id';
+    if (!grupos[key]) {
+      grupos[key] = {
+        cliente: p.customer_name || '—',
+        phone: p.phone_digits || '',
+        bling_contact_id: p.bling_contact_id || null,
+        pedidos: [],
+        produtos: {},
+        total: 0
+      };
+    }
+    grupos[key].pedidos.push(p);
+    grupos[key].total += p.total_value || 0;
+
+    // Somar produtos
+    try {
+      const items = JSON.parse(p.items_json || '[]');
+      items.forEach(item => {
+        const prodKey = item.id || item.name;
+        if (!grupos[key].produtos[prodKey]) {
+          grupos[key].produtos[prodKey] = { name: item.name, code: item.code || '', qty: 0, price: item.price || 0, total: 0 };
+        }
+        grupos[key].produtos[prodKey].qty += item.qty || 1;
+        grupos[key].produtos[prodKey].total += (item.qty || 1) * (item.price || 0);
+      });
+    } catch(e) {}
+  });
+
+  // Render preview
+  let html = '';
+  Object.values(grupos).forEach(g => {
+    const prods = Object.values(g.produtos);
+    html += `<div class="nfe-summary">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px">👤 ${g.cliente} <small style="color:#94a3b8">${g.phone}</small></div>
+      <div style="margin-bottom:6px;font-size:12px;color:#64748b">Pedidos: ${g.pedidos.map(p => '#' + p.id).join(', ')}</div>
+      ${prods.length > 0 ? `
+      <table style="width:100%;margin-top:8px">
+        <thead><tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:right">Unitário</th><th style="text-align:right">Subtotal</th></tr></thead>
+        <tbody>
+          ${prods.map(pr => `<tr>
+            <td>${pr.name} ${pr.code ? '<small style="color:#94a3b8">(' + pr.code + ')</small>' : ''}</td>
+            <td style="text-align:center;font-weight:700">${pr.qty}</td>
+            <td style="text-align:right">R$ ${pr.price.toFixed(2)}</td>
+            <td style="text-align:right;font-weight:700">R$ ${pr.total.toFixed(2)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<div style="color:#dc2626;font-size:12px">⚠️ Sem detalhes de produtos nos pedidos</div>'}
+      <div style="text-align:right;font-weight:900;font-size:16px;margin-top:8px;color:#1e293b">Total: R$ ${g.total.toFixed(2)}</div>
+    </div>`;
+  });
+
+  document.getElementById('nfe-preview').innerHTML = html;
+  document.getElementById('nfeModal').classList.add('open');
+}
+
+function fecharModalNFe() {
+  document.getElementById('nfeModal').classList.remove('open');
+}
+
+async function confirmarNFe() {
+  const sel = getSelected().filter(p => ['mensalista', 'boleto'].includes(p.tipo_pagamento));
+  if (sel.length === 0) return;
+
+  const btn = document.getElementById('btnConfirmNFe');
+  btn.disabled = true;
+  btn.textContent = '⏳ Gerando...';
+
+  try {
+    // Envia IDs dos pedidos para o backend agrupar e gerar NFe
+    const res = await api('/api/pagamentos/gerar-nfe', {
+      method: 'POST',
+      body: JSON.stringify({ order_ids: sel.map(p => p.id) })
+    });
+
+    if (res.ok) {
+      toast(`✅ NFe gerada com sucesso! ${res.message || ''}`);
+      fecharModalNFe();
+      loadPagamentos();
+    } else {
+      toast('❌ ' + (res.error || 'Erro ao gerar NFe'), 'error');
+    }
+  } catch(e) {
+    toast('❌ Erro: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🧾 Confirmar e Gerar NFe';
+  }
+}
+
+// ── Utilitários ──
 function clearFilters() {
   document.getElementById('fCliente').value = '';
   document.getElementById('fDateFrom').value = '';
