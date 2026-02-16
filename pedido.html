@@ -75,7 +75,10 @@
     </div>
     <div class="row" style="margin-bottom:12px">
       <label>Endereço (Rua + Número) *</label>
-      <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas, 123">
+      <div class="street-wrap">
+        <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas, 123" autocomplete="off" oninput="streetAC(this,'cBairro','cAddr-ac')">
+        <div id="cAddr-ac" class="street-ac" style="display:none"></div>
+      </div>
     </div>
     <div class="row row-2">
       <div>
@@ -293,6 +296,106 @@ function applyAddress(a) {
 }
 
 // ── Form de novo endereço no modal ───────────────────────────
+// ── Autocomplete de ruas (Campo Grande/MS via Nominatim OSM) ─
+let _acTimer = null;
+let _acActiveIdx = -1;
+
+async function streetAC(input, bairroId, dropId) {
+  const q = input.value.trim();
+  const drop = document.getElementById(dropId);
+  clearTimeout(_acTimer);
+  _acActiveIdx = -1;
+  
+  if (q.length < 3) { drop.style.display='none'; return; }
+
+  // Navegação por teclado
+  input.onkeydown = (e) => {
+    const items = drop.querySelectorAll('.street-ac-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _acActiveIdx = Math.min(_acActiveIdx+1, items.length-1);
+      items.forEach((el,i) => el.classList.toggle('active', i===_acActiveIdx));
+      items[_acActiveIdx]?.scrollIntoView({block:'nearest'});
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _acActiveIdx = Math.max(_acActiveIdx-1, 0);
+      items.forEach((el,i) => el.classList.toggle('active', i===_acActiveIdx));
+      items[_acActiveIdx]?.scrollIntoView({block:'nearest'});
+    } else if (e.key === 'Enter' && _acActiveIdx >= 0) {
+      e.preventDefault();
+      items[_acActiveIdx].click();
+    } else if (e.key === 'Escape') {
+      drop.style.display='none';
+    }
+  };
+
+  _acTimer = setTimeout(async () => {
+    drop.innerHTML = '<div class="street-ac-item" style="color:#94a3b8">🔍 Buscando...</div>';
+    drop.style.display = 'block';
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?` +
+        `q=${encodeURIComponent(q)}+Campo+Grande+MS&` +
+        `countrycodes=br&format=json&addressdetails=1&limit=10&` +
+        `bounded=1&viewbox=-54.91,-20.28,-54.44,-20.62`; // bounding box Campo Grande
+      
+      const resp = await fetch(url, { headers: {'Accept-Language': 'pt-BR,pt'} });
+      const data = await resp.json();
+      
+      // Filtra só resultados de Campo Grande com nome de rua
+      const streets = data.filter(r =>
+        r.address && 
+        (r.address.city === 'Campo Grande' || r.address.municipality === 'Campo Grande') &&
+        (r.address.road || r.address.pedestrian || r.address.path)
+      );
+      
+      if (!streets.length) {
+        drop.innerHTML = '<div class="street-ac-item" style="color:#94a3b8">Nenhuma rua encontrada em Campo Grande</div>';
+        return;
+      }
+      
+      // Deduplica por nome de rua
+      const seen = new Set();
+      const unique = streets.filter(r => {
+        const road = r.address.road || r.address.pedestrian || r.address.path || '';
+        if (seen.has(road)) return false;
+        seen.add(road); return true;
+      });
+      
+      drop.innerHTML = unique.map(r => {
+        const road    = r.address.road || r.address.pedestrian || r.address.path || '';
+        const bairro  = r.address.suburb || r.address.neighbourhood || r.address.quarter || '';
+        const cep     = r.address.postcode || '';
+        return `<div class="street-ac-item" 
+          onclick="selectStreet('${road.replace(/'/g,"\'")}','${bairro.replace(/'/g,"\'")}','${input.id}','${bairroId}','${dropId}')">
+          <div class="street-name">${road}</div>
+          <div class="street-bairro">${[bairro,cep].filter(Boolean).join(' · ')}</div>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      drop.innerHTML = '<div class="street-ac-item" style="color:#dc2626">Erro ao buscar ruas</div>';
+    }
+  }, 500);
+}
+
+function selectStreet(road, bairro, inputId, bairroId, dropId) {
+  const inp = document.getElementById(inputId);
+  if (inp) inp.value = road;
+  const bairroEl = document.getElementById(bairroId);
+  if (bairroEl && !bairroEl.value) bairroEl.value = bairro;
+  document.getElementById(dropId).style.display = 'none';
+  _acActiveIdx = -1;
+  // Move foco para o próximo campo
+  inp.focus();
+}
+
+// Fecha dropdown ao clicar fora
+document.addEventListener('click', e => {
+  if (!e.target.closest('.street-wrap')) {
+    document.querySelectorAll('.street-ac').forEach(d => d.style.display='none');
+  }
+});
+
 function showAddInModal() {
   document.getElementById('add-addr-section').style.display = 'none';
   document.getElementById('add-addr-form-modal').style.display = 'block';
@@ -537,8 +640,12 @@ renderItems();
         </div>
         <div style="margin-bottom:8px">
           <label style="font-size:11px;font-weight:700;color:#64748b">RUA + NÚMERO *</label>
-          <input id="m-addr" type="text" placeholder="Rua das Flores, 100" 
-            style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+          <div class="street-wrap">
+            <input id="m-addr" type="text" placeholder="Rua das Flores, 100" autocomplete="off"
+              oninput="streetAC(this,'m-bairro','m-addr-ac')"
+              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
+            <div id="m-addr-ac" class="street-ac" style="display:none"></div>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div>
