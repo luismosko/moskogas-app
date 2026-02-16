@@ -164,20 +164,32 @@ function hideSuggestions() {
   box.style.display = 'none';
 }
 
-function selectCustomer(i) {
+async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
+  // Preenche o que já temos
   document.getElementById('cName').value   = c.name || c.customer_name || '';
   document.getElementById('cPhone').value  = c.phone_digits || '';
   document.getElementById('cAddr').value   = c.address_line || '';
   document.getElementById('cBairro').value = c.bairro || '';
   document.getElementById('cComp').value   = c.complemento || '';
   document.getElementById('cRef').value    = c.referencia || '';
+  hideSuggestions();
   // Limpa campos de busca
   ['searchPhone','searchName','searchAddr'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
+    const el = document.getElementById(id); if (el) el.value = '';
   });
-  hideSuggestions();
+  // Se veio do Bling (tem bling_contact_id mas sem endereço), busca detalhes
+  if (c.bling_contact_id && !c.address_line) {
+    try {
+      const det = await api(`/api/customer/bling-detail/${c.bling_contact_id}`);
+      if (det && !det.error) {
+        if (det.phone_digits) document.getElementById('cPhone').value  = det.phone_digits;
+        if (det.address_line) document.getElementById('cAddr').value   = det.address_line;
+        if (det.bairro)       document.getElementById('cBairro').value = det.bairro;
+        if (det.complemento)  document.getElementById('cComp').value   = det.complemento;
+      }
+    } catch(e) { console.error('Detalhe Bling:', e); }
+  }
 }
 
 // ── Itens ─────────────────────────────────────────────────────
@@ -290,4 +302,3 @@ renderItems();
 </script>
 </body>
 </html>
-
