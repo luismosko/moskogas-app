@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório Entregador — MoskoGás v1.2.0</title>
+<title>Relatório Entregador — MoskoGás v1.2.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -19,9 +19,8 @@
   /* ── RELATÓRIO ── */
   .report { max-width: 800px; margin: 16px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 
-  .report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1.5px solid #94a3b8; }
+  .report-header { text-align: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1.5px solid #94a3b8; }
   .report-header h1 { font-size: 13px; color: #334155; white-space: nowrap; }
-  .report-header .sub { font-size: 11px; color: #64748b; white-space: nowrap; }
 
   .report table { width: 100%; border-collapse: collapse; }
   .report th { background: #f1f5f9; color: #334155; padding: 4px 5px; text-align: left; font-size: 10px; font-weight: 700; border: 1px solid #cbd5e1; white-space: nowrap; }
@@ -59,14 +58,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.0</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.1</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.0</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.1</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -79,7 +78,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.0
+// v1.2.1
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -151,11 +150,10 @@ async function gerarRelatorio() {
 
   const dateFmt = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR');
 
-  // Header compacto: título esquerda, dados direita, 1 linha só
+  // Header compacto: tudo numa única linha
   let html = `
     <div class="report-header">
-      <h1>MOSKO GÁS — VENDAS POR ENTREGADOR</h1>
-      <div class="sub">${dateFmt} &nbsp;|&nbsp; <strong>${driverName.toUpperCase()}</strong> &nbsp;|&nbsp; ${rows.length} pedidos</div>
+      <h1>MOSKO GÁS — ${dateFmt} — ${driverName.toUpperCase()} — ${rows.length} pedidos</h1>
     </div>
   `;
 
