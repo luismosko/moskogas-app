@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.6.1 — MoskoGás</title>
+<title>Gestão v2.6.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -74,7 +74,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.6.1</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.6.2</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -141,7 +141,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v2.6.1
+// v2.6.2
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -365,7 +365,7 @@ function renderTable(rows) {
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
       <td style="font-weight:700;color:#1e293b;white-space:nowrap">${total}</td>
       <td style="white-space:nowrap;font-size:12px">${pgtoLabel} ${pagoFlag}</td>
-      <td>${statusBadge(o.status)}</td>
+      <td>${statusBadge(o.status)} ${o.bling_pedido_id ? '<span title="Lançado no Bling #'+o.bling_pedido_id+'" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;font-weight:800;vertical-align:middle;margin-left:3px;cursor:help;">B</span>' : '<span title="Sem lançamento no Bling" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#e2e8f0;color:#94a3b8;font-size:10px;font-weight:800;vertical-align:middle;margin-left:3px;cursor:help;">B</span>'}</td>
       <td>
         <select class="driver-sel" onchange="selectDriver(${o.id}, this.value)">
           ${driverOpts}
