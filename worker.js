@@ -1,6 +1,9 @@
-// v2.12.2
+// v2.12.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.12.3: Flags pode_entregar + recebe_whatsapp em app_users
+//          /api/drivers filtra por pode_entregar=1 (atendentes podem entregar)
+//          WhatsApp skipped se recebe_whatsapp=0
 // v2.12.2: Entregadores unificados: /api/drivers agora puxa de app_users
 //          Removido POST/PATCH /api/drivers (gerenciar via Usuários)
 // v2.12.1: Novas formas pgto: débito, crédito, NFe
@@ -61,10 +64,17 @@ async function ensureAuthTables(env) {
     bling_vendedor_id INTEGER,
     bling_vendedor_nome TEXT,
     telefone TEXT,
+    pode_entregar INTEGER DEFAULT 0,
+    recebe_whatsapp INTEGER DEFAULT 0,
     ativo INTEGER DEFAULT 1,
     created_at INTEGER DEFAULT (unixepoch()),
     updated_at INTEGER DEFAULT (unixepoch())
   )`).run();
+  // Migrate: add columns if missing
+  await env.DB.prepare("ALTER TABLE app_users ADD COLUMN pode_entregar INTEGER DEFAULT 0").run().catch(()=>{});
+  await env.DB.prepare("ALTER TABLE app_users ADD COLUMN recebe_whatsapp INTEGER DEFAULT 0").run().catch(()=>{});
+  // Set defaults: entregadores existentes ganham pode_entregar=1, recebe_whatsapp=1
+  await env.DB.prepare("UPDATE app_users SET pode_entregar=1, recebe_whatsapp=1 WHERE role='entregador' AND pode_entregar=0 AND recebe_whatsapp=0 AND ativo=1").run().catch(()=>{});
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS auth_sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -832,7 +842,7 @@ export default {
       const authCheck = await requireAuth(request, env, ['admin']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuthTables(env);
-      const rows = await env.DB.prepare('SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, ativo, created_at FROM app_users ORDER BY nome').all();
+      const rows = await env.DB.prepare('SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users ORDER BY nome').all();
       return json(rows.results || []);
     }
 
@@ -841,7 +851,7 @@ export default {
       if (authCheck instanceof Response) return authCheck;
       await ensureAuthTables(env);
       const body = await request.json();
-      const { id, nome, login, senha, role, bling_vendedor_id, bling_vendedor_nome, telefone, ativo } = body;
+      const { id, nome, login, senha, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo } = body;
       if (!nome || !login) return err('Nome e login obrigatórios');
       if (!['admin', 'atendente', 'entregador'].includes(role || 'entregador')) return err('Role inválido');
 
@@ -854,11 +864,11 @@ export default {
         if (senha) {
           const salt = crypto.randomUUID();
           const hash = await hashPassword(senha, salt);
-          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, senha_hash=?, senha_salt=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, ativo=?, updated_at=unixepoch() WHERE id=?')
-            .bind(nome, login.toLowerCase().trim(), hash, salt, role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, ativo !== undefined ? (ativo?1:0) : 1, id).run();
+          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, senha_hash=?, senha_salt=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
+            .bind(nome, login.toLowerCase().trim(), hash, salt, role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, pode_entregar?1:0, recebe_whatsapp?1:0, ativo !== undefined ? (ativo?1:0) : 1, id).run();
         } else {
-          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, ativo=?, updated_at=unixepoch() WHERE id=?')
-            .bind(nome, login.toLowerCase().trim(), role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, ativo !== undefined ? (ativo?1:0) : 1, id).run();
+          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
+            .bind(nome, login.toLowerCase().trim(), role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, pode_entregar?1:0, recebe_whatsapp?1:0, ativo !== undefined ? (ativo?1:0) : 1, id).run();
         }
         if (ativo !== undefined && !ativo) {
           await env.DB.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(id).run().catch(() => {});
@@ -870,8 +880,8 @@ export default {
         if (dup) return err('Login já existe');
         const salt = crypto.randomUUID();
         const hash = await hashPassword(senha, salt);
-        const result = await env.DB.prepare('INSERT INTO app_users (nome, login, senha_hash, senha_salt, role, bling_vendedor_id, bling_vendedor_nome, telefone, ativo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(nome, login.toLowerCase().trim(), hash, salt, role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, ativo !== undefined ? (ativo?1:0) : 1).run();
+        const result = await env.DB.prepare('INSERT INTO app_users (nome, login, senha_hash, senha_salt, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(nome, login.toLowerCase().trim(), hash, salt, role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, pode_entregar?1:0, recebe_whatsapp?1:0, ativo !== undefined ? (ativo?1:0) : 1).run();
         return json({ ok: true, id: result.meta?.last_row_id });
       }
     }
@@ -1287,7 +1297,16 @@ export default {
           order = { ...order, driver_id, driver_name_cache: driver.nome, driver_phone_cache: driver.telefone || '' };
         }
       }
-      if (!order.driver_phone_cache) return err('Nenhum entregador selecionado');
+      if (!order.driver_id) return err('Nenhum entregador selecionado');
+      // Checar se entregador recebe WhatsApp
+      const driverUser = await env.DB.prepare('SELECT recebe_whatsapp, telefone FROM app_users WHERE id=?').bind(order.driver_id).first();
+      if (!driverUser || !driverUser.recebe_whatsapp) {
+        // Não envia WhatsApp, mas marca como encaminhado
+        await env.DB.prepare(`UPDATE orders SET status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(id).run();
+        await logEvent(env, id, 'whatsapp_skipped', { driver_id: order.driver_id, reason: 'recebe_whatsapp=0' });
+        return json({ ok: true, status: 'encaminhado', whatsapp_skipped: true, message: 'Entregador não recebe WhatsApp — pedido encaminhado sem envio' });
+      }
+      if (!order.driver_phone_cache) return err('Entregador sem telefone cadastrado');
       const message = buildDeliveryMessage(order, observation);
       const result = await sendWhatsApp(env, order.driver_phone_cache, message);
       if (result.ok) {
@@ -1325,8 +1344,8 @@ export default {
 
     if (method === 'GET' && path === '/api/drivers') {
       await ensureAuthTables(env);
-      const rows = await env.DB.prepare("SELECT id, nome, telefone, ativo FROM app_users WHERE role='entregador' AND ativo=1 ORDER BY nome").all();
-      const result = (rows.results || []).map(u => ({ id: u.id, name: u.nome, phone_e164: u.telefone || '' }));
+      const rows = await env.DB.prepare("SELECT id, nome, telefone, recebe_whatsapp FROM app_users WHERE ativo=1 AND pode_entregar=1 ORDER BY nome").all();
+      const result = (rows.results || []).map(u => ({ id: u.id, name: u.nome, phone_e164: u.telefone || '', recebe_whatsapp: u.recebe_whatsapp ? 1 : 0 }));
       return json(result);
     }
 
