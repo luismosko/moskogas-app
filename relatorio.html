@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório Entregador — MoskoGás v1.0.0</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; }
+
+  /* ── TELA (não imprime) ── */
+  .no-print { }
+  .toolbar { background: #fff; padding: 14px 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .toolbar select, .toolbar input { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
+  .toolbar select:focus, .toolbar input:focus { outline: none; border-color: #f97316; }
+  .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-blue { background: #2563eb; color: #fff; }
+  .btn:hover { opacity: 0.85; }
+
+  /* ── RELATÓRIO (imprime) ── */
+  .report { max-width: 1100px; margin: 16px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+
+  .report-header { text-align: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #1e293b; }
+  .report-header h1 { font-size: 16px; color: #1e293b; margin-bottom: 2px; }
+  .report-header .sub { font-size: 13px; color: #475569; }
+
+  .report table { width: 100%; border-collapse: collapse; }
+  .report th { background: #f1f5f9; color: #1e293b; padding: 5px 6px; text-align: left; font-size: 11px; font-weight: 700; border: 1px solid #cbd5e1; white-space: nowrap; }
+  .report td { padding: 4px 6px; border: 1px solid #e2e8f0; font-size: 11px; vertical-align: top; }
+  .report .order-first td { border-top: 2px solid #94a3b8; }
+  .report .subtotal-row td { font-weight: 800; background: #f8fafc; border-top: 1px solid #94a3b8; }
+  .report .grand-total td { font-weight: 900; font-size: 13px; background: #1e293b; color: #fff; border: none; }
+  .report .pgto-summary { margin-top: 16px; }
+  .report .pgto-summary table { width: auto; min-width: 400px; }
+  .report .pgto-summary th { background: #475569; color: #fff; font-size: 12px; padding: 6px 12px; }
+  .report .pgto-summary td { font-size: 13px; padding: 6px 12px; font-weight: 600; }
+  .report .pgto-summary .pgto-total td { font-weight: 900; font-size: 14px; background: #f97316; color: #fff; }
+
+  .report .conferencia { margin-top: 20px; border-top: 2px solid #1e293b; padding-top: 12px; }
+  .report .conferencia table { width: 100%; }
+  .report .conferencia td { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; height: 36px; }
+  .report .conferencia .label-cell { background: #f1f5f9; font-weight: 700; width: 160px; font-size: 11px; }
+
+  .empty-report { text-align: center; padding: 60px; color: #94a3b8; font-size: 16px; }
+
+  /* ── PRINT ── */
+  @media print {
+    body { background: #fff; }
+    .no-print, .toolbar, #nav-placeholder { display: none !important; }
+    .report { margin: 0; padding: 8px; box-shadow: none; border-radius: 0; max-width: 100%; }
+    .report-header h1 { font-size: 14px; }
+    .report th, .report td { font-size: 10px; padding: 3px 5px; }
+    .report .pgto-summary th, .report .pgto-summary td { font-size: 11px; }
+    .report .conferencia td { height: 28px; font-size: 10px; }
+    @page { margin: 8mm; size: A4 landscape; }
+  }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+
+<!-- TOOLBAR -->
+<div class="toolbar no-print">
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador</span>
+  <input type="date" id="fDate" style="width:155px">
+  <select id="fDriver" style="min-width:160px">
+    <option value="">Todos entregadores</option>
+  </select>
+  <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
+  <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.0.0</span>
+</div>
+
+<!-- RELATÓRIO -->
+<div class="report" id="report">
+  <div class="empty-report" id="empty-msg">
+    Selecione a data e o entregador, depois clique em <strong>📊 Gerar</strong>
+  </div>
+  <div id="report-content" style="display:none"></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+// v1.0.0
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+checkApiKey();
+
+let drivers = [];
+
+async function init() {
+  drivers = await api('/api/drivers').catch(() => []);
+  const sel = document.getElementById('fDriver');
+  sel.innerHTML = '<option value="">Todos entregadores</option>';
+  drivers.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+  // Default: hoje
+  document.getElementById('fDate').value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+}
+
+async function gerarRelatorio() {
+  const date = document.getElementById('fDate').value;
+  const driverId = document.getElementById('fDriver').value;
+  const driverName = driverId ? document.getElementById('fDriver').selectedOptions[0].textContent : 'TODOS';
+
+  if (!date) { toast('Selecione uma data', 'error'); return; }
+
+  let rows = [];
+  try {
+    let url = `/api/orders/list?date_from=${date}&date_to=${date}`;
+    if (driverId) url += `&driver_id=${driverId}`;
+    rows = await api(url);
+    if (!Array.isArray(rows)) rows = [];
+  } catch(e) { toast('Erro: ' + e.message, 'error'); return; }
+
+  // Filtro timezone client-side
+  rows = rows.filter(r => {
+    if (!r.created_at) return true;
+    const d = new Date(r.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+    return d === date;
+  });
+
+  // Excluir cancelados
+  rows = rows.filter(r => r.status !== 'cancelado');
+
+  // Ordenar por ID
+  rows.sort((a, b) => a.id - b.id);
+
+  if (!rows.length) {
+    document.getElementById('empty-msg').style.display = 'block';
+    document.getElementById('empty-msg').textContent = '⚠️ Nenhum pedido encontrado para este filtro.';
+    document.getElementById('report-content').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('empty-msg').style.display = 'none';
+  document.getElementById('report-content').style.display = 'block';
+
+  const dateFmt = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR');
+
+  // ── Build report ──
+  let html = `
+    <div class="report-header">
+      <h1>MOSKO GÁS — RELATÓRIO DE VENDAS POR ENTREGADOR</h1>
+      <div class="sub">Data: <strong>${dateFmt}</strong> &nbsp;|&nbsp; Entregador: <strong>${driverName.toUpperCase()}</strong> &nbsp;|&nbsp; Pedidos: <strong>${rows.length}</strong></div>
+    </div>
+  `;
+
+  // ── Tabela de pedidos ──
+  html += `<table>
+    <thead><tr>
+      <th>Pedido</th>
+      <th>Cliente</th>
+      <th>Pagamento</th>
+      <th>Fone</th>
+      <th>Endereço</th>
+      <th>Bairro</th>
+      <th>Produto</th>
+      <th style="text-align:center">Qtde</th>
+      <th style="text-align:right">Vlr.Unit.</th>
+      <th style="text-align:right">Sub-total</th>
+      <th style="text-align:center;width:30px">✔</th>
+    </tr></thead>
+    <tbody>`;
+
+  const pgtoLabels = {
+    dinheiro: 'DINHEIRO', pix_vista: 'PIX PAGO', pix_receber: 'PIX A RECEBER',
+    mensalista: 'MENSALISTA', boleto: 'BOLETO/ÓRGÃO',
+    debito: 'CARTÃO DÉBITO', credito: 'CARTÃO CRÉDITO'
+  };
+
+  // Totais por forma de pagamento
+  const pgtoTotals = {};
+  let grandTotal = 0;
+
+  rows.forEach((o, idx) => {
+    let items = [];
+    try { items = JSON.parse(o.items_json || '[]'); } catch(e) {}
+    if (!items.length) items = [{ name: '(sem itens)', qty: 1, price: 0 }];
+
+    const pgtoKey = o.tipo_pagamento || 'dinheiro';
+    const pgtoLabel = pgtoLabels[pgtoKey] || pgtoKey.toUpperCase();
+    const orderTotal = parseFloat(o.total_value) || 0;
+    grandTotal += orderTotal;
+
+    if (!pgtoTotals[pgtoKey]) pgtoTotals[pgtoKey] = { label: pgtoLabel, total: 0, count: 0 };
+    pgtoTotals[pgtoKey].total += orderTotal;
+    pgtoTotals[pgtoKey].count++;
+
+    const phone = o.phone_digits ? formatPhone(o.phone_digits) : '—';
+
+    items.forEach((it, i) => {
+      const isFirst = i === 0;
+      const isLast  = i === items.length - 1;
+      const qty   = parseInt(it.qty) || 1;
+      const price = parseFloat(it.price) || 0;
+      const sub   = qty * price;
+
+      html += `<tr class="${isFirst ? 'order-first' : ''}">
+        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:700;vertical-align:middle">#${o.id}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:600;vertical-align:middle;max-width:140px;overflow:hidden;text-overflow:ellipsis">${o.customer_name || '—'}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-size:10px;vertical-align:middle;white-space:nowrap">${pgtoLabel}${o.pago ? ' ✅' : ''}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-size:10px;vertical-align:middle;white-space:nowrap">${phone}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="vertical-align:middle">${o.address_line || '—'}${o.complemento ? ', ' + o.complemento : ''}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-size:10px;vertical-align:middle">${o.bairro || '—'}</td>` : ''}
+        <td>${it.name || '—'}</td>
+        <td style="text-align:center;font-weight:700">${qty}</td>
+        <td style="text-align:right">R$ ${price.toFixed(2)}</td>
+        <td style="text-align:right;font-weight:700">R$ ${sub.toFixed(2)}</td>
+        ${isFirst ? `<td rowspan="${items.length}" style="text-align:center;vertical-align:middle;font-size:16px">☐</td>` : ''}
+      </tr>`;
+    });
+
+    // Subtotal do pedido
+    html += `<tr class="subtotal-row">
+      <td colspan="9" style="text-align:right;font-size:10px;color:#475569">Sub-total pedido #${o.id}</td>
+      <td style="text-align:right;font-size:12px">R$ ${orderTotal.toFixed(2)}</td>
+      <td></td>
+    </tr>`;
+  });
+
+  // Grand total
+  html += `<tr class="grand-total">
+    <td colspan="9" style="text-align:right;padding:8px 10px">TOTAL GERAL</td>
+    <td style="text-align:right;padding:8px 10px;font-size:14px">R$ ${grandTotal.toFixed(2)}</td>
+    <td></td>
+  </tr>`;
+
+  html += `</tbody></table>`;
+
+  // ── Resumo por forma de pagamento ──
+  html += `<div class="pgto-summary">
+    <h3 style="font-size:13px;color:#1e293b;margin-bottom:8px">📊 Resumo por Forma de Pagamento</h3>
+    <table>
+      <thead><tr>
+        <th>Forma de Pagamento</th>
+        <th style="text-align:center">Qtd Pedidos</th>
+        <th style="text-align:right">Total R$</th>
+      </tr></thead>
+      <tbody>`;
+
+  // Ordem preferida
+  const pgtoOrder = ['dinheiro','pix_vista','pix_receber','debito','credito','mensalista','boleto'];
+  const sortedPgto = Object.entries(pgtoTotals).sort((a, b) => {
+    const ia = pgtoOrder.indexOf(a[0]); const ib = pgtoOrder.indexOf(b[0]);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  sortedPgto.forEach(([key, data]) => {
+    const icon = { dinheiro:'💵', pix_vista:'⚡', pix_receber:'⏳', debito:'💳', credito:'💳', mensalista:'📅', boleto:'🧾' }[key] || '💰';
+    html += `<tr>
+      <td>${icon} ${data.label}</td>
+      <td style="text-align:center;font-weight:700">${data.count}</td>
+      <td style="text-align:right;font-weight:800">R$ ${data.total.toFixed(2)}</td>
+    </tr>`;
+  });
+
+  html += `<tr class="pgto-total">
+      <td>TOTAL</td>
+      <td style="text-align:center">${rows.length}</td>
+      <td style="text-align:right">R$ ${grandTotal.toFixed(2)}</td>
+    </tr>`;
+  html += `</tbody></table></div>`;
+
+  // ── Conferência do entregador ──
+  html += `<div class="conferencia">
+    <h3 style="font-size:13px;color:#1e293b;margin-bottom:8px">✍️ Conferência do Entregador</h3>
+    <table>
+      <tr>
+        <td class="label-cell">💵 Dinheiro recebido</td>
+        <td>R$</td>
+        <td class="label-cell">💳 Cartão (máquina)</td>
+        <td>R$</td>
+      </tr>
+      <tr>
+        <td class="label-cell">⚡ PIX recebido</td>
+        <td>R$</td>
+        <td class="label-cell">⏳ PIX a receber</td>
+        <td>R$</td>
+      </tr>
+      <tr>
+        <td class="label-cell">🧾 Boleto/Órgão</td>
+        <td>R$</td>
+        <td class="label-cell">📅 Mensalista</td>
+        <td>R$</td>
+      </tr>
+      <tr>
+        <td class="label-cell" style="background:#f97316;color:#fff">TOTAL CONFERIDO</td>
+        <td style="font-weight:900;font-size:14px">R$</td>
+        <td class="label-cell">Diferença</td>
+        <td style="font-weight:900;font-size:14px">R$</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Assinatura Entregador</td>
+        <td colspan="3" style="height:50px"></td>
+      </tr>
+    </table>
+  </div>`;
+
+  document.getElementById('report-content').innerHTML = html;
+}
+
+function formatPhone(p) {
+  if (!p) return '—';
+  const d = p.replace(/\D/g, '');
+  if (d.length === 11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return p;
+}
+
+init();
+</script>
+</body>
+</html>

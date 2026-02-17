@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.2.0</title>
+<title>Pagamentos — MoskoGás v1.3.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -16,7 +16,7 @@
 
   .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 16px; }
   .s-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-  .s-card .label { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+  .s-card .label { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
   .s-card .value { font-size: 24px; font-weight: 900; }
   .s-card .value.red { color: #dc2626; }
   .s-card .value.orange { color: #f97316; }
@@ -24,17 +24,16 @@
   .s-card .value.green { color: #16a34a; }
 
   table { width: 100%; border-collapse: collapse; background: #fff; }
-  th { background: #1e293b; color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
-  td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; vertical-align: middle; }
+  th { background: #475569; color: #fff; padding: 8px 10px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
   tr:hover td { background: #fffbeb; }
 
-  .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; color: #fff; }
-  .btn-pago { background: #16a34a; color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; }
+  .btn-pago { background: #16a34a; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-pago:hover { background: #15803d; }
   .btn-pago:disabled { background: #94a3b8; cursor: not-allowed; }
   .empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 15px; }
 
-  /* Bulk select */
   .bulk-bar { display: none; background: #fef3c7; padding: 10px 16px; align-items: center; gap: 12px; border-bottom: 2px solid #fbbf24; }
   .bulk-bar.show { display: flex; }
   .bulk-bar .count { font-weight: 800; color: #92400e; font-size: 14px; }
@@ -42,7 +41,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.2.0 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.3.0 — pagamentos</div>
 
 <!-- TOOLBAR -->
 <div class="toolbar">
@@ -64,7 +63,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar lista de pagamentos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.0</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.3.0</span>
 </div>
 
 <!-- BULK BAR -->
@@ -116,14 +115,13 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.0
+// v1.3.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
 let allData = [];
 let selectedIds = new Set();
 
-// ── Date filters ─────────────────────────────────────
 function todayCG() { return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' }); }
 function daysCG(n) {
   const d = new Date(); d.setDate(d.getDate() + n);
@@ -135,7 +133,6 @@ function setDateFilter(mode) {
   const to   = document.getElementById('fDateTo');
   const btns = { hoje: document.getElementById('btnHoje'), ontem: document.getElementById('btnOntem'), semana: document.getElementById('btnSemana') };
   Object.values(btns).forEach(b => b.style.background = '#64748b');
-
   if (mode === 'hoje') {
     const t = todayCG(); from.value = t; to.value = t;
     btns.hoje.style.background = '#f97316';
@@ -145,13 +142,10 @@ function setDateFilter(mode) {
   } else if (mode === 'semana') {
     from.value = daysCG(-7); to.value = todayCG();
     btns.semana.style.background = '#f97316';
-  } else {
-    from.value = ''; to.value = '';
-  }
+  } else { from.value = ''; to.value = ''; }
   loadPagamentos();
 }
 
-// ── Load ─────────────────────────────────────────────
 let loadTimer;
 async function loadPagamentos() {
   clearTimeout(loadTimer);
@@ -161,16 +155,14 @@ async function loadPagamentos() {
 async function _loadPagamentos() {
   try {
     const data = await api('/api/pagamentos');
-    if (!Array.isArray(data)) { allData = []; } else { allData = data; }
+    allData = Array.isArray(data) ? data : [];
 
-    // Client-side filters
     const dateFrom = document.getElementById('fDateFrom').value;
     const dateTo   = document.getElementById('fDateTo').value;
     const tipo     = document.getElementById('fTipo').value;
     const q        = document.getElementById('fQ').value.toLowerCase().trim();
 
     let rows = allData;
-
     if (dateFrom || dateTo) {
       rows = rows.filter(r => {
         if (!r.created_at) return true;
@@ -192,21 +184,13 @@ async function _loadPagamentos() {
     document.getElementById('count-badge').textContent = `${rows.length} pendentes`;
     selectedIds.clear();
     updateBulkBar();
-
-  } catch(e) {
-    toast('Erro ao carregar: ' + e.message, 'error');
-  }
+  } catch(e) { toast('Erro ao carregar: ' + e.message, 'error'); }
 }
 
 function renderTable(rows) {
   const tbody = document.getElementById('tbody');
   const emptyMsg = document.getElementById('empty-msg');
-
-  if (!rows.length) {
-    tbody.innerHTML = '';
-    emptyMsg.style.display = 'block';
-    return;
-  }
+  if (!rows.length) { tbody.innerHTML = ''; emptyMsg.style.display = 'block'; return; }
   emptyMsg.style.display = 'none';
 
   const tipoLabels = {
@@ -229,12 +213,12 @@ function renderTable(rows) {
     return `<tr>
       <td><input type="checkbox" value="${p.id}" ${checked} onchange="toggleSelect(${p.id}, this.checked)" title="Selecionar para ação em lote"></td>
       <td><strong>#${p.id}</strong></td>
-      <td style="white-space:nowrap;font-size:11px">${data}<br><span style="color:#94a3b8">${hora}</span></td>
-      <td style="font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.customer_name || ''}">${p.customer_name || '—'}</td>
-      <td style="font-size:11px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.address_line || ''}">${p.address_line || '—'}<br><span style="font-size:10px">${p.bairro || ''}</span></td>
-      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
+      <td style="white-space:nowrap;font-size:12px">${data}<br><span style="color:#94a3b8">${hora}</span></td>
+      <td style="font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.customer_name || ''}">${p.customer_name || '—'}</td>
+      <td style="color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.address_line || ''}">${p.address_line || '—'}<br><span style="font-size:11px">${p.bairro || ''}</span></td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
       <td style="font-weight:800;color:#1e293b;white-space:nowrap">R$ ${parseFloat(p.total_value || 0).toFixed(2)}</td>
-      <td style="white-space:nowrap;font-size:11px">${tipoLabels[p.tipo_pagamento] || p.tipo_pagamento || '—'}</td>
+      <td style="white-space:nowrap">${tipoLabels[p.tipo_pagamento] || p.tipo_pagamento || '—'}</td>
       <td>${blingBadge}</td>
       <td><button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento deste pagamento">✅ Pago</button></td>
     </tr>`;
@@ -253,29 +237,21 @@ function renderSummary(rows) {
   document.getElementById('count-pendente').textContent = countPendente;
 }
 
-// ── Marcar Pago ──────────────────────────────────────
 async function marcarPago(orderId) {
   if (!confirm(`Confirmar pagamento do pedido #${orderId}?`)) return;
   try {
     const data = await api(`/api/pagamentos/${orderId}`, { method: 'PATCH' });
-    if (data.ok) {
-      toast(`✅ Pedido #${orderId} marcado como pago!`);
-      loadPagamentos();
-    } else {
-      toast('❌ ' + (data.error || 'Falha'), 'error');
-    }
+    if (data.ok) { toast(`✅ Pedido #${orderId} marcado como pago!`); loadPagamentos(); }
+    else { toast('❌ ' + (data.error || 'Falha'), 'error'); }
   } catch(e) { toast(e.message, 'error'); }
 }
 
-// ── Bulk select ──────────────────────────────────────
 function toggleSelect(id, checked) {
   if (checked) selectedIds.add(id); else selectedIds.delete(id);
   updateBulkBar();
 }
-
 function toggleBulkAll(checked) {
-  const boxes = document.querySelectorAll('#tbody input[type=checkbox]');
-  boxes.forEach(b => {
+  document.querySelectorAll('#tbody input[type=checkbox]').forEach(b => {
     b.checked = checked;
     const id = parseInt(b.value);
     if (checked) selectedIds.add(id); else selectedIds.delete(id);
@@ -284,34 +260,26 @@ function toggleBulkAll(checked) {
   document.getElementById('bulk-all').checked = checked;
   updateBulkBar();
 }
-
 function updateBulkBar() {
-  const bar = document.getElementById('bulk-bar');
   const count = selectedIds.size;
   document.getElementById('bulk-count').textContent = count;
-  bar.classList.toggle('show', count > 0);
+  document.getElementById('bulk-bar').classList.toggle('show', count > 0);
 }
 
 async function bulkMarcarPago() {
   const ids = [...selectedIds];
   if (!ids.length) return;
   if (!confirm(`Marcar ${ids.length} pedido(s) como pago(s)?`)) return;
-
   let ok = 0, fail = 0;
   for (const id of ids) {
-    try {
-      const data = await api(`/api/pagamentos/${id}`, { method: 'PATCH' });
-      if (data.ok) ok++; else fail++;
-    } catch(e) { fail++; }
+    try { const d = await api(`/api/pagamentos/${id}`, { method: 'PATCH' }); if (d.ok) ok++; else fail++; }
+    catch(e) { fail++; }
   }
   toast(`✅ ${ok} pago(s)${fail ? `, ${fail} erro(s)` : ''}`, fail ? 'error' : 'success');
   loadPagamentos();
 }
 
-// ── Init ─────────────────────────────────────────────
 setDateFilter('semana');
-
-// Auto refresh 30s
 setInterval(loadPagamentos, 30000);
 </script>
 </body>

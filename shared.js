@@ -1,4 +1,4 @@
-// shared.js — Utilitários compartilhados MoskoGás
+// shared.js — Utilitários compartilhados MoskoGás v1.1.0
 const API_BASE = 'https://api.moskogas.com.br';
 const API_KEY  = localStorage.getItem('mg_api_key') || '';
 
@@ -64,17 +64,18 @@ function toast(msg, type = 'success') {
 }
 
 const NAV_HTML = `
-<nav style="background:#1e293b;padding:10px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+<nav style="background:#334155;padding:10px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
   <a href="https://moskogas.com.br" target="_blank" style="margin-right:12px;display:flex;align-items:center;"><img src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="Mosko Gás" style="height:32px;" onerror="this.style.display='none'"></a>
   <a href="pedido.html" class="nav-btn">➕ Novo Pedido</a>
   <a href="gestao.html" class="nav-btn">📋 Gestão</a>
   <a href="entregador.html" class="nav-btn">🚚 Entregador</a>
   <a href="pagamentos.html" class="nav-btn">💰 Pagamentos</a>
+  <a href="relatorio.html" class="nav-btn">📊 Relatório</a>
   <a href="config.html" class="nav-btn" style="margin-left:auto;">⚙️ Config</a>
 </nav>
 <style>
   .nav-btn { color:#94a3b8;text-decoration:none;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600; }
-  .nav-btn:hover { background:#334155;color:#fff; }
+  .nav-btn:hover { background:#475569;color:#fff; }
 </style>`;
 
 function checkApiKey() {
