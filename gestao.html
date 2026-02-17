@@ -3,731 +3,203 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.2 — MoskoGás</title>
+<title>Entregador — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f1f5f9; }
-  .toolbar { background: #fff; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-  .toolbar input, .toolbar select { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
-  .toolbar input:focus, .toolbar select:focus { outline: none; border-color: #f97316; }
-  .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
-  .btn-orange { background: #f97316; color: #fff; }
-  .btn-blue   { background: #2563eb; color: #fff; }
-  .btn-green  { background: #16a34a; color: #fff; }
-  .btn-gray   { background: #94a3b8; color: #fff; }
-  .btn-red    { background: #dc2626; color: #fff; }
-  .btn:hover { opacity: 0.85; }
-  table { width: 100%; border-collapse: collapse; background: #fff; }
-  th { background: #1e293b; color: #fff; padding: 6px 8px; text-align: left; font-size: 11px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
-  td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; font-size: 11px; vertical-align: middle; }
-  tr:hover td { background: #fafafa; }
-  .badge { display: inline-block; padding: 2px 6px; border-radius: 12px; font-size: 10px; font-weight: 700; color: #fff; }
-  select.driver-sel { border: 2px solid #e2e8f0; border-radius: 6px; padding: 2px 4px; font-size: 11px; max-width: 110px; }
-  select.driver-sel:focus { outline: none; border-color: #f97316; }
-  .action-btns { display: flex; gap: 4px; flex-wrap: nowrap; }
-  .summary-bar { background: #1e293b; color: #fff; padding: 10px 16px; font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
-  .summary-bar span strong { color: #f97316; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .toolbar { background: #1e293b; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 50; }
+  .toolbar select, .toolbar input[type=date] { padding: 8px 12px; border: none; border-radius: 8px; font-size: 14px; background: #334155; color: #fff; }
+  .toolbar select option { background: #1e293b; }
+  .btn { padding: 9px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
+  .btn-refresh { background: #f97316; color: #fff; }
+  .auto-lbl { color: #94a3b8; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .auto-lbl input { accent-color: #f97316; }
 
-  /* Modal */
-  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; align-items:center; justify-content:center; }
-  .modal-overlay.open { display:flex; }
-  .modal { background:#fff; border-radius:14px; padding:24px; width:min(520px,95vw); max-height:90vh; overflow-y:auto; }
-  .modal h2 { font-size:18px; margin-bottom:16px; color:#1e293b; }
-  .modal label { display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; text-transform:uppercase; }
-  .modal select, .modal textarea, .modal input { width:100%; padding:10px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; margin-bottom:12px; }
-  .modal select:focus, .modal textarea:focus { outline:none; border-color:#f97316; }
-  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
-  .preview-msg { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; font-size:12px; white-space:pre-wrap; margin-bottom:12px; max-height:160px; overflow-y:auto; font-family:monospace; }
-  .order-summary { background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; margin-bottom:12px; line-height:1.8; }
+  .summary-bar { background: #0f172a; color: #fff; padding: 8px 16px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; }
+  .summary-bar .chip { display: flex; align-items: center; gap: 6px; }
+  .summary-bar strong { color: #f97316; }
+
+  .container { padding: 12px 16px; max-width: 700px; margin: 0 auto; }
+
+  .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 6px solid #e2e8f0; position: relative; }
+  .card.novo             { border-left-color: #dc2626; }
+  .card.encaminhado      { border-left-color: #d97706; }
+  .card.whatsapp_enviado { border-left-color: #16a34a; }
+  .card.entregue         { border-left-color: #2563eb; opacity: 0.7; }
+  .card.cancelado        { border-left-color: #9ca3af; opacity: 0.5; }
+
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .card-id  { font-size: 12px; color: #94a3b8; font-weight: 700; }
+  .card-client { font-size: 17px; font-weight: 800; color: #1e293b; margin-top: 2px; }
+  .card-time  { font-size: 12px; color: #64748b; }
+
+  .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:800; }
+  .badge-novo   { background:#fee2e2; color:#dc2626; }
+  .badge-enc    { background:#fef3c7; color:#d97706; }
+  .badge-wa     { background:#dcfce7; color:#16a34a; }
+  .badge-entregue { background:#dbeafe; color:#2563eb; }
+  .badge-cancel { background:#f1f5f9; color:#6b7280; }
+
+  .card-addr { background: #f8fafc; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; color: #374151; line-height: 1.7; }
+  .card-addr .ref { color: #7c3aed; font-size: 12px; }
+
+  .card-items { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 10px; }
+  .card-total { font-size: 18px; font-weight: 900; color: #16a34a; }
+
+  .card-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn-maps     { background: #dcfce7; color: #16a34a; border: 2px solid #86efac; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  .btn-phone    { background: #dbeafe; color: #2563eb; border: 2px solid #93c5fd; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  .btn-deliver  { background: #2563eb; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; margin-left: auto; }
+  .btn-deliver:active { transform: scale(0.97); }
+
+  .notes-box { background: #faf5ff; border-left: 3px solid #7c3aed; padding: 8px 12px; border-radius: 0 8px 8px 0; font-size: 13px; color: #7c3aed; margin-bottom: 10px; }
+  .empty { text-align: center; padding: 60px 20px; color: #94a3b8; font-size: 16px; }
+  .hour-chip { background:#e2e8f0; color:#475569; border-radius:6px; padding:2px 7px; font-size:11px; font-weight:700; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
 
-<!-- TOOLBAR -->
 <div class="toolbar">
-  <div style="display:flex;align-items:center;gap:4px">
-    <input type="date" id="fDateFrom" onchange="load()" style="width:135px">
-    <span style="color:#94a3b8;font-size:12px">até</span>
-    <input type="date" id="fDateTo" onchange="load()" style="width:135px">
-    <button id="btnHoje" class="btn" onclick="setDateFilter('hoje')" title="Filtrar pedidos de hoje" style="background:#f97316;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Hoje</button>
-    <button id="btnOntem" class="btn" onclick="setDateFilter('ontem')" title="Filtrar pedidos de ontem" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Ontem</button>
-    <button class="btn" onclick="setDateFilter('limpar')" title="Limpar filtro de data" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
-  </div>
-  <div style="position:relative">
-    <button id="statusBtn" onclick="toggleStatusMenu()" style="background:#fff;border:2px solid #e2e8f0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;min-width:140px;text-align:left">
-      <span id="statusLabel">Status ▾</span>
-    </button>
-    <div id="statusMenu" style="display:none;position:absolute;top:42px;left:0;z-index:200;background:#fff;border:2px solid #f97316;border-radius:8px;padding:8px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="novo" onchange="updateStatusFilter()" checked> 🔴 Novo</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="encaminhado" onchange="updateStatusFilter()" checked> 🟡 Encaminhado</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="whatsapp_enviado" onchange="updateStatusFilter()" checked> 🟢 WhatsApp Enviado</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="entregue" onchange="updateStatusFilter()" checked> 🔵 Entregue</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="cancelado" onchange="updateStatusFilter()"> ⚫ Cancelado</label>
-    </div>
-  </div>
-  <!-- overlay invisível que fecha o status menu ao clicar fora -->
-  <div id="statusOverlay" onclick="closeStatusMenu()" style="display:none;position:fixed;inset:0;z-index:199"></div>
+  <input type="date" id="fDate" onchange="load()">
   <select id="fDriver" onchange="load()">
     <option value="">Todos entregadores</option>
   </select>
-  <input type="text" id="fQ" placeholder="🔍 Busca..." oninput="load()" style="width:160px">
-  <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
-  <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.2</span>
-  <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
-    <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
-  </label>
+  <select id="fStatus" onchange="load()">
+    <option value="">Todos</option>
+    <option value="encaminhado">🟡 Encaminhado</option>
+    <option value="whatsapp_enviado">🟢 WhatsApp Enviado</option>
+    <option value="entregue">🔵 Entregue</option>
+  </select>
+  <button class="btn btn-refresh" onclick="load()" title="Atualizar lista de entregas">🔄</button>
+  <label class="auto-lbl"><input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)</label>
 </div>
 
-<!-- SUMMARY -->
 <div class="summary-bar" id="summary-bar"></div>
 
-<!-- TABELA -->
-<table>
-  <thead>
-    <tr>
-      <th>#</th>
-      <th>Hora</th>
-      <th>Cliente</th>
-      <th>Endereço</th>
-      <th>Itens</th>
-      <th>Total</th>
-      <th>Pgto</th>
-      <th>Status</th>
-      <th>Entregador</th>
-      <th>Ações</th>
-    </tr>
-  </thead>
-  <tbody id="tbody"></tbody>
-</table>
-
-<!-- RESUMO PRODUTOS -->
-<div id="product-summary" style="margin:16px;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;display:none">
-  <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center">
-    <span>📊 Resumo de Produtos</span>
-    <span id="prod-summary-total" style="color:#f97316;font-size:15px"></span>
-  </div>
-  <table style="width:100%;border-collapse:collapse">
-    <thead>
-      <tr style="background:#f8fafc">
-        <th style="position:static;background:#f8fafc;color:#64748b;font-size:11px;padding:8px 12px;text-align:left">Produto</th>
-        <th style="position:static;background:#f8fafc;color:#64748b;font-size:11px;padding:8px 12px;text-align:center;width:80px">Vendidos</th>
-        <th style="position:static;background:#f8fafc;color:#64748b;font-size:11px;padding:8px 12px;text-align:right;width:120px">Total R$</th>
-      </tr>
-    </thead>
-    <tbody id="prod-summary-body"></tbody>
-  </table>
-</div>
-
-<!-- MODAL ENVIAR ENTREGADOR -->
-<div class="modal-overlay" id="modal-wa">
-  <div class="modal">
-    <h2>📱 Enviar para Entregador</h2>
-    <div class="order-summary" id="modal-order-summary"></div>
-    <label>Entregador *</label>
-    <select id="modal-driver"></select>
-    <label>Observação para o entregador</label>
-    <textarea id="modal-obs" rows="3" placeholder="Ex: Troco para R$ 100, ligar antes de chegar..."></textarea>
-    <div class="preview-msg" id="modal-preview" style="display:none"></div>
-    <div class="modal-footer">
-      <button class="btn btn-gray" onclick="closeModal()" title="Cancelar envio">Cancelar</button>
-      <button class="btn" onclick="previewMsg()" title="Ver prévia da mensagem" style="background:#6366f1;color:#fff">👁 Prévia</button>
-      <button class="btn btn-green" onclick="sendWa()" title="Enviar mensagem via WhatsApp">📲 Enviar WhatsApp</button>
-    </div>
-  </div>
+<div class="container">
+  <div id="list"></div>
 </div>
 
 <script src="shared.js"></script>
 <script>
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
+document.getElementById('fDate').value = today();
 
-let drivers = [];
-let currentOrder = null;
-let autoTimer = null;
+let autoTimer;
 
-// ── Init ──────────────────────────────────────────────────────
 async function init() {
-  drivers = await api('/api/drivers').catch(() => []);
+  const drivers = await api('/api/drivers').catch(() => []);
   const sel = document.getElementById('fDriver');
-  sel.innerHTML = '<option value="">Todos entregadores</option>';
   drivers.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d.id; opt.textContent = d.name;
     sel.appendChild(opt);
   });
-  setDateFilter('hoje');
+  load();
 }
 
-// ── Load orders ───────────────────────────────────────────────
-let loadTimer;
 async function load() {
-  clearTimeout(loadTimer);
-  loadTimer = setTimeout(_load, 150);
-}
-
-// Data em Campo Grande — sempre via IANA timezone (correto em qualquer browser)
-function todayCG() {
-  return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
-}
-function yesterdayCG() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
-}
-function _yesterdayCG_unused() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
-function setDateFilter(mode) {
-  const from = document.getElementById('fDateFrom');
-  const to   = document.getElementById('fDateTo');
-  const btnH = document.getElementById('btnHoje');
-  const btnO = document.getElementById('btnOntem');
-  if (mode === 'hoje') {
-    const t = todayCG();
-    from.value = t; to.value = t;
-    btnH.style.background = '#f97316'; btnO.style.background = '#64748b';
-  } else if (mode === 'ontem') {
-    const y = yesterdayCG();
-    from.value = y; to.value = y;
-    btnO.style.background = '#f97316'; btnH.style.background = '#64748b';
-  } else {
-    from.value = ''; to.value = '';
-    btnH.style.background = '#64748b'; btnO.style.background = '#64748b';
-  }
-  load();
-}
-
-// Status multi-select state
-let lastRows = [];
-let activeStatuses = new Set(['novo','encaminhado','whatsapp_enviado','entregue']);
-
-function toggleStatusMenu() {
-  const m = document.getElementById('statusMenu');
-  const ov = document.getElementById('statusOverlay');
-  const isOpen = m.style.display !== 'none';
-  m.style.display  = isOpen ? 'none' : 'block';
-  ov.style.display = isOpen ? 'none' : 'block';
-}
-function closeStatusMenu() {
-  document.getElementById('statusMenu').style.display  = 'none';
-  document.getElementById('statusOverlay').style.display = 'none';
-}
-
-function updateStatusFilter() {
-  const boxes = document.querySelectorAll('#statusMenu input[type=checkbox]');
-  activeStatuses = new Set([...boxes].filter(b => b.checked).map(b => b.value));
-  const count = activeStatuses.size;
-  const lbl = count === 5 ? 'Todos status ▾' : count === 0 ? 'Nenhum ▾' : `${count} status ▾`;
-  document.getElementById('statusLabel').textContent = lbl;
-  load();
-}
-
-// status dropdown closed via overlay div
-
-// Ordenação: novo > encaminhado > whatsapp_enviado > entregue > cancelado
-const STATUS_ORDER = { novo: 0, encaminhado: 1, whatsapp_enviado: 2, entregue: 3, cancelado: 4 };
-
-async function _load() {
-  const dateFrom = document.getElementById('fDateFrom').value;
-  const dateTo   = document.getElementById('fDateTo').value;
+  const date     = document.getElementById('fDate').value;
   const driverId = document.getElementById('fDriver').value;
-  const q        = document.getElementById('fQ').value;
+  const status   = document.getElementById('fStatus').value;
 
-  let url = `/api/orders/list?`;
-  if (dateFrom) url += `&date_from=${dateFrom}`;
-  if (dateTo)   url += `&date_to=${dateTo}`;
+  let url = '/api/orders/list?';
+  if (date)     url += `&date=${date}`;
   if (driverId) url += `&driver_id=${driverId}`;
-  if (q)        url += `&q=${encodeURIComponent(q)}`;
+  if (status)   url += `&status=${status}`;
 
-  let rows = [];
-  try {
-    rows = await api(url);
-    if (!Array.isArray(rows)) { console.error('API retornou:', rows); rows = []; }
-  } catch(e) {
-    console.error('Erro ao carregar pedidos:', e);
-    document.getElementById('tbody').innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#dc2626">Erro ao carregar: ' + e.message + '</td></tr>';
-    return;
-  }
-
-  // Filtro de data client-side (timezone America/Campo_Grande)
-  if (dateFrom || dateTo) {
-    rows = rows.filter(r => {
-      if (!r.created_at) return true;
-      const d = new Date(r.created_at * 1000)
-        .toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' }); // YYYY-MM-DD
-      if (dateFrom && d < dateFrom) return false;
-      if (dateTo   && d > dateTo)   return false;
-      return true;
-    });
-  }
-
-  // Filtro de status client-side (multi-select)
-  rows = rows.filter(r => activeStatuses.has(r.status));
-
-  // Ordenação: status prioritário, depois por hora (mais recente)
-  rows.sort((a, b) => {
-    const sd = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
-    if (sd !== 0) return sd;
-    return b.created_at - a.created_at;
-  });
-
-  lastRows = rows;
-  renderTable(rows);
+  const rows = await api(url).catch(() => []);
   renderSummary(rows);
-  document.getElementById('count-badge').textContent = `${rows.length} pedidos`;
-}
-
-function renderTable(rows) {
-  const tbody = document.getElementById('tbody');
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8">Nenhum pedido encontrado</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = rows.map(o => {
-    const items = JSON.parse(o.items_json || '[]');
-    const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
-    const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
-    const hora  = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
-    const nomeExibir = (o.customer_name||'').length > 50 ? (o.customer_name||'').substring(0,50)+'…' : (o.customer_name||'');
-
-    const pgtoLabels = { dinheiro:'💵', pix_vista:'⚡PIX', pix_receber:'⏳PIX', mensalista:'📅Mensal', boleto:'🧾Boleto' };
-    const pgtoLabel = pgtoLabels[o.tipo_pagamento] || o.tipo_pagamento || '—';
-    const pagoFlag = o.pago ? '✅' : '';
-
-    const driverOpts = `<option value="">—</option>` +
-      drivers.map(d => `<option value="${d.id}" ${o.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
-
-    const canSendWa  = ['novo','encaminhado'].includes(o.status);
-    const canDeliver = ['whatsapp_enviado','encaminhado'].includes(o.status);
-    const canCancel  = !['cancelado','entregue'].includes(o.status);
-
-    return `
-    <tr id="row-${o.id}">
-      <td><strong>#${o.id}</strong></td>
-      <td style="white-space:nowrap">${hora}</td>
-      <td title="${o.customer_name||''}">
-        <div style="font-weight:700;color:#1e293b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nomeExibir}</div>
-        <div style="font-size:10px;color:#64748b">${o.phone_digits || ''}</div>
-      </td>
-      <td>
-        <div style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.address_line||''}">${o.address_line||''}</div>
-        <div style="font-size:10px;color:#64748b">${o.bairro || ''}</div>
-      </td>
-      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
-      <td style="font-weight:700;color:#1e293b;white-space:nowrap">${total}</td>
-      <td style="white-space:nowrap;font-size:10px">${pgtoLabel} ${pagoFlag}</td>
-      <td>${statusBadge(o.status)}</td>
-      <td>
-        <select class="driver-sel" onchange="selectDriver(${o.id}, this.value)">
-          ${driverOpts}
-        </select>
-      </td>
-      <td>
-        <div class="action-btns" style="gap:2px">
-          ${canSendWa  ? `<button class="btn btn-green" style="font-size:10px;padding:3px 6px" title="Enviar WhatsApp para entregador" onclick="openModal(${o.id})">📲</button>` : ''}
-          ${canDeliver ? `<button class="btn btn-blue"  style="font-size:10px;padding:3px 6px" title="Marcar como entregue" onclick="markDelivered(${o.id})">✅</button>` : ''}
-          <button class="btn" style="font-size:10px;padding:3px 6px;background:#6366f1;color:#fff" title="Editar pedido" onclick="openEditModal(${o.id})">✏️</button>
-          ${canCancel  ? `<button class="btn btn-red"   style="font-size:10px;padding:3px 6px" title="Cancelar pedido" onclick="cancelOrder(${o.id})">✕</button>` : ''}
-          <button class="btn btn-gray" style="font-size:10px;padding:3px 6px" title="Imprimir recibo" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
+  render(rows);
 }
 
 function renderSummary(rows) {
-  const counts = { novo: 0, encaminhado: 0, whatsapp_enviado: 0, entregue: 0, cancelado: 0 };
-  let total = 0;
-  rows.forEach(r => { counts[r.status]++; total += r.total_value || 0; });
-
+  const ativos = rows.filter(r => !['cancelado','entregue'].includes(r.status));
+  const entregues = rows.filter(r => r.status === 'entregue');
+  const totalVal = rows.reduce((s,r) => s + (r.total_value||0), 0);
   document.getElementById('summary-bar').innerHTML = `
-    <span>🔴 Novos: <strong>${counts.novo}</strong></span>
-    <span>🟡 Encaminhados: <strong>${counts.encaminhado}</strong></span>
-    <span>🟢 WhatsApp: <strong>${counts.whatsapp_enviado}</strong></span>
-    <span>🔵 Entregues: <strong>${counts.entregue}</strong></span>
-    <span>⚫ Cancelados: <strong>${counts.cancelado}</strong></span>
-    <span style="margin-left:auto">💰 Total: <strong>R$ ${total.toFixed(2)}</strong></span>`;
+    <span class="chip">📦 <strong>${ativos.length}</strong> pendentes</span>
+    <span class="chip">✅ <strong>${entregues.length}</strong> entregues</span>
+    <span class="chip">💰 Total: <strong>R$ ${totalVal.toFixed(2)}</strong></span>
+    <span class="chip" style="margin-left:auto;color:#64748b">${rows.length} pedidos</span>
+  `;
+}
 
-  // ── Resumo por produto (exclui cancelados) ──
-  const prodMap = {};
-  let parsedCount = 0;
-  rows.filter(r => r.status !== 'cancelado').forEach(r => {
-    let items = [];
-    try { items = JSON.parse(r.items_json || '[]'); } catch(e) { console.warn('items_json parse error order', r.id, e); }
-    items.forEach(i => {
-      const key = (i.name || 'Produto').trim();
-      if (!prodMap[key]) prodMap[key] = { qty: 0, total: 0 };
-      const q = parseInt(i.qty) || 1;
-      const p = parseFloat(i.price) || 0;
-      prodMap[key].qty   += q;
-      prodMap[key].total += p * q;
-      parsedCount++;
-    });
-  });
-  console.log('[Resumo Produtos]', parsedCount, 'itens parsed,', Object.keys(prodMap).length, 'produtos únicos');
-
-  const prodSummary = document.getElementById('product-summary');
-  const entries = Object.entries(prodMap).sort((a, b) => b[1].total - a[1].total);
-
-  if (!entries.length) {
-    prodSummary.style.display = 'none';
+function render(rows) {
+  const el = document.getElementById('list');
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">📭 Nenhum pedido encontrado</div>';
     return;
   }
-  prodSummary.style.display = 'block';
 
-  let grandTotal = 0;
-  const body = document.getElementById('prod-summary-body');
-  body.innerHTML = entries.map(([name, data]) => {
-    grandTotal += data.total;
-    return `<tr>
-      <td style="padding:6px 12px;font-size:12px;font-weight:600;border-bottom:1px solid #f1f5f9">${name}</td>
-      <td style="padding:6px 12px;font-size:13px;font-weight:700;text-align:center;border-bottom:1px solid #f1f5f9;color:#2563eb">${data.qty}</td>
-      <td style="padding:6px 12px;font-size:13px;font-weight:700;text-align:right;border-bottom:1px solid #f1f5f9">R$ ${data.total.toFixed(2)}</td>
-    </tr>`;
-  }).join('') + `<tr style="background:#f8fafc">
-    <td style="padding:8px 12px;font-size:12px;font-weight:800;color:#1e293b">TOTAL GERAL</td>
-    <td style="padding:8px 12px;font-size:13px;font-weight:800;text-align:center;color:#1e293b">${entries.reduce((s, e) => s + e[1].qty, 0)}</td>
-    <td style="padding:8px 12px;font-size:14px;font-weight:900;text-align:right;color:#f97316">R$ ${grandTotal.toFixed(2)}</td>
-  </tr>`;
-  document.getElementById('prod-summary-total').textContent = `Total Geral: R$ ${grandTotal.toFixed(2)}`;
+  el.innerHTML = rows.map(o => {
+    const items = JSON.parse(o.items_json || '[]');
+    const itemsStr = items.map(i => `${i.qty}× ${i.name}`).join('  |  ') || '—';
+    const hora = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+    const addr = `${o.address_line}${o.bairro ? ', ' + o.bairro : ''}, Campo Grande/MS`;
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+    const phoneClean = (o.phone_digits||'').replace(/\D/g,'');
+
+    const canDeliver = ['whatsapp_enviado','encaminhado'].includes(o.status);
+
+    const badgeMap = {
+      novo: '<span class="badge badge-novo">🔴 NOVO</span>',
+      encaminhado: '<span class="badge badge-enc">🟡 ENCAMINHADO</span>',
+      whatsapp_enviado: '<span class="badge badge-wa">🟢 WHATS ENVIADO</span>',
+      entregue: '<span class="badge badge-entregue">🔵 ENTREGUE</span>',
+      cancelado: '<span class="badge badge-cancel">⚫ CANCELADO</span>',
+    };
+
+    return `
+    <div class="card ${o.status}">
+      <div class="card-top">
+        <div>
+          <div class="card-id">#${o.id} &nbsp;<span class="hour-chip">${hora}</span>${o.driver_name_cache ? ` &nbsp;🚚 ${o.driver_name_cache}` : ''}</div>
+          <div class="card-client">${o.customer_name}</div>
+        </div>
+        ${badgeMap[o.status] || ''}
+      </div>
+
+      <div class="card-addr">
+        📍 <strong>${o.address_line}</strong>${o.bairro ? ` — ${o.bairro}` : ''}
+        ${o.complemento ? `<br>🏢 ${o.complemento}` : ''}
+        ${o.referencia ? `<br><span class="ref">📌 Ref: ${o.referencia}</span>` : ''}
+      </div>
+
+      ${o.notes ? `<div class="notes-box">📝 ${o.notes}</div>` : ''}
+
+      <div class="card-items">📦 ${itemsStr}</div>
+
+      <div class="card-btns">
+        <a class="btn-maps" href="${mapsUrl}" target="_blank">🗺️ Mapa</a>
+        ${phoneClean ? `<a class="btn-phone" href="tel:+55${phoneClean}">📞 Ligar</a>` : ''}
+        ${o.total_value ? `<span class="card-total">💰 R$ ${o.total_value.toFixed(2)}</span>` : ''}
+        ${canDeliver ? `<button class="btn-deliver" onclick="deliver(${o.id})">✅ Entregue!</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
-// ── Ações ─────────────────────────────────────────────────────
-async function selectDriver(orderId, driverId) {
-  if (!driverId) return;
-  try {
-    await api(`/api/order/${orderId}/select-driver`, { method: 'POST', body: JSON.stringify({ driver_id: parseInt(driverId) }) });
-    toast('✅ Entregador selecionado!');
-    setTimeout(load, 500);
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function markDelivered(id) {
-  if (!confirm(`Marcar pedido #${id} como ENTREGUE?`)) return;
+async function deliver(id) {
+  if (!confirm(`Confirma entrega do pedido #${id}?`)) return;
   try {
     await api(`/api/order/${id}/mark-delivered`, { method: 'POST' });
-    toast('✅ Pedido entregue!');
+    toast('✅ Entregue!');
     load();
   } catch(e) { toast(e.message, 'error'); }
 }
 
-async function cancelOrder(id) {
-  if (!confirm(`Cancelar pedido #${id}?`)) return;
-  try {
-    await api(`/api/order/${id}/cancel`, { method: 'POST' });
-    toast('Pedido cancelado');
-    load();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-// ── Modal WhatsApp ────────────────────────────────────────────
-function openModal(orderId) {
-  // encontrar order no DOM
-  const rows = document.querySelectorAll('#tbody tr');
-  // re-buscar na API
-  api(`/api/order/${orderId}`).then(order => {
-    currentOrder = order;
-    const items = JSON.parse(order.items_json || '[]');
-    document.getElementById('modal-order-summary').innerHTML = `
-      <strong>Pedido #${order.id}</strong> — ${order.customer_name}<br>
-      📍 ${order.address_line}${order.bairro ? ', ' + order.bairro : ''}<br>
-      ${order.referencia ? '📌 Ref: ' + order.referencia + '<br>' : ''}
-      📦 ${items.map(i => i.qty + 'x ' + i.name).join(' | ')}
-    `;
-
-    const dSel = document.getElementById('modal-driver');
-    dSel.innerHTML = '<option value="">Selecione o entregador *</option>' +
-      drivers.map(d => `<option value="${d.id}" ${order.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
-
-    document.getElementById('modal-obs').value = '';
-    document.getElementById('modal-preview').style.display = 'none';
-    document.getElementById('modal-wa').classList.add('open');
-  }).catch(() => {
-    // fallback: abrir modal sem dados da API
-    currentOrder = { id: orderId };
-    document.getElementById('modal-wa').classList.add('open');
-  });
-}
-
-function closeModal() {
-  document.getElementById('modal-wa').classList.remove('open');
-  currentOrder = null;
-}
-
-function previewMsg() {
-  if (!currentOrder) return;
-  const obs = document.getElementById('modal-obs').value;
-  const items = JSON.parse(currentOrder.items_json || '[]');
-  const itemsList = items.map(i => `  • ${i.name} x${i.qty}`).join('\n') || '  (sem itens)';
-  const addr = `${currentOrder.address_line}${currentOrder.bairro ? ', ' + currentOrder.bairro : ''}, Campo Grande/MS`;
-  const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
-
-  const msg = `🚚 *NOVA ENTREGA* — Pedido #${currentOrder.id}
-
-👤 Cliente: ${currentOrder.customer_name}
-📞 ${currentOrder.phone_digits || 'não informado'}
-
-📍 ${currentOrder.address_line}${currentOrder.bairro ? ' — ' + currentOrder.bairro : ''} — Campo Grande/MS${currentOrder.referencia ? '\nRef: ' + currentOrder.referencia : ''}
-
-📦 Itens:
-${itemsList}
-
-📝 Obs: ${obs || '—'}
-
-🗺️ ${mapsLink}`;
-
-  document.getElementById('modal-preview').textContent = msg;
-  document.getElementById('modal-preview').style.display = 'block';
-}
-
-async function sendWa() {
-  const driverId = document.getElementById('modal-driver').value;
-  const obs      = document.getElementById('modal-obs').value;
-  if (!driverId) { toast('Selecione um entregador!', 'error'); return; }
-
-  try {
-    await api(`/api/order/${currentOrder.id}/send-whatsapp`, {
-      method: 'POST',
-      body: JSON.stringify({ driver_id: parseInt(driverId), observation: obs }),
-    });
-    toast('✅ WhatsApp enviado!');
-    closeModal();
-    load();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-// ── Impressão ─────────────────────────────────────────────────
-function printOrder(order) {
-  const params = encodeURIComponent(JSON.stringify(order));
-  window.open(`print.html?data=${params}`, '_blank');
-}
-
-// ── Auto refresh ──────────────────────────────────────────────
 function toggleAuto() {
   clearInterval(autoTimer);
   if (document.getElementById('autoRefresh').checked) {
     autoTimer = setInterval(load, 30000);
+    toast('Auto-refresh ativado (30s)');
   }
-}
-
-// ── Fechar modal clicando fora ────────────────────────────────
-document.getElementById('modal-wa').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
-});
-
-
-// ── Editar Pedido ─────────────────────────────────────────────
-let editOrderId = null;
-let editItems = [];
-
-function openEditModal(orderId) {
-  const o = lastRows.find(r => r.id === orderId);
-  if (!o) { toast('Pedido não encontrado', 'error'); return; }
-
-  editOrderId = orderId;
-  editItems = JSON.parse(o.items_json || '[]').map(i => ({...i}));
-
-  document.getElementById('edit-order-id').textContent = `#${orderId}`;
-  document.getElementById('edit-name').value  = o.customer_name || '';
-  document.getElementById('edit-phone').value = o.phone_digits || '';
-  // Split address_line em rua + numero
-  const _eal = o.address_line || '';
-  const _enm = _eal.match(/,\s*(\d+\S*)$/);
-  document.getElementById('edit-addr').value  = _enm ? _eal.slice(0, _enm.index) : _eal;
-  const _enum = document.getElementById('edit-num');
-  if (_enum) _enum.value = _enm ? _enm[1] : '';
-  document.getElementById('edit-bairro').value = o.bairro || '';
-  document.getElementById('edit-comp').value  = o.complemento || '';
-  document.getElementById('edit-ref').value   = o.referencia || '';
-  document.getElementById('edit-notes').value = o.notes || '';
-  document.getElementById('edit-tipo-pgto').value = o.tipo_pagamento || 'dinheiro';
-  document.getElementById('edit-prod-search').value = '';
-  document.getElementById('edit-prod-suggestions').style.display = 'none';
-
-  renderEditItems();
-  document.getElementById('modal-edit').style.display = 'flex';
-}
-
-function closeEditModal() {
-  document.getElementById('modal-edit').style.display = 'none';
-}
-
-function renderEditItems() {
-  const list = document.getElementById('edit-items-list');
-  if (!editItems.length) {
-    list.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:8px">Nenhum item</div>';
-    document.getElementById('edit-total').textContent = 'R$ 0,00';
-    return;
-  }
-  let total = 0;
-  list.innerHTML = editItems.map((it, i) => {
-    total += (it.price||0) * (it.qty||1);
-    return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #f1f5f9">
-      <span style="flex:1;font-size:13px">${it.name}</span>
-      <button onclick="editQty(${i},-1)" style="background:#e2e8f0;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px">−</button>
-      <span style="min-width:20px;text-align:center;font-weight:700">${it.qty}</span>
-      <button onclick="editQty(${i},1)" style="background:#e2e8f0;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px">+</button>
-      <span style="font-size:11px;color:#94a3b8">R$</span>
-      <input type="number" step="0.01" value="${parseFloat(it.price||0).toFixed(2)}" style="width:65px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right;font-size:13px" onchange="editPrice(${i},this.value)">
-      <span style="min-width:70px;text-align:right;font-weight:700;font-size:13px">= R$ ${((it.price||0)*(it.qty||1)).toFixed(2)}</span>
-      <button onclick="editRemove(${i})" style="background:#fee2e2;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;color:#ef4444">✕</button>
-    </div>`;
-  }).join('');
-  document.getElementById('edit-total').textContent = `R$ ${total.toFixed(2)}`;
-}
-
-function editQty(i, d) {
-  editItems[i].qty = (editItems[i].qty||1) + d;
-  if (editItems[i].qty <= 0) editItems.splice(i, 1);
-  renderEditItems();
-}
-function editPrice(i, v) { editItems[i].price = parseFloat(v)||0; renderEditItems(); }
-function editRemove(i) { editItems.splice(i, 1); renderEditItems(); }
-
-let editProdTimer;
-async function searchEditProduct(q) {
-  clearTimeout(editProdTimer);
-  const box = document.getElementById('edit-prod-suggestions');
-  if (q.length < 2) { box.style.display='none'; return; }
-  editProdTimer = setTimeout(async () => {
-    const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`).catch(() => []);
-    if (!list.length) { box.style.display='none'; return; }
-    box.style.display = 'block';
-    box.innerHTML = list.map((p,i) => {
-      const nome = p.name.length > 45 ? p.name.substring(0,45)+'…' : p.name;
-      return `<div class="suggestion-item" onclick="addEditProduct(${i})" style="display:flex;justify-content:space-between;align-items:center">
-        <span><strong>${nome}</strong></span>
-        <span style="color:#f97316;font-weight:700;margin-left:8px">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
-      </div>`;
-    }).join('');
-    box._data = list;
-  }, 300);
-}
-
-function addEditProduct(i) {
-  const p = document.getElementById('edit-prod-suggestions')._data[i];
-  document.getElementById('edit-prod-search').value = '';
-  document.getElementById('edit-prod-suggestions').style.display = 'none';
-  const existing = editItems.find(x => String(x.id) === String(p.id));
-  if (existing) existing.qty++;
-  else editItems.push({ id: String(p.id), name: p.name, qty: 1, price: parseFloat(p.price)||0 });
-  renderEditItems();
-}
-
-async function saveEditOrder() {
-  const name  = document.getElementById('edit-name').value.trim();
-  const _editRua = document.getElementById('edit-addr').value.trim();
-  const _editNum = document.getElementById('edit-num') ? document.getElementById('edit-num').value.trim() : '';
-  const addr  = _editNum ? _editRua + ', ' + _editNum : _editRua;
-  if (!name) { toast('Nome obrigatório', 'error'); return; }
-  const isConsumidorFinal = name.toUpperCase().includes('CONSUMIDOR FINAL');
-  if (!isConsumidorFinal && !addr) { toast('Endereço obrigatório', 'error'); return; }
-  if (!editItems.length) { toast('Adicione pelo menos 1 item', 'error'); return; }
-
-  const total = editItems.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0);
-  const body = {
-    customer_name: name,
-    phone_digits: document.getElementById('edit-phone').value.replace(/\D/g,''),
-    address_line: addr,
-    bairro: document.getElementById('edit-bairro').value,
-    complemento: document.getElementById('edit-comp').value,
-    referencia: document.getElementById('edit-ref').value,
-    items: editItems,
-    total_value: total,
-    notes: document.getElementById('edit-notes').value,
-    tipo_pagamento: document.getElementById('edit-tipo-pgto').value,
-  };
-
-  try {
-    await api(`/api/order/${editOrderId}/update`, { method: 'POST', body: JSON.stringify(body) });
-    toast('✅ Pedido atualizado!');
-    closeEditModal();
-    load();
-  } catch(e) { toast(e.message, 'error'); }
 }
 
 init();
 </script>
-
-<!-- MODAL EDITAR PEDIDO -->
-<div class="modal-overlay" id="modal-edit" style="display:none">
-  <div class="modal" style="max-width:620px;width:95%;max-height:90vh;overflow-y:auto">
-    <h2>✏️ Editar Pedido <span id="edit-order-id" style="color:#f97316"></span></h2>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div>
-        <label style="font-size:12px;color:#64748b;font-weight:600">CLIENTE *</label>
-        <input id="edit-name" type="text" style="width:100%">
-      </div>
-      <div>
-        <label style="font-size:12px;color:#64748b;font-weight:600">TELEFONE</label>
-        <input id="edit-phone" type="text" style="width:100%">
-      </div>
-      <div style="grid-column:1/-1">
-        <label style="font-size:12px;color:#64748b;font-weight:600">ENDEREÇO (RUA) *</label>
-        <div class="street-wrap" style="position:relative">
-          <input id="edit-addr" type="text" autocomplete="off" style="width:100%"
-            oninput="streetAC(this,'edit-bairro','edit-addr-ac')">
-          <div id="edit-addr-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:2px solid #6366f1;border-top:none;border-radius:0 0 8px 8px;z-index:1000;max-height:200px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.15)"></div>
-        </div>
-      </div>
-      <div>
-        <label style="font-size:12px;color:#64748b;font-weight:600">NÚMERO</label>
-        <input id="edit-num" type="text" style="width:100%" placeholder="123">
-      </div>
-      <div>
-        <label style="font-size:12px;color:#64748b;font-weight:600">BAIRRO</label>
-        <input id="edit-bairro" type="text" style="width:100%">
-      </div>
-      <div>
-        <label style="font-size:12px;color:#64748b;font-weight:600">COMPLEMENTO</label>
-        <input id="edit-comp" type="text" style="width:100%">
-      </div>
-      <div style="grid-column:1/-1">
-        <label style="font-size:12px;color:#64748b;font-weight:600">REFERÊNCIA</label>
-        <input id="edit-ref" type="text" style="width:100%">
-      </div>
-    </div>
-
-    <label style="font-size:12px;color:#64748b;font-weight:600">ITENS</label>
-    <div style="display:flex;gap:8px;margin-bottom:8px;position:relative">
-      <input id="edit-prod-search" type="text" placeholder="🔍 Adicionar produto..." style="flex:1" oninput="searchEditProduct(this.value)">
-      <div id="edit-prod-suggestions" style="display:none;position:absolute;top:38px;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:200px;overflow-y:auto"></div>
-    </div>
-    <div id="edit-items-list" style="margin-bottom:12px"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:2px solid #f97316;margin-bottom:12px">
-      <span style="font-weight:700">TOTAL</span>
-      <span id="edit-total" style="font-size:20px;font-weight:900;color:#f97316">R$ 0,00</span>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div>
-        <label style="font-size:12px;color:#64748b;font-weight:600">OBSERVAÇÃO</label>
-        <textarea id="edit-notes" rows="2" style="width:100%;resize:vertical"></textarea>
-      </div>
-      <div>
-        <label style="font-size:12px;color:#64748b;font-weight:600">TIPO DE PAGAMENTO</label>
-        <select id="edit-tipo-pgto" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px">
-          <option value="dinheiro">💵 Dinheiro</option>
-          <option value="pix_vista">⚡ PIX à vista</option>
-          <option value="pix_receber">⏳ PIX a receber</option>
-          <option value="mensalista">📅 Mensalista</option>
-          <option value="boleto">🧾 Boleto/Órgão</option>
-        </select>
-      </div>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-      <button class="btn btn-gray" onclick="closeEditModal()" title="Cancelar edição">Cancelar</button>
-      <button class="btn btn-orange" onclick="saveEditOrder()" title="Salvar alterações do pedido">💾 Salvar Alterações</button>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>
