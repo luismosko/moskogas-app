@@ -150,16 +150,15 @@ async function checkBlingStatus(manual = false) {
   const ind = document.getElementById('bling-indicator');
   if (!ind) return;
   try {
-    const endpoint = manual ? '/api/bling/keep-alive' : '/api/bling/status';
-    const r = await api(endpoint);
+    const r = await api('/api/bling/keep-alive');
     if (r.connected) {
       ind.style.background = '#16a34a';
-      ind.textContent = `🟢 Bling OK`;
-      ind.title = `Token válido (${r.minutesLeft}min) — clique para atualizar`;
+      ind.textContent = r.refreshed ? '🟢 Renovado!' : '🟢 Bling OK';
+      ind.title = `Token testado (${r.minutesLeft}min) — clique para verificar`;
     } else {
       ind.style.background = '#dc2626';
       ind.textContent = '🔴 Bling OFF';
-      ind.title = 'Token expirado — clique para tentar reconectar';
+      ind.title = (r.message || 'Token expirado') + ' — clique para tentar';
     }
   } catch(e) {
     ind.style.background = '#dc2626';
