@@ -1,20 +1,41 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.1.0
+// shared.js — Utilitários compartilhados MoskoGás v1.2.0
+// v1.2.0: Auth por sessão, nav por role, vendedor vinculado
+
 const API_BASE = 'https://api.moskogas.com.br';
-const API_KEY  = localStorage.getItem('mg_api_key') || '';
+
+function getSessionToken() {
+  return localStorage.getItem('mg_session_token') || '';
+}
+
+function getCurrentUser() {
+  try { return JSON.parse(localStorage.getItem('mg_user') || 'null'); } catch { return null; }
+}
 
 function apiKey() {
   return localStorage.getItem('mg_api_key') || '';
 }
 
 async function api(path, options = {}) {
-  const resp = await fetch(API_BASE + path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': apiKey(),
-      ...(options.headers || {}),
-    },
-  });
+  const token = getSessionToken();
+  const key = apiKey();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  };
+  // Prioriza sessão, fallback para API key
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  else if (key) headers['X-API-KEY'] = key;
+
+  const resp = await fetch(API_BASE + path, { ...options, headers });
+
+  // Se 401, redireciona para login
+  if (resp.status === 401) {
+    localStorage.removeItem('mg_session_token');
+    localStorage.removeItem('mg_user');
+    window.location.href = 'login.html';
+    throw new Error('Sessão expirada');
+  }
+
   if (!resp.ok) {
     const e = await resp.json().catch(() => ({ error: resp.statusText }));
     throw new Error(e.error || 'Erro ' + resp.status);
@@ -63,25 +84,92 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 3000);
 }
 
-const NAV_HTML = `
+// ── Navegação por Role ────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { href: 'pedido.html',      icon: '➕', label: 'Novo Pedido', roles: ['admin', 'atendente'] },
+  { href: 'gestao.html',      icon: '📋', label: 'Gestão',      roles: ['admin', 'atendente'] },
+  { href: 'entregador.html',  icon: '🚚', label: 'Entregador',  roles: ['admin', 'atendente', 'entregador'] },
+  { href: 'pagamentos.html',  icon: '💰', label: 'Pagamentos',  roles: ['admin'] },
+  { href: 'relatorio.html',   icon: '📊', label: 'Relatório',   roles: ['admin'] },
+  { href: 'usuarios.html',    icon: '👥', label: 'Usuários',     roles: ['admin'] },
+  { href: 'config.html',      icon: '⚙️', label: 'Config',      roles: ['admin'], right: true },
+];
+
+function buildNav() {
+  const user = getCurrentUser();
+  const role = user?.role || 'admin';
+
+  const links = NAV_ITEMS
+    .filter(item => item.roles.includes(role))
+    .map(item => `<a href="${item.href}" class="nav-btn">${item.icon} ${item.label}</a>`)
+    .join('\n  ');
+
+  const userInfo = user
+    ? `<span style="color:#94a3b8;font-size:11px;">👤 ${user.nome} <span style="background:#475569;padding:1px 6px;border-radius:4px;font-size:9px;">${user.role.toUpperCase()}</span></span>
+  <a href="#" onclick="doLogout();return false" class="nav-btn" style="color:#f87171;font-size:12px;">⬅ Sair</a>`
+    : '';
+
+  return `
 <nav style="background:#334155;padding:10px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
   <a href="https://moskogas.com.br" target="_blank" style="margin-right:12px;display:flex;align-items:center;"><img src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="Mosko Gás" style="height:32px;" onerror="this.style.display='none'"></a>
-  <a href="pedido.html" class="nav-btn">➕ Novo Pedido</a>
-  <a href="gestao.html" class="nav-btn">📋 Gestão</a>
-  <a href="entregador.html" class="nav-btn">🚚 Entregador</a>
-  <a href="pagamentos.html" class="nav-btn">💰 Pagamentos</a>
-  <a href="relatorio.html" class="nav-btn">📊 Relatório</a>
-  <a href="config.html" class="nav-btn" style="margin-left:auto;">⚙️ Config</a>
+  ${links}
+  <span style="margin-left:auto;display:flex;align-items:center;gap:8px;">${userInfo}</span>
 </nav>
 <style>
   .nav-btn { color:#94a3b8;text-decoration:none;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600; }
   .nav-btn:hover { background:#475569;color:#fff; }
 </style>`;
+}
 
+// Mantém NAV_HTML para compatibilidade (páginas não migradas)
+const NAV_HTML = buildNav();
+
+function doLogout() {
+  const token = getSessionToken();
+  if (token) {
+    fetch(API_BASE + '/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+    }).catch(() => {});
+  }
+  localStorage.removeItem('mg_session_token');
+  localStorage.removeItem('mg_user');
+  localStorage.removeItem('mg_api_key');
+  window.location.href = 'login.html';
+}
+
+// ── Verificação de Acesso ────────────────────────────────────
+
+function checkAuth(requiredRoles = null) {
+  const token = getSessionToken();
+  const key = apiKey();
+
+  // API key legacy = acesso total
+  if (key && !token) return;
+
+  // Sem token e sem key → login
+  if (!token) {
+    window.location.href = 'login.html';
+    return;
+  }
+
+  // Verifica role
+  if (requiredRoles) {
+    const user = getCurrentUser();
+    if (!user || !requiredRoles.includes(user.role)) {
+      toast('Sem permissão para esta página', 'error');
+      window.location.href = 'login.html';
+      return;
+    }
+  }
+}
+
+// Legacy — mantém para compatibilidade
 function checkApiKey() {
-  if (!apiKey() && !window.location.pathname.includes('config')) {
-    const k = prompt('🔑 Digite a APP_API_KEY para acessar o sistema:');
-    if (k) localStorage.setItem('mg_api_key', k);
-    else window.location.href = 'config.html';
+  // Se tem sessão, não pede API key
+  if (getSessionToken()) return;
+  if (!apiKey() && !window.location.pathname.includes('config') && !window.location.pathname.includes('login')) {
+    window.location.href = 'login.html';
   }
 }

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — MoskoApp v1.0.0</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .login-box { background: #fff; border-radius: 16px; padding: 40px 32px; width: 100%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .logo { text-align: center; margin-bottom: 24px; }
+  .logo img { height: 48px; }
+  .logo h1 { font-size: 22px; color: #1e293b; margin-top: 8px; }
+  .logo p { font-size: 13px; color: #64748b; margin-top: 4px; }
+  label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 4px; text-transform: uppercase; }
+  input { width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 16px; margin-bottom: 16px; transition: border-color 0.2s; }
+  input:focus { outline: none; border-color: #f97316; }
+  .btn-login { width: 100%; padding: 14px; background: #f97316; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+  .btn-login:hover { background: #ea580c; }
+  .btn-login:disabled { background: #94a3b8; cursor: not-allowed; }
+  .error-msg { background: #fee2e2; color: #dc2626; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: none; }
+  .version-badge { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<div class="login-box">
+  <div class="logo">
+    <img src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="Mosko Gás" onerror="this.style.display='none'">
+    <h1>MoskoApp</h1>
+    <p>Sistema de Gestão de Pedidos</p>
+  </div>
+
+  <div id="error-msg" class="error-msg"></div>
+
+  <form id="login-form" onsubmit="doLogin(event)">
+    <label>Usuário</label>
+    <input type="text" id="login" autocomplete="username" autocapitalize="off" required autofocus>
+
+    <label>Senha</label>
+    <input type="password" id="senha" autocomplete="current-password" required>
+
+    <button type="submit" class="btn-login" id="btn-submit">🔐 Entrar</button>
+  </form>
+
+  <div class="version-badge">v1.0.0 — login</div>
+</div>
+
+<script>
+const API_BASE = 'https://api.moskogas.com.br';
+
+// Se já tem sessão válida, redireciona
+(async () => {
+  const token = localStorage.getItem('mg_session_token');
+  if (!token) return;
+  try {
+    const resp = await fetch(API_BASE + '/api/auth/session', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (resp.ok) {
+      const data = await resp.json();
+      redirectByRole(data.user.role);
+    } else {
+      localStorage.removeItem('mg_session_token');
+      localStorage.removeItem('mg_user');
+    }
+  } catch(e) {}
+})();
+
+async function doLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-submit');
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = '⏳ Entrando...';
+
+  try {
+    const login = document.getElementById('login').value.trim().toLowerCase();
+    const senha = document.getElementById('senha').value;
+
+    const resp = await fetch(API_BASE + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, senha }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || !data.ok) {
+      errEl.textContent = data.error || 'Erro ao fazer login';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = '🔐 Entrar';
+      return;
+    }
+
+    // Salva sessão
+    localStorage.setItem('mg_session_token', data.token);
+    localStorage.setItem('mg_user', JSON.stringify(data.user));
+    // Mantém API key para compatibilidade (se existir)
+    // localStorage.setItem('mg_api_key', '...'); // removido — agora usa sessão
+
+    redirectByRole(data.user.role);
+  } catch(e) {
+    errEl.textContent = 'Erro de conexão: ' + e.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '🔐 Entrar';
+  }
+}
+
+function redirectByRole(role) {
+  switch (role) {
+    case 'entregador':
+      window.location.href = 'entregador.html';
+      break;
+    case 'atendente':
+      window.location.href = 'pedido.html';
+      break;
+    case 'admin':
+    default:
+      window.location.href = 'pedido.html';
+      break;
+  }
+}
+</script>
+</body>
+</html>

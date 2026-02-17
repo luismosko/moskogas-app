@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usuários — MoskoApp v1.0.0</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; color: #1e293b; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .btn-red    { background: #dc2626; color: #fff; }
+  .btn-gray   { background: #e2e8f0; color: #1e293b; }
+  .btn:hover  { opacity: 0.9; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f1f5f9; font-weight: 700; font-size: 11px; text-transform: uppercase; color: #64748b; padding: 10px 8px; text-align: left; }
+  td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
+  .role-badge { padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; }
+  .role-admin { background: #7c3aed; }
+  .role-atendente { background: #2563eb; }
+  .role-entregador { background: #16a34a; }
+  .status-on  { color: #16a34a; }
+  .status-off { color: #dc2626; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; color: #1e293b; }
+  .modal label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 4px; text-transform: uppercase; }
+  .modal input, .modal select { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; margin-bottom: 12px; }
+  .modal input:focus, .modal select:focus { outline: none; border-color: #f97316; }
+  .modal .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .modal .btn-row .btn { flex: 1; padding: 12px; font-size: 14px; }
+  .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 4px 0 10px; }
+</style>
+</head>
+<body>
+<div id="nav-container"></div>
+
+<div class="container">
+  <h1>👥 Gestão de Usuários</h1>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <span style="font-size:14px;font-weight:700;color:#1e293b;">Usuários do Sistema</span>
+      <button class="btn btn-orange" onclick="openModal()">➕ Novo Usuário</button>
+    </div>
+
+    <div id="loading" style="text-align:center;padding:20px;color:#64748b;">⏳ Carregando...</div>
+    <table id="users-table" style="display:none;">
+      <thead>
+        <tr><th>Nome</th><th>Login</th><th>Função</th><th>Vendedor Bling</th><th>Status</th><th>Ações</th></tr>
+      </thead>
+      <tbody id="users-body"></tbody>
+    </table>
+    <div id="empty-msg" style="display:none;text-align:center;padding:20px;color:#94a3b8;">Nenhum usuário cadastrado</div>
+  </div>
+
+  <div class="version-badge">v1.0.0 — usuários</div>
+</div>
+
+<!-- Modal Criar/Editar -->
+<div id="modal-overlay" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2 id="modal-title">Novo Usuário</h2>
+
+    <label>Nome completo</label>
+    <input type="text" id="m-nome" required>
+
+    <label>Login (usuário)</label>
+    <input type="text" id="m-login" autocapitalize="off">
+
+    <label id="lbl-senha">Senha</label>
+    <input type="password" id="m-senha">
+
+    <label>Função</label>
+    <select id="m-role">
+      <option value="entregador">🚚 Entregador</option>
+      <option value="atendente">📞 Atendente</option>
+      <option value="admin">👑 Administrador</option>
+    </select>
+
+    <label>Vendedor Bling (vincular)</label>
+    <select id="m-vendedor">
+      <option value="">— Selecionar —</option>
+    </select>
+
+    <label>Telefone</label>
+    <input type="tel" id="m-telefone" placeholder="67999999999">
+
+    <label>Status</label>
+    <select id="m-ativo">
+      <option value="1">✅ Ativo</option>
+      <option value="0">❌ Inativo</option>
+    </select>
+
+    <input type="hidden" id="m-id">
+
+    <div class="btn-row">
+      <button class="btn btn-gray" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-green" id="btn-save" onclick="saveUser()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+// Auth check — admin only
+checkAuth(['admin']);
+
+document.getElementById('nav-container').innerHTML = buildNav();
+
+let vendedoresBling = [];
+
+async function loadVendedores() {
+  try {
+    vendedoresBling = await api('/api/vendedores');
+    const sel = document.getElementById('m-vendedor');
+    sel.innerHTML = '<option value="">— Sem vínculo —</option>';
+    for (const v of vendedoresBling) {
+      sel.innerHTML += `<option value="${v.id}">${v.name} (ID: ${v.id})</option>`;
+    }
+  } catch(e) {
+    console.warn('Erro ao carregar vendedores Bling:', e.message);
+  }
+}
+
+async function loadUsers() {
+  try {
+    const users = await api('/api/auth/users');
+    const tbody = document.getElementById('users-body');
+    const table = document.getElementById('users-table');
+    const empty = document.getElementById('empty-msg');
+    document.getElementById('loading').style.display = 'none';
+
+    if (!users.length) {
+      empty.style.display = 'block';
+      table.style.display = 'none';
+      return;
+    }
+
+    empty.style.display = 'none';
+    table.style.display = 'table';
+
+    tbody.innerHTML = users.map(u => {
+      const roleClass = `role-${u.role}`;
+      const roleLabel = { admin: '👑 Admin', atendente: '📞 Atendente', entregador: '🚚 Entregador' }[u.role] || u.role;
+      const vendedorInfo = u.bling_vendedor_nome ? `${u.bling_vendedor_nome}` : '<span style="color:#94a3b8">—</span>';
+      const statusIcon = u.ativo ? '<span class="status-on">✅</span>' : '<span class="status-off">❌</span>';
+      return `<tr>
+        <td style="font-weight:600;">${u.nome}</td>
+        <td style="color:#64748b;">${u.login}</td>
+        <td><span class="role-badge ${roleClass}">${roleLabel}</span></td>
+        <td>${vendedorInfo}</td>
+        <td>${statusIcon}</td>
+        <td>
+          <button class="btn btn-gray" style="padding:4px 10px;font-size:11px;" onclick="editUser(${u.id})">✏️</button>
+          <button class="btn btn-red" style="padding:4px 10px;font-size:11px;" onclick="deleteUser(${u.id},'${u.nome.replace(/'/g,"\\'")}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('loading').textContent = '❌ Erro: ' + e.message;
+  }
+}
+
+function openModal(user = null) {
+  document.getElementById('modal-title').textContent = user ? 'Editar Usuário' : 'Novo Usuário';
+  document.getElementById('m-id').value = user?.id || '';
+  document.getElementById('m-nome').value = user?.nome || '';
+  document.getElementById('m-login').value = user?.login || '';
+  document.getElementById('m-senha').value = '';
+  document.getElementById('m-role').value = user?.role || 'entregador';
+  document.getElementById('m-vendedor').value = user?.bling_vendedor_id || '';
+  document.getElementById('m-telefone').value = user?.telefone || '';
+  document.getElementById('m-ativo').value = user ? (user.ativo ? '1' : '0') : '1';
+
+  // Senha obrigatória só para novo
+  document.getElementById('lbl-senha').textContent = user ? 'Nova senha (deixe vazio para manter)' : 'Senha';
+  document.getElementById('m-senha').required = !user;
+
+  document.getElementById('modal-overlay').classList.add('active');
+  document.getElementById('m-nome').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+}
+
+async function editUser(id) {
+  try {
+    const users = await api('/api/auth/users');
+    const user = users.find(u => u.id === id);
+    if (user) openModal(user);
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+async function saveUser() {
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = '⏳ Salvando...';
+
+  try {
+    const id = document.getElementById('m-id').value || null;
+    const nome = document.getElementById('m-nome').value.trim();
+    const login = document.getElementById('m-login').value.trim().toLowerCase();
+    const senha = document.getElementById('m-senha').value;
+    const role = document.getElementById('m-role').value;
+    const vendedorSel = document.getElementById('m-vendedor');
+    const bling_vendedor_id = vendedorSel.value ? parseInt(vendedorSel.value) : null;
+    const bling_vendedor_nome = vendedorSel.value ? vendedorSel.options[vendedorSel.selectedIndex].text.split(' (ID')[0] : null;
+    const telefone = document.getElementById('m-telefone').value.trim();
+    const ativo = parseInt(document.getElementById('m-ativo').value);
+
+    if (!nome || !login) { toast('Nome e login obrigatórios', 'error'); return; }
+    if (!id && !senha) { toast('Senha obrigatória para novo usuário', 'error'); return; }
+
+    const payload = { nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, ativo };
+    if (id) payload.id = parseInt(id);
+    if (senha) payload.senha = senha;
+
+    await api('/api/auth/users', { method: 'POST', body: JSON.stringify(payload) });
+    toast(id ? 'Usuário atualizado!' : 'Usuário criado!');
+    closeModal();
+    loadUsers();
+  } catch(e) {
+    toast('Erro: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Salvar';
+  }
+}
+
+async function deleteUser(id, nome) {
+  if (!confirm(`Excluir usuário "${nome}"?`)) return;
+  try {
+    await api('/api/auth/users/' + id, { method: 'DELETE' });
+    toast('Usuário excluído');
+    loadUsers();
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+// Init
+loadVendedores();
+loadUsers();
+</script>
+</body>
+</html>
