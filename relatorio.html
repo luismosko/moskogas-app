@@ -3,13 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório Entregador — MoskoGás v1.0.0</title>
+<title>Relatório Entregador — MoskoGás v1.1.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
 
-  /* ── TELA (não imprime) ── */
-  .no-print { }
   .toolbar { background: #fff; padding: 14px 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
   .toolbar select, .toolbar input { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
   .toolbar select:focus, .toolbar input:focus { outline: none; border-color: #f97316; }
@@ -18,42 +16,41 @@
   .btn-blue { background: #2563eb; color: #fff; }
   .btn:hover { opacity: 0.85; }
 
-  /* ── RELATÓRIO (imprime) ── */
-  .report { max-width: 1100px; margin: 16px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  /* ── RELATÓRIO ── */
+  .report { max-width: 800px; margin: 16px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 
-  .report-header { text-align: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #1e293b; }
-  .report-header h1 { font-size: 16px; color: #1e293b; margin-bottom: 2px; }
-  .report-header .sub { font-size: 13px; color: #475569; }
+  .report-header { text-align: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1.5px solid #94a3b8; }
+  .report-header h1 { font-size: 14px; color: #334155; margin-bottom: 2px; }
+  .report-header .sub { font-size: 12px; color: #64748b; }
 
   .report table { width: 100%; border-collapse: collapse; }
-  .report th { background: #f1f5f9; color: #1e293b; padding: 5px 6px; text-align: left; font-size: 11px; font-weight: 700; border: 1px solid #cbd5e1; white-space: nowrap; }
-  .report td { padding: 4px 6px; border: 1px solid #e2e8f0; font-size: 11px; vertical-align: top; }
-  .report .order-first td { border-top: 2px solid #94a3b8; }
-  .report .subtotal-row td { font-weight: 800; background: #f8fafc; border-top: 1px solid #94a3b8; }
-  .report .grand-total td { font-weight: 900; font-size: 13px; background: #1e293b; color: #fff; border: none; }
-  .report .pgto-summary { margin-top: 16px; }
-  .report .pgto-summary table { width: auto; min-width: 400px; }
-  .report .pgto-summary th { background: #475569; color: #fff; font-size: 12px; padding: 6px 12px; }
-  .report .pgto-summary td { font-size: 13px; padding: 6px 12px; font-weight: 600; }
-  .report .pgto-summary .pgto-total td { font-weight: 900; font-size: 14px; background: #f97316; color: #fff; }
+  .report th { background: #f1f5f9; color: #334155; padding: 4px 5px; text-align: left; font-size: 10px; font-weight: 700; border: 1px solid #cbd5e1; white-space: nowrap; }
+  .report td { padding: 3px 5px; border: 1px solid #e2e8f0; font-size: 10px; vertical-align: top; }
+  .report .order-first td { border-top: 1.5px solid #94a3b8; }
+  .report .subtotal-row td { font-weight: 700; background: #f8fafc; border-top: 1px solid #cbd5e1; }
+  .report .grand-total td { font-weight: 900; font-size: 11px; background: #e2e8f0; color: #1e293b; }
 
-  .report .conferencia { margin-top: 20px; border-top: 2px solid #1e293b; padding-top: 12px; }
-  .report .conferencia table { width: 100%; }
-  .report .conferencia td { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; height: 36px; }
-  .report .conferencia .label-cell { background: #f1f5f9; font-weight: 700; width: 160px; font-size: 11px; }
+  .report .pgto-summary { margin-top: 12px; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .report .pgto-summary table { width: auto; border-collapse: collapse; }
+  .report .pgto-summary th { background: #f1f5f9; color: #334155; font-size: 10px; padding: 4px 10px; border: 1px solid #cbd5e1; }
+  .report .pgto-summary td { font-size: 10px; padding: 3px 10px; border: 1px solid #e2e8f0; }
+  .report .pgto-summary .pgto-total td { font-weight: 900; background: #f1f5f9; }
+  .report .pgto-summary .dinheiro-row td { font-weight: 800; background: #fef9c3; }
+
+  .report .dinheiro-conf { border: 1.5px solid #94a3b8; padding: 6px 10px; font-size: 11px; display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .report .dinheiro-conf .line { border-bottom: 1px solid #334155; flex: 1; min-width: 80px; height: 18px; }
 
   .empty-report { text-align: center; padding: 60px; color: #94a3b8; font-size: 16px; }
 
   /* ── PRINT ── */
   @media print {
     body { background: #fff; }
-    .no-print, .toolbar, #nav-placeholder { display: none !important; }
-    .report { margin: 0; padding: 8px; box-shadow: none; border-radius: 0; max-width: 100%; }
-    .report-header h1 { font-size: 14px; }
-    .report th, .report td { font-size: 10px; padding: 3px 5px; }
-    .report .pgto-summary th, .report .pgto-summary td { font-size: 11px; }
-    .report .conferencia td { height: 28px; font-size: 10px; }
-    @page { margin: 8mm; size: A4 landscape; }
+    .toolbar, #nav-placeholder { display: none !important; }
+    .report { margin: 0; padding: 6px; box-shadow: none; border-radius: 0; max-width: 100%; }
+    .report-header h1 { font-size: 13px; }
+    .report th, .report td { font-size: 9px; padding: 2px 4px; }
+    .report .pgto-summary th, .report .pgto-summary td { font-size: 9px; padding: 2px 8px; }
+    @page { margin: 8mm; size: A4 portrait; }
   }
 </style>
 </head>
@@ -61,7 +58,7 @@
 <div id="nav-placeholder"></div>
 
 <!-- TOOLBAR -->
-<div class="toolbar no-print">
+<div class="toolbar">
   <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
@@ -69,7 +66,7 @@
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.0.0</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.1.0</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -82,7 +79,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.0.0
+// v1.1.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -97,7 +94,6 @@ async function init() {
     opt.value = d.id; opt.textContent = d.name;
     sel.appendChild(opt);
   });
-  // Default: hoje
   document.getElementById('fDate').value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
 }
 
@@ -116,17 +112,13 @@ async function gerarRelatorio() {
     if (!Array.isArray(rows)) rows = [];
   } catch(e) { toast('Erro: ' + e.message, 'error'); return; }
 
-  // Filtro timezone client-side
   rows = rows.filter(r => {
     if (!r.created_at) return true;
     const d = new Date(r.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
     return d === date;
   });
 
-  // Excluir cancelados
   rows = rows.filter(r => r.status !== 'cancelado');
-
-  // Ordenar por ID
   rows.sort((a, b) => a.id - b.id);
 
   if (!rows.length) {
@@ -141,42 +133,39 @@ async function gerarRelatorio() {
 
   const dateFmt = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR');
 
-  // ── Build report ──
   let html = `
     <div class="report-header">
-      <h1>MOSKO GÁS — RELATÓRIO DE VENDAS POR ENTREGADOR</h1>
+      <h1>MOSKO GÁS — VENDAS POR ENTREGADOR</h1>
       <div class="sub">Data: <strong>${dateFmt}</strong> &nbsp;|&nbsp; Entregador: <strong>${driverName.toUpperCase()}</strong> &nbsp;|&nbsp; Pedidos: <strong>${rows.length}</strong></div>
     </div>
   `;
 
-  // ── Tabela de pedidos ──
+  // Tabela — sem coluna checkbox, coluna # compacta, sem label "Pedido"
   html += `<table>
     <thead><tr>
-      <th>Pedido</th>
+      <th style="width:24px">#</th>
       <th>Cliente</th>
-      <th>Pagamento</th>
+      <th>Pgto</th>
       <th>Fone</th>
       <th>Endereço</th>
       <th>Bairro</th>
       <th>Produto</th>
-      <th style="text-align:center">Qtde</th>
-      <th style="text-align:right">Vlr.Unit.</th>
+      <th style="text-align:center">Qt</th>
+      <th style="text-align:right">Unit.</th>
       <th style="text-align:right">Sub-total</th>
-      <th style="text-align:center;width:30px">✔</th>
     </tr></thead>
     <tbody>`;
 
   const pgtoLabels = {
-    dinheiro: 'DINHEIRO', pix_vista: 'PIX PAGO', pix_receber: 'PIX A RECEBER',
-    mensalista: 'MENSALISTA', boleto: 'BOLETO/ÓRGÃO',
-    debito: 'CARTÃO DÉBITO', credito: 'CARTÃO CRÉDITO'
+    dinheiro: 'DIN', pix_vista: 'PIX✓', pix_receber: 'PIX⏳',
+    mensalista: 'MENSAL', boleto: 'BOLETO',
+    debito: 'DÉB', credito: 'CRÉD'
   };
 
-  // Totais por forma de pagamento
   const pgtoTotals = {};
   let grandTotal = 0;
 
-  rows.forEach((o, idx) => {
+  rows.forEach(o => {
     let items = [];
     try { items = JSON.parse(o.items_json || '[]'); } catch(e) {}
     if (!items.length) items = [{ name: '(sem itens)', qty: 1, price: 0 }];
@@ -194,111 +183,84 @@ async function gerarRelatorio() {
 
     items.forEach((it, i) => {
       const isFirst = i === 0;
-      const isLast  = i === items.length - 1;
       const qty   = parseInt(it.qty) || 1;
       const price = parseFloat(it.price) || 0;
       const sub   = qty * price;
 
       html += `<tr class="${isFirst ? 'order-first' : ''}">
-        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:700;vertical-align:middle">#${o.id}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:600;vertical-align:middle;max-width:140px;overflow:hidden;text-overflow:ellipsis">${o.customer_name || '—'}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="font-size:10px;vertical-align:middle;white-space:nowrap">${pgtoLabel}${o.pago ? ' ✅' : ''}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="font-size:10px;vertical-align:middle;white-space:nowrap">${phone}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="vertical-align:middle">${o.address_line || '—'}${o.complemento ? ', ' + o.complemento : ''}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="font-size:10px;vertical-align:middle">${o.bairro || '—'}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:700;vertical-align:middle;text-align:center">${o.id}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:600;vertical-align:middle;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.customer_name || '—'}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle;white-space:nowrap">${pgtoLabel}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle;white-space:nowrap">${phone}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="vertical-align:middle;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.address_line || '—'}${o.complemento ? ', ' + o.complemento : ''}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle">${o.bairro || '—'}</td>` : ''}
         <td>${it.name || '—'}</td>
         <td style="text-align:center;font-weight:700">${qty}</td>
         <td style="text-align:right">R$ ${price.toFixed(2)}</td>
         <td style="text-align:right;font-weight:700">R$ ${sub.toFixed(2)}</td>
-        ${isFirst ? `<td rowspan="${items.length}" style="text-align:center;vertical-align:middle;font-size:16px">☐</td>` : ''}
       </tr>`;
     });
 
-    // Subtotal do pedido
     html += `<tr class="subtotal-row">
-      <td colspan="9" style="text-align:right;font-size:10px;color:#475569">Sub-total pedido #${o.id}</td>
-      <td style="text-align:right;font-size:12px">R$ ${orderTotal.toFixed(2)}</td>
-      <td></td>
+      <td colspan="9" style="text-align:right;font-size:9px;color:#64748b">Subtotal #${o.id}</td>
+      <td style="text-align:right;font-size:10px">R$ ${orderTotal.toFixed(2)}</td>
     </tr>`;
   });
 
-  // Grand total
+  // Total geral — cor suave (cinza claro, não preto)
   html += `<tr class="grand-total">
-    <td colspan="9" style="text-align:right;padding:8px 10px">TOTAL GERAL</td>
-    <td style="text-align:right;padding:8px 10px;font-size:14px">R$ ${grandTotal.toFixed(2)}</td>
-    <td></td>
+    <td colspan="9" style="text-align:right;padding:6px 8px">TOTAL GERAL</td>
+    <td style="text-align:right;padding:6px 8px">R$ ${grandTotal.toFixed(2)}</td>
   </tr>`;
 
   html += `</tbody></table>`;
 
-  // ── Resumo por forma de pagamento ──
-  html += `<div class="pgto-summary">
-    <h3 style="font-size:13px;color:#1e293b;margin-bottom:8px">📊 Resumo por Forma de Pagamento</h3>
-    <table>
-      <thead><tr>
-        <th>Forma de Pagamento</th>
-        <th style="text-align:center">Qtd Pedidos</th>
-        <th style="text-align:right">Total R$</th>
-      </tr></thead>
-      <tbody>`;
-
-  // Ordem preferida
+  // ── Resumo compacto por forma de pagamento + conferência dinheiro ──
+  const pgtoFullLabels = {
+    dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX pago', pix_receber: '⏳ PIX a receber',
+    debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista', boleto: '🧾 Boleto'
+  };
   const pgtoOrder = ['dinheiro','pix_vista','pix_receber','debito','credito','mensalista','boleto'];
   const sortedPgto = Object.entries(pgtoTotals).sort((a, b) => {
     const ia = pgtoOrder.indexOf(a[0]); const ib = pgtoOrder.indexOf(b[0]);
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
 
+  html += `<div class="pgto-summary">
+    <table>
+      <thead><tr>
+        <th>Pagamento</th>
+        <th style="text-align:center">Qtd</th>
+        <th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>`;
+
   sortedPgto.forEach(([key, data]) => {
-    const icon = { dinheiro:'💵', pix_vista:'⚡', pix_receber:'⏳', debito:'💳', credito:'💳', mensalista:'📅', boleto:'🧾' }[key] || '💰';
-    html += `<tr>
-      <td>${icon} ${data.label}</td>
+    const isDinheiro = key === 'dinheiro';
+    html += `<tr class="${isDinheiro ? 'dinheiro-row' : ''}">
+      <td>${pgtoFullLabels[key] || key}</td>
       <td style="text-align:center;font-weight:700">${data.count}</td>
-      <td style="text-align:right;font-weight:800">R$ ${data.total.toFixed(2)}</td>
+      <td style="text-align:right;font-weight:700">R$ ${data.total.toFixed(2)}</td>
     </tr>`;
   });
 
   html += `<tr class="pgto-total">
-      <td>TOTAL</td>
-      <td style="text-align:center">${rows.length}</td>
-      <td style="text-align:right">R$ ${grandTotal.toFixed(2)}</td>
+      <td style="font-weight:900">TOTAL</td>
+      <td style="text-align:center;font-weight:900">${rows.length}</td>
+      <td style="text-align:right;font-weight:900">R$ ${grandTotal.toFixed(2)}</td>
     </tr>`;
-  html += `</tbody></table></div>`;
+  html += `</tbody></table>`;
 
-  // ── Conferência do entregador ──
-  html += `<div class="conferencia">
-    <h3 style="font-size:13px;color:#1e293b;margin-bottom:8px">✍️ Conferência do Entregador</h3>
-    <table>
-      <tr>
-        <td class="label-cell">💵 Dinheiro recebido</td>
-        <td>R$</td>
-        <td class="label-cell">💳 Cartão (máquina)</td>
-        <td>R$</td>
-      </tr>
-      <tr>
-        <td class="label-cell">⚡ PIX recebido</td>
-        <td>R$</td>
-        <td class="label-cell">⏳ PIX a receber</td>
-        <td>R$</td>
-      </tr>
-      <tr>
-        <td class="label-cell">🧾 Boleto/Órgão</td>
-        <td>R$</td>
-        <td class="label-cell">📅 Mensalista</td>
-        <td>R$</td>
-      </tr>
-      <tr>
-        <td class="label-cell" style="background:#f97316;color:#fff">TOTAL CONFERIDO</td>
-        <td style="font-weight:900;font-size:14px">R$</td>
-        <td class="label-cell">Diferença</td>
-        <td style="font-weight:900;font-size:14px">R$</td>
-      </tr>
-      <tr>
-        <td class="label-cell">Assinatura Entregador</td>
-        <td colspan="3" style="height:50px"></td>
-      </tr>
-    </table>
-  </div>`;
+  // Conferência dinheiro — só uma linha simples
+  const dinheiroTotal = pgtoTotals['dinheiro'] ? pgtoTotals['dinheiro'].total : 0;
+  if (dinheiroTotal > 0) {
+    html += `<div class="dinheiro-conf">
+      <span>💵 Dinheiro esperado: <strong>R$ ${dinheiroTotal.toFixed(2)}</strong></span>
+      <span>| Conferido: R$</span><div class="line"></div>
+    </div>`;
+  }
+
+  html += `</div>`;
 
   document.getElementById('report-content').innerHTML = html;
 }
