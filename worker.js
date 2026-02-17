@@ -1,6 +1,8 @@
-// v2.12.0
+// v2.12.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.12.1: Novas formas pgto: débito, crédito, NFe
+//          Editar pedido aceita driver_id (troca entregador)
 // v2.12.0: Segurança: endpoints users protegidos por requireAuth admin
 //          Rename: gerar-nfe → criar-vendas-bling
 //          Limpeza: removido código morto NFCe (não existe na API Bling v3)
@@ -197,8 +199,11 @@ function getFormaPagamentoForTipo(tipoPg, formaKey, formaId) {
     case 'dinheiro':    return FORMAS_PAGAMENTO.dinheiro.id;
     case 'pix_vista':   return FORMAS_PAGAMENTO.pix.id;
     case 'pix_receber': return FORMAS_PAGAMENTO.pix_aguardando.id;
+    case 'debito':      return FORMAS_PAGAMENTO.debito.id;
+    case 'credito':     return FORMAS_PAGAMENTO.credito.id;
     case 'mensalista':  return FORMAS_PAGAMENTO.fiado.id;
     case 'boleto':      return FORMAS_PAGAMENTO.fiado.id;
+    case 'nfe':         return FORMAS_PAGAMENTO.fiado.id;
     default:            return FORMAS_PAGAMENTO.dinheiro.id;
   }
 }
@@ -1168,8 +1173,8 @@ export default {
       }
 
       const tipoPg = tipo_pagamento || 'dinheiro';
-      const criarBling = ['dinheiro', 'pix_vista', 'pix_receber'].includes(tipoPg);
-      const pago = ['dinheiro', 'pix_vista'].includes(tipoPg) ? 1 : 0;
+      const criarBling = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'].includes(tipoPg);
+      const pago = ['dinheiro', 'pix_vista', 'debito', 'credito'].includes(tipoPg) ? 1 : 0;
 
       const result = await env.DB.prepare(`
         INSERT INTO orders (phone_digits, customer_name, address_line, bairro, complemento, referencia, items_json, total_value, notes, status, sync_status, forma_pagamento_key, forma_pagamento_id, emitir_nfce, tipo_pagamento, pago, vendedor_id, vendedor_nome)
@@ -1226,14 +1231,21 @@ export default {
     if (method === 'POST' && /^\/api\/order\/\d+\/update$/.test(path)) {
       const orderId = parseInt(path.split('/')[3]);
       const body = await request.json();
-      const { customer_name, phone_digits, address_line, bairro, complemento, referencia, items, total_value, notes, tipo_pagamento, forma_pagamento_key } = body;
+      const { customer_name, phone_digits, address_line, bairro, complemento, referencia, items, total_value, notes, tipo_pagamento, forma_pagamento_key, driver_id } = body;
       let sql = `UPDATE orders SET customer_name=?, phone_digits=?, address_line=?, bairro=?, complemento=?, referencia=?, items_json=?, total_value=?, notes=?, updated_at=unixepoch()`;
       const params = [customer_name, phone_digits||'', address_line||'', bairro||'', complemento||'', referencia||'', JSON.stringify(items||[]), total_value||0, notes||''];
       if (tipo_pagamento !== undefined) { sql += `, tipo_pagamento=?`; params.push(tipo_pagamento); }
       if (forma_pagamento_key !== undefined) { sql += `, forma_pagamento_key=?`; params.push(forma_pagamento_key); }
+      if (driver_id !== undefined && driver_id !== null && driver_id !== '') {
+        const driver = await env.DB.prepare('SELECT * FROM drivers WHERE id=?').bind(parseInt(driver_id)).first();
+        if (driver) {
+          sql += `, driver_id=?, driver_name_cache=?, driver_phone_cache=?`;
+          params.push(parseInt(driver_id), driver.name, driver.phone_e164 || '');
+        }
+      }
       sql += ` WHERE id=?`; params.push(orderId);
       await env.DB.prepare(sql).bind(...params).run();
-      await logEvent(env, orderId, 'edited', { customer_name, address_line, tipo_pagamento });
+      await logEvent(env, orderId, 'edited', { customer_name, address_line, tipo_pagamento, driver_id });
       return json({ ok: true });
     }
 

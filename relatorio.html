@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório Entregador — MoskoGás v1.2.1</title>
+<title>Relatório Entregador — MoskoGás v1.2.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -58,14 +58,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.1</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.2</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.1</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.2</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -78,7 +78,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.1
+// v1.2.2
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -174,8 +174,8 @@ async function gerarRelatorio() {
 
   const pgtoLabels = {
     dinheiro: 'DIN', pix_vista: 'PIX✓', pix_receber: 'PIX⏳',
-    mensalista: 'MENSAL', boleto: 'BOLETO',
-    debito: 'DÉB', credito: 'CRÉD'
+    debito: 'DÉB', credito: 'CRÉD',
+    mensalista: 'MENSAL', boleto: 'BOLETO', nfe: 'NFE'
   };
 
   const pgtoTotals = {};
@@ -234,9 +234,9 @@ async function gerarRelatorio() {
   // ── Resumo compacto por forma de pagamento + conferência dinheiro ──
   const pgtoFullLabels = {
     dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX pago', pix_receber: '⏳ PIX a receber',
-    debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista', boleto: '🧾 Boleto'
+    debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista', boleto: '🧾 Boleto', nfe: '📄 NFe'
   };
-  const pgtoOrder = ['dinheiro','pix_vista','pix_receber','debito','credito','mensalista','boleto'];
+  const pgtoOrder = ['dinheiro','pix_vista','pix_receber','debito','credito','mensalista','boleto','nfe'];
   const sortedPgto = Object.entries(pgtoTotals).sort((a, b) => {
     const ia = pgtoOrder.indexOf(a[0]); const ib = pgtoOrder.indexOf(b[0]);
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);

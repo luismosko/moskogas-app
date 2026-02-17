@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.7.4</title>
+<title>Novo Pedido — MoskoGás v2.7.5</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.4 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.5 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.4</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.5</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -158,8 +158,11 @@
       <button type="button" class="tipo-pgto-btn" data-tipo="dinheiro"     data-key="dinheiro" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💵 Dinheiro</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="pix_vista"    data-key="pix" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">⚡ PIX à vista</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="pix_receber"  data-key="pix_aguardando" onclick="selTipoPgto(this)" title="Cria venda no Bling — aguarda confirmação de PIX">⏳ PIX a receber</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="debito"       data-key="debito" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💳 Débito</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="credito"      data-key="credito" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💳 Crédito</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="mensalista"   data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📅 Mensalista</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="boleto"       data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">🧾 Boleto/Órgão</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="boleto"       data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">🧾 Boleto</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="nfe"          data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📄 NFe</button>
     </div>
     <input type="hidden" id="tipo_pagamento" value="">
     <input type="hidden" id="forma_pagamento_key" value="">
@@ -940,8 +943,11 @@ async function saveOrder() {
       dinheiro: 'pago e no Bling ✅',
       pix_vista: 'pago e no Bling ✅',
       pix_receber: 'no Bling ⏳ aguardando PIX',
+      debito: 'pago e no Bling ✅',
+      credito: 'pago e no Bling ✅',
       mensalista: 'salvo 📋 sem venda Bling',
-      boleto: 'salvo 🧾 sem venda Bling'
+      boleto: 'salvo 🧾 sem venda Bling',
+      nfe: 'salvo 📄 sem venda Bling'
     };
     const statusMsg = msgs[tipoPgto] || 'salvo';
     
