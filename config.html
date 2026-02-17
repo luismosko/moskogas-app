@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config — MoskoGás</title>
+<title>Config v2.2.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -22,9 +22,7 @@
   .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-top: 8px; }
   .status.ok  { background: #dcfce7; color: #16a34a; }
   .status.err { background: #fee2e2; color: #dc2626; }
-  table.drivers-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.drivers-tbl td, table.drivers-tbl th { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
-  table.drivers-tbl th { background: #f1f5f9; font-weight: 700; font-size: 11px; text-transform: uppercase; color: #64748b; }
+  /* Entregadores removido v2.2.1 — gerenciar em Usuários */
   .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 4px 0 10px; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
 </style>
@@ -32,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.2.0 — config</div>
-  <h1>⚙️ Configurações</h1>
+  <div class="version-badge">v2.2.1 — config</div>
+  <h1>⚙️ Configurações v2.2.1</h1>
 
   <!-- API Key -->
   <div class="card">
@@ -58,22 +56,7 @@
     <div id="bling-status"></div>
   </div>
 
-  <!-- Entregadores -->
-  <div class="card">
-    <h2>🚚 Entregadores</h2>
-    <div id="drivers-list" style="margin-bottom:14px"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <div>
-        <label>Nome</label>
-        <input id="dName" placeholder="Nome do entregador">
-      </div>
-      <div>
-        <label>Telefone (5567999...)</label>
-        <input id="dPhone" placeholder="5567999990001">
-      </div>
-    </div>
-    <button class="btn btn-orange" onclick="addDriver()">➕ Adicionar Entregador</button>
-  </div>
+  <!-- Entregadores: gerenciar em Usuários (app_users) -->
 
   <!-- Teste IzChat -->
   <div class="card">
@@ -175,52 +158,7 @@ async function testIzChat() {
   }
 }
 
-async function loadDrivers() {
-  if (!apiKey()) {
-    document.getElementById('drivers-list').innerHTML = '<p style="color:#94a3b8;font-size:13px">Salve a chave de acesso primeiro.</p>';
-    return;
-  }
-  const drivers = await api('/api/drivers').catch(() => []);
-  const el = document.getElementById('drivers-list');
-  if (!drivers.length) {
-    el.innerHTML = '<p style="color:#94a3b8;font-size:13px">Nenhum entregador cadastrado.</p>';
-    return;
-  }
-  el.innerHTML = `<table class="drivers-tbl">
-    <thead><tr><th>Nome</th><th>Telefone</th><th>Ativo</th><th></th></tr></thead>
-    <tbody>
-    ${drivers.map(d => `
-      <tr>
-        <td><strong>${d.name}</strong></td>
-        <td>${d.phone_e164}</td>
-        <td>${d.active ? '✅' : '❌'}</td>
-        <td><button class="btn btn-gray" style="padding:4px 8px;font-size:12px" onclick="toggleDriver(${d.id}, ${d.active})">
-          ${d.active ? 'Desativar' : 'Ativar'}
-        </button></td>
-      </tr>`).join('')}
-    </tbody>
-  </table>`;
-}
-
-async function addDriver() {
-  const name  = document.getElementById('dName').value.trim();
-  const phone = document.getElementById('dPhone').value.trim().replace(/\D/g, '');
-  if (!name || !phone) { toast('Nome e telefone obrigatórios', 'error'); return; }
-  try {
-    await api('/api/drivers', { method: 'POST', body: JSON.stringify({ name, phone_e164: phone }) });
-    toast('✅ Entregador adicionado!');
-    document.getElementById('dName').value = '';
-    document.getElementById('dPhone').value = '';
-    loadDrivers();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function toggleDriver(id, active) {
-  try {
-    await api(`/api/drivers/${id}`, { method: 'PATCH', body: JSON.stringify({ active: !active }) });
-    loadDrivers();
-  } catch(e) { toast(e.message, 'error'); }
-}
+// [REMOVIDO v2.2.1] loadDrivers/addDriver/toggleDriver — entregadores via Usuários (app_users)
 
 // ── Banco de Ruas ──────────────────────────────────────────────
 
@@ -334,7 +272,6 @@ async function testStreetSearch() {
 }
 
 // ── Init ─────────────────────────────────────────────────────
-loadDrivers();
 checkStreetsCount();
 </script>
 </body>
