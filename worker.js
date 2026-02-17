@@ -1,6 +1,8 @@
-// v2.12.1
+// v2.12.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.12.2: Entregadores unificados: /api/drivers agora puxa de app_users
+//          Removido POST/PATCH /api/drivers (gerenciar via Usuários)
 // v2.12.1: Novas formas pgto: débito, crédito, NFe
 //          Editar pedido aceita driver_id (troca entregador)
 // v2.12.0: Segurança: endpoints users protegidos por requireAuth admin
@@ -1237,10 +1239,10 @@ export default {
       if (tipo_pagamento !== undefined) { sql += `, tipo_pagamento=?`; params.push(tipo_pagamento); }
       if (forma_pagamento_key !== undefined) { sql += `, forma_pagamento_key=?`; params.push(forma_pagamento_key); }
       if (driver_id !== undefined && driver_id !== null && driver_id !== '') {
-        const driver = await env.DB.prepare('SELECT * FROM drivers WHERE id=?').bind(parseInt(driver_id)).first();
+        const driver = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=?').bind(parseInt(driver_id)).first();
         if (driver) {
           sql += `, driver_id=?, driver_name_cache=?, driver_phone_cache=?`;
-          params.push(parseInt(driver_id), driver.name, driver.phone_e164 || '');
+          params.push(parseInt(driver_id), driver.nome, driver.telefone || '');
         }
       }
       sql += ` WHERE id=?`; params.push(orderId);
@@ -1251,7 +1253,7 @@ export default {
 
     if (method === 'GET' && path === '/api/orders/list') {
       const status = url.searchParams.get('status'); const driverId = url.searchParams.get('driver_id'); const q = url.searchParams.get('q');
-      let sql = `SELECT o.*, d.name AS driver_name_db, (SELECT status FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) AS payment_status, (SELECT method FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) AS payment_method FROM orders o LEFT JOIN drivers d ON o.driver_id = d.id WHERE 1=1`;
+      let sql = `SELECT o.*, d.nome AS driver_name_db, (SELECT status FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) AS payment_status, (SELECT method FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) AS payment_method FROM orders o LEFT JOIN app_users d ON o.driver_id = d.id WHERE 1=1`;
       const params = [];
       if (status) { sql += ` AND o.status = ?`; params.push(status); }
       if (driverId) { sql += ` AND o.driver_id = ?`; params.push(driverId); }
@@ -1265,10 +1267,10 @@ export default {
     if (method === 'POST' && selectDriverMatch) {
       const id = selectDriverMatch[1];
       const { driver_id } = await request.json();
-      const driver = await env.DB.prepare('SELECT * FROM drivers WHERE id=?').bind(driver_id).first();
+      const driver = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=?').bind(driver_id).first();
       if (!driver) return err('driver not found');
-      await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.name, driver.phone_e164, id).run();
-      await logEvent(env, id, 'driver_selected', { driver_id, driver_name: driver.name });
+      await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.nome, driver.telefone || '', id).run();
+      await logEvent(env, id, 'driver_selected', { driver_id, driver_name: driver.nome });
       return json({ ok: true, status: 'encaminhado' });
     }
 
@@ -1279,10 +1281,10 @@ export default {
       let order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('order not found', 404);
       if (driver_id && !order.driver_id) {
-        const driver = await env.DB.prepare('SELECT * FROM drivers WHERE id=?').bind(driver_id).first();
+        const driver = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=?').bind(driver_id).first();
         if (driver) {
-          await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.name, driver.phone_e164, id).run();
-          order = { ...order, driver_id, driver_name_cache: driver.name, driver_phone_cache: driver.phone_e164 };
+          await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.nome, driver.telefone || '', id).run();
+          order = { ...order, driver_id, driver_name_cache: driver.nome, driver_phone_cache: driver.telefone || '' };
         }
       }
       if (!order.driver_phone_cache) return err('Nenhum entregador selecionado');
@@ -1322,26 +1324,13 @@ export default {
     // ── ENTREGADORES ────────────────────────────────────────
 
     if (method === 'GET' && path === '/api/drivers') {
-      const rows = await env.DB.prepare('SELECT * FROM drivers WHERE active=1 ORDER BY name').all();
-      return json(rows.results || []);
+      await ensureAuthTables(env);
+      const rows = await env.DB.prepare("SELECT id, nome, telefone, ativo FROM app_users WHERE role='entregador' AND ativo=1 ORDER BY nome").all();
+      const result = (rows.results || []).map(u => ({ id: u.id, name: u.nome, phone_e164: u.telefone || '' }));
+      return json(result);
     }
 
-    if (method === 'POST' && path === '/api/drivers') {
-      const { name, phone_e164 } = await request.json();
-      if (!name || !phone_e164) return err('name e phone_e164 obrigatórios');
-      const result = await env.DB.prepare('INSERT INTO drivers (name, phone_e164) VALUES (?, ?)').bind(name, phone_e164).run();
-      return json({ ok: true, id: result.meta?.last_row_id });
-    }
-
-    const driverPatchMatch = path.match(/^\/api\/drivers\/(\d+)$/);
-    if (method === 'PATCH' && driverPatchMatch) {
-      const id = driverPatchMatch[1];
-      const body = await request.json();
-      if (body.active !== undefined) await env.DB.prepare('UPDATE drivers SET active=?, updated_at=unixepoch() WHERE id=?').bind(body.active?1:0, id).run();
-      if (body.name) await env.DB.prepare('UPDATE drivers SET name=?, updated_at=unixepoch() WHERE id=?').bind(body.name, id).run();
-      if (body.phone_e164) await env.DB.prepare('UPDATE drivers SET phone_e164=?, updated_at=unixepoch() WHERE id=?').bind(body.phone_e164, id).run();
-      return json({ ok: true });
-    }
+    // [REMOVIDO v2.12.2] POST/PATCH /api/drivers — entregadores agora gerenciados via /api/auth/users (app_users)
 
     // ── PAGAMENTOS (legado) ─────────────────────────────────
 
