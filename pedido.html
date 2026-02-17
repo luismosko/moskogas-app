@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.6.1</title>
+<title>Novo Pedido — MoskoGás v2.7.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.6 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.0 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.6.0</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.0</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -228,6 +228,9 @@ function showBlingBanner() {
 function hideBlingBanner() {
   const b = document.getElementById('bling-banner');
   if (b) { b.remove(); document.body.style.paddingTop = ''; }
+  // Limpar também banner legado (reauth-banner)
+  const old = document.getElementById('reauth-banner');
+  if (old) { old.remove(); }
 }
 
 // Check on load + every 3 minutes
@@ -363,16 +366,18 @@ let allAddresses = [];
 // ── Banner de reautorização Bling ─────────────────────────────
 function checkBlingReauth(err) {
   const msg = (err?.message || String(err) || '').toLowerCase();
-  if (msg.includes('reauth') || msg.includes('invalid_token') || msg.includes('bling 401')) {
-    let banner = document.getElementById('reauth-banner');
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.id = 'reauth-banner';
-      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
-      banner.innerHTML = '<span>⚠️ Token do Bling expirado — algumas funções não funcionarão até reautorizar.</span>'
-        + '<a href="config.html" style="background:#fff;color:#dc2626;padding:4px 14px;border-radius:8px;font-weight:700;text-decoration:none;margin-left:12px;white-space:nowrap">🔑 Reautorizar agora</a>';
-      document.body.prepend(banner);
+  if (msg.includes('reauth') || msg.includes('invalid_token') || msg.includes('bling 401') || msg.includes('bling_reauth') || msg.includes('token') && msg.includes('expir')) {
+    // Atualizar indicador para VERMELHO imediatamente
+    const ind = document.getElementById('bling-indicator');
+    if (ind) {
+      ind.style.background = '#dc2626';
+      ind.textContent = '🔴 Bling OFF';
+      ind.title = 'Token expirado — clique para tentar reconectar';
     }
+    // Usar o banner unificado
+    showBlingBanner();
+    // Tentar auto-recovery em background (keep-alive tenta refresh)
+    setTimeout(() => checkBlingStatus(true), 2000);
     return true;
   }
   return false;
@@ -764,7 +769,8 @@ async function searchProducts(q) {
     } catch(e) {
       console.error('Erro busca produto:', e);
       if (checkBlingReauth(e)) {
-        box.innerHTML = `<div style="padding:10px 14px;color:#dc2626;font-size:12px">⚠️ Token Bling expirado — <a href="config.html" style="color:#dc2626;font-weight:700">clique aqui para reautorizar</a></div>`;
+        box.innerHTML = `<div style="padding:10px 14px;color:#dc2626;font-size:12px">⚠️ Token Bling expirado — tentando reconectar... <a href="config.html" style="color:#dc2626;font-weight:700">ou reautorize aqui</a></div>`;
+        // checkBlingReauth já dispara auto-recovery, quando reconectar o user pode buscar de novo
       } else {
         box.innerHTML = `<div style="padding:10px 14px;color:#dc2626;font-size:12px">❌ Erro: ${e.message}</div>`;
       }
@@ -947,6 +953,7 @@ async function saveOrder() {
     }
 
   } catch(e) {
+    checkBlingReauth(e); // Atualiza indicador se for erro de token
     toast(e.message, 'error');
     btn.disabled = false;
     btn.textContent = '✅ SALVAR PEDIDO';

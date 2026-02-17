@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.4 — MoskoGás</title>
+<title>Gestão v2.5 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -74,7 +74,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.4</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.5</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -141,7 +141,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v2.4
+// v2.5
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -155,16 +155,48 @@ async function checkBlingStatus(manual = false) {
       ind.style.background = '#16a34a';
       ind.textContent = r.refreshed ? '🟢 Renovado!' : '🟢 Bling OK';
       ind.title = `Token testado (${r.minutesLeft}min) — clique para verificar`;
+      hideBlingBanner();
     } else {
       ind.style.background = '#dc2626';
       ind.textContent = '🔴 Bling OFF';
       ind.title = (r.message || 'Token expirado') + ' — clique para tentar';
+      showBlingBanner();
     }
   } catch(e) {
     ind.style.background = '#dc2626';
     ind.textContent = '🔴 Bling OFF';
+    showBlingBanner();
   }
 }
+
+function showBlingBanner() {
+  if (document.getElementById('bling-banner')) return;
+  const b = document.createElement('div');
+  b.id = 'bling-banner';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+  b.innerHTML = '<span>⚠️ Bling desconectado — pedidos serão salvos mas SEM venda no Bling!</span>'
+    + '<a href="config.html" style="background:#fff;color:#dc2626;padding:6px 16px;border-radius:8px;font-weight:700;text-decoration:none;margin-left:12px;white-space:nowrap">🔑 Reconectar</a>';
+  document.body.prepend(b);
+  document.body.style.paddingTop = '52px';
+}
+
+function hideBlingBanner() {
+  const b = document.getElementById('bling-banner');
+  if (b) { b.remove(); document.body.style.paddingTop = ''; }
+}
+
+function checkBlingReauth(err) {
+  const msg = (err?.message || String(err) || '').toLowerCase();
+  if (msg.includes('reauth') || msg.includes('invalid_token') || msg.includes('bling 401') || msg.includes('bling_reauth') || msg.includes('token') && msg.includes('expir')) {
+    const ind = document.getElementById('bling-indicator');
+    if (ind) { ind.style.background = '#dc2626'; ind.textContent = '🔴 Bling OFF'; }
+    showBlingBanner();
+    setTimeout(() => checkBlingStatus(true), 2000);
+    return true;
+  }
+  return false;
+}
+
 checkBlingStatus(true);
 setInterval(() => checkBlingStatus(false), 180000);
 
