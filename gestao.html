@@ -18,11 +18,11 @@
   .btn-red    { background: #dc2626; color: #fff; }
   .btn:hover { opacity: 0.85; }
   table { width: 100%; border-collapse: collapse; background: #fff; }
-  th { background: #1e293b; color: #fff; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
-  td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+  th { background: #1e293b; color: #fff; padding: 6px 8px; text-align: left; font-size: 11px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
+  td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; font-size: 11px; vertical-align: middle; }
   tr:hover td { background: #fafafa; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; }
-  select.driver-sel { border: 2px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; max-width: 130px; }
+  .badge { display: inline-block; padding: 2px 6px; border-radius: 12px; font-size: 10px; font-weight: 700; color: #fff; }
+  select.driver-sel { border: 2px solid #e2e8f0; border-radius: 6px; padding: 2px 4px; font-size: 11px; max-width: 110px; }
   select.driver-sel:focus { outline: none; border-color: #f97316; }
   .action-btns { display: flex; gap: 4px; flex-wrap: nowrap; }
   .summary-bar { background: #1e293b; color: #fff; padding: 10px 16px; font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
@@ -74,7 +74,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca..." oninput="load()" style="width:160px">
   <button class="btn btn-orange" onclick="load()">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.0</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.1</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -88,12 +88,12 @@
   <thead>
     <tr>
       <th>#</th>
-      <th>Data</th>
       <th>Hora</th>
       <th>Cliente</th>
       <th>Endereço</th>
       <th>Itens</th>
       <th>Total</th>
+      <th>Pgto</th>
       <th>Status</th>
       <th>Entregador</th>
       <th>Ações</th>
@@ -232,7 +232,7 @@ async function _load() {
     if (!Array.isArray(rows)) { console.error('API retornou:', rows); rows = []; }
   } catch(e) {
     console.error('Erro ao carregar pedidos:', e);
-    document.getElementById('tbody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:#dc2626">Erro ao carregar: ' + e.message + '</td></tr>';
+    document.getElementById('tbody').innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#dc2626">Erro ao carregar: ' + e.message + '</td></tr>';
     return;
   }
 
@@ -267,7 +267,7 @@ async function _load() {
 function renderTable(rows) {
   const tbody = document.getElementById('tbody');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:#94a3b8">Nenhum pedido encontrado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8">Nenhum pedido encontrado</td></tr>';
     return;
   }
 
@@ -276,9 +276,13 @@ function renderTable(rows) {
     const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
     const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
     const hora  = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
-    const data  = o.created_at ? new Date(o.created_at * 1000).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+    const nomeExibir = (o.customer_name||'').length > 50 ? (o.customer_name||'').substring(0,50)+'…' : (o.customer_name||'');
 
-    const driverOpts = `<option value="">Sem entregador</option>` +
+    const pgtoLabels = { dinheiro:'💵', pix_vista:'⚡PIX', pix_receber:'⏳PIX', mensalista:'📅Mensal', boleto:'🧾Boleto' };
+    const pgtoLabel = pgtoLabels[o.tipo_pagamento] || o.tipo_pagamento || '—';
+    const pagoFlag = o.pago ? '✅' : '';
+
+    const driverOpts = `<option value="">—</option>` +
       drivers.map(d => `<option value="${d.id}" ${o.driver_id == d.id ? 'selected' : ''}>${d.name}</option>`).join('');
 
     const canSendWa  = ['novo','encaminhado'].includes(o.status);
@@ -288,18 +292,18 @@ function renderTable(rows) {
     return `
     <tr id="row-${o.id}">
       <td><strong>#${o.id}</strong></td>
-      <td style="white-space:nowrap;color:#64748b;font-size:12px">${data}</td>
       <td style="white-space:nowrap">${hora}</td>
-      <td>
-        <div style="font-weight:700;color:#1e293b">${o.customer_name}</div>
-        <div style="font-size:11px;color:#64748b">${o.phone_digits || ''}</div>
+      <td title="${o.customer_name||''}">
+        <div style="font-weight:700;color:#1e293b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nomeExibir}</div>
+        <div style="font-size:10px;color:#64748b">${o.phone_digits || ''}</div>
       </td>
       <td>
-        <div style="font-size:12px">${o.address_line}</div>
-        <div style="font-size:11px;color:#64748b">${o.bairro || ''} ${o.referencia ? '• ' + o.referencia : ''}</div>
+        <div style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.address_line||''}">${o.address_line||''}</div>
+        <div style="font-size:10px;color:#64748b">${o.bairro || ''}</div>
       </td>
-      <td style="font-size:12px;max-width:160px">${itemsStr}</td>
-      <td style="font-weight:700;color:#1e293b">${total}</td>
+      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
+      <td style="font-weight:700;color:#1e293b;white-space:nowrap">${total}</td>
+      <td style="white-space:nowrap;font-size:10px">${pgtoLabel} ${pagoFlag}</td>
       <td>${statusBadge(o.status)}</td>
       <td>
         <select class="driver-sel" onchange="selectDriver(${o.id}, this.value)">
@@ -307,12 +311,12 @@ function renderTable(rows) {
         </select>
       </td>
       <td>
-        <div class="action-btns">
-          ${canSendWa  ? `<button class="btn btn-green" style="font-size:11px;padding:5px 8px" onclick="openModal(${o.id})">📲 Msg</button>` : ''}
-          ${canDeliver ? `<button class="btn btn-blue"  style="font-size:11px;padding:5px 8px" onclick="markDelivered(${o.id})">✅ Entregue</button>` : ''}
-          <button class="btn" style="font-size:11px;padding:5px 8px;background:#6366f1;color:#fff" onclick="openEditModal(${o.id})">✏️</button>
-          ${canCancel  ? `<button class="btn btn-red"   style="font-size:11px;padding:5px 8px" onclick="cancelOrder(${o.id})">✕</button>` : ''}
-          <button class="btn btn-gray" style="font-size:11px;padding:5px 8px" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
+        <div class="action-btns" style="gap:2px">
+          ${canSendWa  ? `<button class="btn btn-green" style="font-size:10px;padding:3px 6px" onclick="openModal(${o.id})">📲</button>` : ''}
+          ${canDeliver ? `<button class="btn btn-blue"  style="font-size:10px;padding:3px 6px" onclick="markDelivered(${o.id})">✅</button>` : ''}
+          <button class="btn" style="font-size:10px;padding:3px 6px;background:#6366f1;color:#fff" onclick="openEditModal(${o.id})">✏️</button>
+          ${canCancel  ? `<button class="btn btn-red"   style="font-size:10px;padding:3px 6px" onclick="cancelOrder(${o.id})">✕</button>` : ''}
+          <button class="btn btn-gray" style="font-size:10px;padding:3px 6px" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
         </div>
       </td>
     </tr>`;
@@ -481,6 +485,7 @@ function openEditModal(orderId) {
   document.getElementById('edit-comp').value  = o.complemento || '';
   document.getElementById('edit-ref').value   = o.referencia || '';
   document.getElementById('edit-notes').value = o.notes || '';
+  document.getElementById('edit-tipo-pgto').value = o.tipo_pagamento || 'dinheiro';
   document.getElementById('edit-prod-search').value = '';
   document.getElementById('edit-prod-suggestions').style.display = 'none';
 
@@ -574,6 +579,7 @@ async function saveEditOrder() {
     items: editItems,
     total_value: total,
     notes: document.getElementById('edit-notes').value,
+    tipo_pagamento: document.getElementById('edit-tipo-pgto').value,
   };
 
   try {
@@ -637,9 +643,21 @@ init();
       <span id="edit-total" style="font-size:20px;font-weight:900;color:#f97316">R$ 0,00</span>
     </div>
 
-    <div>
-      <label style="font-size:12px;color:#64748b;font-weight:600">OBSERVAÇÃO</label>
-      <textarea id="edit-notes" rows="2" style="width:100%;resize:vertical"></textarea>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px;color:#64748b;font-weight:600">OBSERVAÇÃO</label>
+        <textarea id="edit-notes" rows="2" style="width:100%;resize:vertical"></textarea>
+      </div>
+      <div>
+        <label style="font-size:12px;color:#64748b;font-weight:600">TIPO DE PAGAMENTO</label>
+        <select id="edit-tipo-pgto" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px">
+          <option value="dinheiro">💵 Dinheiro</option>
+          <option value="pix_vista">⚡ PIX à vista</option>
+          <option value="pix_receber">⏳ PIX a receber</option>
+          <option value="mensalista">📅 Mensalista</option>
+          <option value="boleto">🧾 Boleto/Órgão</option>
+        </select>
+      </div>
     </div>
 
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
