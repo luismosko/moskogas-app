@@ -1,6 +1,7 @@
-// v2.16.0
+// v2.16.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.16.1: Fix ReferenceError: user não declarado em cancel/revert/deliver/select-driver
 // v2.16.0: Reabrir/cancelar pedido com motivo + auditoria status + alerta WhatsApp admin
 // v2.15.0: Entrega com foto obrigatória (R2) + trocar pgto + observação
 // v2.14.0: Troca tipo pagamento → auto-cria/deleta venda Bling + confirmação
@@ -1486,6 +1487,7 @@ export default {
     const selectDriverMatch = path.match(/^\/api\/order\/(\d+)\/select-driver$/);
     if (method === 'POST' && selectDriverMatch) {
       const id = selectDriverMatch[1];
+      const user = await getSessionUser(request, env);
       const { driver_id } = await request.json();
       const driver = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=?').bind(driver_id).first();
       if (!driver) return err('driver not found');
@@ -1531,6 +1533,7 @@ export default {
     const deliveredMatch = path.match(/^\/api\/order\/(\d+)\/mark-delivered$/);
     if (method === 'POST' && deliveredMatch) {
       const id = parseInt(deliveredMatch[1]);
+      const user = await getSessionUser(request, env);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('Pedido não encontrado', 404);
 
@@ -1693,6 +1696,7 @@ export default {
     const cancelMatch = path.match(/^\/api\/order\/(\d+)\/cancel$/);
     if (method === 'POST' && cancelMatch) {
       const id = parseInt(cancelMatch[1]);
+      const user = await getSessionUser(request, env);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('Pedido não encontrado', 404);
 
@@ -1757,6 +1761,7 @@ export default {
     const revertMatch = path.match(/^\/api\/order\/(\d+)\/revert-status$/);
     if (method === 'POST' && revertMatch) {
       const id = parseInt(revertMatch[1]);
+      const user = await getSessionUser(request, env);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('Pedido não encontrado', 404);
 
