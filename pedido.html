@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.4.3</title>
+<title>Novo Pedido — MoskoGás v2.4.4</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,15 +43,18 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.3 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.4 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.3</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.4</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <label style="margin:0">🔍 Buscar Cliente</label>
-      <button onclick="syncBling(this)" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px;color:#94a3b8;cursor:pointer" title="Sincronizar contatos do Bling para busca por endereço">🔄 Sync Bling</button>
+      <div style="display:flex;gap:6px">
+        <button onclick="setConsumidorFinal()" style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:6px;padding:3px 10px;font-size:11px;color:#0284c7;cursor:pointer;font-weight:600" title="Pedido sem cadastro — Consumidor Final Bling">👤 Consumidor Final</button>
+        <button onclick="syncBling(this)" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px;color:#94a3b8;cursor:pointer" title="Sincronizar contatos do Bling para busca por endereço">🔄 Sync Bling</button>
+      </div>
     </div>
     <div class="search-fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
       <div style="position:relative">
@@ -741,6 +744,34 @@ document.addEventListener('click', e => {
     document.getElementById('product-suggestions').style.display='none';
 });
 
+// ── Consumidor Final ──────────────────────────────────────────
+let isConsumidorFinal = false;
+const CONSUMIDOR_FINAL_BLING_ID = 726746364;
+
+function setConsumidorFinal() {
+  isConsumidorFinal = true;
+  document.getElementById('cName').value = 'CONSUMIDOR FINAL';
+  document.getElementById('cPhone').value = '';
+  document.getElementById('cAddr').value = '';
+  if (document.getElementById('cNum')) document.getElementById('cNum').value = '';
+  if (document.getElementById('cBairro')) document.getElementById('cBairro').value = '';
+  if (document.getElementById('cComp')) document.getElementById('cComp').value = '';
+  if (document.getElementById('cRef')) document.getElementById('cRef').value = '';
+  // Destacar visualmente
+  document.getElementById('cName').style.background = '#f0f9ff';
+  document.getElementById('cName').style.borderColor = '#7dd3fc';
+  toast('👤 Consumidor Final — endereço não obrigatório', 'ok');
+}
+
+// Reset flag quando muda nome manualmente
+document.getElementById('cName')?.addEventListener('input', () => {
+  if (isConsumidorFinal) {
+    isConsumidorFinal = false;
+    document.getElementById('cName').style.background = '';
+    document.getElementById('cName').style.borderColor = '';
+  }
+});
+
 // ── Itens ─────────────────────────────────────────────────────
 function addItem(id, name, price, code) {
   const existing = items.find(i => i.id === id);
@@ -809,7 +840,7 @@ async function saveOrder() {
   const addrNum = document.getElementById('cNum') ? document.getElementById('cNum').value.trim() : '';
   const addr    = addrNum ? addrRua + ', ' + addrNum : addrRua;
   if (!name) { toast('Nome do cliente obrigatório', 'error'); return; }
-  if (!addr) { toast('Endereço obrigatório', 'error'); return; }
+  if (!isConsumidorFinal && !addr) { toast('Endereço obrigatório', 'error'); return; }
 
   const tipoPgto = document.getElementById('tipo_pagamento').value;
   if (!tipoPgto) { toast('⚠️ Selecione o tipo de pagamento', 'error'); return; }
@@ -834,6 +865,7 @@ async function saveOrder() {
         notes:            document.getElementById('notes').value,
         tipo_pagamento:   tipoPgto,
         forma_pagamento_key: document.getElementById('forma_pagamento_key').value,
+        bling_contact_id: isConsumidorFinal ? CONSUMIDOR_FINAL_BLING_ID : null,
       }),
     });
 
