@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.7.1</title>
+<title>Novo Pedido — MoskoGás v2.7.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.1 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.2 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.1</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.2</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -233,9 +233,9 @@ function hideBlingBanner() {
   if (old) { old.remove(); }
 }
 
-// Check on load + every 60 seconds + quando volta pra aba
+// Check on load + every 3 min (backup) + imediato ao voltar pra aba
 checkBlingStatus(true);
-setInterval(() => checkBlingStatus(false), 60000);
+setInterval(() => checkBlingStatus(false), 180000);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkBlingStatus(true);
 });

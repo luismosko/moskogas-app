@@ -198,7 +198,7 @@ function checkBlingReauth(err) {
 }
 
 checkBlingStatus(true);
-setInterval(() => checkBlingStatus(false), 60000);
+setInterval(() => checkBlingStatus(false), 180000);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkBlingStatus(true);
 });
