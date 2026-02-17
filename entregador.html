@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.0.0 — MoskoGás</title>
+<title>Entregador v2.0.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -107,7 +107,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.0.0</small></h1>
+  <h1>🚚 Entregas <small>v2.0.1</small></h1>
   <input type="date" id="fDate" onchange="load()">
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
@@ -129,11 +129,11 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.0.0 — entregador</div>
+<div class="version-badge">v2.0.1 — entregador</div>
 
 <script src="shared.js"></script>
 <script>
-// v2.0.0
+// v2.0.1
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 document.getElementById('fDate').value = today();
@@ -421,8 +421,10 @@ async function deliver(orderId) {
     if (obs && obs.value.trim()) formData.append('observacao_entregador', obs.value.trim());
 
     const token = getSessionToken();
+    const key = apiKey();
     const headers = {};
     if (token) headers['Authorization'] = 'Bearer ' + token;
+    else if (key) headers['X-API-KEY'] = key;
 
     const resp = await fetch(API_BASE + '/api/order/' + orderId + '/mark-delivered', {
       method: 'POST',
