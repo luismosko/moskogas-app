@@ -1,5 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.2.0
-// v1.2.0: Auth por sessão, nav por role, vendedor vinculado
+// shared.js — Utilitários compartilhados MoskoGás v1.3.0
+// v1.3.0: Toast grande + modal nunca fecha ao clicar fora
 
 const API_BASE = 'https://api.moskogas.com.br';
 
@@ -75,13 +75,32 @@ function today() {
 }
 
 function toast(msg, type = 'success') {
+  // Remove toast anterior se existir
+  const old = document.getElementById('mg-toast');
+  if (old) old.remove();
+
   const el = document.createElement('div');
-  el.textContent = msg;
-  el.style.cssText = `position:fixed;top:16px;right:16px;padding:12px 20px;border-radius:8px;
-    background:${type === 'error' ? '#dc2626' : '#16a34a'};color:#fff;font-weight:700;
-    z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:14px;`;
+  el.id = 'mg-toast';
+  const icon = type === 'error' ? '❌' : '✅';
+  const bg = type === 'error' ? '#dc2626' : '#16a34a';
+  el.innerHTML = `<span style="font-size:22px;margin-right:8px;">${icon}</span><span>${msg}</span>`;
+  el.style.cssText = `position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);
+    padding:16px 28px;border-radius:12px;background:${bg};color:#fff;font-weight:700;
+    z-index:99999;box-shadow:0 8px 30px rgba(0,0,0,0.4);font-size:16px;
+    display:flex;align-items:center;max-width:90vw;
+    transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease;opacity:0;`;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  // Anima entrada
+  requestAnimationFrame(() => {
+    el.style.transform = 'translateX(-50%) translateY(0)';
+    el.style.opacity = '1';
+  });
+  // Anima saída
+  setTimeout(() => {
+    el.style.transform = 'translateX(-50%) translateY(-100px)';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 400);
+  }, 3500);
 }
 
 // ── Navegação por Role ────────────────────────────────────────
