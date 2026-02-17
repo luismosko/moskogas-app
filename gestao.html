@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.7.0 — MoskoGás</title>
+<title>Gestão v2.8.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -74,7 +74,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.7.0</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.0</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -141,7 +141,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v2.7.0
+// v2.8.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -348,7 +348,8 @@ function renderTable(rows) {
     // WhatsApp SEMPRE disponível (exceto cancelado)
     const canWa      = o.status !== 'cancelado';
     const canDeliver = ['novo','encaminhado','whatsapp_enviado'].includes(o.status);
-    const canCancel  = !['cancelado','entregue'].includes(o.status);
+    const canCancel  = o.status !== 'cancelado'; // agora permite cancelar entregue
+    const canRevert  = ['entregue','cancelado'].includes(o.status);
 
     return `
     <tr id="row-${o.id}">
@@ -376,7 +377,8 @@ function renderTable(rows) {
           ${canWa      ? `<button class="btn btn-green" style="font-size:11px;padding:4px 7px" title="Enviar/Reenviar WhatsApp" onclick="openModal(${o.id})">📲</button>` : ''}
           ${canDeliver ? `<button class="btn btn-blue"  style="font-size:11px;padding:4px 7px" title="Marcar como entregue" onclick="markDelivered(${o.id})">✅</button>` : ''}
           <button class="btn" style="font-size:11px;padding:4px 7px;background:#6366f1;color:#fff" title="Editar pedido" onclick="openEditModal(${o.id})">✏️</button>
-          ${canCancel  ? `<button class="btn btn-red"   style="font-size:11px;padding:4px 7px" title="Cancelar pedido" onclick="cancelOrder(${o.id})">✕</button>` : ''}
+          ${canRevert  ? `<button class="btn" style="font-size:11px;padding:4px 7px;background:#f59e0b;color:#fff" title="Reabrir pedido" onclick="openRevertModal(${o.id}, '${o.status}')">↩️</button>` : ''}
+          ${canCancel  ? `<button class="btn btn-red"   style="font-size:11px;padding:4px 7px" title="Cancelar pedido" onclick="openCancelModal(${o.id}, '${o.status}')">&times;</button>` : ''}
           <button class="btn btn-gray" style="font-size:11px;padding:4px 7px" title="Imprimir recibo" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
         </div>
       </td>
@@ -453,13 +455,146 @@ async function markDelivered(id) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
-async function cancelOrder(id) {
-  if (!confirm(`Cancelar pedido #${id}?`)) return;
+// ── Modal Cancelar ────────────────────────────────────────────
+function openCancelModal(orderId, statusAtual) {
+  const isEntregue = statusAtual === 'entregue';
+  const titulo = isEntregue ? '⚠️ Cancelar Pedido ENTREGUE' : '✕ Cancelar Pedido';
+  const cor = isEntregue ? '#dc2626' : '#ef4444';
+  const aviso = isEntregue
+    ? '<div style="background:#fef2f2;border:2px solid #dc2626;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#991b1b"><strong>⚠️ ATENÇÃO:</strong> Este pedido já foi ENTREGUE. Cancelamento pós-entrega será registrado em auditoria e o administrador será notificado via WhatsApp.</div>'
+    : '';
+
+  const html = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center" id="cancelModal">
+      <div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <h3 style="margin:0 0 16px;color:${cor}">${titulo} #${orderId}</h3>
+        ${aviso}
+        <label style="font-weight:600;font-size:13px;color:#475569">Motivo do cancelamento *</label>
+        <select id="cancelMotivoSelect" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;margin:6px 0 10px;font-size:14px" onchange="document.getElementById('cancelMotivoText').style.display = this.value==='outro' ? 'block' : 'none'">
+          <option value="">— Selecione —</option>
+          <option value="Cliente desistiu">Cliente desistiu</option>
+          <option value="Endereço incorreto">Endereço incorreto</option>
+          <option value="Pedido duplicado">Pedido duplicado</option>
+          <option value="Erro de digitação">Erro de digitação</option>
+          <option value="Produto indisponível">Produto indisponível</option>
+          <option value="Erro operacional">Erro operacional</option>
+          ${isEntregue ? '<option value="Devolução">Devolução</option><option value="Cobrança indevida">Cobrança indevida</option>' : ''}
+          <option value="outro">Outro (especificar)</option>
+        </select>
+        <textarea id="cancelMotivoText" style="display:none;width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical;min-height:60px;box-sizing:border-box" placeholder="Descreva o motivo..."></textarea>
+        <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('cancelModal').remove()" style="padding:10px 20px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-weight:600">✖ Voltar</button>
+          <button onclick="confirmCancel(${orderId})" style="padding:10px 20px;border:none;border-radius:8px;background:${cor};color:#fff;cursor:pointer;font-weight:600">✕ Confirmar Cancelamento</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function confirmCancel(orderId) {
+  const sel = document.getElementById('cancelMotivoSelect');
+  const txt = document.getElementById('cancelMotivoText');
+  let motivo = sel.value === 'outro' ? txt.value.trim() : sel.value;
+  if (!motivo) { toast('Selecione o motivo do cancelamento', 'error'); return; }
+
+  const modal = document.getElementById('cancelModal');
+  const btn = modal.querySelector('button:last-child');
+  btn.disabled = true; btn.textContent = '⏳ Cancelando...';
+
   try {
-    await api(`/api/order/${id}/cancel`, { method: 'POST' });
-    toast('Pedido cancelado');
+    const res = await api(`/api/order/${orderId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo })
+    });
+    if (res.cancelamento_pos_entrega) {
+      toast(res.admin_notificado
+        ? '⚠️ Pedido cancelado (pós-entrega) — Admin notificado via WhatsApp'
+        : '⚠️ Pedido cancelado (pós-entrega) — Log registrado', 'warning');
+    } else {
+      toast('✕ Pedido cancelado');
+    }
+    modal.remove();
     load();
-  } catch(e) { toast(e.message, 'error'); }
+  } catch(e) {
+    toast(e.message, 'error');
+    btn.disabled = false; btn.textContent = '✕ Confirmar Cancelamento';
+  }
+}
+
+// ── Modal Reabrir / Reverter Status ───────────────────────────
+function openRevertModal(orderId, statusAtual) {
+  const isCancel = statusAtual === 'cancelado';
+  const titulo = isCancel ? '↩️ Reabrir Pedido Cancelado' : '↩️ Reverter Status do Pedido';
+  const cor = '#f59e0b';
+
+  // Opções de status destino baseadas no status atual
+  const optsMap = {
+    entregue: [
+      { value: 'whatsapp_enviado', label: '🟢 WhatsApp Enviado' },
+      { value: 'encaminhado', label: '🟡 Encaminhado' },
+      { value: 'novo', label: '🔴 Novo' },
+    ],
+    cancelado: [
+      { value: 'novo', label: '🔴 Novo' },
+      { value: 'encaminhado', label: '🟡 Encaminhado' },
+    ],
+  };
+  const opts = optsMap[statusAtual] || [];
+  const optionsHtml = opts.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+
+  const html = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center" id="revertModal">
+      <div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <h3 style="margin:0 0 16px;color:${cor}">${titulo} #${orderId}</h3>
+        <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#92400e">
+          <strong>ℹ️</strong> Status atual: <strong>${statusAtual.toUpperCase()}</strong>. Selecione o novo status e informe o motivo.
+        </div>
+        <label style="font-weight:600;font-size:13px;color:#475569">Novo status *</label>
+        <select id="revertNovoStatus" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;margin:6px 0 10px;font-size:14px">
+          ${optionsHtml}
+        </select>
+        <label style="font-weight:600;font-size:13px;color:#475569">Motivo *</label>
+        <select id="revertMotivoSelect" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;margin:6px 0 10px;font-size:14px" onchange="document.getElementById('revertMotivoText').style.display = this.value==='outro' ? 'block' : 'none'">
+          <option value="">— Selecione —</option>
+          <option value="Erro humano ao marcar status">Erro humano ao marcar status</option>
+          <option value="Entrega não confirmada pelo cliente">Entrega não confirmada pelo cliente</option>
+          <option value="Pedido precisa ser refeito">Pedido precisa ser refeito</option>
+          <option value="Cancelamento indevido">Cancelamento indevido</option>
+          <option value="outro">Outro (especificar)</option>
+        </select>
+        <textarea id="revertMotivoText" style="display:none;width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical;min-height:60px;box-sizing:border-box" placeholder="Descreva o motivo..."></textarea>
+        <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('revertModal').remove()" style="padding:10px 20px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-weight:600">✖ Voltar</button>
+          <button onclick="confirmRevert(${orderId})" style="padding:10px 20px;border:none;border-radius:8px;background:${cor};color:#fff;cursor:pointer;font-weight:600">↩️ Confirmar Reabertura</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function confirmRevert(orderId) {
+  const novoStatus = document.getElementById('revertNovoStatus').value;
+  const sel = document.getElementById('revertMotivoSelect');
+  const txt = document.getElementById('revertMotivoText');
+  let motivo = sel.value === 'outro' ? txt.value.trim() : sel.value;
+  if (!motivo) { toast('Selecione o motivo da reabertura', 'error'); return; }
+
+  const modal = document.getElementById('revertModal');
+  const btn = modal.querySelector('button:last-child');
+  btn.disabled = true; btn.textContent = '⏳ Revertendo...';
+
+  try {
+    const res = await api(`/api/order/${orderId}/revert-status`, {
+      method: 'POST',
+      body: JSON.stringify({ novo_status: novoStatus, motivo })
+    });
+    toast(`↩️ Status revertido: ${res.status_anterior} → ${res.status_novo}`);
+    modal.remove();
+    load();
+  } catch(e) {
+    toast(e.message, 'error');
+    btn.disabled = false; btn.textContent = '↩️ Confirmar Reabertura';
+  }
 }
 
 // ── Modal WhatsApp ────────────────────────────────────────────

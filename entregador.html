@@ -2,77 +2,125 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Entregador — MoskoGás</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Entregador v2.0.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
-  .toolbar { background: #1e293b; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 50; }
-  .toolbar select, .toolbar input[type=date] { padding: 8px 12px; border: none; border-radius: 8px; font-size: 14px; background: #334155; color: #fff; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
+
+  /* ── Toolbar ── */
+  .toolbar { background: #0f172a; padding: 10px 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 50; }
+  .toolbar h1 { color: #fff; font-size: 16px; font-weight: 800; margin-right: auto; }
+  .toolbar h1 small { font-weight: 400; color: #94a3b8; font-size: 11px; }
+  .toolbar select, .toolbar input[type=date] { padding: 8px 10px; border: none; border-radius: 8px; font-size: 13px; background: #334155; color: #fff; }
   .toolbar select option { background: #1e293b; }
   .btn { padding: 9px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
   .btn-refresh { background: #f97316; color: #fff; }
-  .auto-lbl { color: #94a3b8; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
-  .auto-lbl input { accent-color: #f97316; }
+  .auto-lbl { color: #94a3b8; font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .auto-lbl input { accent-color: #f97316; width: 16px; height: 16px; }
 
-  .summary-bar { background: #0f172a; color: #fff; padding: 8px 16px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; }
-  .summary-bar .chip { display: flex; align-items: center; gap: 6px; }
+  /* ── Summary ── */
+  .summary-bar { background: #1e293b; color: #fff; padding: 8px 12px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; }
   .summary-bar strong { color: #f97316; }
 
-  .container { padding: 12px 16px; max-width: 700px; margin: 0 auto; }
+  /* ── Container ── */
+  .container { padding: 10px; max-width: 600px; margin: 0 auto; }
 
-  .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 6px solid #e2e8f0; position: relative; }
-  .card.novo             { border-left-color: #dc2626; }
-  .card.encaminhado      { border-left-color: #d97706; }
-  .card.whatsapp_enviado { border-left-color: #16a34a; }
-  .card.entregue         { border-left-color: #2563eb; opacity: 0.7; }
-  .card.cancelado        { border-left-color: #9ca3af; opacity: 0.5; }
+  /* ── Card ── */
+  .card { background: #fff; border-radius: 16px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden; }
+  .card-header { padding: 14px 14px 8px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .card-header-left { flex: 1; }
+  .card-id { font-size: 11px; color: #94a3b8; font-weight: 700; }
+  .card-client { font-size: 16px; font-weight: 800; color: #1e293b; margin-top: 2px; }
+  .hour-chip { background: #e2e8f0; color: #475569; border-radius: 6px; padding: 2px 7px; font-size: 10px; font-weight: 700; }
 
-  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-  .card-id  { font-size: 12px; color: #94a3b8; font-weight: 700; }
-  .card-client { font-size: 17px; font-weight: 800; color: #1e293b; margin-top: 2px; }
-  .card-time  { font-size: 12px; color: #64748b; }
+  .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 99px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; }
+  .badge-novo   { background: #fee2e2; color: #dc2626; }
+  .badge-enc    { background: #fef3c7; color: #d97706; }
+  .badge-wa     { background: #dcfce7; color: #16a34a; }
+  .badge-entregue { background: #dbeafe; color: #2563eb; }
+  .badge-cancel { background: #f1f5f9; color: #6b7280; }
 
-  .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:800; }
-  .badge-novo   { background:#fee2e2; color:#dc2626; }
-  .badge-enc    { background:#fef3c7; color:#d97706; }
-  .badge-wa     { background:#dcfce7; color:#16a34a; }
-  .badge-entregue { background:#dbeafe; color:#2563eb; }
-  .badge-cancel { background:#f1f5f9; color:#6b7280; }
+  .card-body { padding: 0 14px; }
+  .card-addr { background: #f8fafc; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: #374151; line-height: 1.6; }
+  .card-addr .ref { color: #7c3aed; font-size: 12px; font-weight: 600; }
+  .notes-box { background: #faf5ff; border-left: 3px solid #7c3aed; padding: 8px 12px; border-radius: 0 8px 8px 0; font-size: 12px; color: #7c3aed; margin-bottom: 8px; }
+  .card-items { font-size: 14px; font-weight: 700; color: #1e293b; padding: 0 0 6px; }
+  .card-total-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+  .card-total { font-size: 20px; font-weight: 900; color: #16a34a; }
+  .pgto-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 8px; background: #f1f5f9; color: #475569; }
 
-  .card-addr { background: #f8fafc; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; color: #374151; line-height: 1.7; }
-  .card-addr .ref { color: #7c3aed; font-size: 12px; }
+  /* ── Quick action buttons ── */
+  .card-quick { display: flex; gap: 8px; padding: 8px 0; }
+  .btn-maps  { background: #dcfce7; color: #16a34a; border: 2px solid #86efac; padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; }
+  .btn-phone { background: #dbeafe; color: #2563eb; border: 2px solid #93c5fd; padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; }
 
-  .card-items { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 10px; }
-  .card-total { font-size: 18px; font-weight: 900; color: #16a34a; }
+  /* ── Delivery section ── */
+  .delivery-section { border-top: 2px dashed #e2e8f0; margin-top: 6px; padding: 14px; background: #f8fafc; }
+  .delivery-section h3 { font-size: 13px; color: #475569; font-weight: 700; margin-bottom: 10px; }
+  .delivery-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+  .delivery-row label { font-size: 12px; font-weight: 700; color: #475569; min-width: 70px; }
+  .delivery-row select, .delivery-row textarea { flex: 1; padding: 8px 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; }
+  .delivery-row textarea { resize: vertical; min-height: 50px; }
+  .delivery-row select:focus, .delivery-row textarea:focus { border-color: #3b82f6; outline: none; }
 
-  .card-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .btn-maps     { background: #dcfce7; color: #16a34a; border: 2px solid #86efac; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
-  .btn-phone    { background: #dbeafe; color: #2563eb; border: 2px solid #93c5fd; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
-  .btn-deliver  { background: #2563eb; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; margin-left: auto; }
-  .btn-deliver:active { transform: scale(0.97); }
+  /* ── Photo capture ── */
+  .photo-area { margin-bottom: 12px; }
+  .photo-btn { width: 100%; padding: 14px; border: 3px dashed #94a3b8; border-radius: 12px; background: #fff; cursor: pointer; text-align: center; font-size: 14px; font-weight: 700; color: #64748b; transition: all 0.2s; }
+  .photo-btn:active { transform: scale(0.98); background: #f1f5f9; }
+  .photo-btn.has-photo { border-color: #16a34a; border-style: solid; background: #f0fdf4; color: #16a34a; }
+  .photo-btn .icon { font-size: 28px; display: block; margin-bottom: 4px; }
+  .photo-preview { margin-top: 8px; position: relative; display: none; }
+  .photo-preview img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; border: 2px solid #16a34a; }
+  .photo-preview .remove { position: absolute; top: 6px; right: 6px; background: #dc2626; color: #fff; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; font-weight: 900; cursor: pointer; }
+  .photo-size { text-align: center; font-size: 11px; color: #64748b; margin-top: 4px; }
+  .photo-input { display: none !important; }
 
-  .notes-box { background: #faf5ff; border-left: 3px solid #7c3aed; padding: 8px 12px; border-radius: 0 8px 8px 0; font-size: 13px; color: #7c3aed; margin-bottom: 10px; }
+  /* ── Deliver button ── */
+  .btn-deliver { width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 16px; font-weight: 900; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-deliver.ready { background: #2563eb; color: #fff; }
+  .btn-deliver.ready:active { transform: scale(0.97); background: #1d4ed8; }
+  .btn-deliver.disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
+
+  /* ── Entregue / Cancelado ── */
+  .card.entregue { opacity: 0.65; }
+  .card.entregue .delivery-section { display: none; }
+  .card.cancelado { opacity: 0.4; }
+  .card.cancelado .delivery-section { display: none; }
+
+  .entregue-info { border-top: 2px solid #dbeafe; padding: 10px 14px; background: #eff6ff; font-size: 12px; color: #2563eb; }
+  .entregue-info a { color: #2563eb; font-weight: 700; }
+
   .empty { text-align: center; padding: 60px 20px; color: #94a3b8; font-size: 16px; }
-  .hour-chip { background:#e2e8f0; color:#475569; border-radius:6px; padding:2px 7px; font-size:11px; font-weight:700; }
+  .version-badge { position: fixed; bottom: 6px; right: 8px; background: rgba(0,0,0,0.5); color: #fff; padding: 2px 8px; border-radius: 8px; font-size: 9px; font-weight: 700; z-index: 99; }
+
+  @media (max-width: 600px) {
+    .toolbar h1 { font-size: 14px; }
+    .card-client { font-size: 15px; }
+  }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
+  <h1>🚚 Entregas <small>v2.0.0</small></h1>
   <input type="date" id="fDate" onchange="load()">
   <select id="fDriver" onchange="load()">
-    <option value="">Todos entregadores</option>
+    <option value="">Todos</option>
   </select>
   <select id="fStatus" onchange="load()">
-    <option value="">Todos</option>
+    <option value="">Pendentes</option>
     <option value="encaminhado">🟡 Encaminhado</option>
-    <option value="whatsapp_enviado">🟢 WhatsApp Enviado</option>
-    <option value="entregue">🔵 Entregue</option>
+    <option value="whatsapp_enviado">🟢 WhatsApp</option>
+    <option value="entregue">🔵 Entregues</option>
+    <option value="all">📋 Todos</option>
   </select>
-  <button class="btn btn-refresh" onclick="load()" title="Atualizar lista de entregas">🔄</button>
-  <label class="auto-lbl"><input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)</label>
+  <button class="btn btn-refresh" onclick="load()" title="Atualizar">🔄</button>
+  <label class="auto-lbl"><input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> 30s</label>
 </div>
 
 <div class="summary-bar" id="summary-bar"></div>
@@ -81,12 +129,21 @@
   <div id="list"></div>
 </div>
 
+<div class="version-badge">v2.0.0 — entregador</div>
+
 <script src="shared.js"></script>
 <script>
+// v2.0.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 document.getElementById('fDate').value = today();
 
+const TIPO_LABELS = {
+  dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX à vista', pix_receber: '⏳ PIX a receber',
+  mensalista: '📅 Mensalista', boleto: '🧾 Boleto/Órgão', debito: '💳 Débito', credito: '💳 Crédito'
+};
+
+const photoStore = {};
 let autoTimer;
 
 async function init() {
@@ -97,18 +154,32 @@ async function init() {
     opt.value = d.id; opt.textContent = d.name;
     sel.appendChild(opt);
   });
+
+  const user = getCurrentUser();
+  if (user && user.role === 'entregador') {
+    const match = drivers.find(d => d.id == user.id);
+    if (match) sel.value = match.id;
+  }
+
   load();
 }
 
 async function load() {
   const date     = document.getElementById('fDate').value;
   const driverId = document.getElementById('fDriver').value;
-  const status   = document.getElementById('fStatus').value;
+  const statusVal = document.getElementById('fStatus').value;
 
   let url = '/api/orders/list?';
-  if (date)     url += `&date=${date}`;
+  if (date) url += `&date=${date}`;
   if (driverId) url += `&driver_id=${driverId}`;
-  if (status)   url += `&status=${status}`;
+
+  if (statusVal === 'all') {
+    // sem filtro
+  } else if (statusVal) {
+    url += `&status=${statusVal}`;
+  } else {
+    url += '&status=encaminhado,whatsapp_enviado';
+  }
 
   const rows = await api(url).catch(() => []);
   renderSummary(rows);
@@ -116,14 +187,14 @@ async function load() {
 }
 
 function renderSummary(rows) {
-  const ativos = rows.filter(r => !['cancelado','entregue'].includes(r.status));
+  const pendentes = rows.filter(r => ['encaminhado','whatsapp_enviado','novo'].includes(r.status));
   const entregues = rows.filter(r => r.status === 'entregue');
   const totalVal = rows.reduce((s,r) => s + (r.total_value||0), 0);
   document.getElementById('summary-bar').innerHTML = `
-    <span class="chip">📦 <strong>${ativos.length}</strong> pendentes</span>
-    <span class="chip">✅ <strong>${entregues.length}</strong> entregues</span>
-    <span class="chip">💰 Total: <strong>R$ ${totalVal.toFixed(2)}</strong></span>
-    <span class="chip" style="margin-left:auto;color:#64748b">${rows.length} pedidos</span>
+    <span>📦 <strong>${pendentes.length}</strong> pendentes</span>
+    <span>✅ <strong>${entregues.length}</strong> entregues</span>
+    <span>💰 <strong>R$ ${totalVal.toFixed(2)}</strong></span>
+    <span style="margin-left:auto;color:#64748b">${rows.length} total</span>
   `;
 }
 
@@ -136,66 +207,259 @@ function render(rows) {
 
   el.innerHTML = rows.map(o => {
     const items = JSON.parse(o.items_json || '[]');
-    const itemsStr = items.map(i => `${i.qty}× ${i.name}`).join('  |  ') || '—';
+    const itemsStr = items.map(i => `${parseInt(i.qty)}× ${i.name}`).join(' · ') || '—';
     const hora = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
     const addr = `${o.address_line}${o.bairro ? ', ' + o.bairro : ''}, Campo Grande/MS`;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
     const phoneClean = (o.phone_digits||'').replace(/\D/g,'');
-
     const canDeliver = ['whatsapp_enviado','encaminhado'].includes(o.status);
+    const isEntregue = o.status === 'entregue';
+    const pgtoLabel = TIPO_LABELS[o.tipo_pagamento] || o.tipo_pagamento || '—';
+    const hasPhoto = photoStore[o.id];
 
     const badgeMap = {
-      novo: '<span class="badge badge-novo">🔴 NOVO</span>',
-      encaminhado: '<span class="badge badge-enc">🟡 ENCAMINHADO</span>',
-      whatsapp_enviado: '<span class="badge badge-wa">🟢 WHATS ENVIADO</span>',
-      entregue: '<span class="badge badge-entregue">🔵 ENTREGUE</span>',
-      cancelado: '<span class="badge badge-cancel">⚫ CANCELADO</span>',
+      novo:             '<span class="badge badge-novo">NOVO</span>',
+      encaminhado:      '<span class="badge badge-enc">ENCAMINHADO</span>',
+      whatsapp_enviado: '<span class="badge badge-wa">WHATS ENVIADO</span>',
+      entregue:         '<span class="badge badge-entregue">✅ ENTREGUE</span>',
+      cancelado:        '<span class="badge badge-cancel">CANCELADO</span>',
     };
 
     return `
-    <div class="card ${o.status}">
-      <div class="card-top">
-        <div>
-          <div class="card-id">#${o.id} &nbsp;<span class="hour-chip">${hora}</span>${o.driver_name_cache ? ` &nbsp;🚚 ${o.driver_name_cache}` : ''}</div>
+    <div class="card ${o.status}" id="card-${o.id}">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-id">#${o.id} <span class="hour-chip">${hora}</span>${o.driver_name_cache ? ' 🚚 ' + o.driver_name_cache : ''}</div>
           <div class="card-client">${o.customer_name}</div>
         </div>
         ${badgeMap[o.status] || ''}
       </div>
 
-      <div class="card-addr">
-        📍 <strong>${o.address_line}</strong>${o.bairro ? ` — ${o.bairro}` : ''}
-        ${o.complemento ? `<br>🏢 ${o.complemento}` : ''}
-        ${o.referencia ? `<br><span class="ref">📌 Ref: ${o.referencia}</span>` : ''}
+      <div class="card-body">
+        <div class="card-addr">
+          📍 <strong>${o.address_line}</strong>${o.bairro ? ' — ' + o.bairro : ''}
+          ${o.complemento ? '<br>🏢 ' + o.complemento : ''}
+          ${o.referencia ? '<br><span class="ref">📌 ' + o.referencia + '</span>' : ''}
+        </div>
+        ${o.notes ? '<div class="notes-box">📝 ' + o.notes + '</div>' : ''}
+        <div class="card-items">📦 ${itemsStr}</div>
+        <div class="card-total-row">
+          <span class="pgto-badge">${pgtoLabel}</span>
+          <span class="card-total">R$ ${(o.total_value||0).toFixed(2)}</span>
+        </div>
+        <div class="card-quick">
+          <a class="btn-maps" href="${mapsUrl}" target="_blank">🗺️ Mapa</a>
+          ${phoneClean ? '<a class="btn-phone" href="tel:+55' + phoneClean + '">📞 Ligar</a>' : ''}
+        </div>
       </div>
 
-      ${o.notes ? `<div class="notes-box">📝 ${o.notes}</div>` : ''}
+      ${canDeliver ? renderDeliverySection(o, hasPhoto) : ''}
 
-      <div class="card-items">📦 ${itemsStr}</div>
-
-      <div class="card-btns">
-        <a class="btn-maps" href="${mapsUrl}" target="_blank">🗺️ Mapa</a>
-        ${phoneClean ? `<a class="btn-phone" href="tel:+55${phoneClean}">📞 Ligar</a>` : ''}
-        ${o.total_value ? `<span class="card-total">💰 R$ ${o.total_value.toFixed(2)}</span>` : ''}
-        ${canDeliver ? `<button class="btn-deliver" onclick="deliver(${o.id})">✅ Entregue!</button>` : ''}
-      </div>
+      ${isEntregue ? renderEntregueInfo(o, pgtoLabel) : ''}
     </div>`;
   }).join('');
 }
 
-async function deliver(id) {
-  if (!confirm(`Confirma entrega do pedido #${id}?`)) return;
+function renderDeliverySection(o, hasPhoto) {
+  return `
+  <div class="delivery-section" id="delivery-${o.id}">
+    <h3>📋 Finalizar Entrega</h3>
+
+    <div class="delivery-row">
+      <label>💰 Pgto:</label>
+      <select id="pgto-${o.id}">
+        ${Object.entries(TIPO_LABELS).map(([k,v]) => '<option value="' + k + '"' + (k===o.tipo_pagamento?' selected':'') + '>' + v + '</option>').join('')}
+      </select>
+    </div>
+
+    <div class="delivery-row">
+      <label>📝 Obs:</label>
+      <textarea id="obs-${o.id}" placeholder="Observação da entrega (opcional)"></textarea>
+    </div>
+
+    <div class="photo-area">
+      <input type="file" accept="image/*" capture="environment" class="photo-input" id="photo-input-${o.id}" onchange="onPhotoSelected(${o.id}, this)">
+      <button class="photo-btn ${hasPhoto ? 'has-photo' : ''}" id="photo-btn-${o.id}" onclick="document.getElementById('photo-input-${o.id}').click()">
+        <span class="icon">${hasPhoto ? '✅' : '📸'}</span>
+        ${hasPhoto ? 'Foto capturada ✓ (toque para trocar)' : 'Tirar foto do comprovante (obrigatório)'}
+      </button>
+      <div class="photo-preview" id="photo-preview-${o.id}" ${hasPhoto ? 'style="display:block"' : ''}>
+        ${hasPhoto ? '<img src="' + hasPhoto.dataUrl + '"><button class="remove" onclick="removePhoto(' + o.id + ')">✕</button><div class="photo-size">' + hasPhoto.sizeTxt + '</div>' : ''}
+      </div>
+    </div>
+
+    <button class="btn-deliver ${hasPhoto ? 'ready' : 'disabled'}" id="deliver-btn-${o.id}" onclick="deliver(${o.id})" ${!hasPhoto ? 'disabled' : ''}>
+      ✅ Marcar como Entregue
+    </button>
+  </div>`;
+}
+
+function renderEntregueInfo(o, pgtoLabel) {
+  return `
+  <div class="entregue-info">
+    ✅ Entregue ${o.delivered_at ? 'às ' + formatTime(o.delivered_at) : ''}
+    ${o.foto_comprovante ? ' · <a href="' + API_BASE + '/api/comprovante/' + o.id + '" target="_blank">📷 Ver foto</a>' : ''}
+    ${o.observacao_entregador ? '<br>📝 ' + o.observacao_entregador : ''}
+    ${o.tipo_pagamento_original && o.tipo_pagamento_original !== o.tipo_pagamento ? '<br>⚠️ Pgto alterado: ' + (TIPO_LABELS[o.tipo_pagamento_original]||o.tipo_pagamento_original) + ' → ' + pgtoLabel : ''}
+  </div>`;
+}
+
+function formatTime(val) {
+  if (!val) return '';
+  const d = typeof val === 'number' ? new Date(val * 1000) : new Date(val);
+  return d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Campo_Grande'});
+}
+
+// ── Photo capture + compression ──
+
+async function onPhotoSelected(orderId, input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  toast('⏳ Processando foto...', 'info');
+
   try {
-    await api(`/api/order/${id}/mark-delivered`, { method: 'POST' });
-    toast('✅ Entregue!');
+    const compressed = await compressImage(file, 1200, 0.7);
+    const dataUrl = URL.createObjectURL(compressed.blob);
+    const sizeTxt = (compressed.blob.size / 1024).toFixed(0) + ' KB';
+
+    photoStore[orderId] = { blob: compressed.blob, dataUrl, sizeTxt };
+
+    const btn = document.getElementById('photo-btn-' + orderId);
+    btn.className = 'photo-btn has-photo';
+    btn.innerHTML = '<span class="icon">✅</span>Foto capturada ✓ (toque para trocar)';
+
+    const preview = document.getElementById('photo-preview-' + orderId);
+    preview.style.display = 'block';
+    preview.innerHTML = '<img src="' + dataUrl + '"><button class="remove" onclick="removePhoto(' + orderId + ')">✕</button><div class="photo-size">' + sizeTxt + ' (' + compressed.width + '×' + compressed.height + 'px)</div>';
+
+    const deliverBtn = document.getElementById('deliver-btn-' + orderId);
+    deliverBtn.className = 'btn-deliver ready';
+    deliverBtn.disabled = false;
+
+    toast('📸 Foto pronta — ' + sizeTxt);
+  } catch(e) {
+    toast('Erro ao processar foto: ' + e.message, 'error');
+  }
+
+  input.value = '';
+}
+
+function compressImage(file, maxWidth, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Erro ao carregar imagem'));
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = Math.round(h * maxWidth / w);
+          w = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { reject(new Error('Falha na compressão')); return; }
+            resolve({ blob, width: w, height: h });
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function removePhoto(orderId) {
+  if (photoStore[orderId] && photoStore[orderId].dataUrl) {
+    URL.revokeObjectURL(photoStore[orderId].dataUrl);
+  }
+  delete photoStore[orderId];
+
+  const btn = document.getElementById('photo-btn-' + orderId);
+  if (btn) {
+    btn.className = 'photo-btn';
+    btn.innerHTML = '<span class="icon">📸</span>Tirar foto do comprovante (obrigatório)';
+  }
+  const preview = document.getElementById('photo-preview-' + orderId);
+  if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  const deliverBtn = document.getElementById('deliver-btn-' + orderId);
+  if (deliverBtn) { deliverBtn.className = 'btn-deliver disabled'; deliverBtn.disabled = true; }
+}
+
+// ── Deliver with photo ──
+
+async function deliver(orderId) {
+  const photo = photoStore[orderId];
+  if (!photo) {
+    toast('📸 Tire a foto do comprovante antes!', 'error');
+    return;
+  }
+
+  const tipoPg = document.getElementById('pgto-' + orderId);
+  const obs = document.getElementById('obs-' + orderId);
+
+  const btn = document.getElementById('deliver-btn-' + orderId);
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Enviando...';
+
+  try {
+    const formData = new FormData();
+    formData.append('photo', photo.blob, 'comprovante_' + orderId + '.jpg');
+    if (tipoPg && tipoPg.value) formData.append('tipo_pagamento', tipoPg.value);
+    if (obs && obs.value.trim()) formData.append('observacao_entregador', obs.value.trim());
+
+    const token = getSessionToken();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    const resp = await fetch(API_BASE + '/api/order/' + orderId + '/mark-delivered', {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(errData.error || 'Erro ' + resp.status);
+    }
+
+    const result = await resp.json();
+    removePhoto(orderId);
+
+    let msg = '✅ Pedido #' + orderId + ' entregue!';
+    if (result.bling_result && result.bling_result.action === 'created') {
+      msg += ' Venda Bling nº ' + result.bling_result.bling_num + ' criada.';
+    } else if (result.bling_result && result.bling_result.action === 'create_error') {
+      msg += ' ⚠️ Erro Bling: ' + result.bling_result.error;
+    }
+    toast(msg, result.bling_result && result.bling_result.action === 'create_error' ? 'warning' : 'success');
+
     load();
-  } catch(e) { toast(e.message, 'error'); }
+  } catch (e) {
+    toast('❌ ' + e.message, 'error');
+    btn.disabled = false;
+    btn.className = 'btn-deliver ready';
+    btn.innerHTML = '✅ Marcar como Entregue';
+  }
 }
 
 function toggleAuto() {
   clearInterval(autoTimer);
   if (document.getElementById('autoRefresh').checked) {
     autoTimer = setInterval(load, 30000);
-    toast('Auto-refresh ativado (30s)');
+    toast('Auto-refresh 30s ativado');
   }
 }
 

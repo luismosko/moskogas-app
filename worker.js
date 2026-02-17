@@ -1,6 +1,8 @@
-// v2.14.0
+// v2.16.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.16.0: Reabrir/cancelar pedido com motivo + auditoria status + alerta WhatsApp admin
+// v2.15.0: Entrega com foto obrigatória (R2) + trocar pgto + observação
 // v2.14.0: Troca tipo pagamento → auto-cria/deleta venda Bling + confirmação
 // v2.13.1: Audit logs com JOIN orders (nome cliente, valor, tipo, bling_num)
 // v2.13.0: Sistema de Auditoria Bling — integration_audit table,
@@ -394,6 +396,27 @@ async function ensureAuditTable(env) {
     data_json TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   )`).run().catch(() => {});
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS order_status_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    status_anterior TEXT NOT NULL,
+    status_novo TEXT NOT NULL,
+    motivo TEXT,
+    usuario_id INTEGER,
+    usuario_nome TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`).run().catch(() => {});
+  // Migração: coluna cancel_motivo em orders
+  await env.DB.prepare(`ALTER TABLE orders ADD COLUMN cancel_motivo TEXT`).run().catch(() => {});
+}
+
+async function logStatusChange(env, orderId, statusAnterior, statusNovo, motivo, user) {
+  try {
+    await ensureAuditTable(env);
+    await env.DB.prepare(
+      'INSERT INTO order_status_log (order_id, status_anterior, status_novo, motivo, usuario_id, usuario_nome) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(orderId, statusAnterior, statusNovo, motivo || null, user?.id || null, user?.nome || 'sistema').run();
+  } catch (e) { console.error('[logStatusChange]', e.message); }
 }
 
 async function logBlingAudit(env, orderId, action, status, opts = {}) {
@@ -1256,7 +1279,7 @@ export default {
       const { phone, name, address_line, bairro, complemento, referencia, items, total_value, notes, emitir_nfce, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento } = body;
       const digits = (phone || '').replace(/\D/g, '');
 
-      const cols = ['forma_pagamento_id INTEGER','forma_pagamento_key TEXT','emitir_nfce INTEGER','nfce_gerada INTEGER','nfce_numero TEXT','nfce_chave TEXT','bling_pedido_id INTEGER','bling_pedido_num INTEGER','pago INTEGER DEFAULT 0','tipo_pagamento TEXT','vendedor_id INTEGER','vendedor_nome TEXT'];
+      const cols = ['forma_pagamento_id INTEGER','forma_pagamento_key TEXT','emitir_nfce INTEGER','nfce_gerada INTEGER','nfce_numero TEXT','nfce_chave TEXT','bling_pedido_id INTEGER','bling_pedido_num INTEGER','pago INTEGER DEFAULT 0','tipo_pagamento TEXT','vendedor_id INTEGER','vendedor_nome TEXT','foto_comprovante TEXT','observacao_entregador TEXT','tipo_pagamento_original TEXT','delivered_at TEXT'];
       for (const col of cols) { await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col}`).run().catch(() => {}); }
 
       let vendedorId = body.vendedor_id || null;
@@ -1438,11 +1461,22 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/orders/list') {
-      const status = url.searchParams.get('status'); const driverId = url.searchParams.get('driver_id'); const q = url.searchParams.get('q');
-      let sql = `SELECT o.*, d.nome AS driver_name_db, (SELECT status FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) AS payment_status, (SELECT method FROM payments WHERE order_id = o.id ORDER BY id DESC LIMIT 1) AS payment_method FROM orders o LEFT JOIN app_users d ON o.driver_id = d.id WHERE 1=1`;
+      const status = url.searchParams.get('status'); const driverId = url.searchParams.get('driver_id'); const q = url.searchParams.get('q'); const date = url.searchParams.get('date');
+      let sql = `SELECT o.*, d.nome AS driver_name_db FROM orders o LEFT JOIN app_users d ON o.driver_id = d.id WHERE 1=1`;
       const params = [];
-      if (status) { sql += ` AND o.status = ?`; params.push(status); }
+      if (status) {
+        const statusList = status.split(',').map(s => s.trim()).filter(Boolean);
+        if (statusList.length === 1) { sql += ` AND o.status = ?`; params.push(statusList[0]); }
+        else if (statusList.length > 1) { sql += ` AND o.status IN (${statusList.map(() => '?').join(',')})`; params.push(...statusList); }
+      }
       if (driverId) { sql += ` AND o.driver_id = ?`; params.push(driverId); }
+      if (date) {
+        // date=YYYY-MM-DD → filter by created_at (unix epoch) within that day in BRT (UTC-4)
+        const dayStart = Math.floor(new Date(date + 'T00:00:00-04:00').getTime() / 1000);
+        const dayEnd = dayStart + 86400;
+        sql += ` AND o.created_at >= ? AND o.created_at < ?`;
+        params.push(dayStart, dayEnd);
+      }
       if (q) { sql += ` AND (o.customer_name LIKE ? OR o.phone_digits LIKE ? OR o.address_line LIKE ?)`; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
       sql += ' ORDER BY o.created_at DESC LIMIT 200';
       const rows = await env.DB.prepare(sql).bind(...params).all();
@@ -1457,6 +1491,8 @@ export default {
       if (!driver) return err('driver not found');
       await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.nome, driver.telefone || '', id).run();
       await logEvent(env, id, 'driver_selected', { driver_id, driver_name: driver.nome });
+      const prevOrder = await env.DB.prepare('SELECT status FROM orders WHERE id=?').bind(id).first();
+      await logStatusChange(env, id, 'novo', 'encaminhado', `Entregador: ${driver.nome}`, user);
       return json({ ok: true, status: 'encaminhado' });
     }
 
@@ -1494,18 +1530,286 @@ export default {
 
     const deliveredMatch = path.match(/^\/api\/order\/(\d+)\/mark-delivered$/);
     if (method === 'POST' && deliveredMatch) {
-      const id = deliveredMatch[1];
-      await env.DB.prepare(`UPDATE orders SET status='entregue', delivered_at=unixepoch(), updated_at=unixepoch() WHERE id=?`).bind(id).run();
-      await logEvent(env, id, 'delivered');
-      return json({ ok: true, status: 'entregue' });
+      const id = parseInt(deliveredMatch[1]);
+      const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
+      if (!order) return err('Pedido não encontrado', 404);
+
+      let photoKey = null;
+      let tipoPagamento = null;
+      let obsEntregador = null;
+
+      const ct = request.headers.get('Content-Type') || '';
+
+      if (ct.includes('multipart/form-data')) {
+        // ── Multipart: foto + dados ──
+        const formData = await request.formData();
+        const photoFile = formData.get('photo');
+        tipoPagamento = formData.get('tipo_pagamento') || null;
+        obsEntregador = formData.get('observacao_entregador') || null;
+
+        if (!photoFile || !(photoFile instanceof File) || photoFile.size < 100) {
+          return err('Foto do comprovante é obrigatória', 400);
+        }
+
+        // Validar tipo
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(photoFile.type)) {
+          return err('Tipo de arquivo inválido. Use JPG, PNG ou WebP.', 400);
+        }
+
+        // Limite 5MB (após compressão no cliente deve ser ~200-400KB)
+        if (photoFile.size > 5 * 1024 * 1024) {
+          return err('Foto muito grande (máx 5MB)', 400);
+        }
+
+        // Gerar key para R2
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const ts = Date.now();
+        const ext = photoFile.type === 'image/png' ? 'png' : photoFile.type === 'image/webp' ? 'webp' : 'jpg';
+        photoKey = `comprovantes/${dateStr}/pedido_${id}_${ts}.${ext}`;
+
+        // Upload para R2
+        const arrayBuffer = await photoFile.arrayBuffer();
+        await env.BUCKET.put(photoKey, arrayBuffer, {
+          httpMetadata: { contentType: photoFile.type },
+          customMetadata: {
+            order_id: String(id),
+            uploaded_by: user?.nome || 'entregador',
+            original_name: photoFile.name || 'comprovante',
+          },
+        });
+
+        console.log(`[R2] Foto salva: ${photoKey} (${(photoFile.size/1024).toFixed(1)}KB)`);
+      } else if (ct.includes('application/json')) {
+        // Fallback JSON (sem foto — só admin pode)
+        const body = await request.json();
+        tipoPagamento = body.tipo_pagamento || null;
+        obsEntregador = body.observacao_entregador || null;
+        // Admin pode marcar sem foto
+        if (user?.role !== 'admin') {
+          return err('Foto do comprovante é obrigatória para entregadores', 400);
+        }
+      } else {
+        return err('Content-Type inválido', 400);
+      }
+
+      // ── Montar UPDATE SQL ──
+      let sql = `UPDATE orders SET status='entregue', delivered_at=unixepoch(), updated_at=unixepoch()`;
+      const params = [];
+
+      if (photoKey) {
+        sql += `, foto_comprovante=?`;
+        params.push(photoKey);
+      }
+
+      if (obsEntregador) {
+        sql += `, observacao_entregador=?`;
+        params.push(obsEntregador);
+      }
+
+      // Mudou tipo pagamento?
+      const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
+      let blingResult = null;
+
+      if (tipoPagamento && tipoPagamento !== order.tipo_pagamento) {
+        // Salvar tipo original se primeira vez
+        if (!order.tipo_pagamento_original) {
+          sql += `, tipo_pagamento_original=?`;
+          params.push(order.tipo_pagamento);
+        }
+        sql += `, tipo_pagamento=?`;
+        params.push(tipoPagamento);
+
+        // Se mudou para tipo que cria Bling e não tinha
+        const newCriaBling = TIPOS_COM_BLING.includes(tipoPagamento);
+        const hasBling = !!order.bling_pedido_id;
+
+        if (newCriaBling && !hasBling) {
+          try {
+            const custData = order.phone_digits
+              ? await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
+              : null;
+            const vendedorRow = order.vendedor_id
+              ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(order.vendedor_id).first()
+              : null;
+
+            const blingData = await criarPedidoBling(env, id, {
+              name: order.customer_name,
+              items: JSON.parse(order.items_json || '[]'),
+              total_value: order.total_value,
+              tipo_pagamento: tipoPagamento,
+              bling_contact_id: custData?.bling_contact_id || null,
+              bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+              vendedor_nome: vendedorRow?.bling_vendedor_nome || order.vendedor_nome || ''
+            });
+            sql += `, bling_pedido_id=?, bling_pedido_num=?`;
+            params.push(blingData.bling_pedido_id, blingData.bling_pedido_num);
+            blingResult = { action: 'created', bling_num: blingData.bling_pedido_num };
+          } catch (e) {
+            console.error('[Deliver] Erro criar Bling:', e.message);
+            blingResult = { action: 'create_error', error: e.message };
+          }
+        }
+
+        // Marcar pago se tipo imediato
+        const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+        if (TIPOS_PAGO_IMEDIATO.includes(tipoPagamento)) {
+          sql += `, pago=1`;
+        }
+      }
+
+      sql += ` WHERE id=?`;
+      params.push(id);
+
+      await env.DB.prepare(sql).bind(...params).run();
+      await logEvent(env, id, 'delivered', {
+        foto: photoKey,
+        tipo_pagamento_changed: tipoPagamento !== order.tipo_pagamento ? tipoPagamento : null,
+        observacao: obsEntregador,
+      });
+
+      return json({ ok: true, status: 'entregue', foto_key: photoKey, bling_result: blingResult });
+    }
+
+    // ── Buscar comprovante foto do R2 ──
+    const comprovanteMatch = path.match(/^\/api\/comprovante\/(\d+)$/);
+    if (method === 'GET' && comprovanteMatch) {
+      const orderId = parseInt(comprovanteMatch[1]);
+      const order = await env.DB.prepare('SELECT foto_comprovante FROM orders WHERE id=?').bind(orderId).first();
+      if (!order || !order.foto_comprovante) return err('Comprovante não encontrado', 404);
+
+      const obj = await env.BUCKET.get(order.foto_comprovante);
+      if (!obj) return err('Arquivo não encontrado no R2', 404);
+
+      return new Response(obj.body, {
+        headers: {
+          'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
     }
 
     const cancelMatch = path.match(/^\/api\/order\/(\d+)\/cancel$/);
     if (method === 'POST' && cancelMatch) {
-      const id = cancelMatch[1];
-      await env.DB.prepare(`UPDATE orders SET status='cancelado', canceled_at=unixepoch(), updated_at=unixepoch() WHERE id=?`).bind(id).run();
-      await logEvent(env, id, 'canceled');
-      return json({ ok: true, status: 'cancelado' });
+      const id = parseInt(cancelMatch[1]);
+      const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
+      if (!order) return err('Pedido não encontrado', 404);
+
+      // Motivo obrigatório
+      let motivo = '';
+      try {
+        const body = await request.json();
+        motivo = (body.motivo || '').trim();
+      } catch (e) {}
+      if (!motivo) return err('Motivo é obrigatório para cancelar', 400);
+
+      const statusAnterior = order.status;
+      const foiEntregue = statusAnterior === 'entregue';
+
+      // Cancelar
+      await env.DB.prepare(
+        `UPDATE orders SET status='cancelado', canceled_at=unixepoch(), updated_at=unixepoch(), cancel_motivo=? WHERE id=?`
+      ).bind(motivo, id).run();
+
+      // Log de auditoria
+      await logStatusChange(env, id, statusAnterior, 'cancelado', motivo, user);
+      await logEvent(env, id, 'canceled', { motivo, status_anterior: statusAnterior, usuario: user?.nome });
+
+      // ── Se era entregue → alerta alto risco pro admin via WhatsApp ──
+      let whatsappResult = null;
+      if (foiEntregue) {
+        try {
+          // Buscar admins com telefone
+          await ensureAuthTables(env);
+          const admins = await env.DB.prepare(
+            "SELECT nome, telefone FROM app_users WHERE role='admin' AND ativo=1 AND telefone IS NOT NULL AND telefone != ''"
+          ).all();
+          const adminList = admins.results || [];
+
+          if (adminList.length > 0) {
+            const msg = `⚠️ *ALERTA: Cancelamento pós-entrega*\n\n` +
+              `📦 Pedido #${id}\n` +
+              `👤 Cliente: ${order.customer_name}\n` +
+              `💰 Valor: R$ ${(order.total_value || 0).toFixed(2)}\n` +
+              `📋 Motivo: ${motivo}\n` +
+              `👷 Cancelado por: ${user?.nome || 'desconhecido'}\n` +
+              `🕐 ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })}`;
+
+            for (const adm of adminList) {
+              const waResult = await sendWhatsApp(env, adm.telefone, msg);
+              if (!whatsappResult) whatsappResult = waResult;
+            }
+          }
+        } catch (e) { console.error('[cancelamento WhatsApp admin]', e.message); }
+      }
+
+      return json({
+        ok: true,
+        status: 'cancelado',
+        status_anterior: statusAnterior,
+        cancelamento_pos_entrega: foiEntregue,
+        admin_notificado: whatsappResult?.ok || false
+      });
+    }
+
+    // ── REABRIR / REVERTER STATUS ─────────────────────────────
+    const revertMatch = path.match(/^\/api\/order\/(\d+)\/revert-status$/);
+    if (method === 'POST' && revertMatch) {
+      const id = parseInt(revertMatch[1]);
+      const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
+      if (!order) return err('Pedido não encontrado', 404);
+
+      let body = {};
+      try { body = await request.json(); } catch (e) {}
+      const novoStatus = (body.novo_status || '').trim().toLowerCase();
+      const motivo = (body.motivo || '').trim();
+
+      if (!motivo) return err('Motivo é obrigatório para reverter status', 400);
+
+      const VALID_STATUSES = ['novo', 'encaminhado', 'whatsapp_enviado', 'entregue'];
+      if (!VALID_STATUSES.includes(novoStatus)) return err('Status inválido: ' + novoStatus, 400);
+
+      const statusAnterior = order.status;
+      if (statusAnterior === novoStatus) return err('Pedido já está com status: ' + novoStatus, 400);
+
+      // Somente admin pode reverter de cancelado
+      if (statusAnterior === 'cancelado' && user?.role !== 'admin') {
+        return err('Apenas admin pode reabrir pedido cancelado', 403);
+      }
+
+      // Somente admin pode desmarcar entregue
+      if (statusAnterior === 'entregue' && user?.role !== 'admin') {
+        return err('Apenas admin pode reverter pedido entregue', 403);
+      }
+
+      // Reverter status
+      let sql = `UPDATE orders SET status=?, updated_at=unixepoch()`;
+      const params = [novoStatus];
+
+      // Se voltando de entregue, limpar delivered_at
+      if (statusAnterior === 'entregue') {
+        sql += ', delivered_at=NULL';
+      }
+      // Se voltando de cancelado, limpar canceled_at e cancel_motivo
+      if (statusAnterior === 'cancelado') {
+        sql += ', canceled_at=NULL, cancel_motivo=NULL';
+      }
+
+      sql += ' WHERE id=?';
+      params.push(id);
+      await env.DB.prepare(sql).bind(...params).run();
+
+      // Log de auditoria
+      await logStatusChange(env, id, statusAnterior, novoStatus, motivo, user);
+      await logEvent(env, id, 'status_reverted', { de: statusAnterior, para: novoStatus, motivo, usuario: user?.nome });
+
+      return json({
+        ok: true,
+        status_anterior: statusAnterior,
+        status_novo: novoStatus,
+        motivo
+      });
     }
 
     const orderGetMatch = path.match(/^\/api\/order\/(\d+)$/);
@@ -1859,6 +2163,19 @@ export default {
       const logs = await env.DB.prepare(
         'SELECT * FROM integration_audit WHERE order_id=? ORDER BY id DESC LIMIT 50'
       ).bind(parseInt(orderId)).all().then(r => r.results || []);
+      return json(logs);
+    }
+
+    // ── Histórico de status de um pedido ──────────────────────
+    const statusLogMatch = path.match(/^\/api\/order\/(\d+)\/status-log$/);
+    if (method === 'GET' && statusLogMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
+      const orderId = parseInt(statusLogMatch[1]);
+      const logs = await env.DB.prepare(
+        'SELECT * FROM order_status_log WHERE order_id=? ORDER BY id DESC LIMIT 50'
+      ).bind(orderId).all().then(r => r.results || []);
       return json(logs);
     }
 
