@@ -198,7 +198,10 @@ function checkBlingReauth(err) {
 }
 
 checkBlingStatus(true);
-setInterval(() => checkBlingStatus(false), 180000);
+setInterval(() => checkBlingStatus(false), 60000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkBlingStatus(true);
+});
 
 let drivers = [];
 let currentOrder = null;
