@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.6.2 — MoskoGás</title>
+<title>Gestão v2.7.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -74,7 +74,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.6.2</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.7.0</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -141,7 +141,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v2.6.2
+// v2.7.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -365,7 +365,7 @@ function renderTable(rows) {
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
       <td style="font-weight:700;color:#1e293b;white-space:nowrap">${total}</td>
       <td style="white-space:nowrap;font-size:12px">${pgtoLabel} ${pagoFlag}</td>
-      <td>${statusBadge(o.status)} ${o.bling_pedido_id ? '<span title="Lançado no Bling #'+o.bling_pedido_id+'" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;font-weight:800;vertical-align:middle;margin-left:3px;cursor:help;">B</span>' : '<span title="Sem lançamento no Bling" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#e2e8f0;color:#94a3b8;font-size:10px;font-weight:800;vertical-align:middle;margin-left:3px;cursor:help;">B</span>'}</td>
+      <td>${statusBadge(o.status)} ${o.bling_pedido_id ? '<span title="✅ Venda Bling nº '+(o.bling_pedido_num||o.bling_pedido_id)+'" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;font-weight:800;vertical-align:middle;margin-left:3px;cursor:help;">B</span>' : '<span title="⚠️ Não lançado no Bling" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#e2e8f0;color:#94a3b8;font-size:10px;font-weight:800;vertical-align:middle;margin-left:3px;cursor:help;">B</span>'}</td>
       <td>
         <select class="driver-sel" onchange="selectDriver(${o.id}, this.value)">
           ${driverOpts}
@@ -680,7 +680,7 @@ function addEditProduct(i) {
   renderEditItems();
 }
 
-async function saveEditOrder() {
+async function saveEditOrder(confirmBling = false) {
   const name  = document.getElementById('edit-name').value.trim();
   const _editRua = document.getElementById('edit-addr').value.trim();
   const _editNum = document.getElementById('edit-num') ? document.getElementById('edit-num').value.trim() : '';
@@ -705,10 +705,57 @@ async function saveEditOrder() {
     tipo_pagamento: document.getElementById('edit-tipo-pgto').value,
     driver_id: editDriverVal ? parseInt(editDriverVal) : undefined,
   };
+  if (confirmBling) body.confirm_bling_change = true;
 
   try {
-    await api(`/api/order/${editOrderId}/update`, { method: 'POST', body: JSON.stringify(body) });
-    toast('✅ Pedido atualizado!');
+    const resp = await api(`/api/order/${editOrderId}/update`, { method: 'POST', body: JSON.stringify(body) });
+    
+    // Backend pediu confirmação de impacto no Bling
+    if (resp.requires_confirmation) {
+      const actionEmoji = resp.bling_action === 'create' ? '📤' : '🗑️';
+      const actionColor = resp.bling_action === 'create' ? '#16a34a' : '#dc2626';
+      const actionLabel = resp.bling_action === 'create' ? 'CRIAR VENDA' : 'EXCLUIR VENDA';
+      
+      // Mostrar modal de confirmação Bling
+      const modalHtml = `
+        <div class="modal-overlay" id="modal-bling-confirm" style="display:flex;z-index:9999;">
+          <div class="modal-box" style="max-width:460px;text-align:center;padding:30px;">
+            <div style="font-size:48px;margin-bottom:10px;">${actionEmoji}</div>
+            <h2 style="color:${actionColor};margin:0 0 15px;">${actionLabel} no Bling</h2>
+            <p style="font-size:14px;color:#475569;line-height:1.5;">${resp.message}</p>
+            <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;">
+              <button onclick="document.getElementById('modal-bling-confirm').remove();" 
+                style="padding:10px 24px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">
+                ✖ Cancelar
+              </button>
+              <button onclick="document.getElementById('modal-bling-confirm').remove(); saveEditOrder(true);"
+                style="padding:10px 24px;border:none;border-radius:8px;background:${actionColor};color:#fff;cursor:pointer;font-size:14px;font-weight:700;">
+                ✅ Sim, ${resp.bling_action === 'create' ? 'Criar' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>`;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      return;
+    }
+
+    // Sucesso - mostrar resultado Bling se houver
+    if (resp.bling_result) {
+      const br = resp.bling_result;
+      if (br.action === 'created') {
+        toast(`✅ Pedido atualizado + Venda Bling nº ${br.bling_pedido_num || br.bling_pedido_id} criada!`, 'success');
+      } else if (br.action === 'deleted') {
+        toast(`✅ Pedido atualizado + Venda Bling excluída`, 'success');
+      } else if (br.action === 'create_error') {
+        toast(`⚠️ Pedido salvo, mas ERRO ao criar venda Bling: ${br.error}`, 'error');
+      } else if (br.action === 'delete_error') {
+        toast(`⚠️ Pedido salvo, mas ERRO ao excluir venda Bling: ${br.error}. Exclua manualmente no painel Bling.`, 'error');
+      } else {
+        toast('✅ Pedido atualizado!');
+      }
+    } else {
+      toast('✅ Pedido atualizado!');
+    }
     closeEditModal();
     load();
   } catch(e) { toast(e.message, 'error'); }

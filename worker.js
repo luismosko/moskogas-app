@@ -1,6 +1,7 @@
-// v2.13.1
+// v2.14.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.14.0: Troca tipo pagamento → auto-cria/deleta venda Bling + confirmação
 // v2.13.1: Audit logs com JOIN orders (nome cliente, valor, tipo, bling_num)
 // v2.13.0: Sistema de Auditoria Bling — integration_audit table,
 //          logBlingAudit em toda operação Bling, observação enriquecida,
@@ -305,6 +306,31 @@ async function criarPedidoBling(env, orderId, orderData) {
 }
 
 // ── [REMOVIDO v2.12.0] criarPedidoEGerarNFCe — NFCe não existe na API Bling v3 ──
+
+// ── Deletar venda no Bling ──────────────────────────────────────
+async function deletarVendaBling(env, orderId, blingPedidoId) {
+  if (!blingPedidoId) return { ok: false, reason: 'no_bling_id' };
+  
+  const resp = await blingFetch(`/pedidos/vendas/${blingPedidoId}`, {
+    method: 'DELETE',
+  }, env);
+
+  if (resp.ok || resp.status === 204) {
+    await logBlingAudit(env, orderId, 'deletar_venda', 'success', {
+      bling_pedido_id: String(blingPedidoId),
+      response_data: { status: resp.status }
+    });
+    return { ok: true };
+  }
+
+  const errText = await resp.text().catch(() => '');
+  console.error('[Bling] DELETE venda erro:', resp.status, errText);
+  await logBlingAudit(env, orderId, 'deletar_venda', 'error', {
+    bling_pedido_id: String(blingPedidoId),
+    error_message: `HTTP ${resp.status}: ${errText.substring(0, 300)}`
+  });
+  return { ok: false, status: resp.status, error: errText.substring(0, 300) };
+}
 
 // ── IzChat WhatsApp ───────────────────────────────────────────
 
@@ -1306,8 +1332,47 @@ export default {
     if (method === 'POST' && /^\/api\/order\/\d+\/update$/.test(path)) {
       const orderId = parseInt(path.split('/')[3]);
       const body = await request.json();
-      const { customer_name, phone_digits, address_line, bairro, complemento, referencia, items, total_value, notes, tipo_pagamento, forma_pagamento_key, driver_id } = body;
-      let sql = `UPDATE orders SET customer_name=?, phone_digits=?, address_line=?, bairro=?, complemento=?, referencia=?, items_json=?, total_value=?, notes=?, updated_at=unixepoch()`;
+      const { customer_name, phone_digits, address_line, bairro, complemento, referencia, items, total_value, notes, tipo_pagamento, forma_pagamento_key, driver_id, confirm_bling_change } = body;
+
+      // Buscar pedido atual para detectar mudança de tipo_pagamento
+      const currentOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      if (!currentOrder) return err('Pedido não encontrado', 404);
+
+      const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+
+      const oldTipo = currentOrder.tipo_pagamento || '';
+      const newTipo = tipo_pagamento !== undefined ? tipo_pagamento : oldTipo;
+      const tipoChanged = tipo_pagamento !== undefined && tipo_pagamento !== oldTipo;
+
+      const oldCriaBling = TIPOS_COM_BLING.includes(oldTipo);
+      const newCriaBling = TIPOS_COM_BLING.includes(newTipo);
+      const hasBling = !!currentOrder.bling_pedido_id;
+
+      // ── Detectar impacto no Bling e exigir confirmação ──
+      let blingAction = 'none'; // none, create, delete
+      if (tipoChanged) {
+        if (!hasBling && newCriaBling) {
+          blingAction = 'create'; // Mensal→PIX: criar venda no Bling
+        } else if (hasBling && !newCriaBling) {
+          blingAction = 'delete'; // PIX→Mensal: deletar venda no Bling
+        }
+      }
+
+      // Se vai impactar Bling, exigir confirmação explícita do frontend
+      if (blingAction !== 'none' && !confirm_bling_change) {
+        return json({
+          ok: false,
+          requires_confirmation: true,
+          bling_action: blingAction,
+          message: blingAction === 'create'
+            ? `Trocar para "${newTipo}" vai CRIAR uma venda no Bling. Confirma?`
+            : `Trocar para "${newTipo}" vai EXCLUIR a venda nº ${currentOrder.bling_pedido_num || currentOrder.bling_pedido_id} do Bling. Confirma?`
+        });
+      }
+
+      // ── Montar UPDATE SQL ──
+      let sql = `UPDATE orders SET customer_name=?, phone_digits=?, address_line=?, bairro=?, complemento=?, referencia=?, items_json=?, total_value=?, notes=?, updated_at=datetime('now')`;
       const params = [customer_name, phone_digits||'', address_line||'', bairro||'', complemento||'', referencia||'', JSON.stringify(items||[]), total_value||0, notes||''];
       if (tipo_pagamento !== undefined) { sql += `, tipo_pagamento=?`; params.push(tipo_pagamento); }
       if (forma_pagamento_key !== undefined) { sql += `, forma_pagamento_key=?`; params.push(forma_pagamento_key); }
@@ -1318,10 +1383,58 @@ export default {
           params.push(parseInt(driver_id), driver.nome, driver.telefone || '');
         }
       }
+
+      // ── Executar ação Bling ──
+      let blingResult = null;
+      
+      if (blingAction === 'create') {
+        // Buscar dados do cliente para Bling
+        const custData = phone_digits
+          ? await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(phone_digits).first()
+          : null;
+        
+        // Buscar vendedor
+        const vendedorRow = currentOrder.vendedor_id
+          ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(currentOrder.vendedor_id).first()
+          : null;
+
+        try {
+          const blingData = await criarPedidoBling(env, orderId, {
+            name: customer_name || currentOrder.customer_name,
+            items: items || JSON.parse(currentOrder.items_json || '[]'),
+            total_value: total_value || currentOrder.total_value,
+            forma_pagamento_key, tipo_pagamento: newTipo,
+            bling_contact_id: custData?.bling_contact_id || null,
+            bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+            vendedor_nome: vendedorRow?.bling_vendedor_nome || currentOrder.vendedor_nome || ''
+          });
+          sql += `, bling_pedido_id=?, bling_pedido_num=?`;
+          params.push(blingData.bling_pedido_id, blingData.bling_pedido_num);
+          // Se tipo é pago imediato, marcar como pago
+          if (TIPOS_PAGO_IMEDIATO.includes(newTipo)) {
+            sql += `, pago=1`;
+          }
+          blingResult = { action: 'created', bling_pedido_id: blingData.bling_pedido_id, bling_pedido_num: blingData.bling_pedido_num };
+        } catch (e) {
+          console.error('[Update] Erro ao criar venda Bling:', e.message);
+          blingResult = { action: 'create_error', error: e.message };
+        }
+      } else if (blingAction === 'delete') {
+        const delResult = await deletarVendaBling(env, orderId, currentOrder.bling_pedido_id);
+        if (delResult.ok) {
+          sql += `, bling_pedido_id=NULL, bling_pedido_num=NULL, pago=0`;
+          blingResult = { action: 'deleted', old_bling_id: currentOrder.bling_pedido_id };
+        } else {
+          // Falhou ao deletar — atualiza local mesmo assim mas avisa
+          sql += `, pago=0`;
+          blingResult = { action: 'delete_error', error: delResult.error || `HTTP ${delResult.status}`, old_bling_id: currentOrder.bling_pedido_id };
+        }
+      }
+
       sql += ` WHERE id=?`; params.push(orderId);
       await env.DB.prepare(sql).bind(...params).run();
-      await logEvent(env, orderId, 'edited', { customer_name, address_line, tipo_pagamento, driver_id });
-      return json({ ok: true });
+      await logEvent(env, orderId, 'edited', { customer_name, address_line, tipo_pagamento, driver_id, bling_action: blingAction });
+      return json({ ok: true, bling_result: blingResult });
     }
 
     if (method === 'GET' && path === '/api/orders/list') {
