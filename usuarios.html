@@ -126,7 +126,8 @@ async function loadVendedores() {
     const sel = document.getElementById('m-vendedor');
     sel.innerHTML = '<option value="">— Sem vínculo —</option>';
     for (const v of vendedoresBling) {
-      sel.innerHTML += `<option value="${v.id}">${v.name} (ID: ${v.id})</option>`;
+      const label = v.name || ('Vendedor #' + v.id);
+      sel.innerHTML += `<option value="${v.id}" data-nome="${label}">${label}</option>`;
     }
   } catch(e) {
     console.warn('Erro ao carregar vendedores Bling:', e.message);
@@ -216,7 +217,8 @@ async function saveUser() {
     const role = document.getElementById('m-role').value;
     const vendedorSel = document.getElementById('m-vendedor');
     const bling_vendedor_id = vendedorSel.value ? parseInt(vendedorSel.value) : null;
-    const bling_vendedor_nome = vendedorSel.value ? vendedorSel.options[vendedorSel.selectedIndex].text.split(' (ID')[0] : null;
+    const selectedOpt = vendedorSel.options[vendedorSel.selectedIndex];
+    const bling_vendedor_nome = vendedorSel.value ? (selectedOpt.dataset.nome || selectedOpt.textContent.trim()) : null;
     const telefone = document.getElementById('m-telefone').value.trim();
     const ativo = parseInt(document.getElementById('m-ativo').value);
 
