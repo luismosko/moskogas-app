@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.5.0</title>
+<title>Novo Pedido — MoskoGás v2.6.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -45,7 +45,7 @@
 <div id="nav-placeholder"></div>
 <div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.6 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.5.0</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.6.0</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -53,6 +53,7 @@
       <label style="margin:0">🔍 Buscar Cliente</label>
       <div style="display:flex;gap:6px">
         <button onclick="setConsumidorFinal()" style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:6px;padding:3px 10px;font-size:11px;color:#0284c7;cursor:pointer;font-weight:600" title="Pedido sem cadastro — Consumidor Final Bling">👤 Consumidor Final</button>
+        <button onclick="openCadastroModal()" style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:3px 10px;font-size:11px;color:#16a34a;cursor:pointer;font-weight:600" title="Cadastrar novo cliente no Bling (PF/PJ)">➕ Cadastrar Cliente</button>
         <button onclick="syncBling(this)" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px;color:#94a3b8;cursor:pointer" title="Sincronizar contatos do Bling para busca por endereço">🔄 Sync Bling</button>
       </div>
     </div>
@@ -909,7 +910,7 @@ async function saveOrder() {
         notes:            document.getElementById('notes').value,
         tipo_pagamento:   tipoPgto,
         forma_pagamento_key: document.getElementById('forma_pagamento_key').value,
-        bling_contact_id: isConsumidorFinal ? CONSUMIDOR_FINAL_BLING_ID : null,
+        bling_contact_id: isConsumidorFinal ? CONSUMIDOR_FINAL_BLING_ID : (window._lastBlingContactId || null),
       }),
     });
 
@@ -1045,6 +1046,273 @@ renderItems();
 
   </div>
 </div>
+
+<!-- ── MODAL CADASTRO CLIENTE (PF/PJ) ───────────────────────── -->
+<div id="cadastro-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;overflow-y:auto">
+  <div style="background:#fff;max-width:560px;margin:30px auto;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div style="padding:16px 20px;border-bottom:2px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0;font-size:17px;color:#1e293b">👤 Cadastrar Cliente no Bling</h2>
+      <button onclick="closeCadastroModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8">✕</button>
+    </div>
+
+    <!-- Tabs PF / PJ -->
+    <div style="display:flex;border-bottom:2px solid #e2e8f0">
+      <button id="tab-pf" onclick="switchCadTab('pf')" style="flex:1;padding:12px;font-size:14px;font-weight:700;border:none;cursor:pointer;background:#f97316;color:#fff;border-radius:0">
+        🧑 Pessoa Física
+      </button>
+      <button id="tab-pj" onclick="switchCadTab('pj')" style="flex:1;padding:12px;font-size:14px;font-weight:700;border:none;cursor:pointer;background:#f1f5f9;color:#64748b;border-radius:0">
+        🏢 Pessoa Jurídica
+      </button>
+    </div>
+
+    <div style="padding:20px">
+      <!-- === PF Fields === -->
+      <div id="cad-pf">
+        <div style="display:grid;gap:10px;margin-bottom:12px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">NOME COMPLETO *</label>
+            <input id="cad-pf-nome" type="text" placeholder="Nome do cliente" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">CPF</label>
+              <input id="cad-pf-cpf" type="text" placeholder="000.000.000-00" maxlength="14" oninput="maskCPF(this)" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">TELEFONE / CELULAR</label>
+              <input id="cad-pf-tel" type="tel" placeholder="67 99999-9999" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">E-MAIL</label>
+              <input id="cad-pf-email" type="email" placeholder="cliente@email.com" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">E-MAIL P/ ENVIO NFe</label>
+              <input id="cad-pf-email-nfe" type="email" placeholder="nfe@email.com" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === PJ Fields === -->
+      <div id="cad-pj" style="display:none">
+        <div style="display:grid;gap:10px;margin-bottom:12px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">RAZÃO SOCIAL *</label>
+            <input id="cad-pj-razao" type="text" placeholder="Empresa LTDA" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">NOME FANTASIA</label>
+              <input id="cad-pj-fantasia" type="text" placeholder="Nome popular" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">CNPJ *</label>
+              <input id="cad-pj-cnpj" type="text" placeholder="00.000.000/0000-00" maxlength="18" oninput="maskCNPJ(this)" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:end">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">INSCRIÇÃO ESTADUAL</label>
+              <input id="cad-pj-ie" type="text" placeholder="IE" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+            <div style="padding-bottom:4px">
+              <label style="font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;color:#64748b;font-weight:600">
+                <input type="checkbox" id="cad-pj-ie-isento" onchange="document.getElementById('cad-pj-ie').disabled = this.checked; if(this.checked) document.getElementById('cad-pj-ie').value = ''"> ISENTO
+              </label>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">TELEFONE</label>
+              <input id="cad-pj-tel" type="tel" placeholder="67 3333-4444" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">E-MAIL</label>
+              <input id="cad-pj-email" type="email" placeholder="contato@empresa.com" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">E-MAIL P/ ENVIO NFe *</label>
+              <input id="cad-pj-email-nfe" type="email" placeholder="nfe@empresa.com" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === Endereço (compartilhado PF/PJ) === -->
+      <div style="border-top:2px solid #e2e8f0;padding-top:14px;margin-top:8px">
+        <p style="font-size:12px;font-weight:700;color:#475569;margin-bottom:10px">📍 ENDEREÇO</p>
+        <div style="display:grid;grid-template-columns:3fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">RUA</label>
+            <input id="cad-rua" type="text" placeholder="Rua das Orquídeas" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">NÚMERO</label>
+            <input id="cad-num" type="text" placeholder="123" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">BAIRRO</label>
+            <input id="cad-bairro" type="text" placeholder="Jardim Noroeste" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">COMPLEMENTO</label>
+            <input id="cad-comp" type="text" placeholder="Sala 2" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">CEP</label>
+            <input id="cad-cep" type="text" placeholder="79000-000" maxlength="9" oninput="maskCEP(this)" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:14px;margin-top:3px">
+          </div>
+        </div>
+      </div>
+
+      <!-- Botões -->
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button id="cad-btn-save" onclick="saveCadastro()" style="flex:1;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">
+          ✅ Cadastrar no Bling
+        </button>
+        <button onclick="closeCadastroModal()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:12px 20px;font-size:14px;cursor:pointer">
+          Cancelar
+        </button>
+      </div>
+      <p id="cad-status" style="margin-top:10px;font-size:12px;color:#94a3b8;text-align:center"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Cadastro Cliente Modal ────────────────────────────────────
+let cadTab = 'pf';
+
+function openCadastroModal() {
+  document.getElementById('cadastro-modal').style.display = 'block';
+  // Preencher campos com dados já digitados no form principal
+  const name = document.getElementById('cName').value;
+  const phone = document.getElementById('cPhone').value;
+  if (name) document.getElementById('cad-pf-nome').value = name;
+  if (phone) document.getElementById('cad-pf-tel').value = phone;
+}
+
+function closeCadastroModal() {
+  document.getElementById('cadastro-modal').style.display = 'none';
+  document.getElementById('cad-status').textContent = '';
+}
+
+function switchCadTab(tab) {
+  cadTab = tab;
+  document.getElementById('cad-pf').style.display = tab === 'pf' ? 'block' : 'none';
+  document.getElementById('cad-pj').style.display = tab === 'pj' ? 'block' : 'none';
+  document.getElementById('tab-pf').style.background = tab === 'pf' ? '#f97316' : '#f1f5f9';
+  document.getElementById('tab-pf').style.color = tab === 'pf' ? '#fff' : '#64748b';
+  document.getElementById('tab-pj').style.background = tab === 'pj' ? '#f97316' : '#f1f5f9';
+  document.getElementById('tab-pj').style.color = tab === 'pj' ? '#fff' : '#64748b';
+}
+
+// Masks
+function maskCPF(el) {
+  let v = el.value.replace(/\D/g, '').substring(0, 11);
+  v = v.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  el.value = v;
+}
+function maskCNPJ(el) {
+  let v = el.value.replace(/\D/g, '').substring(0, 14);
+  v = v.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+  el.value = v;
+}
+function maskCEP(el) {
+  let v = el.value.replace(/\D/g, '').substring(0, 8);
+  v = v.replace(/(\d{5})(\d)/, '$1-$2');
+  el.value = v;
+}
+
+async function saveCadastro() {
+  const btn = document.getElementById('cad-btn-save');
+  const status = document.getElementById('cad-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Cadastrando...';
+  status.textContent = '';
+
+  try {
+    let payload = {};
+
+    if (cadTab === 'pf') {
+      const nome = document.getElementById('cad-pf-nome').value.trim();
+      if (!nome) { throw new Error('Nome obrigatório'); }
+      payload = {
+        tipoPessoa: 'F',
+        nome,
+        numeroDocumento: document.getElementById('cad-pf-cpf').value,
+        celular: document.getElementById('cad-pf-tel').value,
+        email: document.getElementById('cad-pf-email').value,
+        emailNfe: document.getElementById('cad-pf-email-nfe').value,
+        contribuinte: 9, // Não contribuinte
+      };
+    } else {
+      const nome = document.getElementById('cad-pj-razao').value.trim();
+      const cnpj = document.getElementById('cad-pj-cnpj').value.trim();
+      if (!nome) { throw new Error('Razão Social obrigatória'); }
+      if (!cnpj) { throw new Error('CNPJ obrigatório'); }
+      const ieIsento = document.getElementById('cad-pj-ie-isento').checked;
+      payload = {
+        tipoPessoa: 'J',
+        nome,
+        fantasia: document.getElementById('cad-pj-fantasia').value,
+        numeroDocumento: cnpj,
+        ie: ieIsento ? '' : document.getElementById('cad-pj-ie').value,
+        contribuinte: ieIsento ? 2 : (document.getElementById('cad-pj-ie').value ? 1 : 9),
+        celular: document.getElementById('cad-pj-tel').value,
+        email: document.getElementById('cad-pj-email').value,
+        emailNfe: document.getElementById('cad-pj-email-nfe').value,
+      };
+    }
+
+    // Endereço compartilhado
+    payload.endereco = document.getElementById('cad-rua').value;
+    payload.numero = document.getElementById('cad-num').value;
+    payload.bairro = document.getElementById('cad-bairro').value;
+    payload.complemento = document.getElementById('cad-comp').value;
+    payload.cep = document.getElementById('cad-cep').value;
+
+    const result = await api('/api/customer/create-bling', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!result.ok) throw new Error(result.error || 'Erro ao cadastrar');
+
+    status.style.color = '#16a34a';
+    status.textContent = `✅ Cliente cadastrado no Bling! ID: ${result.bling_contact_id}`;
+    toast(`✅ ${payload.nome} cadastrado no Bling!`);
+
+    // Preencher dados no form principal
+    document.getElementById('cName').value = payload.nome;
+    if (payload.celular) document.getElementById('cPhone').value = payload.celular;
+    if (payload.endereco) {
+      document.getElementById('cAddr').value = payload.endereco;
+      if (document.getElementById('cNum')) document.getElementById('cNum').value = payload.numero || '';
+    }
+    if (payload.bairro) document.getElementById('cBairro').value = payload.bairro;
+    if (payload.complemento) document.getElementById('cComp').value = payload.complemento;
+
+    // Salvar bling_contact_id em variável para uso no pedido
+    window._lastBlingContactId = result.bling_contact_id;
+
+    setTimeout(() => closeCadastroModal(), 1500);
+
+  } catch(e) {
+    status.style.color = '#dc2626';
+    status.textContent = '❌ ' + e.message;
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✅ Cadastrar no Bling';
+  }
+}
+</script>
 
 </body>
 </html>
