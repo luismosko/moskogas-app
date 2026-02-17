@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auditoria v1.0.0 — MoskoGás</title>
+<title>Auditoria v1.1.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -52,14 +52,14 @@
 <body>
 <div id="nav-container"></div>
 <div class="container">
-  <h1>📊 Auditoria Bling v1.0.0</h1>
+  <h1>📊 Auditoria Bling v1.1.0</h1>
 
   <div class="toolbar">
     <input type="date" id="audit-date" title="Data da auditoria">
     <button class="btn btn-orange" onclick="loadAuditoria()" title="Carregar dados do dia">🔄 Carregar</button>
     <button class="btn btn-blue" id="btn-conciliar" onclick="conciliar()" disabled title="Conciliar pedidos com Bling (admin)">🔍 Conciliar Bling</button>
     <button class="btn btn-green" id="btn-csv" onclick="exportCSV()" disabled title="Exportar relatório CSV">📥 CSV</button>
-    <span style="margin-left:auto;background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">v1.0.0</span>
+    <span style="margin-left:auto;background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">v1.1.0</span>
   </div>
 
   <div id="loading" class="loading" style="display:none;">⏳ Carregando auditoria...</div>
@@ -92,7 +92,7 @@
     <div class="section">
       <h2>❌ Erros de Integração Bling</h2>
       <table id="tbl-erros">
-        <thead><tr><th>Pedido</th><th>Ação</th><th>Erro</th><th>Hora</th><th>Detalhe</th></tr></thead>
+        <thead><tr><th>Pedido</th><th>Cliente</th><th>Valor</th><th>Ação</th><th>Erro</th><th>Hora</th><th></th></tr></thead>
         <tbody id="erros-body"></tbody>
       </table>
       <div id="erros-empty" class="empty" style="display:none;">Nenhum erro de integração — tudo OK! ✅</div>
@@ -102,9 +102,9 @@
   <!-- Log de auditoria completo -->
   <div id="audit-log-area" style="display:none;">
     <div class="section">
-      <h2>📋 Log de Auditoria do Dia</h2>
+      <h2>📋 Log de Integração Bling</h2>
       <table id="tbl-audit">
-        <thead><tr><th>ID</th><th>Pedido</th><th>Ação</th><th>Status</th><th>Bling ID</th><th>Hora</th></tr></thead>
+        <thead><tr><th>Pedido</th><th>Cliente</th><th>Valor</th><th>Tipo Pgto</th><th>Ação</th><th>Resultado</th><th>Venda Bling</th><th>Hora</th></tr></thead>
         <tbody id="audit-body"></tbody>
       </table>
     </div>
@@ -119,18 +119,19 @@
     </div>
   </div>
 
-  <!-- Pedidos do dia -->
+  <!-- Verificação cruzada MoskoGás × Bling -->
   <div id="pedidos-area" style="display:none;">
     <div class="section">
-      <h2>📋 Pedidos do Dia</h2>
+      <h2>🔄 Verificação: Pedidos × Bling</h2>
+      <p style="font-size:12px;color:#64748b;margin-bottom:10px;">Todos os pedidos do dia com status de lançamento no Bling. Use para verificar se todos foram criados corretamente.</p>
       <table id="tbl-pedidos">
-        <thead><tr><th>#</th><th>Cliente</th><th>Valor</th><th>Tipo</th><th>Pago</th><th>Bling</th><th>Vendedor</th><th>Status</th></tr></thead>
+        <thead><tr><th>#</th><th>Hora</th><th>Cliente</th><th>Valor</th><th>Tipo Pgto</th><th>Pago</th><th>Bling</th><th>Nº Venda</th><th>Vendedor</th><th>Status</th></tr></thead>
         <tbody id="pedidos-body"></tbody>
       </table>
     </div>
   </div>
 
-  <div class="version-badge">v1.0.0 — auditoria</div>
+  <div class="version-badge">v1.1.0 — auditoria</div>
 </div>
 
 <script src="shared.js"></script>
@@ -239,11 +240,13 @@ function renderErros() {
     document.getElementById('tbl-erros').style.display = 'table';
     document.getElementById('erros-empty').style.display = 'none';
     document.getElementById('erros-body').innerHTML = erros.map(e => {
-      const hora = e.created_at ? e.created_at.split(' ')[1] || '' : '';
+      const hora = e.created_at ? e.created_at.split(' ')[1]?.substring(0,5) || '' : '';
       return `<tr>
         <td><strong>#${e.order_id}</strong></td>
-        <td>${e.action}</td>
-        <td style="color:#dc2626;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(e.error_message||'').replace(/"/g,'&quot;')}">${e.error_message || '—'}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.customer_name || '—'}</td>
+        <td style="white-space:nowrap;">R$ ${(e.total_value||0).toFixed(2)}</td>
+        <td style="font-size:11px;">${e.action}</td>
+        <td style="color:#dc2626;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(e.error_message||'').replace(/"/g,'&quot;')}">${e.error_message || '—'}</td>
         <td>${hora}</td>
         <td><button class="expand-btn" onclick="showAuditDetail(${e.id})">Ver</button></td>
       </tr>`;
@@ -258,15 +261,21 @@ function renderAuditLog() {
     document.getElementById('audit-log-area').style.display = 'none';
     return;
   }
+  const ACTION_LABELS = { criar_venda: '➕ Criar venda', marcar_pago: '💰 Marcar pago', criar_venda_lote: '📦 Venda lote', test_criar_venda: '🧪 Teste' };
   document.getElementById('audit-body').innerHTML = logs.map(l => {
     const tagClass = l.status === 'success' ? 'tag-success' : l.status === 'error' ? 'tag-error' : 'tag-skipped';
-    const hora = l.created_at ? l.created_at.split(' ')[1] || '' : '';
+    const statusLabel = l.status === 'success' ? '✅ OK' : l.status === 'error' ? '❌ Erro' : '⏭️ Pulado';
+    const hora = l.created_at ? l.created_at.split(' ')[1]?.substring(0,5) || '' : '';
+    const blingInfo = l.bling_pedido_num ? `nº ${l.bling_pedido_num}` : (l.bling_pedido_id ? `ID ${l.bling_pedido_id}` : '—');
+    const tipoLabel = TIPO_LABELS[l.order_tipo] || l.order_tipo || '—';
     return `<tr>
-      <td>${l.id}</td>
       <td><strong>#${l.order_id}</strong></td>
-      <td>${l.action}</td>
-      <td><span class="tag ${tagClass}">${l.status}</span></td>
-      <td>${l.bling_pedido_id || '—'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.customer_name||''}">${l.customer_name || '—'}</td>
+      <td style="white-space:nowrap;">R$ ${(l.total_value||0).toFixed(2)}</td>
+      <td style="font-size:11px;">${tipoLabel}</td>
+      <td style="font-size:11px;">${ACTION_LABELS[l.action] || l.action}</td>
+      <td><span class="tag ${tagClass}">${statusLabel}</span></td>
+      <td style="font-weight:600;color:#16a34a;">${blingInfo}</td>
       <td>${hora}</td>
     </tr>`;
   }).join('');
@@ -277,16 +286,20 @@ function renderPedidos() {
   const pedidos = auditData.pedidos || [];
   document.getElementById('pedidos-body').innerHTML = pedidos.map(p => {
     const blingBadge = p.bling_id
-      ? `<span style="color:#16a34a;font-weight:700;">✅ ${p.bling_id}</span>`
-      : '<span style="color:#dc2626;">❌ Sem</span>';
-    const pagoBadge = p.pago ? '<span style="color:#16a34a;">✅</span>' : '<span style="color:#f59e0b;">⏳</span>';
+      ? '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;font-weight:800;">B</span>'
+      : '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fecaca;color:#dc2626;font-size:10px;font-weight:800;">B</span>';
+    const blingNum = p.bling_num ? `<strong>${p.bling_num}</strong>` : '<span style="color:#94a3b8;">—</span>';
+    const pagoBadge = p.pago ? '<span style="color:#16a34a;font-weight:700;">✅ Sim</span>' : '<span style="color:#f59e0b;font-weight:700;">⏳ Não</span>';
+    const hora = p.created_at ? (p.created_at.split(' ')[1] || p.created_at.split('T')[1] || '').substring(0,5) : '';
     return `<tr>
-      <td><strong>${p.id}</strong></td>
-      <td>${p.cliente || '—'}</td>
-      <td>R$ ${(p.valor||0).toFixed(2)}</td>
-      <td>${TIPO_LABELS[p.tipo] || p.tipo || '—'}</td>
+      <td><strong>#${p.id}</strong></td>
+      <td style="white-space:nowrap;">${hora}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.cliente||''}">${p.cliente || '—'}</td>
+      <td style="font-weight:700;white-space:nowrap;">R$ ${(p.valor||0).toFixed(2)}</td>
+      <td style="font-size:11px;">${TIPO_LABELS[p.tipo] || p.tipo || '—'}</td>
       <td>${pagoBadge}</td>
       <td>${blingBadge}</td>
+      <td>${blingNum}</td>
       <td>${p.vendedor || '—'}</td>
       <td>${p.status || '—'}</td>
     </tr>`;

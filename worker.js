@@ -1,6 +1,7 @@
-// v2.13.0
+// v2.13.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.13.1: Audit logs com JOIN orders (nome cliente, valor, tipo, bling_num)
 // v2.13.0: Sistema de Auditoria Bling — integration_audit table,
 //          logBlingAudit em toda operação Bling, observação enriquecida,
 //          GET /api/auditoria/diaria, /conciliacao-bling, /log-detalhado
@@ -1663,14 +1664,21 @@ export default {
         } catch(_) {}
       }
 
-      // Erros de integração do dia
+      // Erros de integração do dia (com dados do pedido)
       const erros = await env.DB.prepare(
-        `SELECT * FROM integration_audit WHERE status='error' AND created_at BETWEEN ? AND ? ORDER BY id DESC`
+        `SELECT ia.*, o.customer_name, o.total_value, o.tipo_pagamento AS order_tipo, o.bling_pedido_num
+         FROM integration_audit ia
+         LEFT JOIN orders o ON o.id = ia.order_id
+         WHERE ia.status='error' AND ia.created_at BETWEEN ? AND ? ORDER BY ia.id DESC`
       ).bind(dateStart, dateEnd).all().then(r => r.results || []).catch(() => []);
 
-      // Todos os logs de auditoria do dia
+      // Todos os logs de auditoria do dia (com dados do pedido)
       const auditLogs = await env.DB.prepare(
-        `SELECT id, order_id, action, status, bling_pedido_id, error_message, created_at FROM integration_audit WHERE created_at BETWEEN ? AND ? ORDER BY id DESC LIMIT 200`
+        `SELECT ia.id, ia.order_id, ia.action, ia.status, ia.bling_pedido_id, ia.error_message, ia.created_at,
+                o.customer_name, o.total_value, o.tipo_pagamento AS order_tipo, o.vendedor_nome, o.bling_pedido_num
+         FROM integration_audit ia
+         LEFT JOIN orders o ON o.id = ia.order_id
+         WHERE ia.created_at BETWEEN ? AND ? ORDER BY ia.id DESC LIMIT 200`
       ).bind(dateStart, dateEnd).all().then(r => r.results || []).catch(() => []);
 
       return json({
@@ -1679,7 +1687,7 @@ export default {
         porTipo, porVendedor, porProduto,
         erros_integracao: erros,
         audit_logs: auditLogs,
-        pedidos: orders.map(o => ({ id: o.id, cliente: o.customer_name, valor: o.total_value, tipo: o.tipo_pagamento, pago: o.pago, bling_id: o.bling_pedido_id, vendedor: o.vendedor_nome, status: o.status }))
+        pedidos: orders.map(o => ({ id: o.id, cliente: o.customer_name, valor: o.total_value, tipo: o.tipo_pagamento, pago: o.pago, bling_id: o.bling_pedido_id, bling_num: o.bling_pedido_num, vendedor: o.vendedor_nome, status: o.status, created_at: o.created_at }))
       });
     }
 
