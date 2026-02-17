@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Usuários — MoskoApp v1.1.0</title>
+<title>Usuários — MoskoApp v1.2.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -46,22 +46,25 @@
   <h1>👥 Gestão de Usuários</h1>
 
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
       <span style="font-size:14px;font-weight:700;color:#1e293b;">Usuários do Sistema</span>
-      <button class="btn btn-orange" onclick="openModal()">➕ Novo Usuário</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-gray" id="btn-toggle-inativos" onclick="toggleInativos()" style="font-size:12px;padding:6px 12px;">👁 Ver inativos</button>
+        <button class="btn btn-orange" onclick="openModal()">➕ Novo Usuário</button>
+      </div>
     </div>
 
     <div id="loading" style="text-align:center;padding:20px;color:#64748b;">⏳ Carregando...</div>
     <table id="users-table" style="display:none;">
       <thead>
-        <tr><th>Nome</th><th>Login</th><th>Função</th><th>Vendedor Bling</th><th>Status</th><th>Ações</th></tr>
+        <tr><th>Nome</th><th>Login</th><th>Função</th><th>Vendedor Bling</th><th>Ações</th></tr>
       </thead>
       <tbody id="users-body"></tbody>
     </table>
     <div id="empty-msg" style="display:none;text-align:center;padding:20px;color:#94a3b8;">Nenhum usuário cadastrado</div>
   </div>
 
-  <div class="version-badge">v1.1.0 — usuários</div>
+  <div class="version-badge">v1.2.0 — usuários</div>
 </div>
 
 <!-- Modal Criar/Editar -->
@@ -119,6 +122,82 @@ checkAuth(['admin']);
 document.getElementById('nav-container').innerHTML = buildNav();
 
 let vendedoresBling = [];
+let allUsers = [];
+let showInativos = false;
+
+// === Toggle exibição de inativos ===
+function toggleInativos() {
+  showInativos = !showInativos;
+  const btn = document.getElementById('btn-toggle-inativos');
+  btn.textContent = showInativos ? '👁 Ocultar inativos' : '👁 Ver inativos';
+  btn.style.background = showInativos ? '#475569' : '#e2e8f0';
+  btn.style.color = showInativos ? '#fff' : '#1e293b';
+  renderUsers();
+}
+
+// === Renderizar tabela ===
+function renderUsers() {
+  const filtered = showInativos ? allUsers : allUsers.filter(u => u.ativo);
+  const tbody = document.getElementById('users-body');
+  const table = document.getElementById('users-table');
+  const empty = document.getElementById('empty-msg');
+
+  if (!filtered.length) {
+    empty.style.display = 'block';
+    empty.textContent = showInativos ? 'Nenhum usuário cadastrado' : 'Nenhum usuário ativo';
+    table.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  table.style.display = 'table';
+
+  tbody.innerHTML = filtered.map(u => {
+    const roleClass = `role-${u.role}`;
+    const roleLabel = { admin: '👑 Admin', atendente: '📞 Atendente', entregador: '🚚 Entregador' }[u.role] || u.role;
+    const vendedorInfo = u.bling_vendedor_nome ? u.bling_vendedor_nome : '<span style="color:#94a3b8">—</span>';
+    const inativoTag = !u.ativo ? ' <span style="background:#dc2626;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">INATIVO</span>' : '';
+    const rowStyle = !u.ativo ? 'opacity:0.5;' : '';
+    const nome_escaped = u.nome.replace(/'/g, "\\'");
+    return `<tr style="${rowStyle}">
+      <td style="font-weight:600;">${u.nome}${inativoTag}</td>
+      <td style="color:#64748b;">${u.login}</td>
+      <td><span class="role-badge ${roleClass}">${roleLabel}</span></td>
+      <td>${vendedorInfo}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-gray" style="padding:4px 10px;font-size:11px;" onclick="editUser(${u.id})">✏️ Editar</button>
+        ${u.ativo
+          ? `<button class="btn btn-red" style="padding:4px 10px;font-size:11px;" onclick="toggleAtivo(${u.id},'${nome_escaped}',false)">⏸ Desativar</button>`
+          : `<button class="btn btn-green" style="padding:4px 10px;font-size:11px;" onclick="toggleAtivo(${u.id},'${nome_escaped}',true)">▶ Reativar</button>`
+        }
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Mostra contador de inativos no botão
+  const inativos = allUsers.filter(u => !u.ativo).length;
+  const btn = document.getElementById('btn-toggle-inativos');
+  if (inativos > 0 && !showInativos) {
+    btn.textContent = `👁 Ver inativos (${inativos})`;
+    btn.style.display = '';
+  } else if (inativos > 0 && showInativos) {
+    btn.textContent = '👁 Ocultar inativos';
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+// === Carregar dados ===
+async function loadUsers() {
+  try {
+    allUsers = await api('/api/auth/users');
+    document.getElementById('loading').style.display = 'none';
+    renderUsers();
+  } catch(e) {
+    document.getElementById('loading').textContent = '❌ Erro: ' + e.message;
+  }
+}
 
 async function loadVendedores() {
   try {
@@ -134,45 +213,22 @@ async function loadVendedores() {
   }
 }
 
-async function loadUsers() {
+// === Ativar/Desativar usuário ===
+async function toggleAtivo(id, nome, ativar) {
+  if (!confirm(`${ativar ? 'Reativar' : 'Desativar'} usuário "${nome}"?`)) return;
   try {
-    const users = await api('/api/auth/users');
-    const tbody = document.getElementById('users-body');
-    const table = document.getElementById('users-table');
-    const empty = document.getElementById('empty-msg');
-    document.getElementById('loading').style.display = 'none';
-
-    if (!users.length) {
-      empty.style.display = 'block';
-      table.style.display = 'none';
-      return;
-    }
-
-    empty.style.display = 'none';
-    table.style.display = 'table';
-
-    tbody.innerHTML = users.map(u => {
-      const roleClass = `role-${u.role}`;
-      const roleLabel = { admin: '👑 Admin', atendente: '📞 Atendente', entregador: '🚚 Entregador' }[u.role] || u.role;
-      const vendedorInfo = u.bling_vendedor_nome ? `${u.bling_vendedor_nome}` : '<span style="color:#94a3b8">—</span>';
-      const statusIcon = u.ativo ? '<span class="status-on">✅</span>' : '<span class="status-off">❌</span>';
-      return `<tr>
-        <td style="font-weight:600;">${u.nome}</td>
-        <td style="color:#64748b;">${u.login}</td>
-        <td><span class="role-badge ${roleClass}">${roleLabel}</span></td>
-        <td>${vendedorInfo}</td>
-        <td>${statusIcon}</td>
-        <td>
-          <button class="btn btn-gray" style="padding:4px 10px;font-size:11px;" onclick="editUser(${u.id})">✏️</button>
-          <button class="btn btn-red" style="padding:4px 10px;font-size:11px;" onclick="deleteUser(${u.id},'${u.nome.replace(/'/g,"\\'")}')">🗑️</button>
-        </td>
-      </tr>`;
-    }).join('');
-  } catch(e) {
-    document.getElementById('loading').textContent = '❌ Erro: ' + e.message;
-  }
+    const user = allUsers.find(u => u.id === id);
+    if (!user) return;
+    await api('/api/auth/users', {
+      method: 'POST',
+      body: JSON.stringify({ id, nome: user.nome, login: user.login, role: user.role, ativo: ativar ? 1 : 0 })
+    });
+    toast(ativar ? `"${nome}" reativado!` : `"${nome}" desativado`);
+    loadUsers();
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
 }
 
+// === Modal ===
 function openModal(user = null) {
   document.getElementById('modal-title').textContent = user ? 'Editar Usuário' : 'Novo Usuário';
   document.getElementById('m-id').value = user?.id || '';
@@ -184,7 +240,6 @@ function openModal(user = null) {
   document.getElementById('m-telefone').value = user?.telefone || '';
   document.getElementById('m-ativo').value = user ? (user.ativo ? '1' : '0') : '1';
 
-  // Senha obrigatória só para novo
   document.getElementById('lbl-senha').textContent = user ? 'Nova senha (deixe vazio para manter)' : 'Senha';
   document.getElementById('m-senha').required = !user;
 
@@ -197,11 +252,8 @@ function closeModal() {
 }
 
 async function editUser(id) {
-  try {
-    const users = await api('/api/auth/users');
-    const user = users.find(u => u.id === id);
-    if (user) openModal(user);
-  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  const user = allUsers.find(u => u.id === id);
+  if (user) openModal(user);
 }
 
 async function saveUser() {
@@ -230,7 +282,6 @@ async function saveUser() {
     if (senha) payload.senha = senha;
 
     await api('/api/auth/users', { method: 'POST', body: JSON.stringify(payload) });
-    // Feedback visual no botão
     btn.textContent = '✅ Salvo!';
     btn.style.background = '#16a34a';
     toast(id ? 'Usuário atualizado!' : 'Usuário criado com sucesso!');
@@ -242,15 +293,6 @@ async function saveUser() {
     btn.textContent = '💾 Salvar';
     btn.style.background = '#16a34a';
   }
-}
-
-async function deleteUser(id, nome) {
-  if (!confirm(`Excluir usuário "${nome}"?`)) return;
-  try {
-    await api('/api/auth/users/' + id, { method: 'DELETE' });
-    toast('Usuário "' + nome + '" excluído');
-    loadUsers();
-  } catch(e) { toast('Erro: ' + e.message, 'error'); }
 }
 
 // Init
