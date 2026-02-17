@@ -1,6 +1,10 @@
-// v2.12.3
+// v2.13.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.13.0: Sistema de Auditoria Bling — integration_audit table,
+//          logBlingAudit em toda operação Bling, observação enriquecida,
+//          GET /api/auditoria/diaria, /conciliacao-bling, /log-detalhado
+//          Cron snapshot diário audit_snapshots
 // v2.12.3: Flags pode_entregar + recebe_whatsapp em app_users
 //          /api/drivers filtra por pode_entregar=1 (atendentes podem entregar)
 //          WhatsApp skipped se recebe_whatsapp=0
@@ -240,13 +244,16 @@ function buildItemBling(item) {
 
 // ── Cria pedido no Bling (sem NFCe) ──────────────────────────
 async function criarPedidoBling(env, orderId, orderData) {
-  const { name, items, total_value, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, bling_vendedor_id } = orderData;
+  const { name, items, total_value, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, bling_vendedor_id, vendedor_nome } = orderData;
   const today = new Date().toISOString().slice(0, 10);
 
   const itensBling = (items || []).map(it => buildItemBling(it));
 
   const fpId = getFormaPagamentoForTipo(tipo_pagamento, forma_pagamento_key, forma_pagamento_id);
   const total = total_value || itensBling.reduce((s, i) => s + i.valor * i.quantidade, 0);
+
+  const obsVendedor = vendedor_nome ? ` | ${vendedor_nome}` : '';
+  const obsTipo = tipo_pagamento ? ` | ${tipo_pagamento}` : '';
 
   const pedidoBody = {
     contato:  bling_contact_id ? { id: bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
@@ -258,7 +265,7 @@ async function criarPedidoBling(env, orderId, orderData) {
       valor:          total,
       dataVencimento: today,
     }],
-    observacoes: `Pedido MoskoGás #${orderId} - ${name}`,
+    observacoes: `MoskoGás #${orderId}${obsVendedor}${obsTipo} - ${name}`,
   };
 
   if (bling_vendedor_id) {
@@ -276,12 +283,22 @@ async function criarPedidoBling(env, orderId, orderData) {
     const errText = await pedidoResp.text();
     console.error('[Bling] Pedido venda erro:', pedidoResp.status, errText);
     await logEvent(env, orderId, 'bling_error_detail', { status: pedidoResp.status, body: errText.substring(0, 500) }).catch(() => {});
+    await logBlingAudit(env, orderId, 'criar_venda', 'error', {
+      request_payload: pedidoBody,
+      error_message: `HTTP ${pedidoResp.status}: ${errText.substring(0, 300)}`
+    });
     throw new Error(`Bling pedido ${pedidoResp.status}: ${errText.substring(0, 300)}`);
   }
 
   const pedidoData = await pedidoResp.json();
   const bling_pedido_id  = pedidoData.data?.id  ?? null;
   const bling_pedido_num = pedidoData.data?.numero ?? null;
+
+  await logBlingAudit(env, orderId, 'criar_venda', 'success', {
+    bling_pedido_id: String(bling_pedido_id || ''),
+    request_payload: pedidoBody,
+    response_data: pedidoData
+  });
 
   return { bling_pedido_id, bling_pedido_num };
 }
@@ -328,6 +345,41 @@ async function logEvent(env, orderId, event, payload = null) {
   await env.DB.prepare(
     'INSERT INTO order_events (order_id, event, payload_json) VALUES (?, ?, ?)'
   ).bind(orderId, event, payload ? JSON.stringify(payload) : null).run();
+}
+
+// ── Auditoria de Integração Bling ────────────────────────────
+
+async function ensureAuditTable(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    status TEXT NOT NULL,
+    bling_pedido_id TEXT,
+    request_payload TEXT,
+    response_data TEXT,
+    error_message TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`).run().catch(() => {});
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS audit_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_date TEXT NOT NULL,
+    data_json TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`).run().catch(() => {});
+}
+
+async function logBlingAudit(env, orderId, action, status, opts = {}) {
+  await ensureAuditTable(env);
+  await env.DB.prepare(
+    'INSERT INTO integration_audit (order_id, action, status, bling_pedido_id, request_payload, response_data, error_message) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(
+    orderId, action, status,
+    opts.bling_pedido_id || null,
+    opts.request_payload ? JSON.stringify(opts.request_payload).substring(0, 4000) : null,
+    opts.response_data ? JSON.stringify(opts.response_data).substring(0, 4000) : null,
+    opts.error_message || null
+  ).run().catch(e => console.error('[audit] log error:', e.message));
 }
 
 // ── Formatação mensagem entregador ────────────────────────────
@@ -776,6 +828,7 @@ export default {
 
     if (method === 'GET' && path === '/api/pub/test-criar-pedido') {
       try {
+        await ensureAuditTable(env);
         const orderId = parseInt(url.searchParams.get('order_id') || '0');
         if (!orderId) return json({ error: 'Informe ?order_id=X' });
         const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
@@ -789,11 +842,18 @@ export default {
           contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
           data: today, dataSaida: today, itens: itensBling,
           parcelas: [{ formaPagamento: { id: fpId }, valor: order.total_value || 0, dataVencimento: today }],
-          observacoes: 'Pedido MoskoGás #' + orderId,
+          observacoes: `MoskoGás #${orderId} | ${order.vendedor_nome || ''} | ${order.tipo_pagamento || ''} - ${order.customer_name} [TEST]`,
         };
         const resp = await blingFetch('/pedidos/vendas', { method: 'POST', body: JSON.stringify(payload) }, env);
         const txt = await resp.text();
         let parsed; try { parsed = JSON.parse(txt); } catch { parsed = txt; }
+        const auditStatus = resp.ok ? 'success' : 'error';
+        await logBlingAudit(env, orderId, 'test_criar_venda', auditStatus, {
+          bling_pedido_id: resp.ok ? String(parsed?.data?.id || '') : '',
+          request_payload: payload,
+          response_data: parsed,
+          error_message: resp.ok ? null : `HTTP ${resp.status}`
+        });
         return json({ order_id: orderId, payload_sent: payload, bling_status: resp.status, bling_response: parsed });
       } catch(e) { return json({ ok: false, error: e.message }); }
     }
@@ -1205,7 +1265,7 @@ export default {
             const cached = await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(digits).first();
             if (cached?.bling_contact_id) finalBlingContactId = cached.bling_contact_id;
           }
-          const blingResult = await criarPedidoBling(env, orderId, { name, items, total_value, forma_pagamento_key, forma_pagamento_id, bling_contact_id: finalBlingContactId, tipo_pagamento: tipoPg, bling_vendedor_id: blingVendedorId });
+          const blingResult = await criarPedidoBling(env, orderId, { name, items, total_value, forma_pagamento_key, forma_pagamento_id, bling_contact_id: finalBlingContactId, tipo_pagamento: tipoPg, bling_vendedor_id: blingVendedorId, vendedor_nome: vendedorNome });
           blingPedidoId = blingResult.bling_pedido_id;
           await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?').bind(blingPedidoId, blingResult.bling_pedido_num||null, 'synced', orderId).run();
           await logEvent(env, orderId, 'bling_created', { bling_pedido_id: blingPedidoId, vendedor_bling_id: blingVendedorId });
@@ -1213,6 +1273,8 @@ export default {
           await logEvent(env, orderId, 'bling_error', { error: e.message });
           return json({ ok: true, id: orderId, bling_warning: e.message });
         }
+      } else {
+        await logBlingAudit(env, orderId, 'criar_venda', 'skipped', { error_message: `tipo_pagamento=${tipoPg} — Bling será criado ao marcar pago` });
       }
       return json({ ok: true, id: orderId, bling_pedido_id: blingPedidoId, pago, vendedor: vendedorNome });
     }
@@ -1407,9 +1469,11 @@ export default {
 
           const items = JSON.parse(order.items_json || '[]');
           let orderVendedorBlingId = null;
+          let orderVendedorNome = order.vendedor_nome || null;
           if (order.vendedor_id) {
-            const vendUser = await env.DB.prepare('SELECT bling_vendedor_id FROM app_users WHERE id=?').bind(order.vendedor_id).first().catch(() => null);
+            const vendUser = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(order.vendedor_id).first().catch(() => null);
             if (vendUser?.bling_vendedor_id) orderVendedorBlingId = vendUser.bling_vendedor_id;
+            if (vendUser?.nome) orderVendedorNome = vendUser.nome;
           }
           const blingResult = await criarPedidoBling(env, orderId, {
             name: order.customer_name,
@@ -1420,6 +1484,7 @@ export default {
             bling_contact_id: cached?.bling_contact_id || null,
             tipo_pagamento: order.tipo_pagamento,
             bling_vendedor_id: orderVendedorBlingId,
+            vendedor_nome: orderVendedorNome,
           });
 
           await env.DB.prepare(
@@ -1438,6 +1503,7 @@ export default {
 
       await env.DB.prepare('UPDATE orders SET pago=1 WHERE id=?').bind(orderId).run();
       await env.DB.prepare('UPDATE payments SET status=?, received_at=unixepoch() WHERE order_id=?').bind('pago', orderId).run();
+      await logBlingAudit(env, orderId, 'marcar_pago', 'success', { bling_pedido_id: order.bling_pedido_id || '' });
       await logEvent(env, orderId, 'payment_confirmed', {});
       return json({ ok: true });
     }
@@ -1505,6 +1571,9 @@ export default {
 
           if (!resp.ok) {
             const errText = await resp.text();
+            for (const oid of pedidoIds) {
+              await logBlingAudit(env, oid, 'criar_venda_lote', 'error', { request_payload: pedidoBody, error_message: `HTTP ${resp.status}: ${errText.substring(0,200)}` });
+            }
             resultados.push({ cliente: grupo.cliente, ok: false, error: `Bling ${resp.status}: ${errText.substring(0, 200)}`, pedidos: pedidoIds });
             continue;
           }
@@ -1517,10 +1586,14 @@ export default {
             await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, pago=1, sync_status=? WHERE id=?').bind(blingId, blingNum, 'synced_nfe', orderId).run();
             await env.DB.prepare('UPDATE payments SET status=?, received_at=unixepoch() WHERE order_id=?').bind('pago', orderId).run();
             await logEvent(env, orderId, 'nfe_agrupada', { bling_pedido_id: blingId, bling_pedido_num: blingNum, grupo_pedidos: pedidoIds });
+            await logBlingAudit(env, orderId, 'criar_venda_lote', 'success', { bling_pedido_id: String(blingId||''), request_payload: pedidoBody, response_data: pedidoData });
           }
 
           resultados.push({ cliente: grupo.cliente, ok: true, bling_pedido_id: blingId, bling_pedido_num: blingNum, pedidos: pedidoIds, total: grupo.total, itens_count: itensBling.length });
         } catch(e) {
+          for (const oid of pedidoIds) {
+            await logBlingAudit(env, oid, 'criar_venda_lote', 'error', { request_payload: pedidoBody, error_message: e.message });
+          }
           resultados.push({ cliente: grupo.cliente, ok: false, error: e.message, pedidos: pedidoIds });
         }
       }
@@ -1534,11 +1607,150 @@ export default {
       });
     }
 
+    // ── AUDITORIA ─────────────────────────────────────────────
+
+    if (method === 'GET' && path === '/api/auditoria/diaria') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
+
+      const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+      const dateStart = `${date} 00:00:00`;
+      const dateEnd = `${date} 23:59:59`;
+
+      // Pedidos do dia
+      const orders = await env.DB.prepare(
+        `SELECT id, customer_name, total_value, tipo_pagamento, pago, bling_pedido_id, bling_pedido_num, vendedor_nome, items_json, status, created_at
+         FROM orders WHERE created_at BETWEEN ? AND ? ORDER BY id`
+      ).bind(dateStart, dateEnd).all().then(r => r.results || []);
+
+      const totalPedidos = orders.length;
+      const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
+      const comBling = orders.filter(o => o.bling_pedido_id).length;
+      const semBling = totalPedidos - comBling;
+      const pagos = orders.filter(o => o.pago === 1).length;
+      const naoPagos = totalPedidos - pagos;
+
+      // Por tipo pagamento
+      const porTipo = {};
+      for (const o of orders) {
+        const t = o.tipo_pagamento || 'indefinido';
+        if (!porTipo[t]) porTipo[t] = { qtd: 0, valor: 0 };
+        porTipo[t].qtd++;
+        porTipo[t].valor += o.total_value || 0;
+      }
+
+      // Por vendedor
+      const porVendedor = {};
+      for (const o of orders) {
+        const v = o.vendedor_nome || 'Sem vendedor';
+        if (!porVendedor[v]) porVendedor[v] = { qtd: 0, valor: 0 };
+        porVendedor[v].qtd++;
+        porVendedor[v].valor += o.total_value || 0;
+      }
+
+      // Por produto
+      const porProduto = {};
+      for (const o of orders) {
+        try {
+          const items = JSON.parse(o.items_json || '[]');
+          for (const it of items) {
+            const k = it.name || 'Desconhecido';
+            if (!porProduto[k]) porProduto[k] = { qtd: 0, valor: 0 };
+            porProduto[k].qtd += parseInt(it.qty) || 1;
+            porProduto[k].valor += (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1);
+          }
+        } catch(_) {}
+      }
+
+      // Erros de integração do dia
+      const erros = await env.DB.prepare(
+        `SELECT * FROM integration_audit WHERE status='error' AND created_at BETWEEN ? AND ? ORDER BY id DESC`
+      ).bind(dateStart, dateEnd).all().then(r => r.results || []).catch(() => []);
+
+      // Todos os logs de auditoria do dia
+      const auditLogs = await env.DB.prepare(
+        `SELECT id, order_id, action, status, bling_pedido_id, error_message, created_at FROM integration_audit WHERE created_at BETWEEN ? AND ? ORDER BY id DESC LIMIT 200`
+      ).bind(dateStart, dateEnd).all().then(r => r.results || []).catch(() => []);
+
+      return json({
+        date,
+        resumo: { totalPedidos, totalValor: Math.round(totalValor * 100) / 100, comBling, semBling, pagos, naoPagos },
+        porTipo, porVendedor, porProduto,
+        erros_integracao: erros,
+        audit_logs: auditLogs,
+        pedidos: orders.map(o => ({ id: o.id, cliente: o.customer_name, valor: o.total_value, tipo: o.tipo_pagamento, pago: o.pago, bling_id: o.bling_pedido_id, vendedor: o.vendedor_nome, status: o.status }))
+      });
+    }
+
+    if (method === 'GET' && path === '/api/auditoria/conciliacao-bling') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+      const dateStart = `${date} 00:00:00`;
+      const dateEnd = `${date} 23:59:59`;
+
+      const orders = await env.DB.prepare(
+        `SELECT id, customer_name, total_value, bling_pedido_id, bling_pedido_num, tipo_pagamento FROM orders WHERE created_at BETWEEN ? AND ? AND bling_pedido_id IS NOT NULL AND bling_pedido_id != '' ORDER BY id`
+      ).bind(dateStart, dateEnd).all().then(r => r.results || []);
+
+      const conciliados = [];
+      const faltando_bling = [];
+      const erros = [];
+
+      // Rate limit: max 5 por segundo
+      for (let i = 0; i < orders.length; i++) {
+        const o = orders[i];
+        if (i > 0 && i % 5 === 0) {
+          await new Promise(r => setTimeout(r, 1100)); // pausa 1.1s a cada 5
+        }
+        try {
+          const resp = await blingFetch(`/pedidos/vendas/${o.bling_pedido_id}`, {}, env);
+          if (resp.ok) {
+            const data = await resp.json();
+            conciliados.push({ order_id: o.id, bling_id: o.bling_pedido_id, bling_num: o.bling_pedido_num, cliente: o.customer_name, valor_local: o.total_value, valor_bling: data.data?.totalProdutos || data.data?.total || null });
+          } else if (resp.status === 404) {
+            faltando_bling.push({ order_id: o.id, bling_id: o.bling_pedido_id, cliente: o.customer_name, valor: o.total_value, motivo: 'Não encontrado no Bling' });
+          } else {
+            erros.push({ order_id: o.id, bling_id: o.bling_pedido_id, erro: `HTTP ${resp.status}` });
+          }
+        } catch(e) {
+          erros.push({ order_id: o.id, bling_id: o.bling_pedido_id, erro: e.message });
+        }
+      }
+
+      return json({
+        date,
+        total_verificados: orders.length,
+        conciliados: { count: conciliados.length, items: conciliados },
+        faltando_bling: { count: faltando_bling.length, items: faltando_bling },
+        erros: { count: erros.length, items: erros },
+      });
+    }
+
+    if (method === 'GET' && path === '/api/auditoria/log-detalhado') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
+      const orderId = url.searchParams.get('order_id');
+      if (!orderId) return err('order_id obrigatório');
+      const logs = await env.DB.prepare(
+        'SELECT * FROM integration_audit WHERE order_id=? ORDER BY id DESC LIMIT 50'
+      ).bind(parseInt(orderId)).all().then(r => r.results || []);
+      return json(logs);
+    }
+
     return err('Not found', 404);
   },
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(keepBlingTokenFresh(env));
+    // Snapshot diário às 22h (cron: 0 1 * * * = 01:00 UTC = 22:00 BRT)
+    const hour = new Date().getUTCHours();
+    if (hour === 1) { // ~22h Brasília
+      ctx.waitUntil(dailyAuditSnapshot(env));
+    }
   },
 };
 
@@ -1557,4 +1769,39 @@ async function keepBlingTokenFresh(env) {
       console.log('[cron] Token ainda válido.');
     }
   } catch(e) { console.error('[cron] Erro:', e.message); }
+}
+
+async function dailyAuditSnapshot(env) {
+  try {
+    await ensureAuditTable(env);
+    // Snapshot do dia anterior (já encerrado)
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const dateStart = `${yesterday} 00:00:00`;
+    const dateEnd = `${yesterday} 23:59:59`;
+
+    // Verificar se já existe snapshot desse dia
+    const existing = await env.DB.prepare('SELECT id FROM audit_snapshots WHERE snapshot_date=?').bind(yesterday).first();
+    if (existing) { console.log(`[audit] Snapshot ${yesterday} já existe`); return; }
+
+    const orders = await env.DB.prepare(
+      `SELECT total_value, tipo_pagamento, pago, bling_pedido_id, vendedor_nome, items_json FROM orders WHERE created_at BETWEEN ? AND ?`
+    ).bind(dateStart, dateEnd).all().then(r => r.results || []);
+
+    const totalPedidos = orders.length;
+    const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
+    const comBling = orders.filter(o => o.bling_pedido_id).length;
+    const pagos = orders.filter(o => o.pago === 1).length;
+
+    const porTipo = {};
+    for (const o of orders) { const t = o.tipo_pagamento || 'indefinido'; if (!porTipo[t]) porTipo[t] = { qtd: 0, valor: 0 }; porTipo[t].qtd++; porTipo[t].valor += o.total_value || 0; }
+
+    const errosCount = await env.DB.prepare(
+      `SELECT COUNT(*) as c FROM integration_audit WHERE status='error' AND created_at BETWEEN ? AND ?`
+    ).bind(dateStart, dateEnd).first().then(r => r?.c || 0).catch(() => 0);
+
+    const snapshot = { totalPedidos, totalValor: Math.round(totalValor * 100) / 100, comBling, semBling: totalPedidos - comBling, pagos, naoPagos: totalPedidos - pagos, porTipo, errosIntegracao: errosCount };
+
+    await env.DB.prepare('INSERT INTO audit_snapshots (snapshot_date, data_json) VALUES (?, ?)').bind(yesterday, JSON.stringify(snapshot)).run();
+    console.log(`[audit] Snapshot ${yesterday} salvo: ${totalPedidos} pedidos, R$${snapshot.totalValor}`);
+  } catch(e) { console.error('[audit] Snapshot error:', e.message); }
 }

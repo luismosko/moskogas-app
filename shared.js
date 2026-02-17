@@ -1,5 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.3.0
-// v1.3.0: Toast grande + modal nunca fecha ao clicar fora
+// shared.js — Utilitários compartilhados MoskoGás v1.4.0
+// v1.4.0: Nav com link Auditoria
 
 const API_BASE = 'https://api.moskogas.com.br';
 
@@ -111,6 +111,7 @@ const NAV_ITEMS = [
   { href: 'entregador.html',  icon: '🚚', label: 'Entregador',  roles: ['admin', 'atendente', 'entregador'] },
   { href: 'pagamentos.html',  icon: '💰', label: 'Pagamentos',  roles: ['admin'] },
   { href: 'relatorio.html',   icon: '📊', label: 'Relatório',   roles: ['admin'] },
+  { href: 'auditoria.html',   icon: '🔍', label: 'Auditoria',   roles: ['admin'] },
   { href: 'usuarios.html',    icon: '👥', label: 'Usuários',     roles: ['admin'] },
   { href: 'config.html',      icon: '⚙️', label: 'Config',      roles: ['admin'], right: true },
 ];

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoria v1.0.0 — MoskoGás</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; color: #1e293b; margin-bottom: 16px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; background: #fff; padding: 12px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .toolbar input[type="date"] { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+  .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-blue   { background: #2563eb; color: #fff; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .btn-gray   { background: #e2e8f0; color: #1e293b; }
+  .btn-red    { background: #dc2626; color: #fff; }
+  .btn:hover  { opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .card-num { font-size: 28px; font-weight: 800; color: #1e293b; }
+  .card-label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: .5px; margin-top: 2px; }
+  .card-sub { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+  .card-warn { border-left: 4px solid #f59e0b; }
+  .card-danger { border-left: 4px solid #dc2626; }
+  .card-ok { border-left: 4px solid #16a34a; }
+  .section { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .section h2 { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #f1f5f9; font-weight: 700; font-size: 10px; text-transform: uppercase; color: #64748b; padding: 8px 6px; text-align: left; }
+  td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; color: #fff; }
+  .tag-success { background: #16a34a; }
+  .tag-error { background: #dc2626; }
+  .tag-skipped { background: #f59e0b; }
+  .empty { text-align: center; padding: 20px; color: #94a3b8; font-size: 13px; }
+  .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 4px 0 10px; }
+  .loading { text-align: center; padding: 30px; color: #64748b; }
+  .conciliacao-result { margin-top: 12px; }
+  .expand-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: #2563eb; text-decoration: underline; padding: 0; }
+  pre.json { background: #1e293b; color: #a5f3fc; padding: 10px; border-radius: 8px; font-size: 11px; overflow-x: auto; max-height: 200px; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+  .resumo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .resumo-grid { grid-template-columns: 1fr; } }
+  .mini-table { font-size: 12px; width: 100%; }
+  .mini-table td { padding: 4px 6px; border-bottom: 1px solid #f1f5f9; }
+  .mini-table td:last-child { text-align: right; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="nav-container"></div>
+<div class="container">
+  <h1>📊 Auditoria Bling v1.0.0</h1>
+
+  <div class="toolbar">
+    <input type="date" id="audit-date" title="Data da auditoria">
+    <button class="btn btn-orange" onclick="loadAuditoria()" title="Carregar dados do dia">🔄 Carregar</button>
+    <button class="btn btn-blue" id="btn-conciliar" onclick="conciliar()" disabled title="Conciliar pedidos com Bling (admin)">🔍 Conciliar Bling</button>
+    <button class="btn btn-green" id="btn-csv" onclick="exportCSV()" disabled title="Exportar relatório CSV">📥 CSV</button>
+    <span style="margin-left:auto;background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">v1.0.0</span>
+  </div>
+
+  <div id="loading" class="loading" style="display:none;">⏳ Carregando auditoria...</div>
+
+  <!-- Cards resumo -->
+  <div id="cards-area" style="display:none;">
+    <div class="cards" id="summary-cards"></div>
+  </div>
+
+  <!-- Resumos detalhados -->
+  <div id="resumos-area" style="display:none;">
+    <div class="resumo-grid">
+      <div class="section">
+        <h2>💰 Por Tipo de Pagamento</h2>
+        <table class="mini-table" id="tbl-tipo"></table>
+      </div>
+      <div class="section">
+        <h2>👤 Por Vendedor</h2>
+        <table class="mini-table" id="tbl-vendedor"></table>
+      </div>
+    </div>
+    <div class="section">
+      <h2>📦 Por Produto</h2>
+      <table class="mini-table" id="tbl-produto"></table>
+    </div>
+  </div>
+
+  <!-- Erros de integração -->
+  <div id="erros-area" style="display:none;">
+    <div class="section">
+      <h2>❌ Erros de Integração Bling</h2>
+      <table id="tbl-erros">
+        <thead><tr><th>Pedido</th><th>Ação</th><th>Erro</th><th>Hora</th><th>Detalhe</th></tr></thead>
+        <tbody id="erros-body"></tbody>
+      </table>
+      <div id="erros-empty" class="empty" style="display:none;">Nenhum erro de integração — tudo OK! ✅</div>
+    </div>
+  </div>
+
+  <!-- Log de auditoria completo -->
+  <div id="audit-log-area" style="display:none;">
+    <div class="section">
+      <h2>📋 Log de Auditoria do Dia</h2>
+      <table id="tbl-audit">
+        <thead><tr><th>ID</th><th>Pedido</th><th>Ação</th><th>Status</th><th>Bling ID</th><th>Hora</th></tr></thead>
+        <tbody id="audit-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Conciliação Bling -->
+  <div id="conciliacao-area" style="display:none;">
+    <div class="section">
+      <h2>🔍 Conciliação com Bling</h2>
+      <div id="conciliacao-loading" class="loading" style="display:none;">⏳ Verificando pedidos no Bling (pode demorar)...</div>
+      <div id="conciliacao-result" class="conciliacao-result"></div>
+    </div>
+  </div>
+
+  <!-- Pedidos do dia -->
+  <div id="pedidos-area" style="display:none;">
+    <div class="section">
+      <h2>📋 Pedidos do Dia</h2>
+      <table id="tbl-pedidos">
+        <thead><tr><th>#</th><th>Cliente</th><th>Valor</th><th>Tipo</th><th>Pago</th><th>Bling</th><th>Vendedor</th><th>Status</th></tr></thead>
+        <tbody id="pedidos-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="version-badge">v1.0.0 — auditoria</div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+checkAuth(['admin', 'atendente']);
+document.getElementById('nav-container').innerHTML = buildNav();
+
+let auditData = null;
+const isAdmin = (() => { try { return getCurrentUser()?.role === 'admin'; } catch(e) { return false; } })();
+if (!isAdmin) document.getElementById('btn-conciliar').style.display = 'none';
+
+// Set data para hoje
+document.getElementById('audit-date').value = new Date().toISOString().slice(0, 10);
+
+const TIPO_LABELS = {
+  dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX Vista', pix_receber: '⏳ PIX Receber',
+  debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista',
+  boleto: '🧾 Boleto', nfe: '📄 NFe', indefinido: '❓ Indefinido'
+};
+
+async function loadAuditoria() {
+  const date = document.getElementById('audit-date').value;
+  if (!date) { toast('Selecione uma data', 'error'); return; }
+
+  document.getElementById('loading').style.display = 'block';
+  ['cards-area','resumos-area','erros-area','audit-log-area','pedidos-area'].forEach(id => document.getElementById(id).style.display = 'none');
+
+  try {
+    auditData = await api(`/api/auditoria/diaria?date=${date}`);
+    renderSummary();
+    renderResumos();
+    renderErros();
+    renderAuditLog();
+    renderPedidos();
+    document.getElementById('btn-csv').disabled = false;
+    if (isAdmin) document.getElementById('btn-conciliar').disabled = false;
+  } catch(e) {
+    toast('Erro: ' + e.message, 'error');
+  } finally {
+    document.getElementById('loading').style.display = 'none';
+  }
+}
+
+function renderSummary() {
+  const r = auditData.resumo;
+  const errosCount = auditData.erros_integracao.length;
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="card">
+      <div class="card-num">${r.totalPedidos}</div>
+      <div class="card-label">Pedidos</div>
+      <div class="card-sub">R$ ${r.totalValor.toFixed(2)}</div>
+    </div>
+    <div class="card card-ok">
+      <div class="card-num">${r.comBling}</div>
+      <div class="card-label">Com Bling</div>
+      <div class="card-sub">${r.totalPedidos ? Math.round(r.comBling/r.totalPedidos*100) : 0}% do total</div>
+    </div>
+    <div class="card ${r.semBling > 0 ? 'card-warn' : ''}">
+      <div class="card-num">${r.semBling}</div>
+      <div class="card-label">Sem Bling</div>
+      <div class="card-sub">Pendentes de criação</div>
+    </div>
+    <div class="card card-ok">
+      <div class="card-num">${r.pagos}</div>
+      <div class="card-label">Pagos</div>
+      <div class="card-sub">${r.totalPedidos ? Math.round(r.pagos/r.totalPedidos*100) : 0}%</div>
+    </div>
+    <div class="card ${r.naoPagos > 0 ? 'card-warn' : ''}">
+      <div class="card-num">${r.naoPagos}</div>
+      <div class="card-label">Não Pagos</div>
+    </div>
+    <div class="card ${errosCount > 0 ? 'card-danger' : 'card-ok'}">
+      <div class="card-num">${errosCount}</div>
+      <div class="card-label">Erros Bling</div>
+      <div class="card-sub">${errosCount === 0 ? '✅ OK' : '⚠️ Verificar'}</div>
+    </div>
+  `;
+  document.getElementById('cards-area').style.display = 'block';
+}
+
+function renderResumos() {
+  // Por tipo
+  const tipoHtml = Object.entries(auditData.porTipo).sort((a,b) => b[1].valor - a[1].valor)
+    .map(([t, v]) => `<tr><td>${TIPO_LABELS[t] || t}</td><td>${v.qtd}</td><td>R$ ${v.valor.toFixed(2)}</td></tr>`).join('');
+  document.getElementById('tbl-tipo').innerHTML = `<tr><th>Tipo</th><th>Qtd</th><th>Valor</th></tr>${tipoHtml}`;
+
+  // Por vendedor
+  const vendHtml = Object.entries(auditData.porVendedor).sort((a,b) => b[1].valor - a[1].valor)
+    .map(([v, d]) => `<tr><td>${v}</td><td>${d.qtd}</td><td>R$ ${d.valor.toFixed(2)}</td></tr>`).join('');
+  document.getElementById('tbl-vendedor').innerHTML = `<tr><th>Vendedor</th><th>Qtd</th><th>Valor</th></tr>${vendHtml}`;
+
+  // Por produto
+  const prodHtml = Object.entries(auditData.porProduto).sort((a,b) => b[1].qtd - a[1].qtd)
+    .map(([p, d]) => `<tr><td>${p}</td><td>${d.qtd}</td><td>R$ ${d.valor.toFixed(2)}</td></tr>`).join('');
+  document.getElementById('tbl-produto').innerHTML = `<tr><th>Produto</th><th>Qtd</th><th>Valor</th></tr>${prodHtml}`;
+
+  document.getElementById('resumos-area').style.display = 'block';
+}
+
+function renderErros() {
+  const erros = auditData.erros_integracao;
+  if (!erros.length) {
+    document.getElementById('tbl-erros').style.display = 'none';
+    document.getElementById('erros-empty').style.display = 'block';
+  } else {
+    document.getElementById('tbl-erros').style.display = 'table';
+    document.getElementById('erros-empty').style.display = 'none';
+    document.getElementById('erros-body').innerHTML = erros.map(e => {
+      const hora = e.created_at ? e.created_at.split(' ')[1] || '' : '';
+      return `<tr>
+        <td><strong>#${e.order_id}</strong></td>
+        <td>${e.action}</td>
+        <td style="color:#dc2626;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(e.error_message||'').replace(/"/g,'&quot;')}">${e.error_message || '—'}</td>
+        <td>${hora}</td>
+        <td><button class="expand-btn" onclick="showAuditDetail(${e.id})">Ver</button></td>
+      </tr>`;
+    }).join('');
+  }
+  document.getElementById('erros-area').style.display = 'block';
+}
+
+function renderAuditLog() {
+  const logs = auditData.audit_logs || [];
+  if (!logs.length) {
+    document.getElementById('audit-log-area').style.display = 'none';
+    return;
+  }
+  document.getElementById('audit-body').innerHTML = logs.map(l => {
+    const tagClass = l.status === 'success' ? 'tag-success' : l.status === 'error' ? 'tag-error' : 'tag-skipped';
+    const hora = l.created_at ? l.created_at.split(' ')[1] || '' : '';
+    return `<tr>
+      <td>${l.id}</td>
+      <td><strong>#${l.order_id}</strong></td>
+      <td>${l.action}</td>
+      <td><span class="tag ${tagClass}">${l.status}</span></td>
+      <td>${l.bling_pedido_id || '—'}</td>
+      <td>${hora}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('audit-log-area').style.display = 'block';
+}
+
+function renderPedidos() {
+  const pedidos = auditData.pedidos || [];
+  document.getElementById('pedidos-body').innerHTML = pedidos.map(p => {
+    const blingBadge = p.bling_id
+      ? `<span style="color:#16a34a;font-weight:700;">✅ ${p.bling_id}</span>`
+      : '<span style="color:#dc2626;">❌ Sem</span>';
+    const pagoBadge = p.pago ? '<span style="color:#16a34a;">✅</span>' : '<span style="color:#f59e0b;">⏳</span>';
+    return `<tr>
+      <td><strong>${p.id}</strong></td>
+      <td>${p.cliente || '—'}</td>
+      <td>R$ ${(p.valor||0).toFixed(2)}</td>
+      <td>${TIPO_LABELS[p.tipo] || p.tipo || '—'}</td>
+      <td>${pagoBadge}</td>
+      <td>${blingBadge}</td>
+      <td>${p.vendedor || '—'}</td>
+      <td>${p.status || '—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('pedidos-area').style.display = 'block';
+}
+
+function showAuditDetail(auditId) {
+  const entry = auditData.erros_integracao.find(e => e.id === auditId);
+  if (!entry) return;
+  let html = `<h3>Erro #${entry.id} — Pedido #${entry.order_id}</h3>`;
+  html += `<p><strong>Ação:</strong> ${entry.action} | <strong>Status:</strong> ${entry.status}</p>`;
+  html += `<p><strong>Erro:</strong> ${entry.error_message || '—'}</p>`;
+  if (entry.request_payload) {
+    try { html += `<h4>Request:</h4><pre class="json">${JSON.stringify(JSON.parse(entry.request_payload), null, 2)}</pre>`; } catch(e) { html += `<pre class="json">${entry.request_payload}</pre>`; }
+  }
+  if (entry.response_data) {
+    try { html += `<h4>Response:</h4><pre class="json">${JSON.stringify(JSON.parse(entry.response_data), null, 2)}</pre>`; } catch(e) { html += `<pre class="json">${entry.response_data}</pre>`; }
+  }
+  // Simple modal
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:#fff;border-radius:16px;padding:24px;max-width:600px;max-height:80vh;overflow-y:auto;width:90%;';
+  modal.innerHTML = html + '<div style="margin-top:12px;text-align:right;"><button class="btn btn-gray" onclick="this.closest(\'div[style]\').remove()">Fechar</button></div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+}
+
+async function conciliar() {
+  const date = document.getElementById('audit-date').value;
+  if (!date) { toast('Selecione uma data', 'error'); return; }
+
+  document.getElementById('conciliacao-area').style.display = 'block';
+  document.getElementById('conciliacao-loading').style.display = 'block';
+  document.getElementById('conciliacao-result').innerHTML = '';
+  document.getElementById('btn-conciliar').disabled = true;
+
+  try {
+    const data = await api(`/api/auditoria/conciliacao-bling?date=${date}`);
+    let html = `<div class="cards" style="margin-bottom:12px;">
+      <div class="card card-ok"><div class="card-num">${data.conciliados.count}</div><div class="card-label">Conciliados</div></div>
+      <div class="card ${data.faltando_bling.count > 0 ? 'card-danger' : 'card-ok'}"><div class="card-num">${data.faltando_bling.count}</div><div class="card-label">Faltando no Bling</div></div>
+      <div class="card ${data.erros.count > 0 ? 'card-warn' : ''}"><div class="card-num">${data.erros.count}</div><div class="card-label">Erros</div></div>
+    </div>`;
+
+    if (data.faltando_bling.count > 0) {
+      html += `<h3 style="color:#dc2626;margin:12px 0 8px;">⚠️ Faltando no Bling:</h3>`;
+      html += `<table><thead><tr><th>Pedido</th><th>Bling ID</th><th>Cliente</th><th>Valor</th><th>Motivo</th></tr></thead><tbody>`;
+      for (const f of data.faltando_bling.items) {
+        html += `<tr><td>#${f.order_id}</td><td>${f.bling_id}</td><td>${f.cliente}</td><td>R$ ${(f.valor||0).toFixed(2)}</td><td style="color:#dc2626;">${f.motivo}</td></tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+
+    if (data.erros.count > 0) {
+      html += `<h3 style="color:#f59e0b;margin:12px 0 8px;">Erros de verificação:</h3><ul>`;
+      for (const e of data.erros.items) { html += `<li>Pedido #${e.order_id} (Bling ${e.bling_id}): ${e.erro}</li>`; }
+      html += `</ul>`;
+    }
+
+    document.getElementById('conciliacao-result').innerHTML = html;
+  } catch(e) {
+    document.getElementById('conciliacao-result').innerHTML = `<p style="color:#dc2626;">Erro: ${e.message}</p>`;
+  } finally {
+    document.getElementById('conciliacao-loading').style.display = 'none';
+    document.getElementById('btn-conciliar').disabled = false;
+  }
+}
+
+function exportCSV() {
+  if (!auditData) return;
+  const pedidos = auditData.pedidos || [];
+  const header = 'ID,Cliente,Valor,Tipo,Pago,Bling_ID,Vendedor,Status\n';
+  const rows = pedidos.map(p => `${p.id},"${(p.cliente||'').replace(/"/g,'""')}",${(p.valor||0).toFixed(2)},${p.tipo||''},${p.pago?'Sim':'Não'},${p.bling_id||''},${p.vendedor||''},${p.status||''}`).join('\n');
+  const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `auditoria_${auditData.date}.csv`;
+  a.click();
+  toast('📥 CSV exportado!');
+}
+
+// Auto-load
+loadAuditoria();
+</script>
+</body>
+</html>
