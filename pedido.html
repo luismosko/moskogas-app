@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.4.5</title>
+<title>Novo Pedido — MoskoGás v2.4.6</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.5 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.6 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.5</span></h1>
+  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.6</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -118,7 +118,7 @@
 
     <!-- Botão endereços adicionais (aparece ao selecionar cliente) -->
     <div id="multi-addr-bar" style="display:none;margin-top:10px;padding-top:10px;border-top:2px dashed #e2e8f0;display:flex;align-items:center;gap:10px">
-      <button type="button" onclick="openAddrModal()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">
+      <button type="button" onclick="openAddrModal()" title="Ver endereços salvos deste cliente" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">
         📍 Outros endereços <span id="addr-count-badge" style="background:rgba(255,255,255,0.3);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span>
       </button>
       <span id="addr-selected-label" style="font-size:12px;color:#6366f1;font-weight:600"></span>
@@ -154,11 +154,11 @@
       <strong>Mensalista/Boleto:</strong> NÃO cria venda agora, aparece em Pagamentos
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="pgto-grid">
-      <button type="button" class="tipo-pgto-btn" data-tipo="dinheiro"     data-key="dinheiro" onclick="selTipoPgto(this)">💵 Dinheiro</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="pix_vista"    data-key="pix" onclick="selTipoPgto(this)">⚡ PIX à vista</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="pix_receber"  data-key="pix_aguardando" onclick="selTipoPgto(this)">⏳ PIX a receber</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="mensalista"   data-key="fiado" onclick="selTipoPgto(this)">📅 Mensalista</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="boleto"       data-key="fiado" onclick="selTipoPgto(this)">🧾 Boleto/Órgão</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="dinheiro"     data-key="dinheiro" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💵 Dinheiro</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="pix_vista"    data-key="pix" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">⚡ PIX à vista</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="pix_receber"  data-key="pix_aguardando" onclick="selTipoPgto(this)" title="Cria venda no Bling — aguarda confirmação de PIX">⏳ PIX a receber</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="mensalista"   data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📅 Mensalista</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="boleto"       data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">🧾 Boleto/Órgão</button>
     </div>
     <input type="hidden" id="tipo_pagamento" value="">
     <input type="hidden" id="forma_pagamento_key" value="">
@@ -179,7 +179,7 @@
   </style>
 
   <div class="status-bar" id="status-bar"></div>
-  <button class="btn-primary" id="btn-save" onclick="saveOrder()">✅ SALVAR PEDIDO</button>
+  <button class="btn-primary" id="btn-save" onclick="saveOrder()" title="Salvar pedido e ir para gestão">✅ SALVAR PEDIDO</button>
 </div>
 
 <script src="shared.js"></script>
@@ -896,23 +896,10 @@ async function saveOrder() {
       toast(`✅ Pedido #${result.id} ${statusMsg}!`);
     }
 
-    // Limpar form
+    // Redirecionar para gestão após 1.2s para ver o toast
     setTimeout(() => {
-      document.getElementById('multi-addr-bar').style.display = 'none';
-      document.getElementById('addr-selected-label').textContent = '';
-      document.getElementById('addr-count-badge').textContent = '0';
-      allAddresses = []; currentPhone = '';
-      ['cName','cPhone','cAddr','cNum','cBairro','cComp','cRef','notes','search'].forEach(id => {
-        const el = document.getElementById(id); if (el) el.value = '';
-      });
-      document.getElementById('tipo_pagamento').value = '';
-      document.getElementById('forma_pagamento_key').value = '';
-      document.querySelectorAll('.tipo-pgto-btn').forEach(b => b.classList.remove('sel'));
-      items = [];
-      renderItems();
-      btn.disabled = false;
-      btn.textContent = '✅ SALVAR PEDIDO';
-    }, 800);
+      window.location.href = 'gestao.html';
+    }, 1200);
 
   } catch(e) {
     toast(e.message, 'error');
