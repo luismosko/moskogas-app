@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório Entregador — MoskoGás v1.1.0</title>
+<title>Relatório Entregador — MoskoGás v1.2.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -19,9 +19,9 @@
   /* ── RELATÓRIO ── */
   .report { max-width: 800px; margin: 16px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 
-  .report-header { text-align: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1.5px solid #94a3b8; }
-  .report-header h1 { font-size: 14px; color: #334155; margin-bottom: 2px; }
-  .report-header .sub { font-size: 12px; color: #64748b; }
+  .report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1.5px solid #94a3b8; }
+  .report-header h1 { font-size: 13px; color: #334155; white-space: nowrap; }
+  .report-header .sub { font-size: 11px; color: #64748b; white-space: nowrap; }
 
   .report table { width: 100%; border-collapse: collapse; }
   .report th { background: #f1f5f9; color: #334155; padding: 4px 5px; text-align: left; font-size: 10px; font-weight: 700; border: 1px solid #cbd5e1; white-space: nowrap; }
@@ -59,14 +59,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.0</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.1.0</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.0</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -79,7 +79,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.1.0
+// v1.2.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -95,6 +95,24 @@ async function init() {
     sel.appendChild(opt);
   });
   document.getElementById('fDate').value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+}
+
+function truncAddr(addr, maxLen) {
+  if (!addr) return '—';
+  // Separa número do final (ex: "Avenida Afonso Pena, 3297" → rua="Avenida Afonso Pena", num="3297")
+  const m = addr.match(/^(.+?)[,\s]+(\d{1,6}\s*\w?)$/);
+  if (m) {
+    const rua = m[1], num = m[2];
+    const space = maxLen - num.length - 4; // 4 = "... "
+    if (rua.length > space && space > 5) return rua.slice(0, space).trim() + '... ' + num;
+    return addr.length > maxLen ? addr.slice(0, maxLen - 3) + '...' : addr;
+  }
+  return addr.length > maxLen ? addr.slice(0, maxLen - 3) + '...' : addr;
+}
+
+function truncText(txt, maxLen) {
+  if (!txt) return '—';
+  return txt.length > maxLen ? txt.slice(0, maxLen - 3).trim() + '...' : txt;
 }
 
 async function gerarRelatorio() {
@@ -133,14 +151,15 @@ async function gerarRelatorio() {
 
   const dateFmt = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR');
 
+  // Header compacto: título esquerda, dados direita, 1 linha só
   let html = `
     <div class="report-header">
       <h1>MOSKO GÁS — VENDAS POR ENTREGADOR</h1>
-      <div class="sub">Data: <strong>${dateFmt}</strong> &nbsp;|&nbsp; Entregador: <strong>${driverName.toUpperCase()}</strong> &nbsp;|&nbsp; Pedidos: <strong>${rows.length}</strong></div>
+      <div class="sub">${dateFmt} &nbsp;|&nbsp; <strong>${driverName.toUpperCase()}</strong> &nbsp;|&nbsp; ${rows.length} pedidos</div>
     </div>
   `;
 
-  // Tabela — sem coluna checkbox, coluna # compacta, sem label "Pedido"
+  // Tabela — sem Bairro, sem R$
   html += `<table>
     <thead><tr>
       <th style="width:24px">#</th>
@@ -148,7 +167,6 @@ async function gerarRelatorio() {
       <th>Pgto</th>
       <th>Fone</th>
       <th>Endereço</th>
-      <th>Bairro</th>
       <th>Produto</th>
       <th style="text-align:center">Qt</th>
       <th style="text-align:right">Unit.</th>
@@ -180,6 +198,8 @@ async function gerarRelatorio() {
     pgtoTotals[pgtoKey].count++;
 
     const phone = o.phone_digits ? formatPhone(o.phone_digits) : '—';
+    const endFull = (o.address_line || '') + (o.complemento ? ', ' + o.complemento : '');
+    const endTrunc = truncAddr(endFull, 50);
 
     items.forEach((it, i) => {
       const isFirst = i === 0;
@@ -189,28 +209,26 @@ async function gerarRelatorio() {
 
       html += `<tr class="${isFirst ? 'order-first' : ''}">
         ${isFirst ? `<td rowspan="${items.length}" style="font-weight:700;vertical-align:middle;text-align:center">${o.id}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:600;vertical-align:middle;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.customer_name || '—'}</td>` : ''}
+        ${isFirst ? `<td rowspan="${items.length}" style="font-weight:600;vertical-align:middle;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${truncText(o.customer_name, 25) || '—'}</td>` : ''}
         ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle;white-space:nowrap">${pgtoLabel}</td>` : ''}
         ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle;white-space:nowrap">${phone}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="vertical-align:middle;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.address_line || '—'}${o.complemento ? ', ' + o.complemento : ''}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle">${o.bairro || '—'}</td>` : ''}
-        <td>${it.name || '—'}</td>
-        <td style="text-align:center;font-weight:700">${qty}</td>
-        <td style="text-align:right">R$ ${price.toFixed(2)}</td>
-        <td style="text-align:right;font-weight:700">R$ ${sub.toFixed(2)}</td>
+        ${isFirst ? `<td rowspan="${items.length}" style="vertical-align:middle;white-space:nowrap;font-size:9px" title="${(o.address_line||'') + (o.complemento ? ', '+o.complemento : '')}">${endTrunc}</td>` : ''}
+        <td style="white-space:nowrap" title="${it.name || ''}">${truncText(it.name, 35)}</td>
+        <td style="text-align:center;font-weight:700;white-space:nowrap">${qty}</td>
+        <td style="text-align:right;white-space:nowrap">${price.toFixed(2)}</td>
+        <td style="text-align:right;font-weight:700;white-space:nowrap">${sub.toFixed(2)}</td>
       </tr>`;
     });
 
     html += `<tr class="subtotal-row">
-      <td colspan="9" style="text-align:right;font-size:9px;color:#64748b">Subtotal #${o.id}</td>
-      <td style="text-align:right;font-size:10px">R$ ${orderTotal.toFixed(2)}</td>
+      <td colspan="8" style="text-align:right;font-size:9px;color:#64748b">Subtotal #${o.id}</td>
+      <td style="text-align:right;font-size:10px;white-space:nowrap">${orderTotal.toFixed(2)}</td>
     </tr>`;
   });
 
-  // Total geral — cor suave (cinza claro, não preto)
   html += `<tr class="grand-total">
-    <td colspan="9" style="text-align:right;padding:6px 8px">TOTAL GERAL</td>
-    <td style="text-align:right;padding:6px 8px">R$ ${grandTotal.toFixed(2)}</td>
+    <td colspan="8" style="text-align:right;padding:6px 8px">TOTAL GERAL</td>
+    <td style="text-align:right;padding:6px 8px;white-space:nowrap">R$ ${grandTotal.toFixed(2)}</td>
   </tr>`;
 
   html += `</tbody></table>`;
