@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.7.3</title>
+<title>Novo Pedido — MoskoGás v2.7.4</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.3 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.4 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.3</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.4</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -193,17 +193,16 @@ async function checkBlingStatus(manual = false) {
   const ind = document.getElementById('bling-indicator');
   if (!ind) return;
   try {
-    // Sempre usar keep-alive que TESTA o token real no Bling
     const r = await api('/api/bling/keep-alive');
     if (r.connected) {
       ind.style.background = '#16a34a';
-      ind.textContent = r.refreshed ? '🟢 Bling Renovado!' : '🟢 Bling OK';
-      ind.title = `Token testado e válido (${r.minutesLeft}min) — clique para verificar`;
+      ind.textContent = '🟢 Bling OK';
+      ind.title = `Token válido (${r.minutesLeft}min) — clique para verificar`;
       hideBlingBanner();
     } else {
       ind.style.background = '#dc2626';
       ind.textContent = '🔴 Bling OFF';
-      ind.title = (r.message || 'Token expirado') + ' — clique para tentar';
+      ind.title = 'Reautorize em Config → Conectar Bling';
       showBlingBanner();
     }
   } catch(e) {

@@ -153,13 +153,13 @@ async function checkBlingStatus(manual = false) {
     const r = await api('/api/bling/keep-alive');
     if (r.connected) {
       ind.style.background = '#16a34a';
-      ind.textContent = r.refreshed ? '🟢 Renovado!' : '🟢 Bling OK';
-      ind.title = `Token testado (${r.minutesLeft}min) — clique para verificar`;
+      ind.textContent = '🟢 Bling OK';
+      ind.title = `Token válido (${r.minutesLeft}min) — clique para verificar`;
       hideBlingBanner();
     } else {
       ind.style.background = '#dc2626';
       ind.textContent = '🔴 Bling OFF';
-      ind.title = (r.message || 'Token expirado') + ' — clique para tentar';
+      ind.title = 'Reautorize em Config → Conectar Bling';
       showBlingBanner();
     }
   } catch(e) {
