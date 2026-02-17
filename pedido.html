@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.4.6</title>
+<title>Novo Pedido — MoskoGás v2.5.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -45,7 +45,7 @@
 <div id="nav-placeholder"></div>
 <div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.4.6 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.4.6</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.5.0</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -186,6 +186,52 @@
 <script>
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
+
+// ── Bling Status Monitor ──────────────────────────────────────
+async function checkBlingStatus(manual = false) {
+  const ind = document.getElementById('bling-indicator');
+  if (!ind) return;
+  try {
+    const endpoint = manual ? '/api/bling/keep-alive' : '/api/bling/status';
+    const r = await api(endpoint);
+    if (r.connected) {
+      ind.style.background = '#16a34a';
+      ind.textContent = `🟢 Bling OK`;
+      ind.title = `Token válido por ${r.minutesLeft}min — clique para atualizar`;
+      hideBlingBanner();
+    } else {
+      ind.style.background = '#dc2626';
+      ind.textContent = '🔴 Bling OFF';
+      ind.title = 'Token expirado — clique para tentar reconectar';
+      showBlingBanner();
+    }
+  } catch(e) {
+    ind.style.background = '#dc2626';
+    ind.textContent = '🔴 Bling OFF';
+    ind.title = 'Erro ao verificar — clique para tentar';
+    showBlingBanner();
+  }
+}
+
+function showBlingBanner() {
+  if (document.getElementById('bling-banner')) return;
+  const b = document.createElement('div');
+  b.id = 'bling-banner';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+  b.innerHTML = '<span>⚠️ Bling desconectado — pedidos serão salvos mas SEM venda no Bling!</span>'
+    + '<a href="config.html" style="background:#fff;color:#dc2626;padding:6px 16px;border-radius:8px;font-weight:700;text-decoration:none;margin-left:12px;white-space:nowrap">🔑 Reconectar</a>';
+  document.body.prepend(b);
+  document.body.style.paddingTop = '52px';
+}
+
+function hideBlingBanner() {
+  const b = document.getElementById('bling-banner');
+  if (b) { b.remove(); document.body.style.paddingTop = ''; }
+}
+
+// Check on load + every 3 minutes
+checkBlingStatus(true);
+setInterval(() => checkBlingStatus(false), 180000);
 
 let items = [];
 let searchTimer;
@@ -891,15 +937,13 @@ async function saveOrder() {
     const statusMsg = msgs[tipoPgto] || 'salvo';
     
     if (result.bling_warning) {
-      toast(`⚠️ Pedido #${result.id} ${statusMsg} (erro Bling: ${result.bling_warning})`, 'error');
+      toast(`⚠️ Pedido #${result.id} SALVO localmente, mas NÃO foi pro Bling! Verifique a conexão.`, 'error');
+      checkBlingStatus(true); // Atualiza indicador
+      setTimeout(() => { window.location.href = 'gestao.html'; }, 3000);
     } else {
       toast(`✅ Pedido #${result.id} ${statusMsg}!`);
+      setTimeout(() => { window.location.href = 'gestao.html'; }, 1200);
     }
-
-    // Redirecionar para gestão após 1.2s para ver o toast
-    setTimeout(() => {
-      window.location.href = 'gestao.html';
-    }, 1200);
 
   } catch(e) {
     toast(e.message, 'error');
