@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v1.8 — MoskoGás</title>
+<title>Gestão v2.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -50,9 +50,9 @@
     <input type="date" id="fDateFrom" onchange="load()" style="width:135px">
     <span style="color:#94a3b8;font-size:12px">até</span>
     <input type="date" id="fDateTo" onchange="load()" style="width:135px">
-    <button id="btnHoje" class="btn" onclick="setDateFilter('hoje')" style="background:#f97316;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Hoje</button>
-    <button id="btnOntem" class="btn" onclick="setDateFilter('ontem')" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Ontem</button>
-    <button class="btn" onclick="setDateFilter('limpar')" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
+    <button id="btnHoje" class="btn" onclick="setDateFilter('hoje')" title="Filtrar pedidos de hoje" style="background:#f97316;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Hoje</button>
+    <button id="btnOntem" class="btn" onclick="setDateFilter('ontem')" title="Filtrar pedidos de ontem" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Ontem</button>
+    <button class="btn" onclick="setDateFilter('limpar')" title="Limpar filtro de data" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
   </div>
   <div style="position:relative">
     <button id="statusBtn" onclick="toggleStatusMenu()" style="background:#fff;border:2px solid #e2e8f0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;min-width:140px;text-align:left">
@@ -72,9 +72,9 @@
     <option value="">Todos entregadores</option>
   </select>
   <input type="text" id="fQ" placeholder="🔍 Busca..." oninput="load()" style="width:160px">
-  <button class="btn btn-orange" onclick="load()">🔄 Atualizar</button>
+  <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.1</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.2</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -102,6 +102,24 @@
   <tbody id="tbody"></tbody>
 </table>
 
+<!-- RESUMO PRODUTOS -->
+<div id="product-summary" style="margin:16px;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;display:none">
+  <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center">
+    <span>📊 Resumo de Produtos</span>
+    <span id="prod-summary-total" style="color:#f97316;font-size:15px"></span>
+  </div>
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:#f8fafc">
+        <th style="position:static;background:#f8fafc;color:#64748b;font-size:11px;padding:8px 12px;text-align:left">Produto</th>
+        <th style="position:static;background:#f8fafc;color:#64748b;font-size:11px;padding:8px 12px;text-align:center;width:80px">Vendidos</th>
+        <th style="position:static;background:#f8fafc;color:#64748b;font-size:11px;padding:8px 12px;text-align:right;width:120px">Total R$</th>
+      </tr>
+    </thead>
+    <tbody id="prod-summary-body"></tbody>
+  </table>
+</div>
+
 <!-- MODAL ENVIAR ENTREGADOR -->
 <div class="modal-overlay" id="modal-wa">
   <div class="modal">
@@ -113,9 +131,9 @@
     <textarea id="modal-obs" rows="3" placeholder="Ex: Troco para R$ 100, ligar antes de chegar..."></textarea>
     <div class="preview-msg" id="modal-preview" style="display:none"></div>
     <div class="modal-footer">
-      <button class="btn btn-gray" onclick="closeModal()">Cancelar</button>
-      <button class="btn" onclick="previewMsg()" style="background:#6366f1;color:#fff">👁 Prévia</button>
-      <button class="btn btn-green" onclick="sendWa()">📲 Enviar WhatsApp</button>
+      <button class="btn btn-gray" onclick="closeModal()" title="Cancelar envio">Cancelar</button>
+      <button class="btn" onclick="previewMsg()" title="Ver prévia da mensagem" style="background:#6366f1;color:#fff">👁 Prévia</button>
+      <button class="btn btn-green" onclick="sendWa()" title="Enviar mensagem via WhatsApp">📲 Enviar WhatsApp</button>
     </div>
   </div>
 </div>
@@ -312,11 +330,11 @@ function renderTable(rows) {
       </td>
       <td>
         <div class="action-btns" style="gap:2px">
-          ${canSendWa  ? `<button class="btn btn-green" style="font-size:10px;padding:3px 6px" onclick="openModal(${o.id})">📲</button>` : ''}
-          ${canDeliver ? `<button class="btn btn-blue"  style="font-size:10px;padding:3px 6px" onclick="markDelivered(${o.id})">✅</button>` : ''}
-          <button class="btn" style="font-size:10px;padding:3px 6px;background:#6366f1;color:#fff" onclick="openEditModal(${o.id})">✏️</button>
-          ${canCancel  ? `<button class="btn btn-red"   style="font-size:10px;padding:3px 6px" onclick="cancelOrder(${o.id})">✕</button>` : ''}
-          <button class="btn btn-gray" style="font-size:10px;padding:3px 6px" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
+          ${canSendWa  ? `<button class="btn btn-green" style="font-size:10px;padding:3px 6px" title="Enviar WhatsApp para entregador" onclick="openModal(${o.id})">📲</button>` : ''}
+          ${canDeliver ? `<button class="btn btn-blue"  style="font-size:10px;padding:3px 6px" title="Marcar como entregue" onclick="markDelivered(${o.id})">✅</button>` : ''}
+          <button class="btn" style="font-size:10px;padding:3px 6px;background:#6366f1;color:#fff" title="Editar pedido" onclick="openEditModal(${o.id})">✏️</button>
+          ${canCancel  ? `<button class="btn btn-red"   style="font-size:10px;padding:3px 6px" title="Cancelar pedido" onclick="cancelOrder(${o.id})">✕</button>` : ''}
+          <button class="btn btn-gray" style="font-size:10px;padding:3px 6px" title="Imprimir recibo" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
         </div>
       </td>
     </tr>`;
@@ -335,6 +353,43 @@ function renderSummary(rows) {
     <span>🔵 Entregues: <strong>${counts.entregue}</strong></span>
     <span>⚫ Cancelados: <strong>${counts.cancelado}</strong></span>
     <span style="margin-left:auto">💰 Total: <strong>R$ ${total.toFixed(2)}</strong></span>`;
+
+  // ── Resumo por produto (exclui cancelados) ──
+  const prodMap = {};
+  rows.filter(r => r.status !== 'cancelado').forEach(r => {
+    const items = JSON.parse(r.items_json || '[]');
+    items.forEach(i => {
+      const key = (i.name || 'Produto').trim();
+      if (!prodMap[key]) prodMap[key] = { qty: 0, total: 0 };
+      prodMap[key].qty   += (i.qty || 1);
+      prodMap[key].total += (i.price || 0) * (i.qty || 1);
+    });
+  });
+
+  const prodSummary = document.getElementById('product-summary');
+  const entries = Object.entries(prodMap).sort((a, b) => b[1].total - a[1].total);
+
+  if (!entries.length) {
+    prodSummary.style.display = 'none';
+    return;
+  }
+  prodSummary.style.display = 'block';
+
+  let grandTotal = 0;
+  const body = document.getElementById('prod-summary-body');
+  body.innerHTML = entries.map(([name, data]) => {
+    grandTotal += data.total;
+    return `<tr>
+      <td style="padding:6px 12px;font-size:12px;font-weight:600;border-bottom:1px solid #f1f5f9">${name}</td>
+      <td style="padding:6px 12px;font-size:13px;font-weight:700;text-align:center;border-bottom:1px solid #f1f5f9;color:#2563eb">${data.qty}</td>
+      <td style="padding:6px 12px;font-size:13px;font-weight:700;text-align:right;border-bottom:1px solid #f1f5f9">R$ ${data.total.toFixed(2)}</td>
+    </tr>`;
+  }).join('') + `<tr style="background:#f8fafc">
+    <td style="padding:8px 12px;font-size:12px;font-weight:800;color:#1e293b">TOTAL GERAL</td>
+    <td style="padding:8px 12px;font-size:13px;font-weight:800;text-align:center;color:#1e293b">${entries.reduce((s, e) => s + e[1].qty, 0)}</td>
+    <td style="padding:8px 12px;font-size:14px;font-weight:900;text-align:right;color:#f97316">R$ ${grandTotal.toFixed(2)}</td>
+  </tr>`;
+  document.getElementById('prod-summary-total').textContent = `Total Geral: R$ ${grandTotal.toFixed(2)}`;
 }
 
 // ── Ações ─────────────────────────────────────────────────────
@@ -565,7 +620,8 @@ async function saveEditOrder() {
   const _editNum = document.getElementById('edit-num') ? document.getElementById('edit-num').value.trim() : '';
   const addr  = _editNum ? _editRua + ', ' + _editNum : _editRua;
   if (!name) { toast('Nome obrigatório', 'error'); return; }
-  if (!addr) { toast('Endereço obrigatório', 'error'); return; }
+  const isConsumidorFinal = name.toUpperCase().includes('CONSUMIDOR FINAL');
+  if (!isConsumidorFinal && !addr) { toast('Endereço obrigatório', 'error'); return; }
   if (!editItems.length) { toast('Adicione pelo menos 1 item', 'error'); return; }
 
   const total = editItems.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0);
@@ -661,8 +717,8 @@ init();
     </div>
 
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-      <button class="btn btn-gray" onclick="closeEditModal()">Cancelar</button>
-      <button class="btn btn-orange" onclick="saveEditOrder()">💾 Salvar Alterações</button>
+      <button class="btn btn-gray" onclick="closeEditModal()" title="Cancelar edição">Cancelar</button>
+      <button class="btn btn-orange" onclick="saveEditOrder()" title="Salvar alterações do pedido">💾 Salvar Alterações</button>
     </div>
   </div>
 </div>
