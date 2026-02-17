@@ -356,15 +356,21 @@ function renderSummary(rows) {
 
   // ── Resumo por produto (exclui cancelados) ──
   const prodMap = {};
+  let parsedCount = 0;
   rows.filter(r => r.status !== 'cancelado').forEach(r => {
-    const items = JSON.parse(r.items_json || '[]');
+    let items = [];
+    try { items = JSON.parse(r.items_json || '[]'); } catch(e) { console.warn('items_json parse error order', r.id, e); }
     items.forEach(i => {
       const key = (i.name || 'Produto').trim();
       if (!prodMap[key]) prodMap[key] = { qty: 0, total: 0 };
-      prodMap[key].qty   += (i.qty || 1);
-      prodMap[key].total += (i.price || 0) * (i.qty || 1);
+      const q = parseInt(i.qty) || 1;
+      const p = parseFloat(i.price) || 0;
+      prodMap[key].qty   += q;
+      prodMap[key].total += p * q;
+      parsedCount++;
     });
   });
+  console.log('[Resumo Produtos]', parsedCount, 'itens parsed,', Object.keys(prodMap).length, 'produtos únicos');
 
   const prodSummary = document.getElementById('product-summary');
   const entries = Object.entries(prodMap).sort((a, b) => b[1].total - a[1].total);
