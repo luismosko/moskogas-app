@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.7.0
+// shared.js — Utilitários compartilhados MoskoGás v1.8.0
+// v1.8.0: Nav compacta — Auditoria dentro de Relatório, Usuários dentro de Config
 // v1.7.0: Dropdown usuário (Trocar Senha + Sair), modal troca senha
 // v1.6.0: Loading overlay global (showLoading/hideLoading)
 // v1.5.0: Navbar azul, dropdown Relatório, menu RBAC, toast warning
@@ -148,20 +149,26 @@ const NAV_ITEMS = [
   { href: 'pedido.html',     icon: '➕', label: 'Novo Pedido',  roles: ['admin', 'atendente'] },
   { href: 'gestao.html',     icon: '📋', label: 'Gestão',       roles: ['admin', 'atendente'] },
   { href: 'pagamentos.html', icon: '💰', label: 'Pagamentos',   roles: ['admin', 'atendente'] },
-  // Relatório é dropdown — tratado à parte
-  { href: 'auditoria.html',  icon: '🔍', label: 'Auditoria',    roles: ['admin', 'atendente'] },
-  { href: 'usuarios.html',   icon: '👥', label: 'Usuários',     roles: ['admin', 'atendente'] },
-  { href: 'config.html',     icon: '⚙️', label: 'Config',      roles: ['admin', 'atendente'] },
 ];
 
-// Dropdown "Relatório" — visível para admin e atendente
-const NAV_RELATORIO = {
-  icon: '📊', label: 'Relatório', roles: ['admin', 'atendente'],
-  children: [
-    { href: 'relatorio.html',   icon: '📊', label: 'Relatório do Dia' },
-    { href: 'entregador.html',  icon: '🚚', label: 'Painel Entregador' },
-  ]
-};
+// Dropdowns — cada um com ID único para abrir/fechar independente
+const NAV_DROPDOWNS = [
+  {
+    id: 'relatorio', icon: '📊', label: 'Relatório', roles: ['admin', 'atendente'],
+    children: [
+      { href: 'relatorio.html',   icon: '📊', label: 'Relatório do Dia' },
+      { href: 'entregador.html',  icon: '🚚', label: 'Painel Entregador' },
+      { href: 'auditoria.html',   icon: '🔍', label: 'Auditoria' },
+    ]
+  },
+  {
+    id: 'config', icon: '⚙️', label: 'Config', roles: ['admin', 'atendente'],
+    children: [
+      { href: 'config.html',     icon: '⚙️', label: 'Configurações' },
+      { href: 'usuarios.html',   icon: '👥', label: 'Usuários' },
+    ]
+  },
+];
 
 // Itens para entregador (visão minimal)
 const NAV_ENTREGADOR = [
@@ -181,26 +188,26 @@ function buildNav() {
     items = NAV_ITEMS.filter(item => item.roles.includes(role));
   }
 
-  const linksHtml = items.map(item => {
+  let linksHtml = items.map(item => {
     const active = currentPage === item.href;
     return `<a href="${item.href}" class="mg-nav-link${active ? ' mg-nav-active' : ''}">${item.icon} ${item.label}</a>`;
   }).join('\n    ');
 
-  // ── Dropdown Relatório (só admin/atendente) ──
-  let dropdownHtml = '';
-  if (NAV_RELATORIO.roles.includes(role)) {
-    const isInRelatorio = NAV_RELATORIO.children.some(c => c.href === currentPage);
-    const childrenHtml = NAV_RELATORIO.children.map(c => {
+  // ── Dropdowns (Relatório, Config, etc) ──
+  for (const dd of NAV_DROPDOWNS) {
+    if (!dd.roles.includes(role)) continue;
+    const isInDd = dd.children.some(c => c.href === currentPage);
+    const childrenHtml = dd.children.map(c => {
       const active = currentPage === c.href;
       return `<a href="${c.href}" class="mg-dd-item${active ? ' mg-dd-active' : ''}">${c.icon} ${c.label}</a>`;
     }).join('\n        ');
 
-    dropdownHtml = `
-    <div class="mg-nav-dropdown" id="mgNavDropdown">
-      <button class="mg-nav-link mg-dd-trigger${isInRelatorio ? ' mg-nav-active' : ''}" onclick="toggleNavDropdown(event)">
-        ${NAV_RELATORIO.icon} ${NAV_RELATORIO.label} <span class="mg-dd-arrow">▾</span>
+    linksHtml += `
+    <div class="mg-nav-dropdown">
+      <button class="mg-nav-link mg-dd-trigger${isInDd ? ' mg-nav-active' : ''}" onclick="toggleNavDropdown(event, '${dd.id}')">
+        ${dd.icon} ${dd.label} <span class="mg-dd-arrow">▾</span>
       </button>
-      <div class="mg-dd-menu" id="mgDdMenu">
+      <div class="mg-dd-menu" id="mgDd_${dd.id}">
         ${childrenHtml}
       </div>
     </div>`;
@@ -220,34 +227,13 @@ function buildNav() {
     </div>`
     : '';
 
-  // ── Inserir dropdown entre Pagamentos e Auditoria ──
-  // Pegar índice onde inserir dropdown (após pagamentos ou gestão)
-  const itemParts = linksHtml.split('\n');
-  let insertIdx = -1;
-  for (let i = 0; i < itemParts.length; i++) {
-    if (itemParts[i].includes('pagamentos.html') || itemParts[i].includes('gestao.html')) {
-      insertIdx = i;
-    }
-  }
-
-  let finalLinks;
-  if (dropdownHtml && insertIdx >= 0) {
-    const before = itemParts.slice(0, insertIdx + 1).join('\n');
-    const after = itemParts.slice(insertIdx + 1).join('\n');
-    finalLinks = before + '\n    ' + dropdownHtml + '\n    ' + after;
-  } else if (dropdownHtml) {
-    finalLinks = linksHtml + '\n    ' + dropdownHtml;
-  } else {
-    finalLinks = linksHtml;
-  }
-
   return `
 <nav class="mg-navbar" id="mgNavbar">
   <a href="https://moskogas.com.br" target="_blank" class="mg-nav-logo">
     <img src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="MoskoGás" onerror="this.onerror=null;this.parentElement.innerHTML='<span style=\\'font-weight:800;font-size:16px;color:#fff;letter-spacing:1px\\'>MOSKOGAS</span>'">
   </a>
   <div class="mg-nav-links">
-    ${finalLinks}
+    ${linksHtml}
   </div>
   <div class="mg-nav-right">
     ${userInfo}
@@ -534,23 +520,24 @@ function buildNav() {
 </style>`;
 }
 
-function toggleNavDropdown(e) {
+function toggleNavDropdown(e, ddId) {
   e.stopPropagation();
-  const menu = document.getElementById('mgDdMenu');
+  const menu = document.getElementById('mgDd_' + ddId);
   if (!menu) return;
+  // Fechar outros dropdowns abertos
+  document.querySelectorAll('.mg-dd-menu.mg-dd-open').forEach(m => {
+    if (m !== menu) m.classList.remove('mg-dd-open');
+  });
   menu.classList.toggle('mg-dd-open');
-
-  // Fechar ao clicar fora
   if (menu.classList.contains('mg-dd-open')) {
     setTimeout(() => {
-      document.addEventListener('click', closeNavDropdown, { once: true });
+      document.addEventListener('click', closeAllNavDropdowns, { once: true });
     }, 10);
   }
 }
 
-function closeNavDropdown() {
-  const menu = document.getElementById('mgDdMenu');
-  if (menu) menu.classList.remove('mg-dd-open');
+function closeAllNavDropdowns() {
+  document.querySelectorAll('.mg-dd-menu.mg-dd-open').forEach(m => m.classList.remove('mg-dd-open'));
 }
 
 function toggleMobileNav() {
