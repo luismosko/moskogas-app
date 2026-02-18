@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.0.0 — MoskoGás</title>
+<title>Contratos v1.0.1 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.0.0</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.0.1</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -236,7 +236,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.0.0
+// v1.0.1 — fix showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -272,7 +272,7 @@ async function loadContratos() {
     renderList();
     renderSummary(r);
   } catch (e) {
-    showToast('Erro ao carregar contratos: ' + e.message, 'error');
+    toast('Erro ao carregar contratos: ' + e.message, 'error');
   }
 }
 
@@ -412,7 +412,7 @@ async function openDetail(id) {
         </div>` : ''}
       </div>`;
   } catch (e) {
-    showToast('Erro ao carregar contrato: ' + e.message, 'error');
+    toast('Erro ao carregar contrato: ' + e.message, 'error');
   }
 }
 
@@ -472,7 +472,7 @@ async function editContrato(id) {
 
     openModal('modalContrato');
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
@@ -492,22 +492,22 @@ async function salvarContrato() {
   };
 
   if (!body.razao_social && !body.responsavel_nome) {
-    showToast('Informe o nome/razão social do cliente', 'warning');
+    toast('Informe o nome/razão social do cliente', 'warning');
     return;
   }
 
   try {
     if (editingId) {
       await api(`/api/contratos/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      showToast('Contrato atualizado!', 'success');
+      toast('Contrato atualizado!', 'success');
     } else {
       const r = await api('/api/contratos', { method: 'POST', body: JSON.stringify(body) });
-      showToast(`Contrato ${r.numero} criado!`, 'success');
+      toast(`Contrato ${r.numero} criado!`, 'success');
     }
     closeModal('modalContrato');
     loadContratos();
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
@@ -612,13 +612,13 @@ async function loadDefaultSignatarios() {
 async function enviarAssinatura(id) {
   if (!confirm('Enviar contrato para assinatura digital via Assinafy + WhatsApp?')) return;
   try {
-    showToast('Enviando para Assinafy... aguarde', 'info');
+    toast('Enviando para Assinafy... aguarde', 'info');
     const r = await api(`/api/contratos/${id}/enviar-assinatura`, { method: 'POST', body: '{}' });
-    showToast('Contrato enviado para assinatura! Links enviados via WhatsApp.', 'success');
+    toast('Contrato enviado para assinatura! Links enviados via WhatsApp.', 'success');
     loadContratos();
     openDetail(id);
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
@@ -627,9 +627,9 @@ async function reenviarLinks(contractId, signerId) {
   try {
     const body = signerId ? { signer_id: signerId } : {};
     await api(`/api/contratos/${contractId}/reenviar-links`, { method: 'POST', body: JSON.stringify(body) });
-    showToast('Links reenviados!', 'success');
+    toast('Links reenviados!', 'success');
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
@@ -638,16 +638,16 @@ async function cancelarContrato(id) {
   if (!motivo) return;
   try {
     await api(`/api/contratos/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
-    showToast('Contrato cancelado', 'success');
+    toast('Contrato cancelado', 'success');
     loadContratos();
     voltarLista();
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
 async function gerarPDF(id) {
-  showToast('Gerando PDF... aguarde', 'info');
+  toast('Gerando PDF... aguarde', 'info');
   try {
     const r = await api(`/api/contratos/${id}`);
     const c = r.contract;
@@ -692,10 +692,10 @@ async function gerarPDF(id) {
     const result = await resp.json();
     if (!result.ok) throw new Error(result.error || 'Falha ao salvar PDF');
 
-    showToast(`PDF gerado! (${Math.round(result.size/1024)}KB)`, 'success');
+    toast(`PDF gerado! (${Math.round(result.size/1024)}KB)`, 'success');
     openDetail(id);
   } catch (e) {
-    showToast('Erro ao gerar PDF: ' + e.message, 'error');
+    toast('Erro ao gerar PDF: ' + e.message, 'error');
   }
 }
 
@@ -834,10 +834,10 @@ async function salvarConfig() {
     await api('/api/contratos/config', { method: 'POST', body: JSON.stringify(body) });
     configData.contrato_comodante = body.contrato_comodante;
     configData.contrato_testemunhas = body.contrato_testemunhas;
-    showToast('Configuração salva!', 'success');
+    toast('Configuração salva!', 'success');
     closeModal('modalConfig');
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
