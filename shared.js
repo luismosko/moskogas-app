@@ -1,5 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.9.0
-// v1.9.0: Logo aponta para dashboard.html (capa do sistema)
+// shared.js — Utilitários compartilhados MoskoGás v1.9.1
+// v1.9.1: Consulta Pedidos adicionado ao dropdown Relatório
 // v1.8.0: Nav compacta — Auditoria dentro de Relatório, Usuários dentro de Config
 // v1.7.0: Dropdown usuário (Trocar Senha + Sair), modal troca senha
 // v1.6.0: Loading overlay global (showLoading/hideLoading)
@@ -160,6 +160,7 @@ const NAV_DROPDOWNS = [
       { href: 'relatorio.html',   icon: '📊', label: 'Relatório do Dia' },
       { href: 'entregador.html',  icon: '🚚', label: 'Painel Entregador' },
       { href: 'auditoria.html',   icon: '🔍', label: 'Auditoria' },
+      { href: 'consulta-pedidos.html', icon: '🔎', label: 'Consulta Pedidos' },
     ]
   },
   {
