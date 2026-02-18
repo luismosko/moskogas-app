@@ -1,6 +1,7 @@
-// v2.22.1
+// v2.23.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.23.0: Produtos favoritos — tabela product_favorites + GET/POST/DELETE endpoints
 // v2.22.1: Fix dashboard date filter (epoch, not text) + porHora BRT conversion
 // v2.22.0: GET /api/dashboard (KPIs, status, produtos, pagamentos, vendedores, entregadores, hora)
 // v2.21.0: Rate limiting login (5 falhas/15min IP), PATCH /api/auth/me/senha,
@@ -467,6 +468,16 @@ async function ensureAuditTable(env) {
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_driver ON orders(driver_name_cache)').run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_pago ON orders(pago)').run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bling ON orders(bling_pedido_id)').run().catch(() => {});
+  // Produtos favoritos (v2.23.0)
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS product_favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bling_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    code TEXT DEFAULT '',
+    price REAL DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`).run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bairro ON orders(bairro)').run().catch(() => {});
 }
 
@@ -1194,6 +1205,52 @@ export default {
         const produtos = (filtered.length ? filtered : all).map(p => ({ id: p.id, name: p.descricao||p.nome||'', code: p.codigo||'', price: parseFloat(p.preco)||0, unit: p.unidade||'un' }));
         return json(produtos.slice(0, 15));
       } catch(e) { return json({ error: e.message }, 500); }
+    }
+
+    // ── PRODUTOS FAVORITOS ────────────────────────────────────
+    if (method === 'GET' && path === '/api/products/favorites') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const rows = await env.DB.prepare('SELECT * FROM product_favorites ORDER BY sort_order ASC, id ASC').all().then(r => r.results || []);
+      return json(rows);
+    }
+
+    if (method === 'POST' && path === '/api/products/favorites') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body = await request.json();
+      const { bling_id, name, code, price } = body;
+      if (!bling_id || !name) return json({ error: 'bling_id e name obrigatórios' }, 400);
+      // Evitar duplicata
+      const exists = await env.DB.prepare('SELECT id FROM product_favorites WHERE bling_id = ?').bind(String(bling_id)).first();
+      if (exists) return json({ error: 'Produto já é favorito' }, 409);
+      // Próximo sort_order
+      const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM product_favorites').first();
+      const nextSort = (maxSort?.mx || 0) + 1;
+      await env.DB.prepare('INSERT INTO product_favorites (bling_id, name, code, price, sort_order) VALUES (?,?,?,?,?)')
+        .bind(String(bling_id), name, code || '', parseFloat(price) || 0, nextSort).run();
+      return json({ ok: true, message: 'Favorito adicionado' });
+    }
+
+    const favDeleteMatch = path.match(/^\/api\/products\/favorites\/(\d+)$/);
+    if (method === 'DELETE' && favDeleteMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const favId = favDeleteMatch[1];
+      await env.DB.prepare('DELETE FROM product_favorites WHERE id = ?').bind(favId).run();
+      return json({ ok: true, message: 'Favorito removido' });
+    }
+
+    if (method === 'PATCH' && path === '/api/products/favorites/reorder') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body = await request.json();
+      const { order } = body; // array de IDs na ordem desejada
+      if (!Array.isArray(order)) return json({ error: 'order deve ser array de IDs' }, 400);
+      for (let i = 0; i < order.length; i++) {
+        await env.DB.prepare('UPDATE product_favorites SET sort_order = ? WHERE id = ?').bind(i + 1, order[i]).run();
+      }
+      return json({ ok: true, message: 'Ordem atualizada' });
     }
 
     // ── BUSCA COMBINADA ──────────────────────────────────────

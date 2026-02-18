@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.6.0 — MoskoGás</title>
+<title>Config v2.7.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.6.0 — config</div>
-  <h1>⚙️ Configurações v2.6.0</h1>
+  <div class="version-badge">v2.7.0 — config</div>
+  <h1>⚙️ Configurações v2.7.0</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -131,6 +131,21 @@
       <button class="btn btn-orange" onclick="salvarPermissoes()" style="flex:1">💾 Salvar Permissões</button>
     </div>
     <div id="perm-status"></div>
+  </div>
+
+  <!-- Produtos Favoritos -->
+  <div class="card" id="favSection">
+    <h2>⭐ Produtos Favoritos (Atalho no Pedido)</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Produtos marcados como favoritos aparecem como botões rápidos na tela de pedido. Arraste para reordenar.</p>
+
+    <div style="position:relative;margin-bottom:12px">
+      <input id="favSearch" placeholder="🔍 Buscar produto no Bling para adicionar..." oninput="searchFavProduct(this.value)" autocomplete="off" style="margin-bottom:0">
+      <div id="favSuggestions" style="display:none;position:absolute;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
+    </div>
+
+    <div id="favList" style="min-height:40px">
+      <div style="color:#94a3b8;text-align:center;padding:16px;font-size:13px">⏳ Carregando favoritos...</div>
+    </div>
   </div>
 
   <!-- Autocomplete de Ruas -->
@@ -422,10 +437,146 @@ function resetFotoConfig() {
   document.getElementById('fotoSharpen').checked = true;
 }
 
+// ── Produtos Favoritos ──────────────────────────────────────
+let _favs = [];
+let _favSearchTimer;
+
+async function loadFavoritos() {
+  try {
+    _favs = await api('/api/products/favorites');
+    renderFavList();
+  } catch(e) {
+    document.getElementById('favList').innerHTML = `<div style="color:#dc2626;font-size:13px;padding:12px">❌ ${e.message}</div>`;
+  }
+}
+
+function renderFavList() {
+  const el = document.getElementById('favList');
+  if (!_favs.length) {
+    el.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px;font-size:13px">Nenhum favorito ainda. Busque um produto acima para adicionar.</div>';
+    return;
+  }
+  el.innerHTML = _favs.map((f, i) => `
+    <div class="fav-item" draggable="true" data-id="${f.id}" data-idx="${i}"
+         ondragstart="favDragStart(event)" ondragover="favDragOver(event)" ondrop="favDrop(event)"
+         style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff;border:2px solid #e2e8f0;border-radius:8px;margin-bottom:6px;cursor:grab;transition:border-color 0.15s">
+      <span style="color:#94a3b8;font-size:14px;cursor:grab" title="Arrastar para reordenar">⠿</span>
+      <span style="flex:1;font-size:14px;font-weight:600">${f.name}</span>
+      <span style="font-size:12px;color:#94a3b8">${f.code || ''}</span>
+      <span style="font-size:13px;font-weight:700;color:#f97316">R$ ${parseFloat(f.price||0).toFixed(2)}</span>
+      <button onclick="removeFav(${f.id})" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer" title="Remover favorito">✕</button>
+    </div>
+  `).join('');
+}
+
+function searchFavProduct(q) {
+  clearTimeout(_favSearchTimer);
+  const box = document.getElementById('favSuggestions');
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<div style="padding:10px 14px;color:#94a3b8;font-size:12px">🔍 Buscando...</div>';
+
+  _favSearchTimer = setTimeout(async () => {
+    try {
+      const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`);
+      if (!list || !list.length) {
+        box.innerHTML = '<div style="padding:10px 14px;color:#94a3b8;font-size:12px">Nenhum produto encontrado</div>';
+        return;
+      }
+      // Filtrar já favoritados
+      const favIds = new Set(_favs.map(f => String(f.bling_id)));
+      box.innerHTML = list.map((p, i) => {
+        const jaFav = favIds.has(String(p.id));
+        return `<div onclick="${jaFav ? '' : `addFav(${JSON.stringify(p).replace(/"/g, '&quot;')})`}"
+          style="padding:10px 14px;cursor:${jaFav ? 'default' : 'pointer'};display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;${jaFav ? 'opacity:0.5' : ''}${!jaFav ? ';background:#fff' : ''};"
+          ${!jaFav ? 'onmouseover="this.style.background=\'#fff7ed\'" onmouseout="this.style.background=\'#fff\'"' : ''}>
+          <span><strong>${p.name||'Produto'}</strong> ${p.code ? `<small style="color:#94a3b8">(${p.code})</small>` : ''}</span>
+          <span style="font-weight:700;color:${jaFav ? '#94a3b8' : '#f97316'};font-size:13px">${jaFav ? '✅ Já favorito' : 'R$ ' + parseFloat(p.price||0).toFixed(2) + ' ➕'}</span>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      box.innerHTML = `<div style="padding:10px 14px;color:#dc2626;font-size:12px">❌ ${e.message}</div>`;
+    }
+  }, 350);
+}
+
+async function addFav(product) {
+  try {
+    await api('/api/products/favorites', {
+      method: 'POST',
+      body: JSON.stringify({ bling_id: String(product.id), name: product.name, code: product.code || '', price: product.price || 0 })
+    });
+    document.getElementById('favSearch').value = '';
+    document.getElementById('favSuggestions').style.display = 'none';
+    showToast('⭐ Favorito adicionado!', 'success');
+    loadFavoritos();
+  } catch(e) {
+    showToast('❌ ' + e.message, 'error');
+  }
+}
+
+async function removeFav(id) {
+  if (!confirm('Remover este favorito?')) return;
+  try {
+    await api(`/api/products/favorites/${id}`, { method: 'DELETE' });
+    showToast('🗑️ Favorito removido', 'warning');
+    loadFavoritos();
+  } catch(e) {
+    showToast('❌ ' + e.message, 'error');
+  }
+}
+
+// Drag & drop reorder
+let _dragIdx = null;
+function favDragStart(e) {
+  _dragIdx = parseInt(e.target.closest('[data-idx]').dataset.idx);
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.closest('.fav-item').style.opacity = '0.5';
+}
+function favDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const item = e.target.closest('.fav-item');
+  if (item) item.style.borderColor = '#f97316';
+}
+async function favDrop(e) {
+  e.preventDefault();
+  const target = e.target.closest('[data-idx]');
+  if (!target) return;
+  const dropIdx = parseInt(target.dataset.idx);
+  target.style.borderColor = '#e2e8f0';
+
+  if (_dragIdx === null || _dragIdx === dropIdx) return;
+  // Reorder array
+  const moved = _favs.splice(_dragIdx, 1)[0];
+  _favs.splice(dropIdx, 0, moved);
+  renderFavList();
+  // Save to backend
+  try {
+    await api('/api/products/favorites/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ order: _favs.map(f => f.id) })
+    });
+  } catch(e) { console.error('Erro reorder:', e); }
+  _dragIdx = null;
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#favSearch') && !e.target.closest('#favSuggestions'))
+    document.getElementById('favSuggestions').style.display = 'none';
+});
+
+// Esconder seção favoritos para não-admin
+if (_cfgUser && _cfgUser.role !== 'admin') {
+  const fs = document.getElementById('favSection');
+  if (fs) fs.style.display = 'none';
+}
+
 // ── Init ─────────────────────────────────────────────────────
 checkStreetsCount();
 carregarFotoConfig();
 carregarPermissoes();
+loadFavoritos();
 </script>
 </body>
 </html>

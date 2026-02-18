@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.8.0</title>
+<title>Novo Pedido — MoskoGás v2.9.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -39,13 +39,17 @@
   .search-tab { padding: 8px; border: 2px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; color: #64748b; transition: all 0.15s; }
   .search-tab.active { border-color: #f97316; background: #f97316; color: #fff; }
   textarea { resize: vertical; height: 70px; }
+  .fav-btn { padding: 7px 14px; border: 2px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; font-size: 12px; font-weight: 700; color: #334155; transition: all 0.15s; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+  .fav-btn:hover { border-color: #f97316; background: #fff7ed; color: #f97316; transform: translateY(-1px); }
+  .fav-btn:active { transform: scale(0.97); }
+  .fav-btn .fav-price { color: #f97316; font-size: 11px; font-weight: 800; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.8.0 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.9.0 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.8.0</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.9.0</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -129,6 +133,10 @@
   <!-- ITENS -->
   <div class="card">
     <label style="margin-bottom:10px">📦 Itens do Pedido</label>
+    <div id="fav-products" style="display:none;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">⭐ Produtos Rápidos</div>
+      <div id="fav-buttons" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
     <div style="position:relative;margin-bottom:10px">
       <input id="product-search" type="text" placeholder="🔍 Buscar produto pelo nome..." autocomplete="off" oninput="searchProducts(this.value)">
       <div id="product-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:220px;overflow-y:auto"></div>
@@ -244,6 +252,24 @@ document.addEventListener('visibilitychange', () => {
 
 let items = [];
 let searchTimer;
+
+// ── Produtos Favoritos (quick-add) ──────────────────────────
+(async function loadFavorites() {
+  try {
+    const favs = await api('/api/products/favorites');
+    if (favs && favs.length) {
+      const container = document.getElementById('fav-products');
+      const btns = document.getElementById('fav-buttons');
+      container.style.display = 'block';
+      btns.innerHTML = favs.map(f => {
+        const preco = parseFloat(f.price || 0).toFixed(2);
+        return `<button class="fav-btn" onclick="addItem('${f.bling_id}','${(f.name||'').replace(/'/g,"\\'")}',${parseFloat(f.price)||0},'${(f.code||'').replace(/'/g,"\\'")}')" title="Adicionar ${f.name} — R$ ${preco}">
+          ${f.name} <span class="fav-price">R$${preco}</span>
+        </button>`;
+      }).join('');
+    }
+  } catch(e) { console.log('Favoritos não carregados:', e.message); }
+})();
 
 async function syncBling(btn) {
   btn.disabled = true;
