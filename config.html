@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.7.3 — MoskoGás</title>
+<title>Config v2.7.4 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.7.3 — config</div>
-  <h1>⚙️ Configurações v2.7.3</h1>
+  <div class="version-badge">v2.7.4 — config</div>
+  <h1>⚙️ Configurações v2.7.4</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -506,10 +506,8 @@ function searchFavProduct(q) {
 }
 
 async function addFavByIdx(idx) {
-  console.log('addFavByIdx called with idx:', idx);
-  alert('Clicou! idx=' + idx);
   const product = _favSearchResults[idx];
-  if (!product) { alert('Product not found at idx ' + idx); return; }
+  if (!product) return;
   addFav(product);
 }
 
@@ -521,8 +519,12 @@ async function addFav(product) {
     });
     document.getElementById('favSearch').value = '';
     document.getElementById('favSuggestions').style.display = 'none';
+    // Adiciona na lista local imediatamente
+    _favs.push({ id: Date.now(), bling_id: String(product.id), name: product.name, code: product.code || '', price: product.price || 0 });
+    renderFavList();
     showToast('⭐ Favorito adicionado!', 'success');
-    loadFavoritos();
+    // Recarrega do servidor pra pegar ID real
+    setTimeout(() => loadFavoritos(), 500);
   } catch(e) {
     showToast('❌ ' + e.message, 'error');
   }
@@ -532,8 +534,10 @@ async function removeFav(id) {
   if (!confirm('Remover este favorito?')) return;
   try {
     await api(`/api/products/favorites/${id}`, { method: 'DELETE' });
+    // Remove imediatamente da tela
+    _favs = _favs.filter(f => f.id !== id);
+    renderFavList();
     showToast('🗑️ Favorito removido', 'warning');
-    loadFavoritos();
   } catch(e) {
     showToast('❌ ' + e.message, 'error');
   }
