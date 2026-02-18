@@ -1,4 +1,4 @@
-// v2.17.0
+// v2.17.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.17.0: Bling só ao ENTREGAR — pedido novo nunca cria venda no Bling
@@ -251,7 +251,7 @@ function buildItemBling(item) {
 
 // ── Cria pedido no Bling (sem NFCe) ──────────────────────────
 async function criarPedidoBling(env, orderId, orderData) {
-  const { name, items, total_value, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, bling_vendedor_id, vendedor_nome } = orderData;
+  const { name, items, total_value, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, bling_vendedor_id, vendedor_nome, cpf_cnpj } = orderData;
   const today = new Date().toISOString().slice(0, 10);
 
   const itensBling = (items || []).map(it => buildItemBling(it));
@@ -262,8 +262,12 @@ async function criarPedidoBling(env, orderId, orderData) {
   const obsVendedor = vendedor_nome ? ` | ${vendedor_nome}` : '';
   const obsTipo = tipo_pagamento ? ` | ${tipo_pagamento}` : '';
 
+  // v2.17.0: Só vincula contato real no Bling se cliente tem CPF/CNPJ
+  // Sem CPF → Consumidor Final (evita erro de pendência cadastral na NFCe)
+  const usarContatoReal = bling_contact_id && cpf_cnpj && cpf_cnpj.replace(/\D/g, '').length >= 11;
+
   const pedidoBody = {
-    contato:  bling_contact_id ? { id: bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+    contato:  usarContatoReal ? { id: bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
     data:     today,
     dataSaida: today,
     itens:    itensBling,
@@ -1284,13 +1288,7 @@ export default {
       const { phone, name, address_line, bairro, complemento, referencia } = body;
       const digits = (phone || '').replace(/\D/g, '');
       await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, updated_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch())`).bind(digits, name, address_line, bairro, complemento, referencia).run();
-      try {
-        const cached = await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(digits).first();
-        if (!cached?.bling_contact_id) {
-          const bResp = await blingFetch('/contatos', { method: 'POST', body: JSON.stringify({ nome: name, celular: digits, situacao: 'A', tipo: 'F', endereco: { endereco: address_line, bairro: bairro||'', municipio: 'Campo Grande', uf: 'MS', pais: 'Brasil' } }) }, env);
-          if (bResp.ok) { const bData = await bResp.json(); const blingId = bData.data?.id; if (blingId) await env.DB.prepare('UPDATE customers_cache SET bling_contact_id=? WHERE phone_digits=?').bind(blingId, digits).run(); }
-        }
-      } catch (_) {}
+      // v2.17.0: NÃO cria contato no Bling aqui — só cliente com CPF/CNPJ cadastrado via /customer/save-bling cria contato
       return json({ ok: true });
     }
 
@@ -1417,9 +1415,9 @@ export default {
       let blingResult = null;
       
       if (blingAction === 'create') {
-        // Buscar dados do cliente para Bling
+        // Buscar dados do cliente para Bling (incluindo cpf_cnpj para decidir contato)
         const custData = phone_digits
-          ? await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(phone_digits).first()
+          ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(phone_digits).first()
           : null;
         
         // Buscar vendedor
@@ -1434,6 +1432,7 @@ export default {
             total_value: total_value || currentOrder.total_value,
             forma_pagamento_key, tipo_pagamento: newTipo,
             bling_contact_id: custData?.bling_contact_id || null,
+            cpf_cnpj: custData?.cpf_cnpj || null,
             bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
             vendedor_nome: vendedorRow?.bling_vendedor_nome || currentOrder.vendedor_nome || ''
           });
@@ -1637,7 +1636,7 @@ export default {
       if (!order.bling_pedido_id) {
         try {
           const custData = order.phone_digits
-            ? await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
+            ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
             : null;
           const vendedorRow = order.vendedor_id
             ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(order.vendedor_id).first()
@@ -1649,6 +1648,7 @@ export default {
             total_value: order.total_value,
             tipo_pagamento: tipoFinal,
             bling_contact_id: custData?.bling_contact_id || null,
+            cpf_cnpj: custData?.cpf_cnpj || null,
             bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
             vendedor_nome: vendedorRow?.bling_vendedor_nome || order.vendedor_nome || ''
           });
@@ -1871,7 +1871,7 @@ export default {
       if (!order.bling_pedido_id) {
         try {
           const cached = await env.DB.prepare(
-            'SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?'
+            'SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?'
           ).bind(order.phone_digits).first();
 
           const items = JSON.parse(order.items_json || '[]');
@@ -1889,6 +1889,7 @@ export default {
             forma_pagamento_key: order.forma_pagamento_key,
             forma_pagamento_id: order.forma_pagamento_id,
             bling_contact_id: cached?.bling_contact_id || null,
+            cpf_cnpj: cached?.cpf_cnpj || null,
             tipo_pagamento: order.tipo_pagamento,
             bling_vendedor_id: orderVendedorBlingId,
             vendedor_nome: orderVendedorNome,
@@ -1922,7 +1923,7 @@ export default {
 
       const placeholders = orderIds.map(() => '?').join(',');
       const orders = await env.DB.prepare(
-        `SELECT o.*, cc.bling_contact_id 
+        `SELECT o.*, cc.bling_contact_id, cc.cpf_cnpj 
          FROM orders o
          LEFT JOIN customers_cache cc ON cc.phone_digits = o.phone_digits
          WHERE o.id IN (${placeholders})`
@@ -1939,7 +1940,7 @@ export default {
       for (const o of orders) {
         const key = o.phone_digits || o.customer_name || 'sem_id_' + o.id;
         if (!grupos[key]) {
-          grupos[key] = { cliente: o.customer_name, phone: o.phone_digits, bling_contact_id: o.bling_contact_id || null, pedidos: [], produtos: {}, total: 0 };
+          grupos[key] = { cliente: o.customer_name, phone: o.phone_digits, bling_contact_id: o.bling_contact_id || null, cpf_cnpj: o.cpf_cnpj || null, pedidos: [], produtos: {}, total: 0 };
         }
         grupos[key].pedidos.push(o);
         grupos[key].total += o.total_value || 0;
@@ -1964,8 +1965,11 @@ export default {
 
         const itensBling = produtos.map(p => buildItemBling(p));
 
+        // v2.17.1: Só vincula contato real se tem CPF/CNPJ (>=11 dígitos)
+        const usarContatoReal = grupo.bling_contact_id && grupo.cpf_cnpj && grupo.cpf_cnpj.replace(/\D/g, '').length >= 11;
+
         const pedidoBody = {
-          contato: grupo.bling_contact_id ? { id: grupo.bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+          contato: usarContatoReal ? { id: grupo.bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
           data: today,
           dataSaida: today,
           itens: itensBling,
