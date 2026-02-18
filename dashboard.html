@@ -153,8 +153,7 @@ document.getElementById('dashDate').value = hoje;
 // Bling ping
 (async () => {
   try {
-    const r = await api('/bling/ping');
-    const d = await r.json();
+    const d = await api('/bling/ping');
     const el = document.getElementById('blingBadge');
     if (d.ok || d.status === 'ok') { el.className = 'bling-badge bling-ok'; el.textContent = '✅ Bling OK'; }
     else { el.className = 'bling-badge bling-err'; el.textContent = '❌ Bling erro'; }
@@ -176,12 +175,8 @@ async function loadDashboard() {
   const btn = document.getElementById('btnRefresh');
   btn.classList.add('loading'); btn.innerHTML = '⏳ Carregando...';
   try {
-    const resp = await api(`/api/dashboard?date=${date}`);
-    if (!resp.ok) {
-      const errData = await resp.json().catch(() => ({}));
-      throw new Error(errData.error || 'Erro HTTP ' + resp.status);
-    }
-    render(await resp.json());
+    const data = await api(`/api/dashboard?date=${date}`);
+    render(data);
   } catch(e) {
     showToast('Erro: ' + e.message, 'error');
     document.getElementById('kTotal').innerHTML = '<span style="color:#ef4444;font-size:14px">⚠️ ' + e.message + '</span>';
