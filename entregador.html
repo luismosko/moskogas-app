@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.1.0 — MoskoGás</title>
+<title>Entregador v2.1.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -127,7 +127,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.1.0</small></h1>
+  <h1>🚚 Entregas <small>v2.1.1</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -146,11 +146,11 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.1.0 — entregador</div>
+<div class="version-badge">v2.1.1 — entregador</div>
 
 <script src="shared.js"></script>
 <script>
-// v2.1.0
+// v2.1.1
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -275,7 +275,7 @@ function renderPendentes(rows) {
       <div class="card-header">
         <div class="card-header-left">
           <div class="card-id">#${o.id} <span class="hour-chip">${hora}</span>${o.driver_name_cache ? ' 🚚 ' + o.driver_name_cache : ''}</div>
-          <div class="card-client">${o.customer_name}</div>
+          <div class="card-client">${o.customer_name} <span style="font-weight:400;font-size:13px;color:#64748b">— ${o.address_line || ''}</span></div>
         </div>
         ${badgeMap[o.status] || ''}
       </div>
@@ -396,7 +396,7 @@ function renderEntregues(rows) {
         <span class="mini-id">#${o.id} · ${hora}${deliveredTime ? ' → ✅ ' + deliveredTime : ''}</span>
         ${o.foto_comprovante ? '<a href="' + API_BASE + '/api/comprovante/' + o.id + '" target="_blank" style="font-size:11px;color:#2563eb;font-weight:700;">📷 Foto</a>' : ''}
       </div>
-      <div class="mini-client">${o.customer_name}</div>
+      <div class="mini-client">${o.customer_name} <span style="font-weight:400;font-size:12px;color:#64748b">— ${o.address_line || ''}</span></div>
       <div class="mini-items">${itemsStr}</div>
       ${o.observacao_entregador ? '<div style="font-size:11px;color:#7c3aed;margin-top:2px;">📝 ' + o.observacao_entregador + '</div>' : ''}
       <div class="mini-bottom">
