@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.0.1 — MoskoGás</title>
+<title>Contratos v1.0.2 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.0.1</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.0.2</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -229,14 +229,14 @@
 
     <div class="modal-footer">
       <button class="btn btn-gray" onclick="closeModal('modalConfig')">Cancelar</button>
-      <button class="btn btn-blue" onclick="salvarConfig()">💾 Salvar Configuração</button>
+      <button class="btn btn-blue" onclick="salvarConfig()" id="btnSalvarConfig">💾 Salvar Configuração</button>
     </div>
   </div>
 </div>
 
 <script src="shared.js"></script>
 <script>
-// v1.0.1 — fix showToast → toast
+// v1.0.2 — loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -496,18 +496,23 @@ async function salvarContrato() {
     return;
   }
 
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true; btn.textContent = '⏳ Salvando...';
+
   try {
     if (editingId) {
       await api(`/api/contratos/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      toast('Contrato atualizado!', 'success');
+      toast('✅ Contrato atualizado!', 'success');
     } else {
       const r = await api('/api/contratos', { method: 'POST', body: JSON.stringify(body) });
-      toast(`Contrato ${r.numero} criado!`, 'success');
+      toast(`✅ Contrato ${r.numero} criado!`, 'success');
     }
     closeModal('modalContrato');
     loadContratos();
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Salvar Rascunho';
   }
 }
 
@@ -780,7 +785,15 @@ async function loadConfig() {
 }
 
 async function openConfig() {
-  await loadConfig();
+  // Abre modal imediatamente — carrega dados depois
+  openModal('modalConfig');
+  const btn = document.getElementById('btnSalvarConfig');
+  btn.disabled = true; btn.textContent = '⏳ Carregando...';
+
+  try {
+    await loadConfig();
+  } catch {}
+
   const com = configData.contrato_comodante || {};
   const test = configData.contrato_testemunhas || [];
 
@@ -801,10 +814,13 @@ async function openConfig() {
   document.getElementById('cfTest2Tel').value = test[1]?.telefone || '';
   document.getElementById('cfTest2Email').value = test[1]?.email || '';
 
-  openModal('modalConfig');
+  btn.disabled = false; btn.textContent = '💾 Salvar Configuração';
 }
 
 async function salvarConfig() {
+  const btn = document.getElementById('btnSalvarConfig');
+  btn.disabled = true; btn.textContent = '⏳ Salvando...';
+
   const body = {
     contrato_comodante: {
       empresa: document.getElementById('cfEmpresa').value.trim(),
@@ -834,10 +850,12 @@ async function salvarConfig() {
     await api('/api/contratos/config', { method: 'POST', body: JSON.stringify(body) });
     configData.contrato_comodante = body.contrato_comodante;
     configData.contrato_testemunhas = body.contrato_testemunhas;
-    toast('Configuração salva!', 'success');
+    toast('✅ Configuração salva!', 'success');
     closeModal('modalConfig');
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Salvar Configuração';
   }
 }
 
