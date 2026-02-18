@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.7.6</title>
+<title>Novo Pedido — MoskoGás v2.8.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,9 +43,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.7.6 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.8.0 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.7.6</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.8.0</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -942,26 +942,19 @@ async function saveOrder() {
     // Mensagens de sucesso
     const msgs = {
       dinheiro: 'pago e no Bling ✅',
-      pix_vista: 'pago e no Bling ✅',
-      pix_receber: 'no Bling ⏳ aguardando PIX',
-      debito: 'pago e no Bling ✅',
-      credito: 'pago e no Bling ✅',
-      mensalista: 'salvo 📋 sem venda Bling',
-      boleto: 'salvo 🧾 sem venda Bling',
-      nfe: 'salvo 📄 sem venda Bling'
+      pix_vista: 'PIX à vista',
+      pix_receber: 'PIX a receber ⏳',
+      debito: 'Débito',
+      credito: 'Crédito',
+      mensalista: 'Mensalista 📋',
+      boleto: 'Boleto/Órgão 🧾',
+      nfe: 'NFe 📄'
     };
-    const statusMsg = msgs[tipoPgto] || 'salvo';
+    const statusMsg = msgs[tipoPgto] || '';
     
-    if (result.bling_warning) {
-      hideLoading();
-      toast(`⚠️ Pedido #${result.id} SALVO localmente, mas NÃO foi pro Bling! Verifique a conexão.`, 'error');
-      checkBlingStatus(true); // Atualiza indicador
-      setTimeout(() => { window.location.href = 'gestao.html'; }, 3000);
-    } else {
-      hideLoading();
-      toast(`✅ Pedido #${result.id} ${statusMsg}!`);
-      setTimeout(() => { window.location.href = 'gestao.html'; }, 1200);
-    }
+    hideLoading();
+    toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
+    setTimeout(() => { window.location.href = 'gestao.html'; }, 1200);
 
   } catch(e) {
     hideLoading();

@@ -1,6 +1,7 @@
-// v2.16.2
+// v2.17.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.17.0: Bling só ao ENTREGAR — pedido novo nunca cria venda no Bling
 // v2.16.2: Fix comprovante foto 401 — endpoint movido antes do auth gate
 // v2.16.1: Fix ReferenceError: user não declarado em cancel/revert/deliver/select-driver
 // v2.16.0: Reabrir/cancelar pedido com motivo + auditoria status + alerta WhatsApp admin
@@ -1316,8 +1317,8 @@ export default {
       }
 
       const tipoPg = tipo_pagamento || 'dinheiro';
-      const criarBling = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'].includes(tipoPg);
-      const pago = ['dinheiro', 'pix_vista', 'debito', 'credito'].includes(tipoPg) ? 1 : 0;
+      // v2.17.0: Bling só é criado ao marcar ENTREGUE. Pedido novo = só D1.
+      const pago = 0; // Nunca pago ao criar — só ao entregar
 
       const result = await env.DB.prepare(`
         INSERT INTO orders (phone_digits, customer_name, address_line, bairro, complemento, referencia, items_json, total_value, notes, status, sync_status, forma_pagamento_key, forma_pagamento_id, emitir_nfce, tipo_pagamento, pago, vendedor_id, vendedor_nome)
@@ -1325,29 +1326,11 @@ export default {
       `).bind(digits||'', name||'', address_line||'', bairro||'', complemento||'', referencia||'', JSON.stringify(items||[]), total_value!=null?total_value:null, notes||null, forma_pagamento_key||null, forma_pagamento_id!=null?Number(forma_pagamento_id):null, emitir_nfce?1:0, tipoPg, pago, vendedorId, vendedorNome).run();
 
       const orderId = result.meta?.last_row_id;
-      await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, pago?'pago':'pendente', forma_pagamento_key||null).run();
+      await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, 'pendente', forma_pagamento_key||null).run();
       await logEvent(env, orderId, 'created', { name, address_line, tipo_pagamento: tipoPg, pago, vendedor: vendedorNome });
+      await logBlingAudit(env, orderId, 'criar_venda', 'skipped', { error_message: `Bling será criado ao marcar entregue` });
 
-      let blingPedidoId = null;
-      if (criarBling) {
-        try {
-          let finalBlingContactId = bling_contact_id;
-          if (!finalBlingContactId && digits) {
-            const cached = await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(digits).first();
-            if (cached?.bling_contact_id) finalBlingContactId = cached.bling_contact_id;
-          }
-          const blingResult = await criarPedidoBling(env, orderId, { name, items, total_value, forma_pagamento_key, forma_pagamento_id, bling_contact_id: finalBlingContactId, tipo_pagamento: tipoPg, bling_vendedor_id: blingVendedorId, vendedor_nome: vendedorNome });
-          blingPedidoId = blingResult.bling_pedido_id;
-          await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?').bind(blingPedidoId, blingResult.bling_pedido_num||null, 'synced', orderId).run();
-          await logEvent(env, orderId, 'bling_created', { bling_pedido_id: blingPedidoId, vendedor_bling_id: blingVendedorId });
-        } catch(e) {
-          await logEvent(env, orderId, 'bling_error', { error: e.message });
-          return json({ ok: true, id: orderId, bling_warning: e.message });
-        }
-      } else {
-        await logBlingAudit(env, orderId, 'criar_venda', 'skipped', { error_message: `tipo_pagamento=${tipoPg} — Bling será criado ao marcar pago` });
-      }
-      return json({ ok: true, id: orderId, bling_pedido_id: blingPedidoId, pago, vendedor: vendedorNome });
+      return json({ ok: true, id: orderId, bling_pedido_id: null, pago, vendedor: vendedorNome });
     }
 
     // [REMOVIDO v2.12.0] POST /api/order/:id/gerar-nfce — NFCe não existe na API Bling v3
@@ -1389,18 +1372,20 @@ export default {
       const newTipo = tipo_pagamento !== undefined ? tipo_pagamento : oldTipo;
       const tipoChanged = tipo_pagamento !== undefined && tipo_pagamento !== oldTipo;
 
-      const oldCriaBling = TIPOS_COM_BLING.includes(oldTipo);
-      const newCriaBling = TIPOS_COM_BLING.includes(newTipo);
       const hasBling = !!currentOrder.bling_pedido_id;
+      const isDelivered = currentOrder.status === 'entregue';
 
-      // ── Detectar impacto no Bling e exigir confirmação ──
-      let blingAction = 'none'; // none, create, delete
-      if (tipoChanged) {
-        if (!hasBling && newCriaBling) {
-          blingAction = 'create'; // Mensal→PIX: criar venda no Bling
-        } else if (hasBling && !newCriaBling) {
-          blingAction = 'delete'; // PIX→Mensal: deletar venda no Bling
+      // v2.17.0: Bling só existe após entrega. Só mexe no Bling se pedido já entregue E tem Bling
+      let blingAction = 'none';
+      if (tipoChanged && isDelivered && hasBling) {
+        const newCriaBling = TIPOS_COM_BLING.includes(newTipo);
+        if (!newCriaBling) {
+          blingAction = 'delete'; // Ex: PIX→Mensal em pedido entregue: deletar Bling
         }
+        // Se tipo mudou mas ambos criam Bling: deletar antigo e recriar
+        // (preço/forma pgto pode ter mudado)
+      } else if (tipoChanged && isDelivered && !hasBling) {
+        blingAction = 'create'; // Pedido entregue sem Bling (falha anterior) → criar agora
       }
 
       // Se vai impactar Bling, exigir confirmação explícita do frontend
@@ -1410,7 +1395,7 @@ export default {
           requires_confirmation: true,
           bling_action: blingAction,
           message: blingAction === 'create'
-            ? `Trocar para "${newTipo}" vai CRIAR uma venda no Bling. Confirma?`
+            ? `Trocar para "${newTipo}" vai CRIAR uma venda no Bling (pedido entregue). Confirma?`
             : `Trocar para "${newTipo}" vai EXCLUIR a venda nº ${currentOrder.bling_pedido_num || currentOrder.bling_pedido_id} do Bling. Confirma?`
         });
       }
@@ -1630,54 +1615,52 @@ export default {
         params.push(obsEntregador);
       }
 
-      // Mudou tipo pagamento?
-      const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
-      let blingResult = null;
-
+      // Tipo pagamento (entregador pode alterar na hora)
+      const tipoFinal = tipoPagamento || order.tipo_pagamento || 'dinheiro';
       if (tipoPagamento && tipoPagamento !== order.tipo_pagamento) {
-        // Salvar tipo original se primeira vez
         if (!order.tipo_pagamento_original) {
           sql += `, tipo_pagamento_original=?`;
           params.push(order.tipo_pagamento);
         }
         sql += `, tipo_pagamento=?`;
         params.push(tipoPagamento);
+      }
 
-        // Se mudou para tipo que cria Bling e não tinha
-        const newCriaBling = TIPOS_COM_BLING.includes(tipoPagamento);
-        const hasBling = !!order.bling_pedido_id;
+      // Marcar pago se tipo imediato
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+      if (TIPOS_PAGO_IMEDIATO.includes(tipoFinal)) {
+        sql += `, pago=1`;
+      }
 
-        if (newCriaBling && !hasBling) {
-          try {
-            const custData = order.phone_digits
-              ? await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
-              : null;
-            const vendedorRow = order.vendedor_id
-              ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(order.vendedor_id).first()
-              : null;
+      // ── v2.17.0: Criar venda no Bling AGORA (ao entregar) ──
+      let blingResult = null;
+      if (!order.bling_pedido_id) {
+        try {
+          const custData = order.phone_digits
+            ? await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
+            : null;
+          const vendedorRow = order.vendedor_id
+            ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(order.vendedor_id).first()
+            : null;
 
-            const blingData = await criarPedidoBling(env, id, {
-              name: order.customer_name,
-              items: JSON.parse(order.items_json || '[]'),
-              total_value: order.total_value,
-              tipo_pagamento: tipoPagamento,
-              bling_contact_id: custData?.bling_contact_id || null,
-              bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
-              vendedor_nome: vendedorRow?.bling_vendedor_nome || order.vendedor_nome || ''
-            });
-            sql += `, bling_pedido_id=?, bling_pedido_num=?`;
-            params.push(blingData.bling_pedido_id, blingData.bling_pedido_num);
-            blingResult = { action: 'created', bling_num: blingData.bling_pedido_num };
-          } catch (e) {
-            console.error('[Deliver] Erro criar Bling:', e.message);
-            blingResult = { action: 'create_error', error: e.message };
-          }
-        }
-
-        // Marcar pago se tipo imediato
-        const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
-        if (TIPOS_PAGO_IMEDIATO.includes(tipoPagamento)) {
-          sql += `, pago=1`;
+          const blingData = await criarPedidoBling(env, id, {
+            name: order.customer_name,
+            items: JSON.parse(order.items_json || '[]'),
+            total_value: order.total_value,
+            tipo_pagamento: tipoFinal,
+            bling_contact_id: custData?.bling_contact_id || null,
+            bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+            vendedor_nome: vendedorRow?.bling_vendedor_nome || order.vendedor_nome || ''
+          });
+          sql += `, bling_pedido_id=?, bling_pedido_num=?, sync_status='synced'`;
+          params.push(blingData.bling_pedido_id, blingData.bling_pedido_num);
+          blingResult = { action: 'created', bling_pedido_id: blingData.bling_pedido_id, bling_num: blingData.bling_pedido_num };
+          await logEvent(env, id, 'bling_created_on_deliver', { bling_pedido_id: blingData.bling_pedido_id });
+        } catch (e) {
+          console.error('[Deliver] Erro criar Bling:', e.message);
+          blingResult = { action: 'create_error', error: e.message };
+          await logEvent(env, id, 'bling_error_on_deliver', { error: e.message });
+          // NÃO bloqueia entrega — salva sem Bling, depois resolve em pagamentos
         }
       }
 
@@ -1872,7 +1855,7 @@ export default {
           cc.bling_contact_id
         FROM orders o
         LEFT JOIN customers_cache cc ON cc.phone_digits = o.phone_digits
-        WHERE o.pago = 0
+        WHERE o.pago = 0 AND o.status = 'entregue'
         ORDER BY o.created_at DESC
         LIMIT 200
       `).all();
