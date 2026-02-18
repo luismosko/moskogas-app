@@ -1,6 +1,7 @@
-// v2.25.2
+// v2.26.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.26.0: Lembretes PIX — payment_reminders, envio manual/bulk/cron, config admin
 // v2.25.2: Fix auth contratos — bypass requireApiKey para /api/contratos e /api/webhooks
 // v2.25.1: Fix IzChat contratos — usar sendWhatsApp (chatapi.izchat.com.br + {number,body})
 // v2.25.0: Módulo Contratos Comodato — schema, endpoints, integração Assinafy + IzChat WhatsApp
@@ -402,6 +403,149 @@ async function sendWhatsApp(env, to, message) {
   return { ok: resp.ok, status: resp.status, data };
 }
 
+// ── Lembretes PIX ─────────────────────────────────────────────
+
+function formatPhoneWA(phone) {
+  if (!phone) return null;
+  const d = phone.replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('55')) return d;
+  if (d.length >= 10) return '55' + d;
+  return null;
+}
+
+async function getLembreteConfig(env) {
+  const defaults = {
+    ativo: true,
+    intervalo_horas: 24,
+    max_lembretes: 3,
+    cron_ativo: true,
+    cron_hora_utc: 14,
+    mensagem: '🔔 Olá {nome}! Seu pedido #{id} de {itens} no valor de R$ {valor} foi entregue em {data_entrega}, mas ainda não identificamos o pagamento via PIX.\n\n💰 Valor: R$ {valor}\n📱 Chave PIX: (sua chave aqui)\n\nQualquer dúvida, estamos à disposição!\n\n— MoskoGás 🔥'
+  };
+  try {
+    const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='lembrete_pix'").first();
+    if (row?.value) return { ...defaults, ...JSON.parse(row.value) };
+  } catch(_) {}
+  return defaults;
+}
+
+function buildLembreteMessage(template, order) {
+  const items = (() => { try { return JSON.parse(order.items_json || '[]'); } catch(_) { return []; } })();
+  const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || 'produto';
+  const dataEntrega = order.delivered_at
+    ? new Date(order.delivered_at * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' })
+    : new Date(order.created_at * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' });
+  return template
+    .replace(/\{nome\}/g, order.customer_name || 'Cliente')
+    .replace(/\{id\}/g, order.id)
+    .replace(/\{itens\}/g, itensStr)
+    .replace(/\{valor\}/g, parseFloat(order.total_value || 0).toFixed(2))
+    .replace(/\{data_entrega\}/g, dataEntrega);
+}
+
+async function enviarLembretePix(env, order, config, user) {
+  await ensureAuditTable(env);
+  const phone = formatPhoneWA(order.phone_digits);
+  if (!phone) return { ok: false, order_id: order.id, error: 'Sem telefone válido' };
+
+  // Verificar limite de lembretes
+  const countRow = await env.DB.prepare(
+    'SELECT COUNT(*) as c FROM payment_reminders WHERE order_id=?'
+  ).bind(order.id).first();
+  const count = countRow?.c || 0;
+  if (count >= config.max_lembretes) {
+    return { ok: false, order_id: order.id, error: `Limite de ${config.max_lembretes} lembretes atingido` };
+  }
+
+  // Verificar intervalo mínimo
+  if (config.intervalo_horas > 0) {
+    const lastRow = await env.DB.prepare(
+      'SELECT sent_at FROM payment_reminders WHERE order_id=? ORDER BY sent_at DESC LIMIT 1'
+    ).bind(order.id).first();
+    if (lastRow?.sent_at) {
+      const horasDesdeUltimo = (Math.floor(Date.now() / 1000) - lastRow.sent_at) / 3600;
+      if (horasDesdeUltimo < config.intervalo_horas) {
+        const falta = Math.ceil(config.intervalo_horas - horasDesdeUltimo);
+        return { ok: false, order_id: order.id, error: `Aguarde ${falta}h para próximo lembrete` };
+      }
+    }
+  }
+
+  const message = buildLembreteMessage(config.mensagem, order);
+  const waResult = await sendWhatsApp(env, phone, message);
+
+  const tipo = user ? 'manual' : 'cron';
+  await env.DB.prepare(
+    `INSERT INTO payment_reminders (order_id, tipo, phone_sent, sent_by, sent_by_nome, whatsapp_ok, whatsapp_detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    order.id, tipo, phone,
+    user?.id || null, user?.nome || 'sistema',
+    waResult.ok ? 1 : 0,
+    JSON.stringify(waResult.data || {}).substring(0, 500)
+  ).run();
+
+  await logEvent(env, order.id, 'pix_reminder_sent', {
+    tipo, phone, wa_ok: waResult.ok, count: count + 1
+  });
+
+  return { ok: waResult.ok, order_id: order.id, phone, envio_num: count + 1, wa_status: waResult.status };
+}
+
+async function processarLembretesCron(env) {
+  try {
+    await ensureAuditTable(env);
+    const config = await getLembreteConfig(env);
+    if (!config.ativo || !config.cron_ativo) {
+      console.log('[lembrete-cron] Desativado nas configs');
+      return;
+    }
+
+    // Buscar pedidos PIX pendentes entregues com telefone
+    const rows = await env.DB.prepare(`
+      SELECT o.id, o.customer_name, o.phone_digits, o.total_value, o.items_json,
+             o.created_at, o.delivered_at,
+             (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
+             (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
+      FROM orders o
+      WHERE o.tipo_pagamento = 'pix_receber' AND o.pago = 0 AND o.status = 'entregue'
+        AND o.phone_digits IS NOT NULL AND o.phone_digits != ''
+      ORDER BY o.created_at ASC
+      LIMIT 50
+    `).all().then(r => r.results || []);
+
+    let enviados = 0, pulados = 0, erros = 0;
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const row of rows) {
+      // Já atingiu limite?
+      if (row.reminder_count >= config.max_lembretes) { pulados++; continue; }
+
+      // Intervalo respeitado?
+      if (row.last_reminder_at) {
+        const horasDesde = (now - row.last_reminder_at) / 3600;
+        if (horasDesde < config.intervalo_horas) { pulados++; continue; }
+      } else {
+        // Primeiro lembrete: esperar intervalo_horas desde a entrega
+        const entregaAt = row.delivered_at || row.created_at;
+        const horasDesdeEntrega = (now - entregaAt) / 3600;
+        if (horasDesdeEntrega < config.intervalo_horas) { pulados++; continue; }
+      }
+
+      const result = await enviarLembretePix(env, row, config, null);
+      if (result.ok) enviados++;
+      else erros++;
+
+      // Rate limit: pausa entre envios
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    console.log(`[lembrete-cron] Total: ${rows.length} pendentes, ${enviados} enviados, ${pulados} pulados, ${erros} erros`);
+  } catch(e) {
+    console.error('[lembrete-cron] Erro:', e.message);
+  }
+}
+
 // ── Middleware Auth ───────────────────────────────────────────
 
 function requireApiKey(request, env) {
@@ -484,6 +628,19 @@ async function ensureAuditTable(env) {
     created_at TEXT DEFAULT (datetime('now'))
   )`).run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bairro ON orders(bairro)').run().catch(() => {});
+  // Lembretes PIX (v2.26.0)
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS payment_reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    tipo TEXT DEFAULT 'manual',
+    phone_sent TEXT,
+    sent_at INTEGER DEFAULT (unixepoch()),
+    sent_by INTEGER,
+    sent_by_nome TEXT,
+    whatsapp_ok INTEGER DEFAULT 0,
+    whatsapp_detail TEXT
+  )`).run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pr_order ON payment_reminders(order_id)').run().catch(() => {});
 }
 
 // ── Contratos (Comodato) — Tabelas e Helpers ─────────────────
@@ -2388,13 +2545,16 @@ export default {
     // ══════════════════════════════════════════════════════════
     
     if (method === 'GET' && path === '/api/pagamentos') {
+      await ensureAuditTable(env);
       const rows = await env.DB.prepare(`
         SELECT 
           o.id, o.customer_name, o.phone_digits, o.address_line, o.total_value, 
           o.tipo_pagamento, o.pago, o.bling_pedido_id, o.bling_pedido_num,
-          o.created_at, o.status, o.items_json,
+          o.created_at, o.delivered_at, o.status, o.items_json, o.bairro,
           o.forma_pagamento_key, o.forma_pagamento_id,
-          cc.bling_contact_id
+          cc.bling_contact_id,
+          (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
+          (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
         FROM orders o
         LEFT JOIN customers_cache cc ON cc.phone_digits = o.phone_digits
         WHERE o.pago = 0 AND o.status = 'entregue'
@@ -2558,6 +2718,111 @@ export default {
         message: `${sucessos} venda(s) criada(s) no Bling${falhas > 0 ? `, ${falhas} falha(s)` : ''}`,
         resultados,
       });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // LEMBRETES PIX — MoskoGás v2.26.0
+    // ══════════════════════════════════════════════════════════
+
+    // GET /api/lembretes/config — retorna config atual
+    if (method === 'GET' && path === '/api/lembretes/config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const config = await getLembreteConfig(env);
+      return json(config);
+    }
+
+    // POST /api/lembretes/config — salvar config (admin)
+    if (method === 'POST' && path === '/api/lembretes/config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
+      const body = await request.json();
+      const current = await getLembreteConfig(env);
+      const updated = { ...current, ...body };
+      await env.DB.prepare(
+        "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('lembrete_pix', ?, datetime('now'))"
+      ).bind(JSON.stringify(updated)).run();
+      return json({ ok: true, config: updated });
+    }
+
+    // POST /api/lembretes/enviar/:orderId — enviar lembrete individual
+    const lembreteMatch = path.match(/^\/api\/lembretes\/enviar\/(\d+)$/);
+    if (method === 'POST' && lembreteMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const user = await getSessionUser(request, env);
+      const orderId = parseInt(lembreteMatch[1]);
+      const order = await env.DB.prepare(
+        "SELECT * FROM orders WHERE id=? AND tipo_pagamento='pix_receber' AND pago=0 AND status='entregue'"
+      ).bind(orderId).first();
+      if (!order) return err('Pedido não encontrado ou não é PIX pendente', 404);
+      const config = await getLembreteConfig(env);
+      if (!config.ativo) return err('Lembretes PIX estão desativados', 400);
+      const result = await enviarLembretePix(env, order, config, user);
+      return json(result, result.ok ? 200 : 400);
+    }
+
+    // POST /api/lembretes/enviar-bulk — enviar lembretes em lote
+    if (method === 'POST' && path === '/api/lembretes/enviar-bulk') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const user = await getSessionUser(request, env);
+      const { order_ids } = await request.json();
+      if (!order_ids?.length) return err('Nenhum pedido selecionado');
+      const config = await getLembreteConfig(env);
+      if (!config.ativo) return err('Lembretes PIX estão desativados', 400);
+
+      const placeholders = order_ids.map(() => '?').join(',');
+      const orders = await env.DB.prepare(
+        `SELECT * FROM orders WHERE id IN (${placeholders}) AND tipo_pagamento='pix_receber' AND pago=0 AND status='entregue'`
+      ).bind(...order_ids).all().then(r => r.results || []);
+
+      const resultados = [];
+      for (const order of orders) {
+        const result = await enviarLembretePix(env, order, config, user);
+        resultados.push(result);
+        if (result.ok) await new Promise(r => setTimeout(r, 1500));
+      }
+
+      const enviados = resultados.filter(r => r.ok).length;
+      const falhas = resultados.filter(r => !r.ok).length;
+      return json({
+        ok: falhas === 0,
+        message: `${enviados} lembrete(s) enviado(s)${falhas ? `, ${falhas} falha(s)` : ''}`,
+        resultados,
+      });
+    }
+
+    // GET /api/lembretes/pedido/:orderId — histórico de lembretes
+    const lembreteHistMatch = path.match(/^\/api\/lembretes\/pedido\/(\d+)$/);
+    if (method === 'GET' && lembreteHistMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
+      const orderId = parseInt(lembreteHistMatch[1]);
+      const rows = await env.DB.prepare(
+        'SELECT * FROM payment_reminders WHERE order_id=? ORDER BY sent_at DESC'
+      ).bind(orderId).all().then(r => r.results || []);
+      return json(rows);
+    }
+
+    // GET /api/lembretes/pendentes — pedidos PIX pendentes c/ info lembretes
+    if (method === 'GET' && path === '/api/lembretes/pendentes') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
+      const rows = await env.DB.prepare(`
+        SELECT o.id, o.customer_name, o.phone_digits, o.total_value, o.items_json,
+               o.created_at, o.delivered_at, o.bairro, o.address_line,
+               (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
+               (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
+        FROM orders o
+        WHERE o.tipo_pagamento = 'pix_receber' AND o.pago = 0 AND o.status = 'entregue'
+        ORDER BY o.created_at DESC
+        LIMIT 200
+      `).all().then(r => r.results || []);
+      return json(rows);
     }
 
     // ── CONSULTA DE PEDIDOS (admin/atendente) ─────────────────────
@@ -3667,11 +3932,18 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(keepBlingTokenFresh(env));
-    // Snapshot diário às 22h (cron: 0 1 * * * = 01:00 UTC = 22:00 BRT)
     const hour = new Date().getUTCHours();
-    if (hour === 1) { // ~22h Brasília
+    // Snapshot diário às 22h BRT (01:00 UTC)
+    if (hour === 1) {
       ctx.waitUntil(dailyAuditSnapshot(env));
     }
+    // Lembretes PIX automáticos — verificar config para hora
+    try {
+      const config = await getLembreteConfig(env);
+      if (config.cron_ativo && hour === (config.cron_hora_utc || 14)) {
+        ctx.waitUntil(processarLembretesCron(env));
+      }
+    } catch(e) { console.error('[lembrete-cron] Config error:', e.message); }
   },
 };
 

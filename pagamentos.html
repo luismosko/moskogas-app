@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.3.2</title>
+<title>Pagamentos — MoskoGás v1.4.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -14,7 +14,7 @@
   .btn-orange { background: #f97316; color: #fff; }
   .btn:hover { opacity: 0.85; }
 
-  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 16px; }
+  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 16px; }
   .s-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
   .s-card .label { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
   .s-card .value { font-size: 24px; font-weight: 900; }
@@ -22,6 +22,7 @@
   .s-card .value.orange { color: #f97316; }
   .s-card .value.gray { color: #64748b; }
   .s-card .value.green { color: #16a34a; }
+  .s-card .value.blue { color: #2563eb; }
 
   table { width: 100%; border-collapse: collapse; background: #fff; }
   th { background: #475569; color: #fff; padding: 8px 10px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
@@ -32,16 +33,24 @@
   .btn-pago { background: #16a34a; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-pago:hover { background: #15803d; }
   .btn-pago:disabled { background: #94a3b8; cursor: not-allowed; }
+  .btn-lembrete { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-lembrete:hover { background: #1d4ed8; }
+  .btn-lembrete:disabled { background: #94a3b8; cursor: not-allowed; }
+  .btn-lembrete .rb { background: #fbbf24; color: #92400e; border-radius: 8px; padding: 1px 5px; font-size: 10px; margin-left: 3px; }
   .empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 15px; }
 
-  .bulk-bar { display: none; background: #fef3c7; padding: 10px 16px; align-items: center; gap: 12px; border-bottom: 2px solid #fbbf24; }
+  .bulk-bar { display: none; background: #fef3c7; padding: 10px 16px; align-items: center; gap: 12px; border-bottom: 2px solid #fbbf24; flex-wrap: wrap; }
   .bulk-bar.show { display: flex; }
   .bulk-bar .count { font-weight: 800; color: #92400e; font-size: 14px; }
+
+  .actions-cell { display: flex; gap: 4px; align-items: center; }
+  .ri { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+  .ri.w { color: #f97316; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.3.2 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.4.0 — pagamentos</div>
 
 <!-- TOOLBAR -->
 <div class="toolbar">
@@ -62,16 +71,17 @@
     <option value="nfe">📄 NFe</option>
   </select>
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
-  <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar lista de pagamentos">🔄 Atualizar</button>
+  <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar lista">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.3.2</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.4.0</span>
 </div>
 
 <!-- BULK BAR -->
 <div class="bulk-bar" id="bulk-bar">
   <input type="checkbox" id="bulk-all" onchange="toggleBulkAll(this.checked)" title="Selecionar/desmarcar todos">
   <span class="count"><span id="bulk-count">0</span> selecionados</span>
-  <button class="btn" style="background:#16a34a;color:#fff;font-size:12px;padding:6px 14px" onclick="bulkMarcarPago()" title="Marcar todos selecionados como pagos">✅ Marcar Pagos em Lote</button>
+  <button class="btn" style="background:#16a34a;color:#fff;font-size:12px;padding:6px 14px" onclick="bulkMarcarPago()" title="Marcar pagos em lote">✅ Marcar Pagos</button>
+  <button class="btn" style="background:#2563eb;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkEnviarLembrete()" id="btn-bulk-lembrete" title="Enviar lembrete WhatsApp (só PIX)">📱 Enviar Lembretes</button>
 </div>
 
 <!-- SUMMARY CARDS -->
@@ -85,12 +95,16 @@
     <div class="value orange" id="count-total">0</div>
   </div>
   <div class="s-card">
+    <div class="label">⏳ PIX Pendente</div>
+    <div class="value blue" id="count-pix">0</div>
+  </div>
+  <div class="s-card">
     <div class="label">✅ No Bling</div>
     <div class="value green" id="count-bling">0</div>
   </div>
   <div class="s-card">
-    <div class="label">⏳ Aguardando Emissão</div>
-    <div class="value gray" id="count-pendente">0</div>
+    <div class="label">📱 Lembretes Enviados</div>
+    <div class="value gray" id="count-lembretes">0</div>
   </div>
 </div>
 
@@ -106,7 +120,7 @@
       <th>Itens</th>
       <th>Valor</th>
       <th>Tipo</th>
-      <th>Status Bling</th>
+      <th>Bling</th>
       <th>Ação</th>
     </tr>
   </thead>
@@ -116,7 +130,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.3.2
+// v1.4.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -188,6 +202,14 @@ async function _loadPagamentos() {
   } catch(e) { toast('Erro ao carregar: ' + e.message, 'error'); }
 }
 
+function timeAgo(epoch) {
+  if (!epoch) return '';
+  const diff = Math.floor(Date.now() / 1000) - epoch;
+  if (diff < 3600) return Math.floor(diff / 60) + 'min';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+  return Math.floor(diff / 86400) + 'd';
+}
+
 function renderTable(rows) {
   const tbody = document.getElementById('tbody');
   const emptyMsg = document.getElementById('empty-msg');
@@ -195,60 +217,117 @@ function renderTable(rows) {
   emptyMsg.style.display = 'none';
 
   const tipoLabels = {
-    dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX à vista',
-    pix_receber: '⏳ PIX a receber', mensalista: '📅 Mensalista', boleto: '🧾 Boleto', nfe: '📄 NFe'
+    pix_receber: '⏳ PIX', mensalista: '📅 Mensal', boleto: '🧾 Boleto', nfe: '📄 NFe',
+    dinheiro: '💵 Dinh', pix_vista: '⚡ PIX', debito: '💳 Déb', credito: '💳 Créd'
   };
 
   tbody.innerHTML = rows.map(p => {
     const items = (() => { try { return JSON.parse(p.items_json || '[]'); } catch(e) { return []; } })();
     const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
-    const data = p.created_at ? new Date(p.created_at * 1000).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', timeZone:'America/Campo_Grande' }) : '—';
-    const hora = p.created_at ? new Date(p.created_at * 1000).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Campo_Grande' }) : '';
+    const dt = p.created_at ? new Date(p.created_at * 1000).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', timeZone:'America/Campo_Grande' }) : '—';
+    const hr = p.created_at ? new Date(p.created_at * 1000).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Campo_Grande' }) : '';
 
     const blingBadge = p.bling_pedido_id
       ? `<span class="badge" style="background:#16a34a">✅ #${p.bling_pedido_num || p.bling_pedido_id}</span>`
-      : `<span class="badge" style="background:#94a3b8">⏳ Sem venda</span>`;
+      : `<span class="badge" style="background:#94a3b8">⏳</span>`;
 
-    const checked = selectedIds.has(p.id) ? 'checked' : '';
+    const ck = selectedIds.has(p.id) ? 'checked' : '';
+
+    // Botão lembrete — só PIX a receber
+    let lb = '';
+    let ri = '';
+    if (p.tipo_pagamento === 'pix_receber') {
+      const cnt = p.reminder_count || 0;
+      const badge = cnt > 0 ? `<span class="rb">${cnt}</span>` : '';
+      const hasPhone = p.phone_digits && p.phone_digits.replace(/\D/g, '').length >= 10;
+      lb = hasPhone
+        ? `<button class="btn-lembrete" onclick="enviarLembrete(${p.id})" title="Enviar lembrete PIX via WhatsApp${cnt ? ' ('+cnt+' enviado'+(cnt>1?'s':'')+')':''}">📱${badge}</button>`
+        : `<button class="btn-lembrete" disabled title="Sem telefone">📱</button>`;
+      if (cnt > 0 && p.last_reminder_at) {
+        ri = `<div class="ri${cnt >= 3 ? ' w' : ''}">📱${cnt}x · ${timeAgo(p.last_reminder_at)} atrás</div>`;
+      }
+    }
 
     return `<tr>
-      <td><input type="checkbox" value="${p.id}" ${checked} onchange="toggleSelect(${p.id}, this.checked)" title="Selecionar para ação em lote"></td>
-      <td><strong>#${p.id}</strong></td>
-      <td style="white-space:nowrap;font-size:12px">${data}<br><span style="color:#94a3b8">${hora}</span></td>
-      <td style="font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.customer_name || ''}">${p.customer_name || '—'}</td>
-      <td style="color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.address_line || ''}">${p.address_line || '—'}<br><span style="font-size:11px">${p.bairro || ''}</span></td>
+      <td><input type="checkbox" value="${p.id}" ${ck} onchange="toggleSelect(${p.id}, this.checked)"></td>
+      <td><strong>#${p.id}</strong>${ri}</td>
+      <td style="white-space:nowrap;font-size:12px">${dt}<br><span style="color:#94a3b8">${hr}</span></td>
+      <td style="font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.customer_name||''}">${p.customer_name||'—'}</td>
+      <td style="color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.address_line||''}">${p.address_line||'—'}<br><span style="font-size:11px">${p.bairro||''}</span></td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
-      <td style="font-weight:800;color:#1e293b;white-space:nowrap">R$ ${parseFloat(p.total_value || 0).toFixed(2)}</td>
-      <td style="white-space:nowrap">${tipoLabels[p.tipo_pagamento] || p.tipo_pagamento || '—'}</td>
+      <td style="font-weight:800;color:#1e293b;white-space:nowrap">R$ ${parseFloat(p.total_value||0).toFixed(2)}</td>
+      <td style="white-space:nowrap">${tipoLabels[p.tipo_pagamento]||p.tipo_pagamento||'—'}</td>
       <td>${blingBadge}</td>
-      <td><button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento deste pagamento">✅ Pago</button></td>
+      <td><div class="actions-cell">${lb}<button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento">✅ Pago</button></div></td>
     </tr>`;
   }).join('');
 }
 
 function renderSummary(rows) {
-  let totalPendente = 0, countBling = 0, countPendente = 0;
+  let total = 0, countBling = 0, countPix = 0, totalLemb = 0;
   rows.forEach(p => {
-    totalPendente += parseFloat(p.total_value) || 0;
-    if (p.bling_pedido_id) countBling++; else countPendente++;
+    total += parseFloat(p.total_value) || 0;
+    if (p.bling_pedido_id) countBling++;
+    if (p.tipo_pagamento === 'pix_receber') countPix++;
+    totalLemb += (p.reminder_count || 0);
   });
-  document.getElementById('total-pendente').textContent = 'R$ ' + totalPendente.toFixed(2);
+  document.getElementById('total-pendente').textContent = 'R$ ' + total.toFixed(2);
   document.getElementById('count-total').textContent = rows.length;
+  document.getElementById('count-pix').textContent = countPix;
   document.getElementById('count-bling').textContent = countBling;
-  document.getElementById('count-pendente').textContent = countPendente;
+  document.getElementById('count-lembretes').textContent = totalLemb;
 }
 
-async function marcarPago(orderId) {
-  if (!confirm(`Confirmar pagamento do pedido #${orderId}?`)) return;
-  showLoading('Processando pagamento...');
+// ── Lembrete Individual ──
+async function enviarLembrete(orderId) {
+  if (!confirm(`Enviar lembrete PIX via WhatsApp para pedido #${orderId}?`)) return;
+  showLoading('Enviando lembrete...');
   try {
-    const data = await api(`/api/pagamentos/${orderId}`, { method: 'PATCH' });
+    const d = await api(`/api/lembretes/enviar/${orderId}`, { method: 'POST' });
     hideLoading();
-    if (data.ok) { toast(`✅ Pedido #${orderId} marcado como pago!`); loadPagamentos(); }
-    else { toast('❌ ' + (data.error || 'Falha'), 'error'); }
+    if (d.ok) {
+      toast(`📱 Lembrete #${d.envio_num} enviado para pedido #${orderId}!`);
+      loadPagamentos();
+    } else {
+      toast('❌ ' + (d.error || 'Falha ao enviar'), 'error');
+    }
   } catch(e) { hideLoading(); toast(e.message, 'error'); }
 }
 
+// ── Lembrete Bulk ──
+async function bulkEnviarLembrete() {
+  const ids = [...selectedIds];
+  const pixIds = ids.filter(id => {
+    const p = allData.find(r => r.id === id);
+    return p && p.tipo_pagamento === 'pix_receber' && p.phone_digits;
+  });
+  if (!pixIds.length) { toast('⚠️ Nenhum PIX com telefone selecionado', 'error'); return; }
+  if (!confirm(`Enviar lembrete PIX para ${pixIds.length} pedido(s)?`)) return;
+  showLoading(`Enviando ${pixIds.length} lembrete(s)...`);
+  try {
+    const d = await api('/api/lembretes/enviar-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ order_ids: pixIds })
+    });
+    hideLoading();
+    toast(d.message || 'Lembretes processados', d.ok ? 'success' : 'error');
+    loadPagamentos();
+  } catch(e) { hideLoading(); toast(e.message, 'error'); }
+}
+
+// ── Pagamento ──
+async function marcarPago(orderId) {
+  if (!confirm(`Confirmar pagamento do pedido #${orderId}?`)) return;
+  showLoading('Processando...');
+  try {
+    const d = await api(`/api/pagamentos/${orderId}`, { method: 'PATCH' });
+    hideLoading();
+    if (d.ok) { toast(`✅ Pedido #${orderId} pago!`); loadPagamentos(); }
+    else { toast('❌ ' + (d.error || 'Falha'), 'error'); }
+  } catch(e) { hideLoading(); toast(e.message, 'error'); }
+}
+
+// ── Seleção ──
 function toggleSelect(id, checked) {
   if (checked) selectedIds.add(id); else selectedIds.delete(id);
   updateBulkBar();
@@ -267,6 +346,12 @@ function updateBulkBar() {
   const count = selectedIds.size;
   document.getElementById('bulk-count').textContent = count;
   document.getElementById('bulk-bar').classList.toggle('show', count > 0);
+  const pixCount = [...selectedIds].filter(id => {
+    const p = allData.find(r => r.id === id);
+    return p && p.tipo_pagamento === 'pix_receber';
+  }).length;
+  const bl = document.getElementById('btn-bulk-lembrete');
+  if (bl) bl.style.display = pixCount > 0 ? '' : 'none';
 }
 
 async function bulkMarcarPago() {

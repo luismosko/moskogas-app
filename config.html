@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.8.0 — MoskoGás</title>
+<title>Config v2.9.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.8.0 — config</div>
-  <h1>⚙️ Configurações v2.8.0</h1>
+  <div class="version-badge">v2.9.0 — config</div>
+  <h1>⚙️ Configurações v2.9.0</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -131,6 +131,53 @@
       <button class="btn btn-orange" onclick="salvarPermissoes()" style="flex:1">💾 Salvar Permissões</button>
     </div>
     <div id="perm-status"></div>
+  </div>
+
+  <!-- Lembretes PIX (admin only) -->
+  <div class="card" id="lembreteSection">
+    <h2>📱 Lembretes PIX (WhatsApp)</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Configuração de lembretes automáticos para PIX a receber pendentes.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="lemb-ativo" style="width:18px;height:18px">
+        <span style="font-size:13px;font-weight:600">Lembretes ativos</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="lemb-cron" style="width:18px;height:18px">
+        <span style="font-size:13px;font-weight:600">Envio automático (cron)</span>
+      </label>
+      <label style="font-size:13px">
+        ⏱️ Intervalo entre lembretes (horas)
+        <input type="number" id="lemb-intervalo" min="1" max="168" value="24" style="width:80px;margin-top:4px">
+      </label>
+      <label style="font-size:13px">
+        🔢 Máximo de lembretes por pedido
+        <input type="number" id="lemb-max" min="1" max="10" value="3" style="width:80px;margin-top:4px">
+      </label>
+      <label style="font-size:13px">
+        🕐 Hora do envio automático (UTC)
+        <select id="lemb-hora" style="margin-top:4px">
+          <option value="10">10:00 UTC (07:00 BRT)</option>
+          <option value="11">11:00 UTC (08:00 BRT)</option>
+          <option value="12">12:00 UTC (09:00 BRT)</option>
+          <option value="13">13:00 UTC (10:00 BRT)</option>
+          <option value="14" selected>14:00 UTC (11:00 BRT)</option>
+          <option value="15">15:00 UTC (12:00 BRT)</option>
+          <option value="16">16:00 UTC (13:00 BRT)</option>
+          <option value="17">17:00 UTC (14:00 BRT)</option>
+          <option value="18">18:00 UTC (15:00 BRT)</option>
+        </select>
+      </label>
+    </div>
+    <label style="font-size:13px;display:block;margin-top:12px">
+      💬 Mensagem do lembrete
+      <span style="font-size:10px;color:#94a3b8;display:block;margin:4px 0">Variáveis: {nome}, {id}, {itens}, {valor}, {data_entrega}</span>
+      <textarea id="lemb-mensagem" rows="6" style="width:100%;font-size:13px;border:2px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:4px;resize:vertical"></textarea>
+    </label>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-orange" onclick="salvarLembreteConfig()" style="flex:1">💾 Salvar Config Lembretes</button>
+    </div>
+    <div id="lemb-status"></div>
   </div>
 
   <!-- Produtos MoskoGás -->
@@ -635,11 +682,47 @@ if (_cfgUser && _cfgUser.role !== 'admin') {
   if (ps) ps.style.display = 'none';
 }
 
+// ── Lembretes PIX Config ──────────────────────────────────────
+
+async function carregarLembreteConfig() {
+  try {
+    const config = await api('/api/lembretes/config');
+    document.getElementById('lemb-ativo').checked = config.ativo !== false;
+    document.getElementById('lemb-cron').checked = config.cron_ativo !== false;
+    document.getElementById('lemb-intervalo').value = config.intervalo_horas || 24;
+    document.getElementById('lemb-max').value = config.max_lembretes || 3;
+    document.getElementById('lemb-hora').value = config.cron_hora_utc || 14;
+    document.getElementById('lemb-mensagem').value = config.mensagem || '';
+  } catch(e) {
+    // Admin-only — pode falhar se não-admin
+    const sec = document.getElementById('lembreteSection');
+    if (sec) sec.style.display = 'none';
+  }
+}
+
+async function salvarLembreteConfig() {
+  const config = {
+    ativo: document.getElementById('lemb-ativo').checked,
+    cron_ativo: document.getElementById('lemb-cron').checked,
+    intervalo_horas: parseInt(document.getElementById('lemb-intervalo').value) || 24,
+    max_lembretes: parseInt(document.getElementById('lemb-max').value) || 3,
+    cron_hora_utc: parseInt(document.getElementById('lemb-hora').value) || 14,
+    mensagem: document.getElementById('lemb-mensagem').value.trim()
+  };
+  if (!config.mensagem) { toast('⚠️ Mensagem não pode estar vazia', 'error'); return; }
+  try {
+    const d = await api('/api/lembretes/config', { method: 'POST', body: JSON.stringify(config) });
+    if (d.ok) toast('✅ Config lembretes salva!');
+    else toast('❌ ' + (d.error || 'Erro'), 'error');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
 // ── Init ─────────────────────────────────────────────────────
 checkStreetsCount();
 carregarFotoConfig();
 carregarPermissoes();
 loadAppProducts();
+carregarLembreteConfig();
 </script>
 </body>
 </html>
