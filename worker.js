@@ -1,6 +1,7 @@
-// v2.19.2
+// v2.20.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.20.0: Endpoint GET /api/consulta/pedidos (filtros, paginação, resumo, dropdowns)
 // v2.19.2: Foto config defaults → WebP 1200px 85% + sharpen
 // v2.19.1: Fix /api/config auth check (requireAuth retorna user, não Response)
 // v2.19.0: Permissões dinâmicas atendente + fix auth revert/cancel (sessão null)
@@ -426,6 +427,15 @@ async function ensureAuditTable(env) {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT (datetime('now'))
   )`).run().catch(() => {});
+  // Índices para consulta de pedidos (performance)
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_name)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_digits)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_driver ON orders(driver_name_cache)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_pago ON orders(pago)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bling ON orders(bling_pedido_id)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bairro ON orders(bairro)').run().catch(() => {});
 }
 
 async function logStatusChange(env, orderId, statusAnterior, statusNovo, motivo, user) {
@@ -2102,6 +2112,257 @@ export default {
         ok: falhas === 0,
         message: `${sucessos} venda(s) criada(s) no Bling${falhas > 0 ? `, ${falhas} falha(s)` : ''}`,
         resultados,
+      });
+    }
+
+    // ── CONSULTA DE PEDIDOS (admin/atendente) ─────────────────────
+    if (method === 'GET' && path === '/api/consulta/pedidos') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      // Índices (idempotente)
+      await env.DB.exec(`
+        CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+        CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_name);
+        CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_digits);
+        CREATE INDEX IF NOT EXISTS idx_orders_driver ON orders(driver_name_cache);
+        CREATE INDEX IF NOT EXISTS idx_orders_pagamento ON orders(tipo_pagamento);
+        CREATE INDEX IF NOT EXISTS idx_orders_pago ON orders(pago);
+        CREATE INDEX IF NOT EXISTS idx_orders_bling ON orders(bling_pedido_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_vendedor ON orders(vendedor_nome);
+        CREATE INDEX IF NOT EXISTS idx_orders_bairro ON orders(bairro);
+      `);
+
+      const page = Math.max(1, parseInt(url.searchParams.get('page')) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit')) || 30));
+
+      // Datas
+      const hoje = new Date().toISOString().slice(0, 10);
+      const seteAtras = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      let data_de = url.searchParams.get('data_de') || seteAtras;
+      let data_ate = url.searchParams.get('data_ate') || hoje;
+
+      // Limite 90 dias
+      const diffDias = (new Date(data_ate) - new Date(data_de)) / 86400000;
+      if (diffDias > 90) return err('Período máximo: 90 dias. Reduza o intervalo de datas.');
+
+      const conditions = ['1=1'];
+      const params = [];
+
+      conditions.push('created_at >= ?'); params.push(data_de + 'T00:00:00');
+      conditions.push('created_at <= ?'); params.push(data_ate + 'T23:59:59');
+
+      // Filtros
+      const pedido_id = url.searchParams.get('pedido_id');
+      const cliente = url.searchParams.get('cliente');
+      const telefone = url.searchParams.get('telefone');
+      const produto = url.searchParams.get('produto');
+      const entregador = url.searchParams.get('entregador');
+      const vendedor = url.searchParams.get('vendedor');
+      const status_f = url.searchParams.get('status');
+      const tipo_pagamento = url.searchParams.get('tipo_pagamento');
+      const rua = url.searchParams.get('rua');
+      const bairro = url.searchParams.get('bairro');
+      const pago = url.searchParams.get('pago');
+      const tem_foto = url.searchParams.get('tem_foto');
+      const tem_bling = url.searchParams.get('tem_bling');
+      const consumidor_final = url.searchParams.get('consumidor_final');
+
+      if (pedido_id) { conditions.push('id = ?'); params.push(parseInt(pedido_id)); }
+      if (cliente) { conditions.push("customer_name LIKE ?"); params.push(`%${cliente}%`); }
+      if (telefone) { conditions.push("phone_digits LIKE ?"); params.push(`%${telefone}%`); }
+      if (produto) { conditions.push("items_json LIKE ?"); params.push(`%${produto}%`); }
+      if (entregador) { conditions.push("driver_name_cache = ?"); params.push(entregador); }
+      if (vendedor) { conditions.push("vendedor_nome = ?"); params.push(vendedor); }
+      if (status_f) { conditions.push("status = ?"); params.push(status_f); }
+      if (tipo_pagamento) { conditions.push("tipo_pagamento = ?"); params.push(tipo_pagamento); }
+      if (rua) { conditions.push("address_line LIKE ?"); params.push(`%${rua}%`); }
+      if (bairro) { conditions.push("bairro = ?"); params.push(bairro); }
+      if (pago === 'sim') conditions.push("pago = 1");
+      if (pago === 'nao') conditions.push("pago = 0");
+      if (tem_foto === 'sim') conditions.push("foto_comprovante IS NOT NULL AND foto_comprovante != ''");
+      if (tem_foto === 'nao') conditions.push("(foto_comprovante IS NULL OR foto_comprovante = '')");
+      if (tem_bling === 'sim') conditions.push("bling_pedido_id IS NOT NULL AND bling_pedido_id != ''");
+      if (tem_bling === 'nao') conditions.push("(bling_pedido_id IS NULL OR bling_pedido_id = '')");
+      if (consumidor_final === 'sim') conditions.push("customer_name = 'CONSUMIDOR FINAL'");
+
+      const where = conditions.join(' AND ');
+
+      // Ordenação
+      const allowedOrder = ['created_at', 'total_value', 'customer_name', 'id', 'status'];
+      let orderBy = url.searchParams.get('order_by') || 'created_at';
+      if (!allowedOrder.includes(orderBy)) orderBy = 'created_at';
+      let orderDir = (url.searchParams.get('order_dir') || 'DESC').toUpperCase();
+      if (orderDir !== 'ASC' && orderDir !== 'DESC') orderDir = 'DESC';
+
+      // Resumo
+      const resumoSQL = `SELECT COUNT(*) as total_pedidos, COALESCE(SUM(total_value),0) as total_valor,
+        SUM(CASE WHEN foto_comprovante IS NOT NULL AND foto_comprovante != '' THEN 1 ELSE 0 END) as com_foto,
+        SUM(CASE WHEN foto_comprovante IS NULL OR foto_comprovante = '' THEN 1 ELSE 0 END) as sem_foto,
+        SUM(CASE WHEN bling_pedido_id IS NOT NULL AND bling_pedido_id != '' THEN 1 ELSE 0 END) as com_bling,
+        SUM(CASE WHEN bling_pedido_id IS NULL OR bling_pedido_id = '' THEN 1 ELSE 0 END) as sem_bling,
+        SUM(CASE WHEN pago = 1 THEN 1 ELSE 0 END) as pagos,
+        SUM(CASE WHEN pago = 0 THEN 1 ELSE 0 END) as nao_pagos
+        FROM orders WHERE ${where}`;
+
+      const resumo = await env.DB.prepare(resumoSQL).bind(...params).first();
+
+      const total = resumo?.total_pedidos || 0;
+      const pages = Math.ceil(total / limit);
+      const offset = (page - 1) * limit;
+
+      // Dados paginados
+      const dadosSQL = `SELECT * FROM orders WHERE ${where} ORDER BY ${orderBy} ${orderDir} LIMIT ? OFFSET ?`;
+      const pedidos = await env.DB.prepare(dadosSQL).bind(...params, limit, offset).all();
+
+      // Listas para dropdowns
+      const entregadores = await env.DB.prepare("SELECT DISTINCT driver_name_cache as nome FROM orders WHERE driver_name_cache IS NOT NULL AND driver_name_cache != '' ORDER BY driver_name_cache").all();
+      const vendedores = await env.DB.prepare("SELECT DISTINCT vendedor_nome as nome FROM orders WHERE vendedor_nome IS NOT NULL AND vendedor_nome != '' ORDER BY vendedor_nome").all();
+      const bairros = await env.DB.prepare("SELECT DISTINCT bairro as nome FROM orders WHERE bairro IS NOT NULL AND bairro != '' ORDER BY bairro").all();
+
+      return json({
+        ok: true,
+        pedidos: pedidos.results || [],
+        resumo: {
+          total_pedidos: total,
+          total_valor: resumo?.total_valor || 0,
+          com_foto: resumo?.com_foto || 0,
+          sem_foto: resumo?.sem_foto || 0,
+          com_bling: resumo?.com_bling || 0,
+          sem_bling: resumo?.sem_bling || 0,
+          pagos: resumo?.pagos || 0,
+          nao_pagos: resumo?.nao_pagos || 0,
+        },
+        paginacao: { page, limit, total, pages },
+        dropdowns: {
+          entregadores: (entregadores.results || []).map(r => r.nome),
+          vendedores: (vendedores.results || []).map(r => r.nome),
+          bairros: (bairros.results || []).map(r => r.nome),
+        }
+      });
+    }
+
+    // ── CONSULTA DE PEDIDOS (paginada + filtros) ──────────────
+
+    if (method === 'GET' && path === '/api/consulta/pedidos') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const page = Math.max(1, parseInt(url.searchParams.get('page')) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit')) || 30));
+      const offset = (page - 1) * limit;
+
+      // Período (default 7 dias, máx 90)
+      const hoje = new Date().toISOString().slice(0, 10);
+      const seteAtras = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const data_de = url.searchParams.get('data_de') || seteAtras;
+      const data_ate = url.searchParams.get('data_ate') || hoje;
+
+      // Validar máximo 90 dias
+      const diffDias = (new Date(data_ate) - new Date(data_de)) / 86400000;
+      if (diffDias > 92) return err('Período máximo: 90 dias', 400);
+
+      const conditions = ['created_at >= ?', 'created_at <= ?'];
+      const params = [data_de + 'T00:00:00', data_ate + 'T23:59:59'];
+
+      // Filtros textuais
+      const pedido_id = url.searchParams.get('pedido_id');
+      const cliente = url.searchParams.get('cliente');
+      const telefone = url.searchParams.get('telefone');
+      const produto = url.searchParams.get('produto');
+      const entregador = url.searchParams.get('entregador');
+      const vendedor = url.searchParams.get('vendedor');
+      const rua = url.searchParams.get('rua');
+      const bairro = url.searchParams.get('bairro');
+      const status_f = url.searchParams.get('status');
+      const tipo_pagamento = url.searchParams.get('tipo_pagamento');
+      const pago = url.searchParams.get('pago');
+      const tem_foto = url.searchParams.get('tem_foto');
+      const tem_bling = url.searchParams.get('tem_bling');
+      const consumidor_final = url.searchParams.get('consumidor_final');
+
+      if (pedido_id) { conditions.push('id = ?'); params.push(parseInt(pedido_id)); }
+      if (cliente) { conditions.push("customer_name LIKE ?"); params.push('%' + cliente + '%'); }
+      if (telefone) { conditions.push("phone_digits LIKE ?"); params.push('%' + telefone + '%'); }
+      if (produto) { conditions.push("items_json LIKE ?"); params.push('%' + produto + '%'); }
+      if (entregador) { conditions.push("driver_name_cache = ?"); params.push(entregador); }
+      if (vendedor) { conditions.push("vendedor_nome = ?"); params.push(vendedor); }
+      if (rua) { conditions.push("address_line LIKE ?"); params.push('%' + rua + '%'); }
+      if (bairro) { conditions.push("bairro = ?"); params.push(bairro); }
+      if (status_f) { conditions.push("status = ?"); params.push(status_f); }
+      if (tipo_pagamento) { conditions.push("tipo_pagamento = ?"); params.push(tipo_pagamento); }
+      if (pago === 'sim') conditions.push("pago = 1");
+      if (pago === 'nao') conditions.push("pago = 0");
+      if (tem_foto === 'sim') conditions.push("foto_comprovante IS NOT NULL AND foto_comprovante != ''");
+      if (tem_foto === 'nao') conditions.push("(foto_comprovante IS NULL OR foto_comprovante = '')");
+      if (tem_bling === 'sim') conditions.push("bling_pedido_id IS NOT NULL AND bling_pedido_id != ''");
+      if (tem_bling === 'nao') conditions.push("(bling_pedido_id IS NULL OR bling_pedido_id = '')");
+      if (consumidor_final === 'sim') conditions.push("customer_name = 'CONSUMIDOR FINAL'");
+
+      const where = conditions.join(' AND ');
+
+      // Ordenação
+      const validCols = ['created_at', 'total_value', 'customer_name', 'id', 'status'];
+      let order_by = url.searchParams.get('order_by') || 'created_at';
+      if (!validCols.includes(order_by)) order_by = 'created_at';
+      let order_dir = (url.searchParams.get('order_dir') || 'DESC').toUpperCase();
+      if (order_dir !== 'ASC' && order_dir !== 'DESC') order_dir = 'DESC';
+
+      // Resumo (COUNT + SUM)
+      const resumoSQL = `SELECT
+        COUNT(*) as total_pedidos,
+        COALESCE(SUM(total_value), 0) as total_valor,
+        SUM(CASE WHEN foto_comprovante IS NOT NULL AND foto_comprovante != '' THEN 1 ELSE 0 END) as com_foto,
+        SUM(CASE WHEN foto_comprovante IS NULL OR foto_comprovante = '' THEN 1 ELSE 0 END) as sem_foto,
+        SUM(CASE WHEN bling_pedido_id IS NOT NULL AND bling_pedido_id != '' THEN 1 ELSE 0 END) as com_bling,
+        SUM(CASE WHEN bling_pedido_id IS NULL OR bling_pedido_id = '' THEN 1 ELSE 0 END) as sem_bling,
+        SUM(CASE WHEN pago = 1 THEN 1 ELSE 0 END) as pagos,
+        SUM(CASE WHEN pago = 0 THEN 1 ELSE 0 END) as nao_pagos
+      FROM orders WHERE ${where}`;
+
+      const resumoRow = await env.DB.prepare(resumoSQL).bind(...params).first();
+
+      // Dados paginados
+      const dadosSQL = `SELECT id, phone_digits, customer_name, address_line, bairro, complemento, referencia,
+        items_json, total_value, notes, status, driver_name_cache, created_at,
+        bling_pedido_id, bling_pedido_num, tipo_pagamento, pago, vendedor_nome,
+        foto_comprovante, delivered_at, obs_entrega, pagamento_final, cancel_motivo
+      FROM orders WHERE ${where} ORDER BY ${order_by} ${order_dir} LIMIT ? OFFSET ?`;
+
+      const dados = await env.DB.prepare(dadosSQL).bind(...params, limit, offset).all();
+      const total = resumoRow?.total_pedidos || 0;
+
+      return json({
+        ok: true,
+        pedidos: dados.results || [],
+        resumo: {
+          total_pedidos: total,
+          total_valor: resumoRow?.total_valor || 0,
+          com_foto: resumoRow?.com_foto || 0,
+          sem_foto: resumoRow?.sem_foto || 0,
+          com_bling: resumoRow?.com_bling || 0,
+          sem_bling: resumoRow?.sem_bling || 0,
+          pagos: resumoRow?.pagos || 0,
+          nao_pagos: resumoRow?.nao_pagos || 0,
+        },
+        paginacao: { page, limit, total, pages: Math.ceil(total / limit) || 1 }
+      });
+    }
+
+    // Dropdowns auxiliares para consulta
+    if (method === 'GET' && path === '/api/consulta/opcoes') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const vendedores = await env.DB.prepare("SELECT DISTINCT vendedor_nome FROM orders WHERE vendedor_nome IS NOT NULL AND vendedor_nome != '' ORDER BY vendedor_nome").all();
+      const bairros = await env.DB.prepare("SELECT DISTINCT bairro FROM orders WHERE bairro IS NOT NULL AND bairro != '' ORDER BY bairro").all();
+      const entregadores = await env.DB.prepare("SELECT DISTINCT driver_name_cache FROM orders WHERE driver_name_cache IS NOT NULL AND driver_name_cache != '' ORDER BY driver_name_cache").all();
+
+      return json({
+        vendedores: (vendedores.results || []).map(r => r.vendedor_nome),
+        bairros: (bairros.results || []).map(r => r.bairro),
+        entregadores: (entregadores.results || []).map(r => r.driver_name_cache),
       });
     }
 
