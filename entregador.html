@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.2.1 — MoskoGás</title>
+<title>Entregador v2.3.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -127,7 +127,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.2.1</small></h1>
+  <h1>🚚 Entregas <small>v2.3.0</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -146,11 +146,11 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.2.1 — entregador</div>
+<div class="version-badge">v2.3.0 — entregador</div>
 
 <script src="shared.js"></script>
 <script>
-// v2.2.1
+// v2.3.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -164,11 +164,18 @@ const TIPO_ICONS = {
 };
 
 const photoStore = {};
+let fotoConfig = { maxDim: 800, quality: 55, contraste: true, desaturacao: 50 };
 let autoTimer;
 let allOrders = [];
 let currentTab = 'pendentes';
 
 async function init() {
+  // Carregar config de foto do backend
+  try {
+    const fc = await api('/api/pub/foto-config').catch(() => null);
+    if (fc && fc.maxDim) fotoConfig = fc;
+  } catch(_) {}
+
   const drivers = await api('/api/drivers').catch(() => []);
   const sel = document.getElementById('fDriver');
   drivers.forEach(d => {
@@ -426,7 +433,7 @@ async function onPhotoSelected(orderId, input) {
   toast('⏳ Processando foto (scanner)...', 'info');
 
   try {
-    const compressed = await compressImage(file, 800, 0.55);
+    const compressed = await compressImage(file, fotoConfig.maxDim, fotoConfig.quality / 100, fotoConfig.contraste, fotoConfig.desaturacao);
     const dataUrl = URL.createObjectURL(compressed.blob);
     const sizeTxt = (compressed.blob.size / 1024).toFixed(0) + ' KB';
 
@@ -452,7 +459,7 @@ async function onPhotoSelected(orderId, input) {
   input.value = '';
 }
 
-function compressImage(file, maxWidth, quality) {
+function compressImage(file, maxWidth, quality, contraste, desaturacao) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
@@ -462,9 +469,12 @@ function compressImage(file, maxWidth, quality) {
       img.onload = () => {
         let w = img.width;
         let h = img.height;
-        if (w > maxWidth) {
-          h = Math.round(h * maxWidth / w);
-          w = maxWidth;
+        // Resize pela maior dimensão
+        const maxDim = Math.max(w, h);
+        if (maxDim > maxWidth) {
+          const ratio = maxWidth / maxDim;
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
         }
         const canvas = document.createElement('canvas');
         canvas.width = w;
@@ -474,35 +484,39 @@ function compressImage(file, maxWidth, quality) {
         ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
 
-        // ── Tratamento leve (comprovante) ──
-        const imageData = ctx.getImageData(0, 0, w, h);
-        const px = imageData.data;
+        // Tratamento condicional (config do admin)
+        if (contraste || desaturacao > 0) {
+          const imageData = ctx.getImageData(0, 0, w, h);
+          const px = imageData.data;
 
-        // 1) Auto-contraste suave (histogram stretch)
-        let minL = 255, maxL = 0;
-        for (let i = 0; i < px.length; i += 4) {
-          const lum = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
-          if (lum < minL) minL = lum;
-          if (lum > maxL) maxL = lum;
+          let cutLow = 0, cutRange = 255;
+          if (contraste) {
+            let minL = 255, maxL = 0;
+            for (let i = 0; i < px.length; i += 4) {
+              const lum = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
+              if (lum < minL) minL = lum;
+              if (lum > maxL) maxL = lum;
+            }
+            cutLow = minL + (maxL - minL) * 0.02;
+            const cutHigh = maxL - (maxL - minL) * 0.02;
+            cutRange = (cutHigh - cutLow) || 1;
+          }
+
+          const satKeep = 1 - (desaturacao / 100); // 50% desat → 0.5 keep
+          for (let i = 0; i < px.length; i += 4) {
+            let r = contraste ? Math.min(255, Math.max(0, ((px[i]   - cutLow) / cutRange) * 255)) : px[i];
+            let g = contraste ? Math.min(255, Math.max(0, ((px[i+1] - cutLow) / cutRange) * 255)) : px[i+1];
+            let b = contraste ? Math.min(255, Math.max(0, ((px[i+2] - cutLow) / cutRange) * 255)) : px[i+2];
+            if (desaturacao > 0) {
+              const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+              r = gray + (r - gray) * satKeep;
+              g = gray + (g - gray) * satKeep;
+              b = gray + (b - gray) * satKeep;
+            }
+            px[i] = r; px[i+1] = g; px[i+2] = b;
+          }
+          ctx.putImageData(imageData, 0, 0);
         }
-        const cutLow = minL + (maxL - minL) * 0.02;
-        const cutHigh = maxL - (maxL - minL) * 0.02;
-        const range = cutHigh - cutLow || 1;
-
-        // 2) Contraste + desaturação 50% num loop só (performance)
-        for (let i = 0; i < px.length; i += 4) {
-          let r = Math.min(255, Math.max(0, ((px[i]   - cutLow) / range) * 255));
-          let g = Math.min(255, Math.max(0, ((px[i+1] - cutLow) / range) * 255));
-          let b = Math.min(255, Math.max(0, ((px[i+2] - cutLow) / range) * 255));
-          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-          px[i]   = gray + (r - gray) * 0.5;
-          px[i+1] = gray + (g - gray) * 0.5;
-          px[i+2] = gray + (b - gray) * 0.5;
-        }
-
-        ctx.putImageData(imageData, 0, 0);
-
-        // (sem sharpen — não melhora foto de celular e infla tamanho 3x)
 
         canvas.toBlob(
           (blob) => {

@@ -1,6 +1,8 @@
-// v2.17.1
+// v2.18.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.18.0: Config dinâmica (app_config) + foto-config público + admin GET/POST config
+// v2.17.1: Consumidor Final padrão no Bling (só vincula contato se CPF/CNPJ)
 // v2.17.0: Bling só ao ENTREGAR — pedido novo nunca cria venda no Bling
 // v2.16.2: Fix comprovante foto 401 — endpoint movido antes do auth gate
 // v2.16.1: Fix ReferenceError: user não declarado em cancel/revert/deliver/select-driver
@@ -415,6 +417,10 @@ async function ensureAuditTable(env) {
   )`).run().catch(() => {});
   // Migração: coluna cancel_motivo em orders
   await env.DB.prepare(`ALTER TABLE orders ADD COLUMN cancel_motivo TEXT`).run().catch(() => {});
+  // Tabela config (key-value)
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS app_config (
+    key TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT (datetime('now'))
+  )`).run().catch(() => {});
 }
 
 async function logStatusChange(env, orderId, statusAnterior, statusNovo, motivo, user) {
@@ -917,6 +923,15 @@ export default {
 
     // [REMOVIDO v2.12.0] test-nfce — NFCe não existe na API Bling v3
 
+    // ── Config pública (foto-config para entregador) ──
+    if (method === 'GET' && path === '/api/pub/foto-config') {
+      await ensureAuditTable(env); // garante tabela app_config existe
+      const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='foto_config'").first();
+      const defaults = { maxDim: 800, quality: 55, contraste: true, desaturacao: 50 };
+      if (!row?.value) return json(defaults);
+      try { return json({ ...defaults, ...JSON.parse(row.value) }); } catch { return json(defaults); }
+    }
+
     // ── AUTH: Login / Sessão / Logout (SEM autenticação prévia) ──
 
     if (method === 'POST' && path === '/api/auth/login') {
@@ -1352,6 +1367,29 @@ export default {
 
     if (method === 'GET' && path === '/api/formas-pagamento') {
       return json(Object.entries(FORMAS_PAGAMENTO).map(([key, v]) => ({ key, ...v })));
+    }
+
+    // ── Config (admin) ──────────────────────────────────────
+    if (method === 'GET' && path === '/api/config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck) return authCheck;
+      const key = url.searchParams.get('key');
+      if (!key) return err('Informe ?key=nome_da_config');
+      const row = await env.DB.prepare("SELECT value, updated_at FROM app_config WHERE key=?").bind(key).first();
+      if (!row) return json({ key, value: null });
+      try { return json({ key, value: JSON.parse(row.value), updated_at: row.updated_at }); }
+      catch { return json({ key, value: row.value, updated_at: row.updated_at }); }
+    }
+
+    if (method === 'POST' && path === '/api/config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck) return authCheck;
+      const body = await request.json();
+      const { key, value } = body;
+      if (!key) return err('Informe key');
+      const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+      await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?, ?, datetime('now'))").bind(key, valueStr).run();
+      return json({ ok: true, key, value });
     }
 
     if (method === 'POST' && /^\/api\/order\/\d+\/update$/.test(path)) {

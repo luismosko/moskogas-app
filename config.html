@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.2.1 — MoskoGás</title>
+<title>Config v2.3.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -22,7 +22,7 @@
   .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-top: 8px; }
   .status.ok  { background: #dcfce7; color: #16a34a; }
   .status.err { background: #fee2e2; color: #dc2626; }
-  /* Entregadores removido v2.2.1 — gerenciar em Usuários */
+  /* Entregadores removido v2.3.0 — gerenciar em Usuários */
   .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 4px 0 10px; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
 </style>
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.2.1 — config</div>
-  <h1>⚙️ Configurações v2.2.1</h1>
+  <div class="version-badge">v2.3.0 — config</div>
+  <h1>⚙️ Configurações v2.3.0</h1>
 
   <!-- API Key -->
   <div class="card">
@@ -65,6 +65,34 @@
     <input id="testTo" placeholder="5567999990000">
     <button class="btn btn-green" onclick="testIzChat()">📲 Enviar Mensagem Teste</button>
     <div id="izchat-status"></div>
+  </div>
+
+  <!-- Config Foto Comprovante -->
+  <div class="card">
+    <h2>📸 Foto Comprovante (Entregador)</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Ajuste a compressão da foto tirada pelo entregador ao marcar entrega. Valores menores = arquivo menor, qualidade menor.</p>
+
+    <label>Dimensão máxima (px): <strong id="maxDimVal">800</strong></label>
+    <input type="range" id="fotoMaxDim" min="400" max="1600" step="100" value="800" oninput="document.getElementById('maxDimVal').textContent=this.value" style="padding:0;border:none">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>400px</span><span>800</span><span>1200</span><span>1600px</span></div>
+
+    <label>Qualidade JPEG (%): <strong id="qualityVal">55</strong></label>
+    <input type="range" id="fotoQuality" min="20" max="90" step="5" value="55" oninput="document.getElementById('qualityVal').textContent=this.value" style="padding:0;border:none">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>20%</span><span>55%</span><span>90%</span></div>
+
+    <label>Desaturação (%): <strong id="desatVal">50</strong></label>
+    <input type="range" id="fotoDesat" min="0" max="100" step="10" value="50" oninput="document.getElementById('desatVal').textContent=this.value" style="padding:0;border:none">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>0% (cor)</span><span>50%</span><span>100% (P&B)</span></div>
+
+    <div style="margin-bottom:12px">
+      <label style="display:inline;cursor:pointer"><input type="checkbox" id="fotoContraste" checked style="width:auto;margin-right:6px">Auto-contraste</label>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-orange" onclick="salvarFotoConfig()" style="flex:1">💾 Salvar</button>
+      <button class="btn btn-gray" onclick="resetFotoConfig()">🔄 Padrão</button>
+    </div>
+    <div id="foto-config-status"></div>
   </div>
 
   <!-- Autocomplete de Ruas -->
@@ -158,7 +186,7 @@ async function testIzChat() {
   }
 }
 
-// [REMOVIDO v2.2.1] loadDrivers/addDriver/toggleDriver — entregadores via Usuários (app_users)
+// [REMOVIDO v2.3.0] loadDrivers/addDriver/toggleDriver — entregadores via Usuários (app_users)
 
 // ── Banco de Ruas ──────────────────────────────────────────────
 
@@ -271,8 +299,47 @@ async function testStreetSearch() {
   }
 }
 
+// ── Foto Config ─────────────────────────────────────────────
+async function carregarFotoConfig() {
+  try {
+    const data = await api('/api/config?key=foto_config');
+    if (data?.value) {
+      const c = data.value;
+      if (c.maxDim) { document.getElementById('fotoMaxDim').value = c.maxDim; document.getElementById('maxDimVal').textContent = c.maxDim; }
+      if (c.quality) { document.getElementById('fotoQuality').value = c.quality; document.getElementById('qualityVal').textContent = c.quality; }
+      if (c.desaturacao !== undefined) { document.getElementById('fotoDesat').value = c.desaturacao; document.getElementById('desatVal').textContent = c.desaturacao; }
+      if (c.contraste !== undefined) { document.getElementById('fotoContraste').checked = c.contraste; }
+    }
+  } catch(_) {}
+}
+
+async function salvarFotoConfig() {
+  const config = {
+    maxDim: parseInt(document.getElementById('fotoMaxDim').value),
+    quality: parseInt(document.getElementById('fotoQuality').value),
+    desaturacao: parseInt(document.getElementById('fotoDesat').value),
+    contraste: document.getElementById('fotoContraste').checked,
+  };
+  const el = document.getElementById('foto-config-status');
+  try {
+    await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'foto_config', value: config }) });
+    el.innerHTML = '<div class="status ok">✅ Configuração salva! Entregadores usarão na próxima foto.</div>';
+    setTimeout(() => el.innerHTML = '', 3000);
+  } catch(e) {
+    el.innerHTML = '<div class="status err">❌ ' + e.message + '</div>';
+  }
+}
+
+function resetFotoConfig() {
+  document.getElementById('fotoMaxDim').value = 800; document.getElementById('maxDimVal').textContent = '800';
+  document.getElementById('fotoQuality').value = 55; document.getElementById('qualityVal').textContent = '55';
+  document.getElementById('fotoDesat').value = 50; document.getElementById('desatVal').textContent = '50';
+  document.getElementById('fotoContraste').checked = true;
+}
+
 // ── Init ─────────────────────────────────────────────────────
 checkStreetsCount();
+carregarFotoConfig();
 </script>
 </body>
 </html>
