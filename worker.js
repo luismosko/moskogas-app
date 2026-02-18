@@ -1,6 +1,7 @@
-// v2.22.0
+// v2.22.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.22.1: Fix dashboard date filter (epoch, not text) + porHora BRT conversion
 // v2.22.0: GET /api/dashboard (KPIs, status, produtos, pagamentos, vendedores, entregadores, hora)
 // v2.21.0: Rate limiting login (5 falhas/15min IP), PATCH /api/auth/me/senha,
 //          Permissões atendente expandidas (CRUD atendente+entregador, não admin)
@@ -2456,20 +2457,21 @@ export default {
       if (authCheck instanceof Response) return authCheck;
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
-      const dateStart = `${date} 00:00:00`;
-      const dateEnd = `${date} 23:59:59`;
+      // created_at is stored as INTEGER (unixepoch) — use epoch comparison like /api/orders/list
+      const dayStartEpoch = Math.floor(new Date(date + 'T00:00:00-04:00').getTime() / 1000);
+      const dayEndEpoch = dayStartEpoch + 86400;
 
       const orders = await env.DB.prepare(
         `SELECT id, customer_name, phone_digits, total_value, tipo_pagamento, pago,
                 bling_pedido_id, bling_pedido_num, vendedor_nome, items_json,
                 status, driver_name_cache, created_at
-         FROM orders WHERE created_at BETWEEN ? AND ? AND status != 'cancelado' ORDER BY id DESC`
-      ).bind(dateStart, dateEnd).all().then(r => r.results || []);
+         FROM orders WHERE created_at >= ? AND created_at < ? AND status != 'cancelado' ORDER BY id DESC`
+      ).bind(dayStartEpoch, dayEndEpoch).all().then(r => r.results || []);
 
       // Também pegar cancelados separados (para KPI)
       const cancelados = await env.DB.prepare(
-        `SELECT COUNT(*) as cnt FROM orders WHERE created_at BETWEEN ? AND ? AND status = 'cancelado'`
-      ).bind(dateStart, dateEnd).first().then(r => r?.cnt || 0);
+        `SELECT COUNT(*) as cnt FROM orders WHERE created_at >= ? AND created_at < ? AND status = 'cancelado'`
+      ).bind(dayStartEpoch, dayEndEpoch).first().then(r => r?.cnt || 0);
 
       const totalPedidos = orders.length;
       const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
@@ -2530,10 +2532,13 @@ export default {
       // Ticket médio
       const ticketMedio = totalPedidos > 0 ? Math.round((totalValor / totalPedidos) * 100) / 100 : 0;
 
-      // Pedidos por hora (histograma)
+      // Pedidos por hora (histograma) — created_at is epoch, convert to BRT (UTC-4)
       const porHora = {};
       for (const o of orders) {
-        const h = (o.created_at || '').slice(11, 13) || '??';
+        const epoch = typeof o.created_at === 'number' ? o.created_at : parseInt(o.created_at) || 0;
+        const dt = new Date(epoch * 1000);
+        const brtHour = (dt.getUTCHours() - 4 + 24) % 24;
+        const h = String(brtHour).padStart(2, '0');
         porHora[h] = (porHora[h] || 0) + 1;
       }
 

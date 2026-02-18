@@ -177,9 +177,15 @@ async function loadDashboard() {
   btn.classList.add('loading'); btn.innerHTML = '⏳ Carregando...';
   try {
     const resp = await api(`/api/dashboard?date=${date}`);
-    if (!resp.ok) throw new Error('Erro ' + resp.status);
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.error || 'Erro HTTP ' + resp.status);
+    }
     render(await resp.json());
-  } catch(e) { showToast('Erro: ' + e.message, 'error'); }
+  } catch(e) {
+    showToast('Erro: ' + e.message, 'error');
+    document.getElementById('kTotal').innerHTML = '<span style="color:#ef4444;font-size:14px">⚠️ ' + e.message + '</span>';
+  }
   finally { btn.classList.remove('loading'); btn.innerHTML = '🔄 Atualizar'; }
 }
 
