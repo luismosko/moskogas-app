@@ -1,6 +1,7 @@
-// v2.26.0
+// v2.27.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.27.0: WhatsApp Safety Layer — anti-ban, circuit breaker, rate limit, variação msgs
 // v2.26.0: Lembretes PIX — payment_reminders, envio manual/bulk/cron, config admin
 // v2.25.2: Fix auth contratos — bypass requireApiKey para /api/contratos e /api/webhooks
 // v2.25.1: Fix IzChat contratos — usar sendWhatsApp (chatapi.izchat.com.br + {number,body})
@@ -388,9 +389,223 @@ async function deletarVendaBling(env, orderId, blingPedidoId) {
   return { ok: false, status: resp.status, error: errText.substring(0, 300) };
 }
 
-// ── IzChat WhatsApp ───────────────────────────────────────────
+// ── IzChat WhatsApp — Safety Layer v1.0 ──────────────────────
+// Proteção contra banimento: rate limiting, circuit breaker,
+// variação de mensagem, horário comercial, log de envios.
+// TODA mensagem WhatsApp do sistema passa por aqui.
 
-async function sendWhatsApp(env, to, message) {
+async function ensureWhatsAppTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS whatsapp_send_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    category TEXT DEFAULT 'geral',
+    status_code INTEGER,
+    wa_ok INTEGER DEFAULT 0,
+    blocked INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_wsl_created ON whatsapp_send_log(created_at)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_wsl_phone ON whatsapp_send_log(phone)').run().catch(() => {});
+}
+
+async function getWhatsAppSafetyConfig(env) {
+  const defaults = {
+    habilitado: true,
+    max_por_minuto: 25,
+    max_por_hora: 100,
+    max_por_dia: 200,
+    intervalo_min_segundos: 4,
+    cooldown_mesmo_numero_horas: 12,
+    horario_inicio_brt: 8,
+    horario_fim_brt: 18,
+    respeitar_horario: true,
+    circuit_breaker_minutos: 30,
+    opt_out_texto: '\n\n_Responda PARAR para não receber mais lembretes._'
+  };
+  try {
+    const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='whatsapp_safety'").first();
+    if (row?.value) return { ...defaults, ...JSON.parse(row.value) };
+  } catch(_) {}
+  return defaults;
+}
+
+// Circuit breaker: verifica se houve 429/bloqueio recente
+async function isCircuitBroken(env, config) {
+  try {
+    const cutoff = Math.floor(Date.now() / 1000) - (config.circuit_breaker_minutos * 60);
+    const row = await env.DB.prepare(
+      'SELECT COUNT(*) as c FROM whatsapp_send_log WHERE blocked=1 AND created_at > ?'
+    ).bind(cutoff).first();
+    return (row?.c || 0) > 0;
+  } catch(_) { return false; }
+}
+
+// Rate limit checks
+async function checkRateLimits(env, config, phone) {
+  const now = Math.floor(Date.now() / 1000);
+
+  // Por minuto
+  const min1 = await env.DB.prepare(
+    'SELECT COUNT(*) as c FROM whatsapp_send_log WHERE created_at > ? AND wa_ok=1'
+  ).bind(now - 60).first();
+  if ((min1?.c || 0) >= config.max_por_minuto) {
+    return { ok: false, reason: `Rate limit: ${config.max_por_minuto} msgs/min atingido` };
+  }
+
+  // Por hora
+  const hr1 = await env.DB.prepare(
+    'SELECT COUNT(*) as c FROM whatsapp_send_log WHERE created_at > ? AND wa_ok=1'
+  ).bind(now - 3600).first();
+  if ((hr1?.c || 0) >= config.max_por_hora) {
+    return { ok: false, reason: `Rate limit: ${config.max_por_hora} msgs/hora atingido` };
+  }
+
+  // Por dia (desde meia-noite BRT = 04:00 UTC)
+  const nowDate = new Date();
+  const brtOffset = -4;
+  const brtMidnight = new Date(nowDate);
+  brtMidnight.setUTCHours(Math.abs(brtOffset), 0, 0, 0);
+  if (brtMidnight > nowDate) brtMidnight.setUTCDate(brtMidnight.getUTCDate() - 1);
+  const midnightEpoch = Math.floor(brtMidnight.getTime() / 1000);
+
+  const day1 = await env.DB.prepare(
+    'SELECT COUNT(*) as c FROM whatsapp_send_log WHERE created_at > ? AND wa_ok=1'
+  ).bind(midnightEpoch).first();
+  if ((day1?.c || 0) >= config.max_por_dia) {
+    return { ok: false, reason: `Rate limit: ${config.max_por_dia} msgs/dia atingido` };
+  }
+
+  // Intervalo mínimo desde último envio global
+  const last = await env.DB.prepare(
+    'SELECT MAX(created_at) as t FROM whatsapp_send_log WHERE wa_ok=1'
+  ).first();
+  if (last?.t && (now - last.t) < config.intervalo_min_segundos) {
+    return { ok: false, reason: `Aguarde ${config.intervalo_min_segundos}s entre envios`, retry: true };
+  }
+
+  return { ok: true };
+}
+
+// Cooldown por destinatário (para lembretes/cobranças)
+async function checkRecipientCooldown(env, config, phone, category) {
+  if (!category || category === 'sistema' || category === 'entrega') return { ok: true };
+  const cutoff = Math.floor(Date.now() / 1000) - (config.cooldown_mesmo_numero_horas * 3600);
+  const row = await env.DB.prepare(
+    'SELECT MAX(created_at) as t, COUNT(*) as c FROM whatsapp_send_log WHERE phone=? AND category=? AND wa_ok=1 AND created_at > ?'
+  ).bind(phone, category, cutoff).first();
+  if (row?.c > 0) {
+    const horasAtras = Math.round((Math.floor(Date.now() / 1000) - (row.t || 0)) / 3600);
+    return { ok: false, reason: `Último ${category} para este número há ${horasAtras}h (cooldown: ${config.cooldown_mesmo_numero_horas}h)` };
+  }
+  return { ok: true };
+}
+
+// Verificar horário comercial BRT
+function isDentroHorarioComercial(config) {
+  if (!config.respeitar_horario) return true;
+  const now = new Date();
+  const brtHour = (now.getUTCHours() - 4 + 24) % 24;
+  return brtHour >= config.horario_inicio_brt && brtHour < config.horario_fim_brt;
+}
+
+// Variação de mensagem — embaralha para não ser idêntica
+const MSG_SAUDACOES = ['Olá', 'Oi', 'Bom dia', 'Boa tarde', 'Prezado(a)'];
+const MSG_FECHAMENTOS = [
+  '— MoskoGás 🔥',
+  '— Equipe MoskoGás',
+  'Atenciosamente, MoskoGás 🔥',
+  '— MoskoGás · Campo Grande/MS',
+  'Obrigado! MoskoGás 🔥'
+];
+
+function variarMensagem(msg) {
+  // Troca saudação se começa com emoji de sino/olá padrão
+  if (msg.startsWith('🔔 Olá')) {
+    const saud = MSG_SAUDACOES[Math.floor(Math.random() * MSG_SAUDACOES.length)];
+    msg = msg.replace('🔔 Olá', `🔔 ${saud}`);
+  }
+  // Troca fechamento se termina com MoskoGás
+  for (const f of MSG_FECHAMENTOS) {
+    if (msg.includes(f)) {
+      const novo = MSG_FECHAMENTOS[Math.floor(Math.random() * MSG_FECHAMENTOS.length)];
+      msg = msg.replace(f, novo);
+      break;
+    }
+  }
+  // Adiciona espaço invisível aleatório (variação técnica anti-duplicata)
+  const pos = Math.floor(Math.random() * Math.min(msg.length, 100)) + 10;
+  if (pos < msg.length) {
+    msg = msg.slice(0, pos) + '\u200B' + msg.slice(pos); // zero-width space
+  }
+  return msg;
+}
+
+/**
+ * sendWhatsApp — Função CENTRAL de envio. Todas as mensagens passam por aqui.
+ * @param {object} env - Cloudflare env
+ * @param {string} to - Número formato 5567999999999
+ * @param {string} message - Texto da mensagem
+ * @param {object} opts - Opções: { category, skipSafety, variar }
+ *   category: 'entrega'|'lembrete_pix'|'admin_alerta'|'contrato'|'sistema'|'teste'
+ *   skipSafety: true para bypasses (teste, admin direto)
+ *   variar: true para aplicar variação automática (default true para lembretes)
+ */
+async function sendWhatsApp(env, to, message, opts = {}) {
+  const { category = 'geral', skipSafety = false, variar } = opts;
+
+  // Garantir tabelas
+  await ensureWhatsAppTables(env);
+
+  if (!skipSafety) {
+    const config = await getWhatsAppSafetyConfig(env);
+
+    if (!config.habilitado) {
+      return { ok: false, status: 0, data: {}, safety: 'whatsapp_desabilitado' };
+    }
+
+    // 1. Circuit breaker
+    if (await isCircuitBroken(env, config)) {
+      console.error('[WA-SAFETY] Circuit breaker ABERTO — 429/bloqueio recente');
+      return { ok: false, status: 0, data: {}, safety: 'circuit_breaker_aberto' };
+    }
+
+    // 2. Horário comercial
+    if (!isDentroHorarioComercial(config)) {
+      console.log('[WA-SAFETY] Fora do horário comercial BRT');
+      return { ok: false, status: 0, data: {}, safety: 'fora_horario_comercial' };
+    }
+
+    // 3. Rate limits globais
+    const rateCheck = await checkRateLimits(env, config, to);
+    if (!rateCheck.ok) {
+      console.warn(`[WA-SAFETY] ${rateCheck.reason}`);
+      return { ok: false, status: 0, data: {}, safety: 'rate_limit', detail: rateCheck.reason };
+    }
+
+    // 4. Cooldown por destinatário (lembretes/cobranças)
+    if (category === 'lembrete_pix' || category === 'cobranca') {
+      const coolCheck = await checkRecipientCooldown(env, config, to, category);
+      if (!coolCheck.ok) {
+        console.log(`[WA-SAFETY] Cooldown: ${coolCheck.reason}`);
+        return { ok: false, status: 0, data: {}, safety: 'cooldown_destinatario', detail: coolCheck.reason };
+      }
+    }
+
+    // 5. Adicionar opt-out em msgs de cobrança
+    if ((category === 'lembrete_pix' || category === 'cobranca') && config.opt_out_texto) {
+      if (!message.includes('PARAR') && !message.includes('parar')) {
+        message += config.opt_out_texto;
+      }
+    }
+  }
+
+  // 6. Variação de mensagem (anti-duplicata)
+  const deveVariar = variar !== undefined ? variar : ['lembrete_pix', 'cobranca'].includes(category);
+  if (deveVariar) {
+    message = variarMensagem(message);
+  }
+
+  // ── ENVIO REAL ──
   const resp = await fetch('https://chatapi.izchat.com.br/api/messages/send', {
     method: 'POST',
     headers: {
@@ -400,7 +615,27 @@ async function sendWhatsApp(env, to, message) {
     body: JSON.stringify({ number: to, body: message }),
   });
   const data = await resp.json().catch(() => ({}));
-  return { ok: resp.ok, status: resp.status, data };
+  const isBlocked = resp.status === 429 || data.tokenBlocked === true;
+
+  // ── LOG ──
+  try {
+    await env.DB.prepare(
+      'INSERT INTO whatsapp_send_log (phone, category, status_code, wa_ok, blocked) VALUES (?, ?, ?, ?, ?)'
+    ).bind(to, category, resp.status, resp.ok ? 1 : 0, isBlocked ? 1 : 0).run();
+  } catch(_) {}
+
+  // ── CIRCUIT BREAKER: se 429, logar e parar ──
+  if (isBlocked) {
+    console.error(`[WA-SAFETY] ⚠️ 429/BLOCKED detectado! Token pode ter sido rotacionado. Circuit breaker ATIVADO.`);
+    // Notificação interna (não via WhatsApp, obviamente)
+    try {
+      await env.DB.prepare(
+        "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('whatsapp_last_block', ?, datetime('now'))"
+      ).bind(JSON.stringify({ at: new Date().toISOString(), phone: to, status: resp.status, data })).run();
+    } catch(_) {}
+  }
+
+  return { ok: resp.ok, status: resp.status, data, blocked: isBlocked };
 }
 
 // ── Lembretes PIX ─────────────────────────────────────────────
@@ -472,7 +707,7 @@ async function enviarLembretePix(env, order, config, user) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order);
-  const waResult = await sendWhatsApp(env, phone, message);
+  const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true });
 
   const tipo = user ? 'manual' : 'cron';
   await env.DB.prepare(
@@ -489,7 +724,7 @@ async function enviarLembretePix(env, order, config, user) {
     tipo, phone, wa_ok: waResult.ok, count: count + 1
   });
 
-  return { ok: waResult.ok, order_id: order.id, phone, envio_num: count + 1, wa_status: waResult.status };
+  return { ok: waResult.ok, order_id: order.id, phone, envio_num: count + 1, wa_status: waResult.status, blocked: waResult.blocked, safety: waResult.safety };
 }
 
 async function processarLembretesCron(env) {
@@ -534,10 +769,18 @@ async function processarLembretesCron(env) {
 
       const result = await enviarLembretePix(env, row, config, null);
       if (result.ok) enviados++;
-      else erros++;
+      else {
+        erros++;
+        // Circuit breaker: parar tudo se bloqueado
+        if (result.wa_status === 429 || result.blocked) {
+          console.error('[lembrete-cron] ⚠️ BLOQUEIO detectado — parando envios!');
+          break;
+        }
+      }
 
-      // Rate limit: pausa entre envios
-      await new Promise(r => setTimeout(r, 1500));
+      // Pausa entre envios (safety layer valida, mas delay real aqui)
+      const safetyConfig = await getWhatsAppSafetyConfig(env);
+      await new Promise(r => setTimeout(r, (safetyConfig.intervalo_min_segundos || 4) * 1000));
     }
 
     console.log(`[lembrete-cron] Total: ${rows.length} pendentes, ${enviados} enviados, ${pulados} pulados, ${erros} erros`);
@@ -1269,14 +1512,14 @@ export default {
       const auth = requireApiKey(request, env);
       if (auth) return auth;
       const body = await request.json();
-      const result = await sendWhatsApp(env, body.to, body.message);
+      const result = await sendWhatsApp(env, body.to, body.message, { category: 'entrega' });
       return json(result);
     }
 
     if (method === 'GET' && path === '/izchat/teste') {
       const to = url.searchParams.get('to');
       if (!to) return err('missing to');
-      const result = await sendWhatsApp(env, to, '✅ Teste MoskoGás — Sistema funcionando!');
+      const result = await sendWhatsApp(env, to, '✅ Teste MoskoGás — Sistema funcionando!', { category: 'teste', skipSafety: true });
       return json(result);
     }
 
@@ -2192,7 +2435,7 @@ export default {
       }
       if (!order.driver_phone_cache) return err('Entregador sem telefone cadastrado');
       const message = buildDeliveryMessage(order, observation);
-      const result = await sendWhatsApp(env, order.driver_phone_cache, message);
+      const result = await sendWhatsApp(env, order.driver_phone_cache, message, { category: 'entrega' });
       if (result.ok) {
         await env.DB.prepare(`UPDATE orders SET status='whatsapp_enviado', whatsapp_sent_at=unixepoch(), updated_at=unixepoch() WHERE id=?`).bind(id).run();
         await logEvent(env, id, 'whatsapp_sent', { to: order.driver_phone_cache });
@@ -2403,7 +2646,7 @@ export default {
               `🕐 ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })}`;
 
             for (const adm of adminList) {
-              const waResult = await sendWhatsApp(env, adm.telefone, msg);
+              const waResult = await sendWhatsApp(env, adm.telefone, msg, { category: 'admin_alerta', skipSafety: true });
               if (!whatsappResult) whatsappResult = waResult;
             }
           }
@@ -2486,7 +2729,7 @@ export default {
           const admins = await env.DB.prepare("SELECT telefone, nome FROM app_users WHERE role='admin' AND ativo=1 AND recebe_whatsapp=1 AND telefone IS NOT NULL").all().then(r => r.results || []);
           for (const adm of admins) {
             if (adm.telefone) {
-              await sendWhatsApp(env, adm.telefone, `⚠️ ${user.nome} reverteu pedido #${id}: ${statusAnterior.toUpperCase()} → ${novoStatus.toUpperCase()}\nMotivo: ${motivo}`);
+              await sendWhatsApp(env, adm.telefone, `⚠️ ${user.nome} reverteu pedido #${id}: ${statusAnterior.toUpperCase()} → ${novoStatus.toUpperCase()}\nMotivo: ${motivo}`, { category: 'admin_alerta', skipSafety: true });
             }
           }
         } catch (_) {} // não bloqueia se WhatsApp falhar
@@ -2721,6 +2964,50 @@ export default {
     }
 
     // ══════════════════════════════════════════════════════════
+    // WHATSAPP SAFETY — Config + Stats (admin)
+    // ══════════════════════════════════════════════════════════
+
+    if (method === 'GET' && path === '/api/whatsapp/safety-config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const config = await getWhatsAppSafetyConfig(env);
+      return json(config);
+    }
+
+    if (method === 'POST' && path === '/api/whatsapp/safety-config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureWhatsAppTables(env);
+      const body = await request.json();
+      const current = await getWhatsAppSafetyConfig(env);
+      const updated = { ...current, ...body };
+      await env.DB.prepare(
+        "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('whatsapp_safety', ?, datetime('now'))"
+      ).bind(JSON.stringify(updated)).run();
+      return json({ ok: true, config: updated });
+    }
+
+    if (method === 'GET' && path === '/api/whatsapp/stats') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureWhatsAppTables(env);
+      const now = Math.floor(Date.now() / 1000);
+      const stats = {};
+      // Hoje
+      const brtMidnight = new Date();
+      brtMidnight.setUTCHours(4, 0, 0, 0);
+      if (brtMidnight > new Date()) brtMidnight.setUTCDate(brtMidnight.getUTCDate() - 1);
+      const midnightEpoch = Math.floor(brtMidnight.getTime() / 1000);
+
+      stats.hoje = await env.DB.prepare('SELECT COUNT(*) as total, SUM(wa_ok) as ok, SUM(blocked) as bloqueios FROM whatsapp_send_log WHERE created_at > ?').bind(midnightEpoch).first();
+      stats.ultima_hora = await env.DB.prepare('SELECT COUNT(*) as total, SUM(wa_ok) as ok FROM whatsapp_send_log WHERE created_at > ?').bind(now - 3600).first();
+      stats.por_categoria = await env.DB.prepare('SELECT category, COUNT(*) as total, SUM(wa_ok) as ok FROM whatsapp_send_log WHERE created_at > ? GROUP BY category').bind(midnightEpoch).all().then(r => r.results || []);
+      stats.ultimo_bloqueio = await env.DB.prepare("SELECT value FROM app_config WHERE key='whatsapp_last_block'").first().then(r => r?.value ? JSON.parse(r.value) : null).catch(() => null);
+      stats.circuit_breaker = await isCircuitBroken(env, await getWhatsAppSafetyConfig(env));
+      return json(stats);
+    }
+
+    // ══════════════════════════════════════════════════════════
     // LEMBRETES PIX — MoskoGás v2.26.0
     // ══════════════════════════════════════════════════════════
 
@@ -2779,10 +3066,20 @@ export default {
       ).bind(...order_ids).all().then(r => r.results || []);
 
       const resultados = [];
+      let bloqueado = false;
+      const safetyConfig = await getWhatsAppSafetyConfig(env);
       for (const order of orders) {
+        if (bloqueado) {
+          resultados.push({ ok: false, order_id: order.id, error: 'Envio interrompido — bloqueio detectado' });
+          continue;
+        }
         const result = await enviarLembretePix(env, order, config, user);
         resultados.push(result);
-        if (result.ok) await new Promise(r => setTimeout(r, 1500));
+        if (result.blocked || result.wa_status === 429) {
+          bloqueado = true;
+        } else if (result.ok) {
+          await new Promise(r => setTimeout(r, (safetyConfig.intervalo_min_segundos || 4) * 1000));
+        }
       }
 
       const enviados = resultados.filter(r => r.ok).length;
@@ -3784,7 +4081,7 @@ export default {
           if (phone && phone.length >= 10 && signingUrl) {
             try {
               const msg = `📋 *MoskoGás — Contrato de Comodato*\n\nOlá ${signer.nome.split(' ')[0]}!\n\nVocê tem um contrato de comodato (${contract.numero}) para assinar digitalmente.\n\n🔗 Clique para assinar:\n${signingUrl}\n\n📌 Após clicar, siga as instruções na tela.\n\nObrigado!`;
-              const izResult = await sendWhatsApp(env, `55${phone}`, msg);
+              const izResult = await sendWhatsApp(env, `55${phone}`, msg, { category: 'contrato' });
               if (izResult.ok) {
                 await env.DB.prepare('UPDATE contract_signers SET whatsapp_sent_at=unixepoch() WHERE id=?').bind(signer.id).run();
               }
@@ -3840,7 +4137,7 @@ export default {
 
         try {
           const msg = `📋 *Lembrete — Contrato de Comodato*\n\nOlá ${signer.nome.split(' ')[0]}!\n\nSeu contrato (${contract.numero}) ainda aguarda sua assinatura.\n\n🔗 Clique para assinar:\n${signer.signing_url}\n\nObrigado!`;
-          const izResult = await sendWhatsApp(env, `55${phone}`, msg);
+          const izResult = await sendWhatsApp(env, `55${phone}`, msg, { category: 'contrato' });
           await env.DB.prepare('UPDATE contract_signers SET whatsapp_sent_at=unixepoch() WHERE id=?').bind(signer.id).run();
           results.push({ nome: signer.nome, sent: izResult.ok });
         } catch (e) {
