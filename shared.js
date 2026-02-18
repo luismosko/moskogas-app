@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.8.0
+// shared.js — Utilitários compartilhados MoskoGás v1.9.0
+// v1.9.0: Logo aponta para dashboard.html (capa do sistema)
 // v1.8.0: Nav compacta — Auditoria dentro de Relatório, Usuários dentro de Config
 // v1.7.0: Dropdown usuário (Trocar Senha + Sair), modal troca senha
 // v1.6.0: Loading overlay global (showLoading/hideLoading)
@@ -229,7 +230,7 @@ function buildNav() {
 
   return `
 <nav class="mg-navbar" id="mgNavbar">
-  <a href="https://moskogas.com.br" target="_blank" class="mg-nav-logo">
+  <a href="dashboard.html" class="mg-nav-logo">
     <img src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" alt="MoskoGás" onerror="this.onerror=null;this.parentElement.innerHTML='<span style=\\'font-weight:800;font-size:16px;color:#fff;letter-spacing:1px\\'>MOSKOGAS</span>'">
   </a>
   <div class="mg-nav-links">

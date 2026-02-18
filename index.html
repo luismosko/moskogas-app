@@ -20,7 +20,7 @@
       // Tem sessão ou API key → vai para pedido
       const user = JSON.parse(localStorage.getItem('mg_user') || 'null');
       if (user?.role === 'entregador') window.location.replace('entregador.html');
-      else window.location.replace('pedido.html');
+      else window.location.replace('dashboard.html');
     } else {
       // Sem auth → login
       window.location.replace('login.html');

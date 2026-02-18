@@ -1,6 +1,7 @@
-// v2.21.0
+// v2.22.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.22.0: GET /api/dashboard (KPIs, status, produtos, pagamentos, vendedores, entregadores, hora)
 // v2.21.0: Rate limiting login (5 falhas/15min IP), PATCH /api/auth/me/senha,
 //          Permissões atendente expandidas (CRUD atendente+entregador, não admin)
 // v2.20.0: Endpoint GET /api/consulta/pedidos (filtros, paginação, resumo, dropdowns)
@@ -2445,6 +2446,112 @@ export default {
         vendedores: (vendedores.results || []).map(r => r.vendedor_nome),
         bairros: (bairros.results || []).map(r => r.bairro),
         entregadores: (entregadores.results || []).map(r => r.driver_name_cache),
+      });
+    }
+
+    // ── DASHBOARD ───────────────────────────────────────────
+
+    if (method === 'GET' && path === '/api/dashboard') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+      const dateStart = `${date} 00:00:00`;
+      const dateEnd = `${date} 23:59:59`;
+
+      const orders = await env.DB.prepare(
+        `SELECT id, customer_name, phone_digits, total_value, tipo_pagamento, pago,
+                bling_pedido_id, bling_pedido_num, vendedor_nome, items_json,
+                status, driver_name_cache, created_at
+         FROM orders WHERE created_at BETWEEN ? AND ? AND status != 'cancelado' ORDER BY id DESC`
+      ).bind(dateStart, dateEnd).all().then(r => r.results || []);
+
+      // Também pegar cancelados separados (para KPI)
+      const cancelados = await env.DB.prepare(
+        `SELECT COUNT(*) as cnt FROM orders WHERE created_at BETWEEN ? AND ? AND status = 'cancelado'`
+      ).bind(dateStart, dateEnd).first().then(r => r?.cnt || 0);
+
+      const totalPedidos = orders.length;
+      const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
+      const comBling = orders.filter(o => o.bling_pedido_id).length;
+      const pagos = orders.filter(o => o.pago === 1).length;
+      const naoPagos = totalPedidos - pagos;
+
+      // Status breakdown
+      const porStatus = {};
+      for (const o of orders) {
+        const s = o.status || 'novo';
+        porStatus[s] = (porStatus[s] || 0) + 1;
+      }
+
+      // Por tipo pagamento
+      const porTipo = {};
+      for (const o of orders) {
+        const t = o.tipo_pagamento || 'indefinido';
+        if (!porTipo[t]) porTipo[t] = { qtd: 0, valor: 0 };
+        porTipo[t].qtd++;
+        porTipo[t].valor += o.total_value || 0;
+      }
+
+      // Por vendedor
+      const porVendedor = {};
+      for (const o of orders) {
+        const v = o.vendedor_nome || 'Sem vendedor';
+        if (!porVendedor[v]) porVendedor[v] = { qtd: 0, valor: 0 };
+        porVendedor[v].qtd++;
+        porVendedor[v].valor += o.total_value || 0;
+      }
+
+      // Por entregador
+      const porEntregador = {};
+      for (const o of orders) {
+        if (o.status === 'cancelado') continue;
+        const d = o.driver_name_cache || 'Sem entregador';
+        if (!porEntregador[d]) porEntregador[d] = { qtd: 0, valor: 0, entregues: 0 };
+        porEntregador[d].qtd++;
+        porEntregador[d].valor += o.total_value || 0;
+        if (o.status === 'entregue') porEntregador[d].entregues++;
+      }
+
+      // Por produto
+      const porProduto = {};
+      for (const o of orders) {
+        try {
+          const items = JSON.parse(o.items_json || '[]');
+          for (const it of items) {
+            const k = it.name || 'Desconhecido';
+            if (!porProduto[k]) porProduto[k] = { qtd: 0, valor: 0 };
+            porProduto[k].qtd += parseInt(it.qty) || 1;
+            porProduto[k].valor += (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1);
+          }
+        } catch(_) {}
+      }
+
+      // Ticket médio
+      const ticketMedio = totalPedidos > 0 ? Math.round((totalValor / totalPedidos) * 100) / 100 : 0;
+
+      // Pedidos por hora (histograma)
+      const porHora = {};
+      for (const o of orders) {
+        const h = (o.created_at || '').slice(11, 13) || '??';
+        porHora[h] = (porHora[h] || 0) + 1;
+      }
+
+      return json({
+        date,
+        resumo: {
+          totalPedidos, cancelados,
+          totalValor: Math.round(totalValor * 100) / 100,
+          comBling, pagos, naoPagos, ticketMedio
+        },
+        porStatus, porTipo, porVendedor, porEntregador, porProduto, porHora,
+        pedidos: orders.slice(0, 30).map(o => ({
+          id: o.id, cliente: o.customer_name, telefone: o.phone_digits,
+          valor: o.total_value, tipo: o.tipo_pagamento, pago: o.pago,
+          bling_num: o.bling_pedido_num, vendedor: o.vendedor_nome,
+          entregador: o.driver_name_cache, items_json: o.items_json,
+          status: o.status, created_at: o.created_at
+        }))
       });
     }
 

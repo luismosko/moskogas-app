@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — MoskoApp v1.0.0</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
+  .container { max-width: 1320px; margin: 0 auto; padding: 20px 16px; }
+
+  .dash-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+  .dash-title { font-size: 22px; font-weight: 800; color: #0f172a; }
+  .dash-title span { color: #f97316; }
+  .dash-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .dash-controls input[type=date] { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-weight: 600; }
+  .dash-controls input:focus { outline: none; border-color: #f97316; }
+  .btn-refresh { background: #0B2A6F; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.15s; }
+  .btn-refresh:hover { background: #104BB8; }
+  .btn-refresh.loading { opacity: 0.6; pointer-events: none; }
+  .bling-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .bling-ok { background: #dcfce7; color: #166534; }
+  .bling-warn { background: #fef3c7; color: #92400e; }
+  .bling-err { background: #fee2e2; color: #991b1b; }
+
+  .quick-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .qa-btn { display: flex; align-items: center; gap: 7px; padding: 10px 18px; border-radius: 10px; text-decoration: none; font-size: 13px; font-weight: 700; transition: transform 0.1s, box-shadow 0.15s; border: 2px solid transparent; }
+  .qa-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .qa-btn.primary { background: #f97316; color: #fff; }
+  .qa-btn.sec { background: #fff; color: #0f172a; border-color: #e2e8f0; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .kpi { background: #fff; border-radius: 12px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); position: relative; overflow: hidden; }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .kpi.c-blue::before { background: #3b82f6; }   .kpi.c-green::before { background: #22c55e; }
+  .kpi.c-orange::before { background: #f97316; }  .kpi.c-red::before { background: #ef4444; }
+  .kpi.c-purple::before { background: #8b5cf6; }  .kpi.c-cyan::before { background: #06b6d4; }
+  .kpi.c-amber::before { background: #f59e0b; }   .kpi.c-gray::before { background: #94a3b8; }
+  .kpi-icon { font-size: 24px; margin-bottom: 4px; }
+  .kpi-val { font-size: 26px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+  .kpi-lbl { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+
+  .cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+  @media (max-width: 860px) { .cards-grid { grid-template-columns: 1fr; } }
+  .card { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+  .card.full { grid-column: 1 / -1; }
+  .card h2 { font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+
+  .st-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .st-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .st-label { font-size: 12px; font-weight: 600; color: #475569; width: 120px; flex-shrink: 0; }
+  .st-bar-wrap { flex: 1; background: #f1f5f9; border-radius: 20px; height: 20px; overflow: hidden; }
+  .st-bar { height: 100%; border-radius: 20px; min-width: 2px; transition: width 0.6s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; }
+  .st-bar span { font-size: 10px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+  .st-cnt { font-size: 13px; font-weight: 800; color: #0f172a; min-width: 26px; text-align: right; }
+
+  .mt { width: 100%; border-collapse: collapse; }
+  .mt th { text-align: left; font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; padding: 5px 8px; border-bottom: 2px solid #f1f5f9; }
+  .mt td { padding: 7px 8px; font-size: 12px; font-weight: 600; color: #334155; border-bottom: 1px solid #f8fafc; }
+  .mt tr:hover td { background: #f8fafc; }
+  .r { text-align: right; }
+  .mono { font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace; }
+
+  .hora-chart { display: flex; align-items: flex-end; gap: 3px; height: 80px; padding-top: 8px; }
+  .hora-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; height: 100%; justify-content: flex-end; }
+  .hora-bar { width: 100%; min-height: 2px; background: #3b82f6; border-radius: 3px 3px 0 0; transition: height 0.4s ease; }
+  .hora-num { font-size: 9px; font-weight: 800; color: #64748b; }
+  .hora-val { font-size: 9px; font-weight: 700; color: #3b82f6; }
+
+  .st-pill { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .empty { text-align: center; padding: 24px 16px; color: #94a3b8; font-size: 13px; }
+  .empty-icon { font-size: 36px; margin-bottom: 6px; display: block; }
+  .sk { background: linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%); background-size: 200% 100%; animation: sh 1.5s infinite; border-radius: 6px; height: 26px; }
+  @keyframes sh { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  .auto-badge { font-size: 10px; color: #94a3b8; font-weight: 600; margin-left: auto; }
+  .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 6px 0; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <div class="dash-header">
+    <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.0</div>
+    <div class="dash-controls">
+      <span class="bling-badge bling-warn" id="blingBadge">⏳ Bling...</span>
+      <input type="date" id="dashDate">
+      <button class="btn-refresh" id="btnRefresh" onclick="loadDashboard()" title="Atualizar dados">🔄 Atualizar</button>
+    </div>
+  </div>
+
+  <div class="quick-row">
+    <a href="pedido.html" class="qa-btn primary">➕ Novo Pedido</a>
+    <a href="gestao.html" class="qa-btn sec">📋 Gestão</a>
+    <a href="pagamentos.html" class="qa-btn sec">💰 Pagamentos</a>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi c-blue"><div class="kpi-icon">📦</div><div class="kpi-val" id="kTotal"><div class="sk" style="width:60px"></div></div><div class="kpi-lbl">Pedidos</div></div>
+    <div class="kpi c-green"><div class="kpi-icon">💰</div><div class="kpi-val" id="kValor"><div class="sk" style="width:100px"></div></div><div class="kpi-lbl">Faturamento</div></div>
+    <div class="kpi c-orange"><div class="kpi-icon">🚚</div><div class="kpi-val" id="kEntregues"><div class="sk" style="width:50px"></div></div><div class="kpi-lbl">Entregues</div></div>
+    <div class="kpi c-red"><div class="kpi-icon">⏳</div><div class="kpi-val" id="kPendentes"><div class="sk" style="width:50px"></div></div><div class="kpi-lbl">Pgto Pendente</div></div>
+    <div class="kpi c-amber"><div class="kpi-icon">🎫</div><div class="kpi-val" id="kTicket"><div class="sk" style="width:70px"></div></div><div class="kpi-lbl">Ticket Médio</div></div>
+    <div class="kpi c-purple"><div class="kpi-icon">📝</div><div class="kpi-val" id="kBling"><div class="sk" style="width:60px"></div></div><div class="kpi-lbl">Bling Sync</div></div>
+    <div class="kpi c-gray"><div class="kpi-icon">❌</div><div class="kpi-val" id="kCancel"><div class="sk" style="width:40px"></div></div><div class="kpi-lbl">Cancelados</div></div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <h2>🚦 Status dos Pedidos</h2>
+      <div id="secStatus"><div class="sk" style="margin-bottom:8px"></div><div class="sk" style="margin-bottom:8px"></div><div class="sk"></div></div>
+    </div>
+    <div class="card">
+      <h2>🕐 Pedidos por Hora <span class="auto-badge">⟳ auto 60s</span></h2>
+      <div class="hora-chart" id="secHora"></div>
+    </div>
+    <div class="card">
+      <h2>📦 Produtos Vendidos</h2>
+      <div id="secProdutos"><div class="sk" style="margin-bottom:6px"></div><div class="sk" style="margin-bottom:6px"></div><div class="sk" style="width:80%"></div></div>
+    </div>
+    <div class="card">
+      <h2>💳 Pagamentos por Tipo</h2>
+      <div id="secPagamentos"><div class="sk" style="margin-bottom:6px"></div><div class="sk" style="margin-bottom:6px"></div><div class="sk" style="width:70%"></div></div>
+    </div>
+    <div class="card">
+      <h2>👤 Por Vendedor</h2>
+      <div id="secVendedores"><div class="sk" style="margin-bottom:6px"></div><div class="sk" style="width:90%"></div></div>
+    </div>
+    <div class="card">
+      <h2>🚚 Por Entregador</h2>
+      <div id="secEntregadores"><div class="sk" style="margin-bottom:6px"></div><div class="sk" style="width:90%"></div></div>
+    </div>
+    <div class="card full">
+      <h2>📋 Últimos Pedidos</h2>
+      <div style="overflow-x:auto">
+        <table class="mt">
+          <thead><tr><th>#</th><th>Cliente</th><th>Itens</th><th class="r">Valor</th><th>Pgto</th><th>Status</th><th>Entregador</th></tr></thead>
+          <tbody id="tbPedidos"><tr><td colspan="7"><div class="sk" style="margin:6px 0"></div><div class="sk" style="margin:6px 0"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="version-badge">v1.0.0 — dashboard</div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+checkAuth(['admin', 'atendente']);
+document.getElementById('nav-placeholder').innerHTML = buildNav();
+
+const hoje = new Date(Date.now() - 4*3600000).toISOString().slice(0, 10);
+document.getElementById('dashDate').value = hoje;
+
+// Bling ping
+(async () => {
+  try {
+    const r = await api('/bling/ping');
+    const d = await r.json();
+    const el = document.getElementById('blingBadge');
+    if (d.ok || d.status === 'ok') { el.className = 'bling-badge bling-ok'; el.textContent = '✅ Bling OK'; }
+    else { el.className = 'bling-badge bling-err'; el.textContent = '❌ Bling erro'; }
+  } catch { const el = document.getElementById('blingBadge'); el.className = 'bling-badge bling-warn'; el.textContent = '⚠️ Sem resposta'; }
+})();
+
+const ST = {
+  novo:             { cor: '#ef4444', label: 'Novo',             icon: '🔴' },
+  encaminhado:      { cor: '#eab308', label: 'Encaminhado',      icon: '🟡' },
+  whatsapp_enviado: { cor: '#22c55e', label: 'WhatsApp Enviado', icon: '🟢' },
+  entregue:         { cor: '#3b82f6', label: 'Entregue',         icon: '🔵' },
+  cancelado:        { cor: '#94a3b8', label: 'Cancelado',        icon: '⚪' },
+};
+const PG = { dinheiro:'💵 Dinheiro', pix_vista:'⚡ PIX à vista', pix_receber:'⏳ PIX a receber', mensalista:'📅 Mensalista', boleto:'🧾 Boleto/Órgão', debito:'💳 Débito', credito:'💳 Crédito', nfe:'📄 NFe' };
+const R$ = v => 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+async function loadDashboard() {
+  const date = document.getElementById('dashDate').value;
+  const btn = document.getElementById('btnRefresh');
+  btn.classList.add('loading'); btn.innerHTML = '⏳ Carregando...';
+  try {
+    const resp = await api(`/api/dashboard?date=${date}`);
+    if (!resp.ok) throw new Error('Erro ' + resp.status);
+    render(await resp.json());
+  } catch(e) { showToast('Erro: ' + e.message, 'error'); }
+  finally { btn.classList.remove('loading'); btn.innerHTML = '🔄 Atualizar'; }
+}
+
+function render(d) {
+  const r = d.resumo || {}, pedidos = d.pedidos || [];
+
+  // KPIs
+  document.getElementById('kTotal').textContent = r.totalPedidos || 0;
+  document.getElementById('kValor').textContent = R$(r.totalValor);
+  document.getElementById('kEntregues').textContent = (d.porStatus||{}).entregue || 0;
+  document.getElementById('kPendentes').textContent = r.naoPagos || 0;
+  document.getElementById('kTicket').textContent = R$(r.ticketMedio);
+  document.getElementById('kBling').textContent = `${r.comBling||0}/${r.totalPedidos||0}`;
+  document.getElementById('kCancel').textContent = r.cancelados || 0;
+
+  // Status bars
+  const ps = d.porStatus || {};
+  const allSt = {...ps}; if (r.cancelados) allSt.cancelado = r.cancelados;
+  const maxSt = Math.max(1, ...Object.values(allSt));
+  const secSt = document.getElementById('secStatus');
+  if (!r.totalPedidos && !r.cancelados) {
+    secSt.innerHTML = '<div class="empty"><span class="empty-icon">📭</span>Nenhum pedido nesta data</div>';
+  } else {
+    secSt.innerHTML = Object.entries(ST).map(([k,c]) => {
+      const n = allSt[k] || 0;
+      const pct = Math.round((n/maxSt)*100);
+      return `<div class="st-row"><div class="st-dot" style="background:${c.cor}"></div><div class="st-label">${c.icon} ${c.label}</div><div class="st-bar-wrap"><div class="st-bar" style="width:${pct}%;background:${c.cor}"><span>${n||''}</span></div></div><div class="st-cnt">${n}</div></div>`;
+    }).join('');
+  }
+
+  // Hora chart
+  const ph = d.porHora || {};
+  const maxH = Math.max(1, ...Object.values(ph));
+  let hh = '';
+  for (let i = 6; i <= 22; i++) {
+    const h = String(i).padStart(2,'0'), v = ph[h] || 0;
+    const pct = Math.round((v/maxH)*100);
+    hh += `<div class="hora-bar-wrap">${v?`<div class="hora-val">${v}</div>`:'<div class="hora-val"></div>'}<div class="hora-bar" style="height:${Math.max(v?8:2,pct)}%"></div><div class="hora-num">${i}h</div></div>`;
+  }
+  document.getElementById('secHora').innerHTML = hh;
+
+  // Tables
+  renderTbl('secProdutos', d.porProduto, ['Produto','Qtd','Valor'], (k,v)=>[k,v.qtd,R$(v.valor)], '📦', (a,b)=>b[1].qtd-a[1].qtd);
+  renderTbl('secPagamentos', d.porTipo, ['Tipo','Qtd','Valor'], (k,v)=>[PG[k]||k,v.qtd,R$(v.valor)], '💳');
+  renderTbl('secVendedores', d.porVendedor, ['Vendedor','Qtd','Valor'], (k,v)=>['👤 '+k,v.qtd,R$(v.valor)], '👤');
+
+  // Entregadores (custom with entregues column)
+  const ee = d.porEntregador || {};
+  const entEl = document.getElementById('secEntregadores');
+  const ent = Object.entries(ee).sort((a,b)=>b[1].qtd-a[1].qtd);
+  if (!ent.length) { entEl.innerHTML = '<div class="empty"><span class="empty-icon">🚚</span>Sem dados</div>'; }
+  else { entEl.innerHTML = `<table class="mt"><thead><tr><th>Entregador</th><th class="r">Pedidos</th><th class="r">Entregues</th><th class="r">Valor</th></tr></thead><tbody>${ent.map(([k,v])=>`<tr><td>🚚 ${k}</td><td class="r mono">${v.qtd}</td><td class="r mono">${v.entregues}</td><td class="r mono">${R$(v.valor)}</td></tr>`).join('')}</tbody></table>`; }
+
+  // Últimos pedidos
+  const tb = document.getElementById('tbPedidos');
+  if (!pedidos.length) { tb.innerHTML = '<tr><td colspan="7" class="empty"><span class="empty-icon">📭</span>Nenhum pedido</td></tr>'; return; }
+  tb.innerHTML = pedidos.map(p => {
+    const c = ST[p.status] || ST.novo;
+    const items = pItems(p.items_json).map(i=>`${i.name} ×${i.qty}`).join(', ') || '—';
+    return `<tr><td class="mono" style="font-size:11px;color:#94a3b8">#${p.id}</td><td>${p.cliente||'—'}</td><td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${items}">${items}</td><td class="r mono">${R$(p.valor)}</td><td style="font-size:11px">${PG[p.tipo]||p.tipo||'—'}${p.pago?' ✅':''}</td><td><span class="st-pill" style="background:${c.cor}">${c.label}</span></td><td style="font-size:11px">${p.entregador||'—'}</td></tr>`;
+  }).join('');
+}
+
+function renderTbl(id, obj, hdrs, fn, icon, sortFn) {
+  const el = document.getElementById(id);
+  const arr = Object.entries(obj||{}).sort(sortFn || ((a,b)=>b[1].valor-a[1].valor));
+  if (!arr.length) { el.innerHTML = `<div class="empty"><span class="empty-icon">${icon}</span>Sem dados</div>`; return; }
+  el.innerHTML = `<table class="mt"><thead><tr>${hdrs.map((h,i)=>`<th${i?` class="r"`:``}>${h}</th>`).join('')}</tr></thead><tbody>${arr.map(([k,v])=>{const c=fn(k,v);return `<tr>${c.map((x,i)=>`<td${i?` class="r mono"`:``}>${x}</td>`).join('')}</tr>`;}).join('')}</tbody></table>`;
+}
+function pItems(j) { try { return JSON.parse(j||'[]'); } catch { return []; } }
+
+setInterval(loadDashboard, 60000);
+loadDashboard();
+</script>
+</body>
+</html>
