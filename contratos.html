@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.1.0 — MoskoGás</title>
+<title>Contratos v1.1.1 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.1.0</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.1.1</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -206,6 +206,10 @@
       <div><label>Representante</label><input id="cfRepresentante" placeholder="Nome do representante"></div>
       <div><label>CPF Representante</label><input id="cfRepCpf" placeholder="000.000.000-00"></div>
     </div>
+    <div class="row">
+      <div><label>Email Representante</label><input id="cfRepEmail" type="email" placeholder="email@empresa.com"></div>
+      <div><label>Telefone Representante</label><input id="cfRepTel" placeholder="(67) 99999-0000"></div>
+    </div>
 
     <div class="section-title">Testemunha 1 (padrão)</div>
     <div class="row">
@@ -241,7 +245,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.1.0 — modelo editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
+// v1.1.1 — email+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -671,7 +675,7 @@ async function loadDefaultSignatarios() {
   // Add comodante from config
   const com = configData.contrato_comodante || {};
   if (com.representante) {
-    addSignatario({ role: 'comodante', nome: com.representante, cpf: com.rep_cpf || '', telefone: '', email: '' });
+    addSignatario({ role: 'comodante', nome: com.representante, cpf: com.rep_cpf || '', telefone: com.rep_telefone || '', email: com.rep_email || '' });
   }
 
   // Add witnesses from config
@@ -919,6 +923,8 @@ async function openConfig() {
   document.getElementById('cfEndereco').value = com.endereco || '';
   document.getElementById('cfRepresentante').value = com.representante || '';
   document.getElementById('cfRepCpf').value = com.rep_cpf || '';
+  document.getElementById('cfRepEmail').value = com.rep_email || '';
+  document.getElementById('cfRepTel').value = com.rep_telefone || '';
 
   document.getElementById('cfTest1Nome').value = test[0]?.nome || '';
   document.getElementById('cfTest1Cpf').value = test[0]?.cpf || '';
@@ -948,6 +954,8 @@ async function salvarConfig() {
       endereco: document.getElementById('cfEndereco').value.trim(),
       representante: document.getElementById('cfRepresentante').value.trim(),
       rep_cpf: document.getElementById('cfRepCpf').value.trim(),
+      rep_email: document.getElementById('cfRepEmail').value.trim(),
+      rep_telefone: document.getElementById('cfRepTel').value.trim(),
     },
     contrato_testemunhas: [
       {
