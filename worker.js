@@ -1,6 +1,7 @@
-// v2.19.1
+// v2.19.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.19.2: Foto config defaults → WebP 1200px 85% + sharpen
 // v2.19.1: Fix /api/config auth check (requireAuth retorna user, não Response)
 // v2.19.0: Permissões dinâmicas atendente + fix auth revert/cancel (sessão null)
 //          Config 'permissoes' controla: reabrir entregue/cancelado, cancelar, editar entregue
@@ -931,7 +932,7 @@ export default {
     if (method === 'GET' && path === '/api/pub/foto-config') {
       await ensureAuditTable(env); // garante tabela app_config existe
       const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='foto_config'").first();
-      const defaults = { maxDim: 800, quality: 55, contraste: true, desaturacao: 50 };
+      const defaults = { formato: 'webp', maxDim: 1200, quality: 85, contraste: true, desaturacao: 50, sharpen: true };
       if (!row?.value) return json(defaults);
       try { return json({ ...defaults, ...JSON.parse(row.value) }); } catch { return json(defaults); }
     }
