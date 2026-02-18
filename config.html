@@ -469,6 +469,8 @@ function renderFavList() {
   `).join('');
 }
 
+let _favSearchResults = [];
+
 function searchFavProduct(q) {
   clearTimeout(_favSearchTimer);
   const box = document.getElementById('favSuggestions');
@@ -481,13 +483,15 @@ function searchFavProduct(q) {
       const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`);
       if (!list || !list.length) {
         box.innerHTML = '<div style="padding:10px 14px;color:#94a3b8;font-size:12px">Nenhum produto encontrado</div>';
+        _favSearchResults = [];
         return;
       }
+      _favSearchResults = list;
       // Filtrar já favoritados
       const favIds = new Set(_favs.map(f => String(f.bling_id)));
       box.innerHTML = list.map((p, i) => {
         const jaFav = favIds.has(String(p.id));
-        return `<div onclick="${jaFav ? '' : `addFav(${JSON.stringify(p).replace(/"/g, '&quot;')})`}"
+        return `<div onclick="${jaFav ? '' : `addFavByIdx(${i})`}"
           style="padding:10px 14px;cursor:${jaFav ? 'default' : 'pointer'};display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;${jaFav ? 'opacity:0.5' : ''}${!jaFav ? ';background:#fff' : ''};"
           ${!jaFav ? 'onmouseover="this.style.background=\'#fff7ed\'" onmouseout="this.style.background=\'#fff\'"' : ''}>
           <span><strong>${p.name||'Produto'}</strong> ${p.code ? `<small style="color:#94a3b8">(${p.code})</small>` : ''}</span>
@@ -496,8 +500,15 @@ function searchFavProduct(q) {
       }).join('');
     } catch(e) {
       box.innerHTML = `<div style="padding:10px 14px;color:#dc2626;font-size:12px">❌ ${e.message}</div>`;
+      _favSearchResults = [];
     }
   }, 350);
+}
+
+async function addFavByIdx(idx) {
+  const product = _favSearchResults[idx];
+  if (!product) return;
+  addFav(product);
 }
 
 async function addFav(product) {
