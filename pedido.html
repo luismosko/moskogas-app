@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.9.1</title>
+<title>Novo Pedido — MoskoGás v2.9.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -47,9 +47,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.9.1 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.9.2 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.9.1</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.9.2</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -870,6 +870,15 @@ function changeQty(id, delta) {
   renderItems();
 }
 
+function setQty(id, val) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  const qty = parseInt(val) || 0;
+  if (qty <= 0) { items = items.filter(i => i.id !== id); }
+  else { item.qty = qty; }
+  renderItems();
+}
+
 // Converte input de preço: "120" → 120.00, "120,50" → 120.50, "25.00" → 25.00
 function parsePrice(val) {
   if (typeof val !== 'string') val = String(val || '0');
@@ -902,7 +911,9 @@ function renderItems() {
     <div class="item-row">
       <span style="flex:1;font-size:14px">${it.name}</span>
       <button class="qty-btn" onclick="changeQty('${it.id}',-1)">−</button>
-      <span class="qty-val">${it.qty}</span>
+      <input type="text" inputmode="numeric" value="${it.qty}" 
+        style="width:40px;text-align:center;font-weight:800;font-size:15px;border:1px solid #e2e8f0;border-radius:6px;padding:3px 2px;-moz-appearance:textfield"
+        onblur="setQty('${it.id}',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
       <button class="qty-btn" onclick="changeQty('${it.id}',1)">+</button>
       <span style="display:flex;align-items:center;gap:4px">
         <small style="color:#94a3b8">R$</small>
