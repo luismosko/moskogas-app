@@ -1,6 +1,9 @@
-// v2.18.0
+// v2.19.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.19.0: Permissões dinâmicas atendente + fix auth revert/cancel (sessão null)
+//          Config 'permissoes' controla: reabrir entregue/cancelado, cancelar, editar entregue
+//          WhatsApp admin: notifica em qualquer cancel/revert de não-admin
 // v2.18.0: Config dinâmica (app_config) + foto-config público + admin GET/POST config
 // v2.17.1: Consumidor Final padrão no Bling (só vincula contato se CPF/CNPJ)
 // v2.17.0: Bling só ao ENTREGAR — pedido novo nunca cria venda no Bling
@@ -1401,6 +1404,17 @@ export default {
       const currentOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
       if (!currentOrder) return err('Pedido não encontrado', 404);
 
+      // Verificar permissão para editar pedido entregue
+      if (currentOrder.status === 'entregue') {
+        const editUser = await getSessionUser(request, env);
+        if (editUser && editUser.role !== 'admin') {
+          const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
+          let perms = { atendente_editar_entregue: false };
+          try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch {}
+          if (!perms.atendente_editar_entregue) return err('Sem permissão para editar pedido entregue. Peça ao admin.', 403);
+        }
+      }
+
       const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
       const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
 
@@ -1719,8 +1733,19 @@ export default {
     if (method === 'POST' && cancelMatch) {
       const id = parseInt(cancelMatch[1]);
       const user = await getSessionUser(request, env);
+      if (!user) return err('Sessão expirada. Faça login novamente.', 401);
+
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('Pedido não encontrado', 404);
+
+      // Verificar permissão atendente para cancelar
+      const isAdmin = user.role === 'admin';
+      if (!isAdmin) {
+        const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
+        let perms = { atendente_cancelar: true };
+        try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch {}
+        if (!perms.atendente_cancelar) return err('Sem permissão para cancelar pedido. Peça ao admin.', 403);
+      }
 
       // Motivo obrigatório
       let motivo = '';
@@ -1742,19 +1767,20 @@ export default {
       await logStatusChange(env, id, statusAnterior, 'cancelado', motivo, user);
       await logEvent(env, id, 'canceled', { motivo, status_anterior: statusAnterior, usuario: user?.nome });
 
-      // ── Se era entregue → alerta alto risco pro admin via WhatsApp ──
+      // ── Alerta WhatsApp pro admin ──
+      // Se cancelou pós-entrega OU se quem cancelou não é admin
       let whatsappResult = null;
-      if (foiEntregue) {
+      if (foiEntregue || !isAdmin) {
         try {
-          // Buscar admins com telefone
           await ensureAuthTables(env);
           const admins = await env.DB.prepare(
-            "SELECT nome, telefone FROM app_users WHERE role='admin' AND ativo=1 AND telefone IS NOT NULL AND telefone != ''"
+            "SELECT nome, telefone FROM app_users WHERE role='admin' AND ativo=1 AND recebe_whatsapp=1 AND telefone IS NOT NULL AND telefone != ''"
           ).all();
           const adminList = admins.results || [];
 
           if (adminList.length > 0) {
-            const msg = `⚠️ *ALERTA: Cancelamento pós-entrega*\n\n` +
+            const risco = foiEntregue ? '🔴 *ALTO RISCO — Pós-entrega*' : '🟡 Cancelamento';
+            const msg = `⚠️ ${risco}\n\n` +
               `📦 Pedido #${id}\n` +
               `👤 Cliente: ${order.customer_name}\n` +
               `💰 Valor: R$ ${(order.total_value || 0).toFixed(2)}\n` +
@@ -1784,6 +1810,8 @@ export default {
     if (method === 'POST' && revertMatch) {
       const id = parseInt(revertMatch[1]);
       const user = await getSessionUser(request, env);
+      if (!user) return err('Sessão expirada. Faça login novamente.', 401);
+
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('Pedido não encontrado', 404);
 
@@ -1800,14 +1828,21 @@ export default {
       const statusAnterior = order.status;
       if (statusAnterior === novoStatus) return err('Pedido já está com status: ' + novoStatus, 400);
 
-      // Somente admin pode reverter de cancelado
-      if (statusAnterior === 'cancelado' && user?.role !== 'admin') {
-        return err('Apenas admin pode reabrir pedido cancelado', 403);
+      // Carregar permissões dinâmicas
+      const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
+      let perms = { atendente_reabrir_entregue: true, atendente_reabrir_cancelado: false };
+      try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch {}
+
+      const isAdmin = user.role === 'admin';
+
+      // Verificar permissão para reverter cancelado
+      if (statusAnterior === 'cancelado' && !isAdmin && !perms.atendente_reabrir_cancelado) {
+        return err('Sem permissão para reabrir pedido cancelado. Peça ao admin.', 403);
       }
 
-      // Somente admin pode desmarcar entregue
-      if (statusAnterior === 'entregue' && user?.role !== 'admin') {
-        return err('Apenas admin pode reverter pedido entregue', 403);
+      // Verificar permissão para reverter entregue
+      if (statusAnterior === 'entregue' && !isAdmin && !perms.atendente_reabrir_entregue) {
+        return err('Sem permissão para reverter pedido entregue. Peça ao admin.', 403);
       }
 
       // Reverter status
@@ -1829,7 +1864,19 @@ export default {
 
       // Log de auditoria
       await logStatusChange(env, id, statusAnterior, novoStatus, motivo, user);
-      await logEvent(env, id, 'status_reverted', { de: statusAnterior, para: novoStatus, motivo, usuario: user?.nome });
+      await logEvent(env, id, 'status_reverted', { de: statusAnterior, para: novoStatus, motivo, usuario: user?.nome, role: user?.role });
+
+      // Se não é admin, notificar admin via WhatsApp
+      if (!isAdmin) {
+        try {
+          const admins = await env.DB.prepare("SELECT telefone, nome FROM app_users WHERE role='admin' AND ativo=1 AND recebe_whatsapp=1 AND telefone IS NOT NULL").all().then(r => r.results || []);
+          for (const adm of admins) {
+            if (adm.telefone) {
+              await sendWhatsApp(env, adm.telefone, `⚠️ ${user.nome} reverteu pedido #${id}: ${statusAnterior.toUpperCase()} → ${novoStatus.toUpperCase()}\nMotivo: ${motivo}`);
+            }
+          }
+        } catch (_) {} // não bloqueia se WhatsApp falhar
+      }
 
       return json({
         ok: true,

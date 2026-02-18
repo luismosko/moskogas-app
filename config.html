@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.3.0 — MoskoGás</title>
+<title>Config v2.4.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -22,7 +22,7 @@
   .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-top: 8px; }
   .status.ok  { background: #dcfce7; color: #16a34a; }
   .status.err { background: #fee2e2; color: #dc2626; }
-  /* Entregadores removido v2.3.0 — gerenciar em Usuários */
+  /* Entregadores removido v2.4.0 — gerenciar em Usuários */
   .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 4px 0 10px; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
 </style>
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.3.0 — config</div>
-  <h1>⚙️ Configurações v2.3.0</h1>
+  <div class="version-badge">v2.4.0 — config</div>
+  <h1>⚙️ Configurações v2.4.0</h1>
 
   <!-- API Key -->
   <div class="card">
@@ -93,6 +93,36 @@
       <button class="btn btn-gray" onclick="resetFotoConfig()">🔄 Padrão</button>
     </div>
     <div id="foto-config-status"></div>
+  </div>
+
+  <!-- Permissões Atendente -->
+  <div class="card">
+    <h2>🔐 Permissões do Atendente</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Defina o que atendentes podem fazer. Admin sempre tem acesso total.</p>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permReabrirEntregue" checked style="width:auto;margin:0"> Reabrir pedido <strong>entregue</strong>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permReabrirCancelado" style="width:auto;margin:0"> Reabrir pedido <strong>cancelado</strong>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permCancelar" checked style="width:auto;margin:0"> Cancelar pedido
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permEditarEntregue" style="width:auto;margin:0"> Editar pedido <strong>entregue</strong>
+      </label>
+    </div>
+
+    <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-top:12px">
+      ⚠️ Quando atendente reabrir/cancelar, admin recebe alerta WhatsApp automático.
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-orange" onclick="salvarPermissoes()" style="flex:1">💾 Salvar Permissões</button>
+    </div>
+    <div id="perm-status"></div>
   </div>
 
   <!-- Autocomplete de Ruas -->
@@ -186,7 +216,7 @@ async function testIzChat() {
   }
 }
 
-// [REMOVIDO v2.3.0] loadDrivers/addDriver/toggleDriver — entregadores via Usuários (app_users)
+// [REMOVIDO v2.4.0] loadDrivers/addDriver/toggleDriver — entregadores via Usuários (app_users)
 
 // ── Banco de Ruas ──────────────────────────────────────────────
 
@@ -299,6 +329,37 @@ async function testStreetSearch() {
   }
 }
 
+// ── Permissões Atendente ─────────────────────────────────────
+async function carregarPermissoes() {
+  try {
+    const data = await api('/api/config?key=permissoes');
+    if (data?.value) {
+      const p = data.value;
+      if (p.atendente_reabrir_entregue !== undefined) document.getElementById('permReabrirEntregue').checked = p.atendente_reabrir_entregue;
+      if (p.atendente_reabrir_cancelado !== undefined) document.getElementById('permReabrirCancelado').checked = p.atendente_reabrir_cancelado;
+      if (p.atendente_cancelar !== undefined) document.getElementById('permCancelar').checked = p.atendente_cancelar;
+      if (p.atendente_editar_entregue !== undefined) document.getElementById('permEditarEntregue').checked = p.atendente_editar_entregue;
+    }
+  } catch(_) {}
+}
+
+async function salvarPermissoes() {
+  const perms = {
+    atendente_reabrir_entregue: document.getElementById('permReabrirEntregue').checked,
+    atendente_reabrir_cancelado: document.getElementById('permReabrirCancelado').checked,
+    atendente_cancelar: document.getElementById('permCancelar').checked,
+    atendente_editar_entregue: document.getElementById('permEditarEntregue').checked,
+  };
+  const el = document.getElementById('perm-status');
+  try {
+    await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'permissoes', value: perms }) });
+    el.innerHTML = '<div class="status ok">✅ Permissões salvas!</div>';
+    setTimeout(() => el.innerHTML = '', 3000);
+  } catch(e) {
+    el.innerHTML = '<div class="status err">❌ ' + e.message + '</div>';
+  }
+}
+
 // ── Foto Config ─────────────────────────────────────────────
 async function carregarFotoConfig() {
   try {
@@ -340,6 +401,7 @@ function resetFotoConfig() {
 // ── Init ─────────────────────────────────────────────────────
 checkStreetsCount();
 carregarFotoConfig();
+carregarPermissoes();
 </script>
 </body>
 </html>
