@@ -1,6 +1,7 @@
-// v2.25.1
+// v2.25.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.25.2: Fix auth contratos — bypass requireApiKey para /api/contratos e /api/webhooks
 // v2.25.1: Fix IzChat contratos — usar sendWhatsApp (chatapi.izchat.com.br + {number,body})
 // v2.25.0: Módulo Contratos Comodato — schema, endpoints, integração Assinafy + IzChat WhatsApp
 // v2.24.0: Último pedido cliente + app_products (preços sugeridos MoskoGás)
@@ -1289,8 +1290,11 @@ export default {
       });
     }
 
-    const authErr = requireApiKey(request, env);
-    if (authErr) return authErr;
+    // Contratos e webhooks têm auth próprio (requireAuth ou público)
+    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks')) {
+      const authErr = requireApiKey(request, env);
+      if (authErr) return authErr;
+    }
 
     // ── AUTH: Gestão de Usuários (requer admin) ─────────────────
 

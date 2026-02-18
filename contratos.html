@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.0.3 — MoskoGás</title>
+<title>Contratos v1.1.0 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.0.3</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.1.0</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -227,6 +227,11 @@
       <div><label>Email</label><input id="cfTest2Email" placeholder="Email"></div>
     </div>
 
+    <div class="section-title">📝 Modelo do Contrato (Cláusulas)</div>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:8px">Use as variáveis: <code>{COMODANTE}</code>, <code>{COMODATARIA}</code>, <code>{ITENS_TABELA}</code>, <code>{DATA}</code>, <code>{ASSINATURAS}</code></p>
+    <textarea id="cfTemplate" rows="20" style="font-family:monospace;font-size:12px;line-height:1.5"></textarea>
+    <button class="btn btn-gray btn-sm" onclick="carregarModeloPadrao()" style="margin-bottom:12px">🔄 Restaurar Modelo Padrão</button>
+
     <div class="modal-footer">
       <button class="btn btn-gray" onclick="closeModal('modalConfig')">Cancelar</button>
       <button class="btn btn-blue" onclick="salvarConfig()" id="btnSalvarConfig">💾 Salvar Configuração</button>
@@ -236,7 +241,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.0.3 — comodatário auto-sync responsável + loading feedback em Config e Salvar showToast → toast
+// v1.1.0 — modelo editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -256,6 +261,65 @@ const PRODUTOS_DEFAULT = [
   { nome: 'P13 (13kg)', valor: 0 },
   { nome: 'Galão 20L', valor: 0 },
 ];
+
+const TEMPLATE_PADRAO = `INSTRUMENTO PARTICULAR CONTRATO DE COMODATO
+
+{COMODANTE}
+
+{COMODATARIA}
+
+Cláusula Primeira - Tem por objeto este contrato a cessão gratuita de uso dos bens, de propriedade da COMODANTE à COMODATÁRIA, nas condições estabelecidas neste instrumento e nas quantidades e especificações constantes abaixo.
+
+{ITENS_TABELA}
+
+Cláusula Segunda - A presente cessão restringe-se apenas ao uso do(s) bem(ns) identificado(s) na cláusula anterior pela COMODATÁRIA, nos termos do Código Civil, art. 579 e seguintes.
+
+Cláusula Terceira – O(s) bem(ns), objeto deste contrato referido(s) nos item acima é no valor unitário em reais na data da assinatura deste Termo.
+
+DO PRAZO
+
+Cláusula Quarta - O presente comodato terá duração de 12 meses a partir da data da assinatura deste, sendo que a COMODATÁRIA compromete-se a restituir o(s) bem(ns) descrito(s) na Cláusula Primeira, nas mesmas condições de uso e conservação em que se encontra nesta data.
+
+Cláusula Quinta - Expirado o prazo aqui ajustado, caso não haja manifestação de nenhuma das partes, este instrumento se renova por igual período.
+
+Cláusula Sexta - Extrapolando o prazo máximo fixado na cláusula quarta e não havendo a prorrogação, o(s) bem(ns) deverá(ão) ser entregue(s) no prazo de 5 (cinco) dias à COMODANTE. Quando do vencimento desse último na falta de entrega, fica a COMODATÁRIA sujeita ao pagamento de multa fixa 10% (dez por cento) do valor dos bem, mais 2% (dois por cento) do valor do bem por dia em que o mesmo permanecer em seu poder.
+
+DO USO
+
+Cláusula Sétima – O(s) bem(ns) objeto da cessão destina-se exclusivamente ao uso da COMODATÁRIA, vedada a sua utilização em outras operações estranhas à que se propõe.
+
+DA MANUTENÇÃO DO(S) BEM(NS)
+
+Cláusula Oitava - Todas as despesas de manutenção e conservação do(s) bem(ns) comodatado(s), de qualquer natureza serão de responsabilidade da COMODATÁRIA.
+
+Cláusula Nona - A COMODATÁRIA obriga-se a manter os bens objeto deste contrato, em perfeitas condições de uso e funcionamento.
+
+Cláusula Décima - Durante a vigência do presente contrato fica assegurado à COMODANTE o direito de inspecionar os bens objeto do contrato no local onde se encontram para verificação do bom cumprimento deste contrato.
+
+DA RESCISÃO
+
+Cláusula Décima Primeira - O presente contrato poderá ser rescindido a qualquer tempo, a critério das partes, mediante notificação com antecedência mínima de 10 (dez) dias.
+
+Cláusula Décima Segunda - Infringida pela COMODATÁRIA qualquer Cláusula deste Instrumento, a rescisão será automática, independente de notificação judicial ou extrajudicial, devendo o bem ser restituído imediatamente à COMODANTE sob pena da aplicação do disposto na Cláusula Sexta deste instrumento.
+
+DISPOSIÇÕES GERAIS
+
+Cláusula Décima Terceira - O presente Termo de comodato não cria nenhuma obrigação de compra e venda dos bens constantes na Cláusula Primeira.
+
+ELEIÇÃO DO FORO
+
+Cláusula Décima Quarta - Fica eleito o Foro da Cidade de Campo Grande-MS, para dirimir quaisquer questões decorrentes da execução do presente contrato, com exclusão de qualquer outro, por mais privilegiado que seja.
+
+Cláusula Décima Quinta - Os casos omissos serão resolvidos pelas partes contratantes, de comum acordo, ou pelas disposições legais aplicáveis à espécie. E, por estarem de comum acordo, assinam o presente instrumento em 2 (duas) vias de igual teor, para que produzam um só efeito, o qual fazem na presença de duas testemunhas que a tudo assistiram e também assinam.
+
+{DATA}
+
+{ASSINATURAS}`;
+
+function carregarModeloPadrao() {
+  document.getElementById('cfTemplate').value = TEMPLATE_PADRAO;
+  toast('Modelo padrão carregado', 'info');
+}
 
 // ── Load ─────────────────────────────────────────────────────
 
@@ -727,71 +791,102 @@ async function gerarPDF(id) {
 
 function buildContractHTML(contract, signers, itens, comodante) {
   const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-  const comodatario = contract.tipo_pessoa === 'pf'
-    ? `<strong>${contract.razao_social}</strong>, portador(a) do CPF nº ${contract.cnpj_cpf}, residente em ${contract.endereco || 'Campo Grande/MS'}`
-    : `<strong>${contract.razao_social}</strong>, inscrita no CNPJ nº ${contract.cnpj_cpf}, com sede em ${contract.endereco || 'Campo Grande/MS'}, representada por ${contract.responsavel_nome}, CPF ${contract.responsavel_cpf}`;
+  const template = configData.contrato_template || TEMPLATE_PADRAO;
 
-  const itensRows = itens.map((i, idx) =>
-    `<tr><td>${idx+1}</td><td>${i.produto || i.nome}</td><td>${i.quantidade || 1}</td><td>${i.valor_unit ? 'R$ ' + parseFloat(i.valor_unit).toFixed(2) : '-'}</td></tr>`
-  ).join('');
+  // Build COMODANTE block
+  const comodanteText = `COMODANTE: ${comodante.empresa || 'MOSKO LTDA'}, com sede à ${comodante.endereco || 'Campo Grande/MS'}, inscrita no CNPJ sob o nº ${comodante.cnpj || ''}, ${comodante.ie ? 'IE ' + comodante.ie + ', ' : ''}representada por seu proprietário ${comodante.representante || ''}, inscrito no CPF/MF nº ${comodante.rep_cpf || ''}.`;
 
+  // Build COMODATÁRIA block
+  let comodatariaText = '';
+  if (contract.tipo_pessoa === 'pf') {
+    comodatariaText = `COMODATÁRIA: ${contract.razao_social}, pessoa física, inscrita no CPF sob o nº ${contract.cnpj_cpf || ''}, residente em ${contract.endereco || 'Campo Grande/MS'}.`;
+  } else {
+    comodatariaText = `COMODATÁRIA: ${contract.razao_social}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${contract.cnpj_cpf || ''}, com sede em ${contract.endereco || 'Campo Grande/MS'}${contract.responsavel_nome ? ', neste ato representada por ' + contract.responsavel_nome + (contract.responsavel_cpf ? ', inscrita no CPF nº ' + contract.responsavel_cpf : '') : ''}.`;
+  }
+
+  // Build ITENS table
+  let totalGeral = 0;
+  const itensRows = itens.map((i, idx) => {
+    const valor = parseFloat(i.valor_unit) || 0;
+    const qtd = parseInt(i.quantidade) || 1;
+    totalGeral += valor * qtd;
+    return `<tr>
+      <td style="border:1px solid #999;padding:6px;text-align:center">${i.produto || i.nome}</td>
+      <td style="border:1px solid #999;padding:6px;text-align:center">${qtd}</td>
+      <td style="border:1px solid #999;padding:6px;text-align:center">R$ ${valor.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  const itensTabela = `<table style="width:100%;border-collapse:collapse;margin:10px 0">
+    <thead><tr style="background:#e8e8e8">
+      <th style="border:1px solid #999;padding:6px">Itens</th>
+      <th style="border:1px solid #999;padding:6px">Quantidade</th>
+      <th style="border:1px solid #999;padding:6px">Valor unitário</th>
+    </tr></thead>
+    <tbody>${itensRows}
+      <tr><td colspan="2" style="border:1px solid #999;padding:6px;text-align:right;font-weight:bold">Total</td>
+      <td style="border:1px solid #999;padding:6px;text-align:center;font-weight:bold">R$ ${totalGeral.toFixed(2)}</td></tr>
+    </tbody></table>`;
+
+  const dataText = `Campo Grande MS, ${hoje}`;
+
+  // Build ASSINATURAS block
+  const comodatarioSigner = signers.find(s => s.role === 'comodatario') || {};
+  const comodanteSigner = signers.find(s => s.role === 'comodante') || {};
   const test1 = signers.find(s => s.role === 'testemunha1') || {};
   const test2 = signers.find(s => s.role === 'testemunha2') || {};
 
-  return `
-    <div style="font-family: 'Times New Roman', serif; font-size: 13px; color: #000; line-height: 1.6; max-width: 700px; margin: 0 auto; padding: 20px;">
-      <h2 style="text-align:center; font-size:16px; margin-bottom:4px;">CONTRATO DE COMODATO DE VASILHAMES</h2>
-      <p style="text-align:center; font-size:12px; color:#666; margin-bottom:20px;">Nº ${contract.numero}</p>
-
-      <p>Pelo presente instrumento particular de <strong>COMODATO</strong>, as partes abaixo qualificadas:</p>
-
-      <p><strong>COMODANTE:</strong> ${comodante.empresa || 'MOSKO LTDA'}, inscrita no CNPJ nº ${comodante.cnpj || ''}, ${comodante.ie ? 'IE ' + comodante.ie + ', ' : ''}com sede em ${comodante.endereco || 'Campo Grande/MS'}, neste ato representada por ${comodante.representante || ''}, CPF ${comodante.rep_cpf || ''}.</p>
-
-      <p><strong>COMODATÁRIO:</strong> ${comodatario}.</p>
-
-      <p>Têm entre si justo e contratado o seguinte:</p>
-
-      <p><strong>CLÁUSULA 1ª — DO OBJETO:</strong> O COMODANTE empresta ao COMODATÁRIO, a título gratuito, os seguintes vasilhames/equipamentos:</p>
-
-      <table style="width:100%; border-collapse:collapse; margin:10px 0;">
-        <thead><tr style="background:#f0f0f0;">
-          <th style="border:1px solid #ccc; padding:6px; text-align:center;">#</th>
-          <th style="border:1px solid #ccc; padding:6px;">Produto</th>
-          <th style="border:1px solid #ccc; padding:6px; text-align:center;">Qtd</th>
-          <th style="border:1px solid #ccc; padding:6px; text-align:center;">Valor Ref.</th>
-        </tr></thead>
-        <tbody>${itensRows}</tbody>
-      </table>
-
-      <p><strong>CLÁUSULA 2ª — DO PRAZO:</strong> O presente contrato é celebrado por prazo indeterminado, podendo ser rescindido por qualquer das partes mediante notificação prévia de 30 (trinta) dias.</p>
-
-      <p><strong>CLÁUSULA 3ª — DAS OBRIGAÇÕES DO COMODATÁRIO:</strong> O COMODATÁRIO se obriga a: a) conservar os vasilhames em bom estado; b) utilizá-los exclusivamente para os fins a que se destinam; c) restituí-los ao COMODANTE quando solicitado; d) responsabilizar-se por qualquer dano, perda ou extravio.</p>
-
-      <p><strong>CLÁUSULA 4ª — DA RESPONSABILIDADE:</strong> Em caso de perda, extravio ou dano irreparável dos vasilhames, o COMODATÁRIO obriga-se a indenizar o COMODANTE pelo valor de reposição vigente na data da ocorrência.</p>
-
-      <p><strong>CLÁUSULA 5ª — DO FORO:</strong> As partes elegem o Foro da Comarca de Campo Grande/MS para dirimir quaisquer dúvidas oriundas deste contrato.</p>
-
-      <p style="margin-top:20px;">E por estarem assim justos e contratados, assinam o presente instrumento eletronicamente.</p>
-      <p>Campo Grande/MS, ${hoje}.</p>
-
-      <div style="margin-top:40px; display:flex; justify-content:space-between; gap:40px;">
-        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
-          <strong>COMODANTE</strong><br>${comodante.representante || comodante.empresa || ''}
-        </div>
-        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
-          <strong>COMODATÁRIO</strong><br>${contract.responsavel_nome || contract.razao_social || ''}
-        </div>
+  const assinaturas = `
+    <div style="margin-top:40px;display:flex;justify-content:space-between;gap:40px">
+      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+        <strong>Comodante</strong><br>${comodanteSigner.nome || comodante.representante || ''}<br>
+        <span style="font-size:11px">CPF: ${comodanteSigner.cpf || comodante.rep_cpf || ''}</span>
       </div>
-
-      <div style="margin-top:40px; display:flex; justify-content:space-between; gap:40px;">
-        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
-          <strong>TESTEMUNHA 1</strong><br>${test1.nome || ''}<br><span style="font-size:11px">CPF: ${test1.cpf || ''}</span>
-        </div>
-        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
-          <strong>TESTEMUNHA 2</strong><br>${test2.nome || ''}<br><span style="font-size:11px">CPF: ${test2.cpf || ''}</span>
-        </div>
+      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+        <strong>Comodatária</strong><br>${comodatarioSigner.nome || contract.responsavel_nome || ''}<br>
+        <span style="font-size:11px">CPF: ${comodatarioSigner.cpf || contract.responsavel_cpf || ''}</span>
+      </div>
+    </div>
+    <div style="margin-top:40px;display:flex;justify-content:space-between;gap:40px">
+      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+        <strong>Testemunha 1</strong><br>${test1.nome || ''}<br>
+        <span style="font-size:11px">${test1.cpf ? 'CPF: ' + test1.cpf : ''}</span>
+      </div>
+      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+        <strong>Testemunha 2</strong><br>${test2.nome || ''}<br>
+        <span style="font-size:11px">${test2.cpf ? 'CPF: ' + test2.cpf : ''}</span>
       </div>
     </div>`;
+
+  // Replace variables in template
+  let body = template
+    .replace('{COMODANTE}', comodanteText)
+    .replace('{COMODATARIA}', comodatariaText)
+    .replace('{ITENS_TABELA}', '%%ITENS%%')
+    .replace('{DATA}', dataText)
+    .replace('{ASSINATURAS}', '%%ASSINATURAS%%');
+
+  // Convert plain text paragraphs to HTML
+  const paragraphs = body.split('\n\n').map(p => {
+    p = p.trim();
+    if (!p) return '';
+    if (p === '%%ITENS%%') return itensTabela;
+    if (p === '%%ASSINATURAS%%') return assinaturas;
+    // Section headers (all caps or short lines)
+    if (p === p.toUpperCase() && p.length < 60 && !p.includes('.')) {
+      return `<p style="margin-top:16px;font-weight:bold;text-decoration:underline">${p}</p>`;
+    }
+    // Title
+    if (p.startsWith('INSTRUMENTO')) {
+      return `<h2 style="text-align:center;font-size:15px;margin-bottom:4px">${p}</h2>`;
+    }
+    return `<p style="text-align:justify;text-indent:2em;margin:6px 0">${p}</p>`;
+  }).join('\n');
+
+  return `<div style="font-family:'Times New Roman',serif;font-size:12.5px;color:#000;line-height:1.6;max-width:700px;margin:0 auto;padding:20px">
+    <p style="text-align:center;font-size:11px;color:#888;margin-bottom:16px">Nº ${contract.numero}</p>
+    ${paragraphs}
+  </div>`;
 }
 
 // ── Config ───────────────────────────────────────────────────
@@ -835,6 +930,9 @@ async function openConfig() {
   document.getElementById('cfTest2Tel').value = test[1]?.telefone || '';
   document.getElementById('cfTest2Email').value = test[1]?.email || '';
 
+  // Template
+  document.getElementById('cfTemplate').value = configData.contrato_template || TEMPLATE_PADRAO;
+
   btn.disabled = false; btn.textContent = '💾 Salvar Configuração';
 }
 
@@ -865,12 +963,14 @@ async function salvarConfig() {
         email: document.getElementById('cfTest2Email').value.trim(),
       },
     ],
+    contrato_template: document.getElementById('cfTemplate').value,
   };
 
   try {
     await api('/api/contratos/config', { method: 'POST', body: JSON.stringify(body) });
     configData.contrato_comodante = body.contrato_comodante;
     configData.contrato_testemunhas = body.contrato_testemunhas;
+    configData.contrato_template = body.contrato_template;
     toast('✅ Configuração salva!', 'success');
     closeModal('modalConfig');
   } catch (e) {
