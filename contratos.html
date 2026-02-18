@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.0.2 — MoskoGás</title>
+<title>Contratos v1.0.3 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.0.2</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.0.3</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -236,7 +236,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.0.2 — loading feedback em Config e Salvar showToast → toast
+// v1.0.3 — comodatário auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -597,8 +597,12 @@ async function loadDefaultSignatarios() {
   document.getElementById('mItensContainer').innerHTML = '';
   addItem(); // blank item
 
-  // Add comodatario (blank)
-  addSignatario({ role: 'comodatario', nome: '', cpf: '', telefone: '', email: '' });
+  // Comodatário auto-preenche com dados do responsável
+  const respNome = document.getElementById('mRespNome').value.trim();
+  const respCpf = document.getElementById('mRespCpf').value.trim();
+  const respTel = document.getElementById('mRespTel').value.trim();
+  const respEmail = document.getElementById('mRespEmail').value.trim() || document.getElementById('mEmail').value.trim();
+  addSignatario({ role: 'comodatario', nome: respNome, cpf: respCpf, telefone: respTel, email: respEmail });
 
   // Add comodante from config
   const com = configData.contrato_comodante || {};
@@ -610,6 +614,23 @@ async function loadDefaultSignatarios() {
   const test = configData.contrato_testemunhas || [];
   if (test[0]) addSignatario({ role: 'testemunha1', nome: test[0].nome || '', cpf: test[0].cpf || '', telefone: test[0].telefone || '', email: test[0].email || '' });
   if (test[1]) addSignatario({ role: 'testemunha2', nome: test[1].nome || '', cpf: test[1].cpf || '', telefone: test[1].telefone || '', email: test[1].email || '' });
+}
+
+// Sync responsável → comodatário ao digitar
+['mRespNome', 'mRespCpf', 'mRespTel', 'mRespEmail', 'mEmail'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', syncComodatario);
+});
+
+function syncComodatario() {
+  const firstSigner = document.querySelector('#mSignatariosContainer .row');
+  if (!firstSigner) return;
+  const role = firstSigner.querySelector('.sig-role');
+  if (!role || role.value !== 'comodatario') return;
+  firstSigner.querySelector('.sig-nome').value = document.getElementById('mRespNome').value;
+  firstSigner.querySelector('.sig-cpf').value = document.getElementById('mRespCpf').value;
+  firstSigner.querySelector('.sig-tel').value = document.getElementById('mRespTel').value;
+  firstSigner.querySelector('.sig-email').value = document.getElementById('mRespEmail').value || document.getElementById('mEmail').value;
 }
 
 // ── Actions ──────────────────────────────────────────────────

@@ -1,6 +1,7 @@
-// v2.25.0
+// v2.25.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.25.1: Fix IzChat contratos — usar sendWhatsApp (chatapi.izchat.com.br + {number,body})
 // v2.25.0: Módulo Contratos Comodato — schema, endpoints, integração Assinafy + IzChat WhatsApp
 // v2.24.0: Último pedido cliente + app_products (preços sugeridos MoskoGás)
 // v2.23.1: Fix favorites — ensureAuditTable antes de acessar product_favorites
@@ -3514,16 +3515,11 @@ export default {
           if (phone && phone.length >= 10 && signingUrl) {
             try {
               const msg = `📋 *MoskoGás — Contrato de Comodato*\n\nOlá ${signer.nome.split(' ')[0]}!\n\nVocê tem um contrato de comodato (${contract.numero}) para assinar digitalmente.\n\n🔗 Clique para assinar:\n${signingUrl}\n\n📌 Após clicar, siga as instruções na tela.\n\nObrigado!`;
-              const izResp = await fetch('https://api.izchat.com.br/api/messages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.IZCHAT_TOKEN}` },
-                body: JSON.stringify({ to: `55${phone}`, message: msg }),
-              });
-              const sent = izResp.ok;
-              if (sent) {
+              const izResult = await sendWhatsApp(env, `55${phone}`, msg);
+              if (izResult.ok) {
                 await env.DB.prepare('UPDATE contract_signers SET whatsapp_sent_at=unixepoch() WHERE id=?').bind(signer.id).run();
               }
-              whatsappResults.push({ nome: signer.nome, sent });
+              whatsappResults.push({ nome: signer.nome, sent: izResult.ok });
             } catch (wzErr) {
               whatsappResults.push({ nome: signer.nome, sent: false, error: wzErr.message });
             }
@@ -3575,13 +3571,9 @@ export default {
 
         try {
           const msg = `📋 *Lembrete — Contrato de Comodato*\n\nOlá ${signer.nome.split(' ')[0]}!\n\nSeu contrato (${contract.numero}) ainda aguarda sua assinatura.\n\n🔗 Clique para assinar:\n${signer.signing_url}\n\nObrigado!`;
-          const izResp = await fetch('https://api.izchat.com.br/api/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.IZCHAT_TOKEN}` },
-            body: JSON.stringify({ to: `55${phone}`, message: msg }),
-          });
+          const izResult = await sendWhatsApp(env, `55${phone}`, msg);
           await env.DB.prepare('UPDATE contract_signers SET whatsapp_sent_at=unixepoch() WHERE id=?').bind(signer.id).run();
-          results.push({ nome: signer.nome, sent: izResp.ok });
+          results.push({ nome: signer.nome, sent: izResult.ok });
         } catch (e) {
           results.push({ nome: signer.nome, sent: false, error: e.message });
         }
