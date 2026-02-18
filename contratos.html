@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.1.1 — MoskoGás</title>
+<title>Contratos v1.1.2 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.1.1</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.1.2</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -245,7 +245,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.1.1 — email+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
+// v1.1.2 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -566,6 +566,7 @@ async function salvarContrato() {
 
   const btn = document.getElementById('btnSalvar');
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
+  showLoading('Salvando contrato...');
 
   try {
     if (editingId) {
@@ -580,6 +581,7 @@ async function salvarContrato() {
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
   } finally {
+    hideLoading();
     btn.disabled = false; btn.textContent = '💾 Salvar Rascunho';
   }
 }
@@ -705,43 +707,51 @@ function syncComodatario() {
 
 async function enviarAssinatura(id) {
   if (!confirm('Enviar contrato para assinatura digital via Assinafy + WhatsApp?')) return;
+  showLoading('Enviando para Assinafy...');
   try {
-    toast('Enviando para Assinafy... aguarde', 'info');
     const r = await api(`/api/contratos/${id}/enviar-assinatura`, { method: 'POST', body: '{}' });
-    toast('Contrato enviado para assinatura! Links enviados via WhatsApp.', 'success');
+    toast('✅ Contrato enviado! Links de assinatura enviados via WhatsApp.', 'success');
     loadContratos();
     openDetail(id);
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
+  } finally {
+    hideLoading();
   }
 }
 
 async function reenviarLinks(contractId, signerId) {
   if (!confirm('Reenviar links de assinatura via WhatsApp?')) return;
+  showLoading('Reenviando links...');
   try {
     const body = signerId ? { signer_id: signerId } : {};
     await api(`/api/contratos/${contractId}/reenviar-links`, { method: 'POST', body: JSON.stringify(body) });
-    toast('Links reenviados!', 'success');
+    toast('✅ Links reenviados!', 'success');
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
+  } finally {
+    hideLoading();
   }
 }
 
 async function cancelarContrato(id) {
   const motivo = prompt('Motivo do cancelamento:');
   if (!motivo) return;
+  showLoading('Cancelando contrato...');
   try {
     await api(`/api/contratos/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
-    toast('Contrato cancelado', 'success');
+    toast('✅ Contrato cancelado', 'success');
     loadContratos();
     voltarLista();
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
+  } finally {
+    hideLoading();
   }
 }
 
 async function gerarPDF(id) {
-  toast('Gerando PDF... aguarde', 'info');
+  showLoading('Gerando PDF...');
   try {
     const r = await api(`/api/contratos/${id}`);
     const c = r.contract;
@@ -786,10 +796,12 @@ async function gerarPDF(id) {
     const result = await resp.json();
     if (!result.ok) throw new Error(result.error || 'Falha ao salvar PDF');
 
-    toast(`PDF gerado! (${Math.round(result.size/1024)}KB)`, 'success');
+    toast(`✅ PDF gerado! (${Math.round(result.size/1024)}KB)`, 'success');
     openDetail(id);
   } catch (e) {
     toast('Erro ao gerar PDF: ' + e.message, 'error');
+  } finally {
+    hideLoading();
   }
 }
 
@@ -945,6 +957,7 @@ async function openConfig() {
 async function salvarConfig() {
   const btn = document.getElementById('btnSalvarConfig');
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
+  showLoading('Salvando configuração...');
 
   const body = {
     contrato_comodante: {
@@ -984,6 +997,7 @@ async function salvarConfig() {
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
   } finally {
+    hideLoading();
     btn.disabled = false; btn.textContent = '💾 Salvar Configuração';
   }
 }
