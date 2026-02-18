@@ -1,6 +1,7 @@
-// v2.16.1
+// v2.16.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.16.2: Fix comprovante foto 401 — endpoint movido antes do auth gate
 // v2.16.1: Fix ReferenceError: user não declarado em cancel/revert/deliver/select-driver
 // v2.16.0: Reabrir/cancelar pedido com motivo + auditoria status + alerta WhatsApp admin
 // v2.15.0: Entrega com foto obrigatória (R2) + trocar pgto + observação
@@ -944,6 +945,25 @@ export default {
       return json({ ok: true });
     }
 
+    // ── Buscar comprovante foto do R2 (público — abre em nova aba) ──
+    const comprovanteMatch = path.match(/^\/api\/comprovante\/(\d+)$/);
+    if (method === 'GET' && comprovanteMatch) {
+      const orderId = parseInt(comprovanteMatch[1]);
+      const order = await env.DB.prepare('SELECT foto_comprovante FROM orders WHERE id=?').bind(orderId).first();
+      if (!order || !order.foto_comprovante) return err('Comprovante não encontrado', 404);
+
+      const obj = await env.BUCKET.get(order.foto_comprovante);
+      if (!obj) return err('Arquivo não encontrado no R2', 404);
+
+      return new Response(obj.body, {
+        headers: {
+          'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
     const authErr = requireApiKey(request, env);
     if (authErr) return authErr;
 
@@ -1672,25 +1692,6 @@ export default {
       });
 
       return json({ ok: true, status: 'entregue', foto_key: photoKey, bling_result: blingResult });
-    }
-
-    // ── Buscar comprovante foto do R2 ──
-    const comprovanteMatch = path.match(/^\/api\/comprovante\/(\d+)$/);
-    if (method === 'GET' && comprovanteMatch) {
-      const orderId = parseInt(comprovanteMatch[1]);
-      const order = await env.DB.prepare('SELECT foto_comprovante FROM orders WHERE id=?').bind(orderId).first();
-      if (!order || !order.foto_comprovante) return err('Comprovante não encontrado', 404);
-
-      const obj = await env.BUCKET.get(order.foto_comprovante);
-      if (!obj) return err('Arquivo não encontrado no R2', 404);
-
-      return new Response(obj.body, {
-        headers: {
-          'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
-          'Cache-Control': 'public, max-age=86400',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
     }
 
     const cancelMatch = path.match(/^\/api\/order\/(\d+)\/cancel$/);
