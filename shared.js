@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.5.0
+// shared.js — Utilitários compartilhados MoskoGás v1.6.0
+// v1.6.0: Loading overlay global (showLoading/hideLoading)
 // v1.5.0: Navbar azul, dropdown Relatório, menu RBAC, toast warning
 // v1.4.0: Nav com link Auditoria
 
@@ -104,6 +105,35 @@ function toast(msg, type = 'success') {
     el.style.opacity = '0';
     setTimeout(() => el.remove(), 400);
   }, 3500);
+}
+
+// ── Loading Overlay Global ────────────────────────────────────
+function showLoading(msg = 'Salvando...') {
+  let overlay = document.getElementById('mg-loading-overlay');
+  if (overlay) { overlay.querySelector('.mg-loading-text').textContent = msg; overlay.style.display = 'flex'; return; }
+  overlay = document.createElement('div');
+  overlay.id = 'mg-loading-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:999999;backdrop-filter:blur(3px);';
+  overlay.innerHTML = `<div style="background:#fff;border-radius:20px;padding:36px 48px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:320px;animation:mgLoadPop 0.3s ease;">
+    <div style="margin-bottom:16px;">
+      <svg width="56" height="56" viewBox="0 0 56 56" style="animation:mgLoadSpin 1s linear infinite;">
+        <circle cx="28" cy="28" r="22" fill="none" stroke="#e2e8f0" stroke-width="5"/>
+        <circle cx="28" cy="28" r="22" fill="none" stroke="#2563eb" stroke-width="5" stroke-dasharray="100 40" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="mg-loading-text" style="font-size:18px;font-weight:800;color:#1e293b;">${msg}</div>
+    <div style="font-size:13px;color:#64748b;margin-top:6px;">Aguarde...</div>
+  </div>
+  <style>
+    @keyframes mgLoadSpin { to { transform: rotate(360deg); } }
+    @keyframes mgLoadPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  </style>`;
+  document.body.appendChild(overlay);
+}
+
+function hideLoading() {
+  const overlay = document.getElementById('mg-loading-overlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 // ── Navegação por Role ────────────────────────────────────────

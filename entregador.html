@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.0.1 — MoskoGás</title>
+<title>Entregador v2.1.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -12,12 +12,19 @@
   .toolbar { background: #0f172a; padding: 10px 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 50; }
   .toolbar h1 { color: #fff; font-size: 16px; font-weight: 800; margin-right: auto; }
   .toolbar h1 small { font-weight: 400; color: #94a3b8; font-size: 11px; }
-  .toolbar select, .toolbar input[type=date] { padding: 8px 10px; border: none; border-radius: 8px; font-size: 13px; background: #334155; color: #fff; }
+  .toolbar select { padding: 8px 10px; border: none; border-radius: 8px; font-size: 13px; background: #334155; color: #fff; }
   .toolbar select option { background: #1e293b; }
   .btn { padding: 9px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
   .btn-refresh { background: #f97316; color: #fff; }
   .auto-lbl { color: #94a3b8; font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
   .auto-lbl input { accent-color: #f97316; width: 16px; height: 16px; }
+
+  /* ── Tabs ── */
+  .tab-bar { display: flex; background: #1e293b; border-bottom: 2px solid #334155; }
+  .tab-btn { flex: 1; padding: 12px 8px; text-align: center; font-size: 14px; font-weight: 700; color: #94a3b8; background: transparent; border: none; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
+  .tab-btn.active { color: #fff; border-bottom-color: #f97316; background: #334155; }
+  .tab-btn .tab-count { display: inline-block; background: #475569; color: #fff; border-radius: 12px; padding: 1px 8px; font-size: 11px; margin-left: 4px; }
+  .tab-btn.active .tab-count { background: #f97316; }
 
   /* ── Summary ── */
   .summary-bar { background: #1e293b; color: #fff; padding: 8px 12px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; }
@@ -51,9 +58,10 @@
   .pgto-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 8px; background: #f1f5f9; color: #475569; }
 
   /* ── Quick action buttons ── */
-  .card-quick { display: flex; gap: 8px; padding: 8px 0; }
-  .btn-maps  { background: #dcfce7; color: #16a34a; border: 2px solid #86efac; padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; }
-  .btn-phone { background: #dbeafe; color: #2563eb; border: 2px solid #93c5fd; padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; }
+  .card-quick { display: flex; gap: 6px; padding: 8px 0; flex-wrap: wrap; }
+  .btn-maps  { background: #dcfce7; color: #16a34a; border: 2px solid #86efac; padding: 8px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; min-width: 0; }
+  .btn-phone { background: #dbeafe; color: #2563eb; border: 2px solid #93c5fd; padding: 8px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; min-width: 0; }
+  .btn-whats { background: #d1fae5; color: #059669; border: 2px solid #6ee7b7; padding: 8px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; min-width: 0; }
 
   /* ── Delivery section ── */
   .delivery-section { border-top: 2px dashed #e2e8f0; margin-top: 6px; padding: 14px; background: #f8fafc; }
@@ -85,17 +93,29 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
 
-  /* ── Entregue / Cancelado ── */
-  .card.entregue { opacity: 0.65; }
-  .card.entregue .delivery-section { display: none; }
-  .card.cancelado { opacity: 0.4; }
-  .card.cancelado .delivery-section { display: none; }
-
-  .entregue-info { border-top: 2px solid #dbeafe; padding: 10px 14px; background: #eff6ff; font-size: 12px; color: #2563eb; }
-  .entregue-info a { color: #2563eb; font-weight: 700; }
-
   .empty { text-align: center; padding: 60px 20px; color: #94a3b8; font-size: 16px; }
   .version-badge { position: fixed; bottom: 6px; right: 8px; background: rgba(0,0,0,0.5); color: #fff; padding: 2px 8px; border-radius: 8px; font-size: 9px; font-weight: 700; z-index: 99; }
+
+  /* ── Totais (aba entregues) ── */
+  .totals-card { background: #fff; border-radius: 16px; margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden; }
+  .totals-header { background: #1e293b; color: #fff; padding: 12px 14px; font-size: 14px; font-weight: 800; }
+  .totals-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+  .totals-row:last-child { border-bottom: none; }
+  .totals-row .pgto-icon { font-size: 16px; }
+  .totals-row .pgto-name { font-weight: 600; color: #374151; }
+  .totals-row .pgto-count { color: #64748b; font-size: 12px; }
+  .totals-row .pgto-val { font-weight: 800; color: #16a34a; }
+  .totals-grand { display: flex; justify-content: space-between; align-items: center; padding: 14px; background: #f0fdf4; font-size: 18px; font-weight: 900; color: #16a34a; border-top: 2px solid #16a34a; }
+
+  /* ── Entregue mini card ── */
+  .mini-card { background: #fff; border-radius: 12px; margin-bottom: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); padding: 12px 14px; }
+  .mini-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .mini-id { font-size: 11px; color: #94a3b8; font-weight: 700; }
+  .mini-client { font-size: 14px; font-weight: 700; color: #1e293b; }
+  .mini-items { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .mini-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .mini-pgto { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #f1f5f9; color: #475569; }
+  .mini-val { font-size: 16px; font-weight: 900; color: #16a34a; }
 
   @media (max-width: 600px) {
     .toolbar h1 { font-size: 14px; }
@@ -107,20 +127,17 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.0.1</small></h1>
-  <input type="date" id="fDate" onchange="load()">
+  <h1>🚚 Entregas <small>v2.1.0</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
-  <select id="fStatus" onchange="load()">
-    <option value="">Pendentes</option>
-    <option value="encaminhado">🟡 Encaminhado</option>
-    <option value="whatsapp_enviado">🟢 WhatsApp</option>
-    <option value="entregue">🔵 Entregues</option>
-    <option value="all">📋 Todos</option>
-  </select>
   <button class="btn btn-refresh" onclick="load()" title="Atualizar">🔄</button>
   <label class="auto-lbl"><input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> 30s</label>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-pendentes" onclick="switchTab('pendentes')">📦 Pendentes <span class="tab-count" id="count-pendentes">0</span></button>
+  <button class="tab-btn" id="tab-entregues" onclick="switchTab('entregues')">✅ Entregues <span class="tab-count" id="count-entregues">0</span></button>
 </div>
 
 <div class="summary-bar" id="summary-bar"></div>
@@ -129,22 +146,27 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.0.1 — entregador</div>
+<div class="version-badge">v2.1.0 — entregador</div>
 
 <script src="shared.js"></script>
 <script>
-// v2.0.1
+// v2.1.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
-document.getElementById('fDate').value = today();
 
 const TIPO_LABELS = {
   dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX à vista', pix_receber: '⏳ PIX a receber',
   mensalista: '📅 Mensalista', boleto: '🧾 Boleto/Órgão', debito: '💳 Débito', credito: '💳 Crédito'
 };
+const TIPO_ICONS = {
+  dinheiro: '💵', pix_vista: '⚡', pix_receber: '⏳',
+  mensalista: '📅', boleto: '🧾', debito: '💳', credito: '💳'
+};
 
 const photoStore = {};
 let autoTimer;
+let allOrders = [];
+let currentTab = 'pendentes';
 
 async function init() {
   const drivers = await api('/api/drivers').catch(() => []);
@@ -165,43 +187,70 @@ async function init() {
 }
 
 async function load() {
-  const date     = document.getElementById('fDate').value;
   const driverId = document.getElementById('fDriver').value;
-  const statusVal = document.getElementById('fStatus').value;
+  const todayStr = today();
 
-  let url = '/api/orders/list?';
-  if (date) url += `&date=${date}`;
+  let url = `/api/orders/list?date=${todayStr}`;
   if (driverId) url += `&driver_id=${driverId}`;
+  url += '&status=encaminhado,whatsapp_enviado,entregue';
 
-  if (statusVal === 'all') {
-    // sem filtro
-  } else if (statusVal) {
-    url += `&status=${statusVal}`;
-  } else {
-    url += '&status=encaminhado,whatsapp_enviado';
-  }
-
-  const rows = await api(url).catch(() => []);
-  renderSummary(rows);
-  render(rows);
+  allOrders = await api(url).catch(() => []);
+  updateCounts();
+  renderCurrentTab();
 }
 
-function renderSummary(rows) {
-  const pendentes = rows.filter(r => ['encaminhado','whatsapp_enviado','novo'].includes(r.status));
-  const entregues = rows.filter(r => r.status === 'entregue');
+function updateCounts() {
+  const pendentes = allOrders.filter(r => ['encaminhado','whatsapp_enviado','novo'].includes(r.status));
+  const entregues = allOrders.filter(r => r.status === 'entregue');
+  document.getElementById('count-pendentes').textContent = pendentes.length;
+  document.getElementById('count-entregues').textContent = entregues.length;
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-pendentes').className = 'tab-btn' + (tab === 'pendentes' ? ' active' : '');
+  document.getElementById('tab-entregues').className = 'tab-btn' + (tab === 'entregues' ? ' active' : '');
+  renderCurrentTab();
+}
+
+function renderCurrentTab() {
+  if (currentTab === 'pendentes') {
+    const rows = allOrders.filter(r => ['encaminhado','whatsapp_enviado','novo'].includes(r.status));
+    renderSummaryPendentes(rows);
+    renderPendentes(rows);
+  } else {
+    const rows = allOrders.filter(r => r.status === 'entregue');
+    renderSummaryEntregues(rows);
+    renderEntregues(rows);
+  }
+}
+
+function renderSummaryPendentes(rows) {
   const totalVal = rows.reduce((s,r) => s + (r.total_value||0), 0);
   document.getElementById('summary-bar').innerHTML = `
-    <span>📦 <strong>${pendentes.length}</strong> pendentes</span>
-    <span>✅ <strong>${entregues.length}</strong> entregues</span>
+    <span>📦 <strong>${rows.length}</strong> pendentes</span>
     <span>💰 <strong>R$ ${totalVal.toFixed(2)}</strong></span>
-    <span style="margin-left:auto;color:#64748b">${rows.length} total</span>
+    <span style="margin-left:auto;color:#64748b">📅 Hoje</span>
   `;
 }
 
-function render(rows) {
+function renderSummaryEntregues(rows) {
+  const totalVal = rows.reduce((s,r) => s + (r.total_value||0), 0);
+  document.getElementById('summary-bar').innerHTML = `
+    <span>✅ <strong>${rows.length}</strong> entregues</span>
+    <span>💰 <strong>R$ ${totalVal.toFixed(2)}</strong></span>
+    <span style="margin-left:auto;color:#64748b">📅 Hoje</span>
+  `;
+}
+
+// ══════════════════════════════════════════════
+// ── ABA PENDENTES (cards completos)
+// ══════════════════════════════════════════════
+
+function renderPendentes(rows) {
   const el = document.getElementById('list');
   if (!rows.length) {
-    el.innerHTML = '<div class="empty">📭 Nenhum pedido encontrado</div>';
+    el.innerHTML = '<div class="empty">🎉 Nenhuma entrega pendente!</div>';
     return;
   }
 
@@ -212,8 +261,6 @@ function render(rows) {
     const addr = `${o.address_line}${o.bairro ? ', ' + o.bairro : ''}, Campo Grande/MS`;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
     const phoneClean = (o.phone_digits||'').replace(/\D/g,'');
-    const canDeliver = ['whatsapp_enviado','encaminhado'].includes(o.status);
-    const isEntregue = o.status === 'entregue';
     const pgtoLabel = TIPO_LABELS[o.tipo_pagamento] || o.tipo_pagamento || '—';
     const hasPhoto = photoStore[o.id];
 
@@ -221,12 +268,10 @@ function render(rows) {
       novo:             '<span class="badge badge-novo">NOVO</span>',
       encaminhado:      '<span class="badge badge-enc">ENCAMINHADO</span>',
       whatsapp_enviado: '<span class="badge badge-wa">WHATS ENVIADO</span>',
-      entregue:         '<span class="badge badge-entregue">✅ ENTREGUE</span>',
-      cancelado:        '<span class="badge badge-cancel">CANCELADO</span>',
     };
 
     return `
-    <div class="card ${o.status}" id="card-${o.id}">
+    <div class="card" id="card-${o.id}">
       <div class="card-header">
         <div class="card-header-left">
           <div class="card-id">#${o.id} <span class="hour-chip">${hora}</span>${o.driver_name_cache ? ' 🚚 ' + o.driver_name_cache : ''}</div>
@@ -248,60 +293,120 @@ function render(rows) {
           <span class="card-total">R$ ${(o.total_value||0).toFixed(2)}</span>
         </div>
         <div class="card-quick">
-          <a class="btn-maps" href="${mapsUrl}" target="_blank">🗺️ Mapa</a>
-          ${phoneClean ? '<a class="btn-phone" href="tel:+55' + phoneClean + '">📞 Ligar</a>' : ''}
+          <a class="btn-maps" href="${mapsUrl}" target="_blank" title="Abrir no Google Maps">🗺️ Mapa</a>
+          ${phoneClean ? '<a class="btn-phone" href="tel:+55' + phoneClean + '" title="Ligar para cliente">📞 Ligar</a>' : ''}
+          ${phoneClean ? '<a class="btn-whats" href="https://wa.me/55' + phoneClean + '" target="_blank" title="WhatsApp do cliente">💬 Zap</a>' : ''}
         </div>
       </div>
 
-      ${canDeliver ? renderDeliverySection(o, hasPhoto) : ''}
+      <div class="delivery-section" id="delivery-${o.id}">
+        <h3>📋 Finalizar Entrega</h3>
 
-      ${isEntregue ? renderEntregueInfo(o, pgtoLabel) : ''}
+        <div class="delivery-row">
+          <label>💰 Pgto:</label>
+          <select id="pgto-${o.id}">
+            ${Object.entries(TIPO_LABELS).map(([k,v]) => '<option value="' + k + '"' + (k===o.tipo_pagamento?' selected':'') + '>' + v + '</option>').join('')}
+          </select>
+        </div>
+
+        <div class="delivery-row">
+          <label>📝 Obs:</label>
+          <textarea id="obs-${o.id}" placeholder="Observação da entrega (opcional)"></textarea>
+        </div>
+
+        <div class="photo-area">
+          <input type="file" accept="image/*" capture="environment" class="photo-input" id="photo-input-${o.id}" onchange="onPhotoSelected(${o.id}, this)">
+          <button class="photo-btn ${hasPhoto ? 'has-photo' : ''}" id="photo-btn-${o.id}" onclick="document.getElementById('photo-input-${o.id}').click()">
+            <span class="icon">${hasPhoto ? '✅' : '📸'}</span>
+            ${hasPhoto ? 'Foto capturada ✓ (toque para trocar)' : 'Tirar foto do comprovante (obrigatório)'}
+          </button>
+          <div class="photo-preview" id="photo-preview-${o.id}" ${hasPhoto ? 'style="display:block"' : ''}>
+            ${hasPhoto ? '<img src="' + hasPhoto.dataUrl + '"><button class="remove" onclick="removePhoto(' + o.id + ')">✕</button><div class="photo-size">' + hasPhoto.sizeTxt + '</div>' : ''}
+          </div>
+        </div>
+
+        <button class="btn-deliver ${hasPhoto ? 'ready' : 'disabled'}" id="deliver-btn-${o.id}" onclick="deliver(${o.id})" ${!hasPhoto ? 'disabled' : ''}>
+          ✅ Marcar como Entregue
+        </button>
+      </div>
     </div>`;
   }).join('');
 }
 
-function renderDeliverySection(o, hasPhoto) {
-  return `
-  <div class="delivery-section" id="delivery-${o.id}">
-    <h3>📋 Finalizar Entrega</h3>
+// ══════════════════════════════════════════════
+// ── ABA ENTREGUES (mini cards + totais)
+// ══════════════════════════════════════════════
 
-    <div class="delivery-row">
-      <label>💰 Pgto:</label>
-      <select id="pgto-${o.id}">
-        ${Object.entries(TIPO_LABELS).map(([k,v]) => '<option value="' + k + '"' + (k===o.tipo_pagamento?' selected':'') + '>' + v + '</option>').join('')}
-      </select>
+function renderEntregues(rows) {
+  const el = document.getElementById('list');
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">📭 Nenhuma entrega finalizada hoje</div>';
+    return;
+  }
+
+  // Calcular totais por tipo de pagamento
+  const totais = {};
+  let grandTotal = 0;
+  rows.forEach(o => {
+    const tipo = o.tipo_pagamento || 'outros';
+    if (!totais[tipo]) totais[tipo] = { count: 0, value: 0 };
+    totais[tipo].count++;
+    totais[tipo].value += (o.total_value || 0);
+    grandTotal += (o.total_value || 0);
+  });
+
+  // Card de totais
+  let totaisHtml = `
+  <div class="totals-card">
+    <div class="totals-header">💰 Resumo — ${rows.length} entregas</div>`;
+
+  Object.entries(totais).sort((a,b) => b[1].value - a[1].value).forEach(([tipo, data]) => {
+    const icon = TIPO_ICONS[tipo] || '💲';
+    const name = TIPO_LABELS[tipo] || tipo;
+    totaisHtml += `
+    <div class="totals-row">
+      <span>
+        <span class="pgto-icon">${icon}</span>
+        <span class="pgto-name">${name}</span>
+        <span class="pgto-count">(${data.count}x)</span>
+      </span>
+      <span class="pgto-val">R$ ${data.value.toFixed(2)}</span>
+    </div>`;
+  });
+
+  totaisHtml += `
+    <div class="totals-grand">
+      <span>TOTAL</span>
+      <span>R$ ${grandTotal.toFixed(2)}</span>
     </div>
+  </div>`;
 
-    <div class="delivery-row">
-      <label>📝 Obs:</label>
-      <textarea id="obs-${o.id}" placeholder="Observação da entrega (opcional)"></textarea>
-    </div>
+  // Mini cards dos pedidos entregues
+  const cardsHtml = rows.map(o => {
+    const items = JSON.parse(o.items_json || '[]');
+    const itemsStr = items.map(i => `${parseInt(i.qty)}× ${i.name}`).join(' · ') || '—';
+    const hora = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+    const deliveredTime = o.delivered_at ? formatTime(o.delivered_at) : '';
 
-    <div class="photo-area">
-      <input type="file" accept="image/*" capture="environment" class="photo-input" id="photo-input-${o.id}" onchange="onPhotoSelected(${o.id}, this)">
-      <button class="photo-btn ${hasPhoto ? 'has-photo' : ''}" id="photo-btn-${o.id}" onclick="document.getElementById('photo-input-${o.id}').click()">
-        <span class="icon">${hasPhoto ? '✅' : '📸'}</span>
-        ${hasPhoto ? 'Foto capturada ✓ (toque para trocar)' : 'Tirar foto do comprovante (obrigatório)'}
-      </button>
-      <div class="photo-preview" id="photo-preview-${o.id}" ${hasPhoto ? 'style="display:block"' : ''}>
-        ${hasPhoto ? '<img src="' + hasPhoto.dataUrl + '"><button class="remove" onclick="removePhoto(' + o.id + ')">✕</button><div class="photo-size">' + hasPhoto.sizeTxt + '</div>' : ''}
+    const pgtoLabel = TIPO_LABELS[o.tipo_pagamento] || o.tipo_pagamento || '—';
+
+    return `
+    <div class="mini-card">
+      <div class="mini-top">
+        <span class="mini-id">#${o.id} · ${hora}${deliveredTime ? ' → ✅ ' + deliveredTime : ''}</span>
+        ${o.foto_comprovante ? '<a href="' + API_BASE + '/api/comprovante/' + o.id + '" target="_blank" style="font-size:11px;color:#2563eb;font-weight:700;">📷 Foto</a>' : ''}
       </div>
-    </div>
+      <div class="mini-client">${o.customer_name}</div>
+      <div class="mini-items">${itemsStr}</div>
+      ${o.observacao_entregador ? '<div style="font-size:11px;color:#7c3aed;margin-top:2px;">📝 ' + o.observacao_entregador + '</div>' : ''}
+      <div class="mini-bottom">
+        <span class="mini-pgto">${pgtoLabel}</span>
+        <span class="mini-val">R$ ${(o.total_value||0).toFixed(2)}</span>
+      </div>
+    </div>`;
+  }).join('');
 
-    <button class="btn-deliver ${hasPhoto ? 'ready' : 'disabled'}" id="deliver-btn-${o.id}" onclick="deliver(${o.id})" ${!hasPhoto ? 'disabled' : ''}>
-      ✅ Marcar como Entregue
-    </button>
-  </div>`;
-}
-
-function renderEntregueInfo(o, pgtoLabel) {
-  return `
-  <div class="entregue-info">
-    ✅ Entregue ${o.delivered_at ? 'às ' + formatTime(o.delivered_at) : ''}
-    ${o.foto_comprovante ? ' · <a href="' + API_BASE + '/api/comprovante/' + o.id + '" target="_blank">📷 Ver foto</a>' : ''}
-    ${o.observacao_entregador ? '<br>📝 ' + o.observacao_entregador : ''}
-    ${o.tipo_pagamento_original && o.tipo_pagamento_original !== o.tipo_pagamento ? '<br>⚠️ Pgto alterado: ' + (TIPO_LABELS[o.tipo_pagamento_original]||o.tipo_pagamento_original) + ' → ' + pgtoLabel : ''}
-  </div>`;
+  el.innerHTML = totaisHtml + cardsHtml;
 }
 
 function formatTime(val) {
@@ -310,7 +415,9 @@ function formatTime(val) {
   return d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Campo_Grande'});
 }
 
-// ── Photo capture + compression ──
+// ══════════════════════════════════════════════
+// ── FOTO (capture + compress)
+// ══════════════════════════════════════════════
 
 async function onPhotoSelected(orderId, input) {
   const file = input.files[0];
@@ -398,7 +505,9 @@ function removePhoto(orderId) {
   if (deliverBtn) { deliverBtn.className = 'btn-deliver disabled'; deliverBtn.disabled = true; }
 }
 
-// ── Deliver with photo ──
+// ══════════════════════════════════════════════
+// ── DELIVER (com loading overlay)
+// ══════════════════════════════════════════════
 
 async function deliver(orderId) {
   const photo = photoStore[orderId];
@@ -413,6 +522,7 @@ async function deliver(orderId) {
   const btn = document.getElementById('deliver-btn-' + orderId);
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Enviando...';
+  showLoading('Finalizando entrega...');
 
   try {
     const formData = new FormData();
@@ -439,6 +549,7 @@ async function deliver(orderId) {
 
     const result = await resp.json();
     removePhoto(orderId);
+    hideLoading();
 
     let msg = '✅ Pedido #' + orderId + ' entregue!';
     if (result.bling_result && result.bling_result.action === 'created') {
@@ -450,6 +561,7 @@ async function deliver(orderId) {
 
     load();
   } catch (e) {
+    hideLoading();
     toast('❌ ' + e.message, 'error');
     btn.disabled = false;
     btn.className = 'btn-deliver ready';

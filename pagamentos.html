@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.3.1</title>
+<title>Pagamentos — MoskoGás v1.3.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -41,7 +41,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.3.1 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.3.2 — pagamentos</div>
 
 <!-- TOOLBAR -->
 <div class="toolbar">
@@ -64,7 +64,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar lista de pagamentos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.3.1</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.3.2</span>
 </div>
 
 <!-- BULK BAR -->
@@ -116,7 +116,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.3.1
+// v1.3.2
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -240,11 +240,13 @@ function renderSummary(rows) {
 
 async function marcarPago(orderId) {
   if (!confirm(`Confirmar pagamento do pedido #${orderId}?`)) return;
+  showLoading('Processando pagamento...');
   try {
     const data = await api(`/api/pagamentos/${orderId}`, { method: 'PATCH' });
+    hideLoading();
     if (data.ok) { toast(`✅ Pedido #${orderId} marcado como pago!`); loadPagamentos(); }
     else { toast('❌ ' + (data.error || 'Falha'), 'error'); }
-  } catch(e) { toast(e.message, 'error'); }
+  } catch(e) { hideLoading(); toast(e.message, 'error'); }
 }
 
 function toggleSelect(id, checked) {
@@ -271,11 +273,13 @@ async function bulkMarcarPago() {
   const ids = [...selectedIds];
   if (!ids.length) return;
   if (!confirm(`Marcar ${ids.length} pedido(s) como pago(s)?`)) return;
+  showLoading(`Processando ${ids.length} pagamento(s)...`);
   let ok = 0, fail = 0;
   for (const id of ids) {
     try { const d = await api(`/api/pagamentos/${id}`, { method: 'PATCH' }); if (d.ok) ok++; else fail++; }
     catch(e) { fail++; }
   }
+  hideLoading();
   toast(`✅ ${ok} pago(s)${fail ? `, ${fail} erro(s)` : ''}`, fail ? 'error' : 'success');
   loadPagamentos();
 }
