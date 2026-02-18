@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.7.0 — MoskoGás</title>
+<title>Config v2.7.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.7.0 — config</div>
-  <h1>⚙️ Configurações v2.7.0</h1>
+  <div class="version-badge">v2.7.1 — config</div>
+  <h1>⚙️ Configurações v2.7.1</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -491,13 +491,21 @@ function searchFavProduct(q) {
       const favIds = new Set(_favs.map(f => String(f.bling_id)));
       box.innerHTML = list.map((p, i) => {
         const jaFav = favIds.has(String(p.id));
-        return `<div onclick="${jaFav ? '' : `addFavByIdx(${i})`}"
-          style="padding:10px 14px;cursor:${jaFav ? 'default' : 'pointer'};display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;${jaFav ? 'opacity:0.5' : ''}${!jaFav ? ';background:#fff' : ''};"
-          ${!jaFav ? 'onmouseover="this.style.background=\'#fff7ed\'" onmouseout="this.style.background=\'#fff\'"' : ''}>
+        return `<div data-fav-idx="${jaFav ? '' : i}" class="fav-suggestion-item"
+          style="padding:10px 14px;cursor:${jaFav ? 'default' : 'pointer'};display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;${jaFav ? 'opacity:0.5' : ''};background:#fff;">
           <span><strong>${p.name||'Produto'}</strong> ${p.code ? `<small style="color:#94a3b8">(${p.code})</small>` : ''}</span>
           <span style="font-weight:700;color:${jaFav ? '#94a3b8' : '#f97316'};font-size:13px">${jaFav ? '✅ Já favorito' : 'R$ ' + parseFloat(p.price||0).toFixed(2) + ' ➕'}</span>
         </div>`;
       }).join('');
+      // Event delegation for clicks
+      box.querySelectorAll('.fav-suggestion-item').forEach(el => {
+        const idx = el.getAttribute('data-fav-idx');
+        if (idx !== '') {
+          el.addEventListener('click', () => addFavByIdx(parseInt(idx)));
+          el.addEventListener('mouseover', () => el.style.background = '#fff7ed');
+          el.addEventListener('mouseout', () => el.style.background = '#fff');
+        }
+      });
     } catch(e) {
       box.innerHTML = `<div style="padding:10px 14px;color:#dc2626;font-size:12px">❌ ${e.message}</div>`;
       _favSearchResults = [];
