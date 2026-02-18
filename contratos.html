@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contratos v1.0.0 — MoskoGás</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; }
+  h1 { font-size: 20px; color: #1e293b; display: flex; align-items: center; gap: 8px; }
+  h1 .v-badge { background: #f97316; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+
+  .toolbar { background: #fff; padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .toolbar input, .toolbar select { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
+  .toolbar input:focus, .toolbar select:focus { outline: none; border-color: #f97316; }
+  .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-blue   { background: #2563eb; color: #fff; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .btn-gray   { background: #94a3b8; color: #fff; }
+  .btn-red    { background: #dc2626; color: #fff; }
+  .btn-purple { background: #7c3aed; color: #fff; }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; }
+  th { background: #475569; color: #fff; padding: 8px 10px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+  tr:hover td { background: #fafafa; }
+  tr.clickable { cursor: pointer; }
+
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; }
+  .badge-draft { background: #94a3b8; }
+  .badge-ready { background: #0ea5e9; }
+  .badge-waiting { background: #eab308; color: #000; }
+  .badge-partially_signed { background: #f97316; }
+  .badge-signed { background: #16a34a; }
+  .badge-canceled { background: #6b7280; }
+  .badge-error { background: #dc2626; }
+
+  .action-btns { display: flex; gap: 4px; flex-wrap: nowrap; }
+
+  /* Summary */
+  .summary-bar { background: #475569; color: #fff; padding: 10px 16px; font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .summary-bar span strong { color: #fb923c; }
+
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:14px; padding:24px; width:min(700px,95vw); max-height:90vh; overflow-y:auto; }
+  .modal h2 { font-size:18px; margin-bottom:16px; color:#1e293b; }
+  .modal label { display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; text-transform:uppercase; }
+  .modal input, .modal select, .modal textarea { width:100%; padding:10px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; margin-bottom:12px; }
+  .modal input:focus, .modal select:focus, .modal textarea:focus { outline:none; border-color:#f97316; }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; flex-wrap:wrap; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  .section-title { font-size: 14px; font-weight: 700; color: #475569; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin: 16px 0 12px 0; }
+
+  /* Detail panel */
+  .detail-panel { background:#fff; margin: 16px; border-radius:14px; padding:24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .detail-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .detail-field { }
+  .detail-field label { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+  .detail-field p { font-size: 14px; color: #1e293b; margin-top: 2px; }
+
+  .signer-card { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .signer-card.signed { border-color: #16a34a; background: #f0fdf4; }
+  .signer-card.rejected { border-color: #dc2626; background: #fef2f2; }
+
+  .timeline { border-left: 3px solid #e2e8f0; margin-left: 8px; padding-left: 16px; }
+  .timeline-item { margin-bottom: 12px; position: relative; }
+  .timeline-item::before { content: ''; position: absolute; left: -22px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }
+  .timeline-item .time { font-size: 11px; color: #94a3b8; }
+  .timeline-item .event { font-size: 13px; color: #334155; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .loading { text-align: center; padding: 40px; color: #94a3b8; }
+
+  @media (max-width: 640px) {
+    .row { flex-direction: column; gap: 0; }
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <h1>📄 Contratos <span class="v-badge">v1.0.0</span></h1>
+  <div style="flex:1"></div>
+  <select id="fStatus" onchange="loadContratos()" style="width:140px">
+    <option value="">Todos Status</option>
+    <option value="draft">Rascunho</option>
+    <option value="ready">Pronto</option>
+    <option value="waiting">Aguardando</option>
+    <option value="partially_signed">Parcial</option>
+    <option value="signed">Assinado</option>
+    <option value="canceled">Cancelado</option>
+    <option value="error">Erro</option>
+  </select>
+  <input id="fSearch" placeholder="Buscar..." onkeyup="if(event.key==='Enter')loadContratos()" style="width:180px">
+  <button class="btn btn-purple btn-sm" onclick="openConfig()" title="Configurar dados do comodante e testemunhas">⚙️ Config</button>
+  <button class="btn btn-orange" onclick="openNovoContrato()">➕ Novo Contrato</button>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary-bar" id="summaryBar"></div>
+
+<!-- LIST VIEW -->
+<div id="listView">
+  <table>
+    <thead>
+      <tr>
+        <th>Nº</th>
+        <th>Cliente</th>
+        <th>CNPJ/CPF</th>
+        <th>Status</th>
+        <th>Assinaturas</th>
+        <th>Criado</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody id="tblBody">
+      <tr><td colspan="7" class="loading">Carregando...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- DETAIL VIEW -->
+<div id="detailView" style="display:none"></div>
+
+<!-- ══ MODAL: Novo/Editar Contrato ══ -->
+<div class="modal-overlay" id="modalContrato">
+  <div class="modal">
+    <h2 id="modalTitle">Novo Contrato de Comodato</h2>
+
+    <div class="section-title">Dados do Comodatário</div>
+    <div class="row">
+      <div>
+        <label>Tipo</label>
+        <select id="mTipoPessoa" onchange="togglePJPF()">
+          <option value="pj">Pessoa Jurídica</option>
+          <option value="pf">Pessoa Física</option>
+        </select>
+      </div>
+      <div>
+        <label id="lblDoc">CNPJ</label>
+        <input id="mCnpjCpf" placeholder="00.000.000/0001-00">
+      </div>
+    </div>
+    <label id="lblNome">Razão Social</label>
+    <input id="mRazaoSocial" placeholder="Nome da empresa">
+    <label>Endereço</label>
+    <input id="mEndereco" placeholder="Rua, nº, bairro">
+    <div class="row">
+      <div><label>CEP</label><input id="mCep" placeholder="79000-000"></div>
+      <div><label>Email</label><input id="mEmail" type="email" placeholder="email@empresa.com"></div>
+    </div>
+
+    <div class="section-title">Responsável / Representante</div>
+    <div class="row">
+      <div><label>Nome</label><input id="mRespNome" placeholder="Nome completo"></div>
+      <div><label>CPF</label><input id="mRespCpf" placeholder="000.000.000-00"></div>
+    </div>
+    <div class="row">
+      <div><label>Email</label><input id="mRespEmail" type="email" placeholder="email@responsavel.com"></div>
+      <div><label>Telefone (WhatsApp)</label><input id="mRespTel" placeholder="(67) 99999-0000"></div>
+    </div>
+
+    <div class="section-title">Itens do Comodato</div>
+    <div id="mItensContainer"></div>
+    <button class="btn btn-gray btn-sm" onclick="addItem()" style="margin-bottom:12px">➕ Adicionar Item</button>
+
+    <div class="section-title">Signatários</div>
+    <div id="mSignatariosContainer"></div>
+    <button class="btn btn-gray btn-sm" onclick="addSignatario()">➕ Adicionar Signatário</button>
+
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal('modalContrato')">Cancelar</button>
+      <button class="btn btn-blue" onclick="salvarContrato()" id="btnSalvar">💾 Salvar Rascunho</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Config Comodante/Testemunhas ══ -->
+<div class="modal-overlay" id="modalConfig">
+  <div class="modal">
+    <h2>⚙️ Configuração de Contratos</h2>
+
+    <div class="section-title">Dados do Comodante (sua empresa)</div>
+    <label>Razão Social</label>
+    <input id="cfEmpresa" placeholder="Mosko Ltda">
+    <div class="row">
+      <div><label>CNPJ</label><input id="cfCnpj" placeholder="00.000.000/0001-00"></div>
+      <div><label>IE</label><input id="cfIe" placeholder="Inscrição estadual"></div>
+    </div>
+    <label>Endereço</label>
+    <input id="cfEndereco" placeholder="Endereço completo">
+    <div class="row">
+      <div><label>Representante</label><input id="cfRepresentante" placeholder="Nome do representante"></div>
+      <div><label>CPF Representante</label><input id="cfRepCpf" placeholder="000.000.000-00"></div>
+    </div>
+
+    <div class="section-title">Testemunha 1 (padrão)</div>
+    <div class="row">
+      <div><label>Nome</label><input id="cfTest1Nome" placeholder="Nome"></div>
+      <div><label>CPF</label><input id="cfTest1Cpf" placeholder="CPF"></div>
+    </div>
+    <div class="row">
+      <div><label>Telefone</label><input id="cfTest1Tel" placeholder="Telefone"></div>
+      <div><label>Email</label><input id="cfTest1Email" placeholder="Email"></div>
+    </div>
+
+    <div class="section-title">Testemunha 2 (padrão)</div>
+    <div class="row">
+      <div><label>Nome</label><input id="cfTest2Nome" placeholder="Nome"></div>
+      <div><label>CPF</label><input id="cfTest2Cpf" placeholder="CPF"></div>
+    </div>
+    <div class="row">
+      <div><label>Telefone</label><input id="cfTest2Tel" placeholder="Telefone"></div>
+      <div><label>Email</label><input id="cfTest2Email" placeholder="Email"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal('modalConfig')">Cancelar</button>
+      <button class="btn btn-blue" onclick="salvarConfig()">💾 Salvar Configuração</button>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+// v1.0.0
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+checkApiKey();
+
+let currentContratos = [];
+let editingId = null;
+let configData = {};
+
+const STATUS_LABELS = {
+  draft: 'Rascunho', ready: 'Pronto', waiting: 'Aguardando',
+  partially_signed: 'Parcial', signed: 'Assinado ✅',
+  canceled: 'Cancelado', error: 'Erro'
+};
+
+const PRODUTOS_DEFAULT = [
+  { nome: 'P45 (45kg)', valor: 0 },
+  { nome: 'P20 (20kg)', valor: 0 },
+  { nome: 'P13 (13kg)', valor: 0 },
+  { nome: 'Galão 20L', valor: 0 },
+];
+
+// ── Load ─────────────────────────────────────────────────────
+
+async function loadContratos() {
+  const status = document.getElementById('fStatus').value;
+  const search = document.getElementById('fSearch').value.trim();
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (search) params.set('search', search);
+
+  try {
+    const r = await api(`/api/contratos?${params}`);
+    currentContratos = r.data || [];
+    renderList();
+    renderSummary(r);
+  } catch (e) {
+    showToast('Erro ao carregar contratos: ' + e.message, 'error');
+  }
+}
+
+function renderList() {
+  const tbody = document.getElementById('tblBody');
+  if (!currentContratos.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="icon">📄</div>Nenhum contrato encontrado</td></tr>';
+    return;
+  }
+  tbody.innerHTML = currentContratos.map(c => {
+    const dt = c.created_at ? new Date(c.created_at * 1000).toLocaleDateString('pt-BR') : '-';
+    const assinLabel = `${c.assinaturas_ok || 0}/${c.assinaturas_total || 0}`;
+    return `<tr class="clickable" onclick="openDetail(${c.id})">
+      <td><strong>${c.numero}</strong></td>
+      <td>${c.razao_social || c.responsavel_nome || '-'}</td>
+      <td style="font-size:12px">${c.cnpj_cpf || '-'}</td>
+      <td><span class="badge badge-${c.status}">${STATUS_LABELS[c.status] || c.status}</span></td>
+      <td>${assinLabel}</td>
+      <td>${dt}</td>
+      <td onclick="event.stopPropagation()">
+        <div class="action-btns">
+          ${c.status === 'draft' || c.status === 'error' ? `<button class="btn btn-blue btn-sm" onclick="editContrato(${c.id})" title="Editar">✏️</button>` : ''}
+          ${c.status === 'ready' ? `<button class="btn btn-green btn-sm" onclick="enviarAssinatura(${c.id})" title="Enviar para assinatura">✍️</button>` : ''}
+          ${['waiting','partially_signed'].includes(c.status) ? `<button class="btn btn-purple btn-sm" onclick="reenviarLinks(${c.id})" title="Reenviar WhatsApp">📲</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSummary(r) {
+  const bar = document.getElementById('summaryBar');
+  const total = r.total || currentContratos.length;
+  const signed = currentContratos.filter(c => c.status === 'signed').length;
+  const waiting = currentContratos.filter(c => ['waiting', 'partially_signed'].includes(c.status)).length;
+  const draft = currentContratos.filter(c => c.status === 'draft').length;
+  bar.innerHTML = `<span>Total: <strong>${total}</strong></span>
+    <span>Assinados: <strong>${signed}</strong></span>
+    <span>Aguardando: <strong>${waiting}</strong></span>
+    <span>Rascunhos: <strong>${draft}</strong></span>`;
+}
+
+// ── Detail View ──────────────────────────────────────────────
+
+async function openDetail(id) {
+  try {
+    const r = await api(`/api/contratos/${id}`);
+    const c = r.contract;
+    const signers = r.signers || [];
+    const events = r.events || [];
+    const attachments = r.attachments || [];
+    let itens = [];
+    try { itens = JSON.parse(c.itens_json || '[]'); } catch {}
+
+    const dt = c.created_at ? new Date(c.created_at * 1000).toLocaleString('pt-BR') : '-';
+    const signedDt = c.signed_at ? new Date(c.signed_at * 1000).toLocaleString('pt-BR') : '';
+
+    document.getElementById('listView').style.display = 'none';
+    const dv = document.getElementById('detailView');
+    dv.style.display = 'block';
+
+    dv.innerHTML = `
+      <div class="detail-panel">
+        <div class="detail-header">
+          <div>
+            <h2 style="font-size:20px;color:#1e293b">📄 ${c.numero}</h2>
+            <span class="badge badge-${c.status}" style="font-size:13px;margin-top:4px">${STATUS_LABELS[c.status] || c.status}</span>
+            ${signedDt ? `<span style="font-size:12px;color:#16a34a;margin-left:8px">✅ Assinado em ${signedDt}</span>` : ''}
+            ${c.assinafy_error ? `<div style="color:#dc2626;font-size:12px;margin-top:4px">⚠️ ${c.assinafy_error}</div>` : ''}
+          </div>
+          <div class="action-btns" style="flex-wrap:wrap">
+            <button class="btn btn-gray btn-sm" onclick="voltarLista()">← Voltar</button>
+            ${['draft','ready','error'].includes(c.status) ? `<button class="btn btn-blue btn-sm" onclick="editContrato(${c.id})">✏️ Editar</button>` : ''}
+            ${c.status === 'ready' ? `<button class="btn btn-green btn-sm" onclick="enviarAssinatura(${c.id})">✍️ Enviar p/ Assinatura</button>` : ''}
+            ${['draft','ready'].includes(c.status) ? `<button class="btn btn-purple btn-sm" onclick="gerarPDF(${c.id})">📃 Gerar PDF</button>` : ''}
+            ${['waiting','partially_signed'].includes(c.status) ? `<button class="btn btn-purple btn-sm" onclick="reenviarLinks(${c.id})">📲 Reenviar WhatsApp</button>` : ''}
+            ${c.generated_pdf_key ? `<a class="btn btn-gray btn-sm" href="${API_BASE}/api/contratos/${c.id}/pdf?type=generated&api_key=${getApiKeyFallback()}" target="_blank">📥 PDF Gerado</a>` : ''}
+            ${c.signed_pdf_key ? `<a class="btn btn-green btn-sm" href="${API_BASE}/api/contratos/${c.id}/pdf?type=signed&api_key=${getApiKeyFallback()}" target="_blank">📥 PDF Assinado</a>` : ''}
+            ${c.status !== 'canceled' && c.status !== 'signed' ? `<button class="btn btn-red btn-sm" onclick="cancelarContrato(${c.id})">❌ Cancelar</button>` : ''}
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <div class="detail-field"><label>Tipo</label><p>${c.tipo_pessoa === 'pf' ? 'Pessoa Física' : 'Pessoa Jurídica'}</p></div>
+          <div class="detail-field"><label>${c.tipo_pessoa === 'pf' ? 'Nome' : 'Razão Social'}</label><p>${c.razao_social || '-'}</p></div>
+          <div class="detail-field"><label>${c.tipo_pessoa === 'pf' ? 'CPF' : 'CNPJ'}</label><p>${c.cnpj_cpf || '-'}</p></div>
+          <div class="detail-field"><label>Endereço</label><p>${c.endereco || '-'}</p></div>
+          <div class="detail-field"><label>CEP</label><p>${c.cep || '-'}</p></div>
+          <div class="detail-field"><label>Criado em</label><p>${dt}</p></div>
+        </div>
+
+        ${c.responsavel_nome ? `
+        <div class="section-title">Responsável</div>
+        <div class="detail-grid">
+          <div class="detail-field"><label>Nome</label><p>${c.responsavel_nome}</p></div>
+          <div class="detail-field"><label>CPF</label><p>${c.responsavel_cpf || '-'}</p></div>
+          <div class="detail-field"><label>Email</label><p>${c.responsavel_email || '-'}</p></div>
+          <div class="detail-field"><label>Telefone</label><p>${c.responsavel_telefone || '-'}</p></div>
+        </div>` : ''}
+
+        ${itens.length ? `
+        <div class="section-title">Itens do Comodato</div>
+        <table style="margin-bottom:20px">
+          <thead><tr><th>Produto</th><th>Qtd</th><th>Valor Unit.</th><th>Obs</th></tr></thead>
+          <tbody>${itens.map(i => `<tr><td>${i.produto || i.nome}</td><td>${i.quantidade || 1}</td><td>${i.valor_unit ? 'R$ ' + parseFloat(i.valor_unit).toFixed(2) : '-'}</td><td>${i.obs || '-'}</td></tr>`).join('')}</tbody>
+        </table>` : ''}
+
+        <div class="section-title">Signatários (${signers.filter(s=>s.status==='signed').length}/${signers.length} assinaram)</div>
+        ${signers.map(s => {
+          const cls = s.status === 'signed' ? 'signed' : s.status === 'rejected' ? 'rejected' : '';
+          const statusIcon = s.status === 'signed' ? '✅' : s.status === 'rejected' ? '❌' : '⏳';
+          const signedAt = s.signed_at ? new Date(s.signed_at * 1000).toLocaleString('pt-BR') : '';
+          return `<div class="signer-card ${cls}">
+            <div>
+              <strong>${statusIcon} ${s.nome}</strong> <span style="color:#94a3b8;font-size:12px">(${s.role})</span>
+              <div style="font-size:12px;color:#64748b">${s.email || ''} ${s.telefone ? '• ' + s.telefone : ''}</div>
+              ${signedAt ? `<div style="font-size:11px;color:#16a34a">Assinado em ${signedAt}</div>` : ''}
+              ${s.reject_reason ? `<div style="font-size:11px;color:#dc2626">Motivo: ${s.reject_reason}</div>` : ''}
+            </div>
+            <div>
+              ${s.signing_url && s.status === 'pending' ? `<a href="${s.signing_url}" target="_blank" class="btn btn-blue btn-sm">🔗 Link</a>` : ''}
+              ${s.status === 'pending' && s.telefone && c.status !== 'draft' ? `<button class="btn btn-purple btn-sm" onclick="reenviarLinks(${c.id}, ${s.id})">📲</button>` : ''}
+            </div>
+          </div>`;
+        }).join('') || '<p style="color:#94a3b8;padding:12px">Nenhum signatário adicionado</p>'}
+
+        ${events.length ? `
+        <div class="section-title">Timeline</div>
+        <div class="timeline">
+          ${events.slice(0, 20).map(e => {
+            const t = e.created_at ? new Date(e.created_at * 1000).toLocaleString('pt-BR') : '';
+            return `<div class="timeline-item">
+              <div class="time">${t} ${e.usuario_nome ? '• ' + e.usuario_nome : ''}</div>
+              <div class="event"><strong>${e.evento}</strong>: ${e.detalhes || ''}</div>
+            </div>`;
+          }).join('')}
+        </div>` : ''}
+      </div>`;
+  } catch (e) {
+    showToast('Erro ao carregar contrato: ' + e.message, 'error');
+  }
+}
+
+function voltarLista() {
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('listView').style.display = 'block';
+}
+
+function getApiKeyFallback() {
+  return getSessionToken() || localStorage.getItem('mg_api_key') || '';
+}
+
+// ── Create / Edit ────────────────────────────────────────────
+
+function openNovoContrato() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Novo Contrato de Comodato';
+  clearForm();
+  // Pre-populate signers from config
+  loadDefaultSignatarios();
+  openModal('modalContrato');
+}
+
+async function editContrato(id) {
+  try {
+    const r = await api(`/api/contratos/${id}`);
+    const c = r.contract;
+    editingId = c.id;
+    document.getElementById('modalTitle').textContent = `Editar ${c.numero}`;
+
+    document.getElementById('mTipoPessoa').value = c.tipo_pessoa || 'pj';
+    document.getElementById('mCnpjCpf').value = c.cnpj_cpf || '';
+    document.getElementById('mRazaoSocial').value = c.razao_social || '';
+    document.getElementById('mEndereco').value = c.endereco || '';
+    document.getElementById('mCep').value = c.cep || '';
+    document.getElementById('mEmail').value = c.responsavel_email || '';
+    document.getElementById('mRespNome').value = c.responsavel_nome || '';
+    document.getElementById('mRespCpf').value = c.responsavel_cpf || '';
+    document.getElementById('mRespEmail').value = c.responsavel_email || '';
+    document.getElementById('mRespTel').value = c.responsavel_telefone || '';
+    togglePJPF();
+
+    // Items
+    let itens = [];
+    try { itens = JSON.parse(c.itens_json || '[]'); } catch {}
+    document.getElementById('mItensContainer').innerHTML = '';
+    if (itens.length) {
+      itens.forEach(i => addItem(i));
+    } else {
+      addItem();
+    }
+
+    // Signers
+    const signers = r.signers || [];
+    document.getElementById('mSignatariosContainer').innerHTML = '';
+    signers.forEach(s => addSignatario(s));
+
+    openModal('modalContrato');
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+async function salvarContrato() {
+  const body = {
+    tipo_pessoa: document.getElementById('mTipoPessoa').value,
+    cnpj_cpf: document.getElementById('mCnpjCpf').value.trim(),
+    razao_social: document.getElementById('mRazaoSocial').value.trim(),
+    endereco: document.getElementById('mEndereco').value.trim(),
+    cep: document.getElementById('mCep').value.trim(),
+    responsavel_nome: document.getElementById('mRespNome').value.trim(),
+    responsavel_cpf: document.getElementById('mRespCpf').value.trim(),
+    responsavel_email: document.getElementById('mRespEmail').value.trim() || document.getElementById('mEmail').value.trim(),
+    responsavel_telefone: document.getElementById('mRespTel').value.trim(),
+    itens: collectItems(),
+    signatarios: collectSignatarios(),
+  };
+
+  if (!body.razao_social && !body.responsavel_nome) {
+    showToast('Informe o nome/razão social do cliente', 'warning');
+    return;
+  }
+
+  try {
+    if (editingId) {
+      await api(`/api/contratos/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showToast('Contrato atualizado!', 'success');
+    } else {
+      const r = await api('/api/contratos', { method: 'POST', body: JSON.stringify(body) });
+      showToast(`Contrato ${r.numero} criado!`, 'success');
+    }
+    closeModal('modalContrato');
+    loadContratos();
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+// ── Items ─────────────────────────────────────────────────────
+
+function addItem(data) {
+  const container = document.getElementById('mItensContainer');
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.style.alignItems = 'end';
+  div.innerHTML = `
+    <div style="flex:2"><label>Produto</label><input class="item-produto" value="${data?.produto || data?.nome || ''}" placeholder="Ex: P45 (45kg)"></div>
+    <div style="flex:0.7"><label>Qtd</label><input type="number" class="item-qtd" value="${data?.quantidade || 1}" min="1"></div>
+    <div style="flex:1"><label>Valor Unit.</label><input type="number" step="0.01" class="item-valor" value="${data?.valor_unit || ''}" placeholder="0.00"></div>
+    <div style="flex:0.3"><button class="btn btn-red btn-sm" onclick="this.closest('.row').remove()" style="margin-bottom:12px">✕</button></div>
+  `;
+  container.appendChild(div);
+}
+
+function collectItems() {
+  const items = [];
+  document.querySelectorAll('#mItensContainer .row').forEach(row => {
+    const produto = row.querySelector('.item-produto').value.trim();
+    const quantidade = parseInt(row.querySelector('.item-qtd').value) || 1;
+    const valor_unit = parseFloat(row.querySelector('.item-valor').value) || 0;
+    if (produto) items.push({ produto, quantidade, valor_unit });
+  });
+  return items;
+}
+
+// ── Signatários ──────────────────────────────────────────────
+
+function addSignatario(data) {
+  const container = document.getElementById('mSignatariosContainer');
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.style.alignItems = 'end';
+  div.style.background = '#f8fafc';
+  div.style.padding = '8px';
+  div.style.borderRadius = '8px';
+  div.style.marginBottom = '8px';
+  div.innerHTML = `
+    <div style="flex:0.8"><label>Papel</label>
+      <select class="sig-role">
+        <option value="comodatario" ${data?.role==='comodatario'?'selected':''}>Comodatário</option>
+        <option value="comodante" ${data?.role==='comodante'?'selected':''}>Comodante</option>
+        <option value="testemunha1" ${data?.role==='testemunha1'?'selected':''}>Testemunha 1</option>
+        <option value="testemunha2" ${data?.role==='testemunha2'?'selected':''}>Testemunha 2</option>
+      </select>
+    </div>
+    <div style="flex:1.3"><label>Nome</label><input class="sig-nome" value="${data?.nome||''}" placeholder="Nome completo"></div>
+    <div style="flex:0.8"><label>CPF</label><input class="sig-cpf" value="${data?.cpf||''}" placeholder="CPF"></div>
+    <div style="flex:1"><label>Telefone (WhatsApp)</label><input class="sig-tel" value="${data?.telefone||''}" placeholder="(67) 99999-0000"></div>
+    <div style="flex:1"><label>Email</label><input class="sig-email" value="${data?.email||''}" placeholder="email@mail.com"></div>
+    <div style="flex:0.2"><button class="btn btn-red btn-sm" onclick="this.closest('.row').remove()" style="margin-bottom:12px">✕</button></div>
+  `;
+  container.appendChild(div);
+}
+
+function collectSignatarios() {
+  const signers = [];
+  document.querySelectorAll('#mSignatariosContainer .row').forEach(row => {
+    const nome = row.querySelector('.sig-nome').value.trim();
+    if (!nome) return;
+    signers.push({
+      role: row.querySelector('.sig-role').value,
+      nome,
+      cpf: row.querySelector('.sig-cpf').value.trim(),
+      telefone: row.querySelector('.sig-tel').value.trim(),
+      email: row.querySelector('.sig-email').value.trim(),
+    });
+  });
+  return signers;
+}
+
+async function loadDefaultSignatarios() {
+  if (!configData.contrato_comodante && !configData.contrato_testemunhas) {
+    await loadConfig();
+  }
+  const container = document.getElementById('mSignatariosContainer');
+  container.innerHTML = '';
+  document.getElementById('mItensContainer').innerHTML = '';
+  addItem(); // blank item
+
+  // Add comodatario (blank)
+  addSignatario({ role: 'comodatario', nome: '', cpf: '', telefone: '', email: '' });
+
+  // Add comodante from config
+  const com = configData.contrato_comodante || {};
+  if (com.representante) {
+    addSignatario({ role: 'comodante', nome: com.representante, cpf: com.rep_cpf || '', telefone: '', email: '' });
+  }
+
+  // Add witnesses from config
+  const test = configData.contrato_testemunhas || [];
+  if (test[0]) addSignatario({ role: 'testemunha1', nome: test[0].nome || '', cpf: test[0].cpf || '', telefone: test[0].telefone || '', email: test[0].email || '' });
+  if (test[1]) addSignatario({ role: 'testemunha2', nome: test[1].nome || '', cpf: test[1].cpf || '', telefone: test[1].telefone || '', email: test[1].email || '' });
+}
+
+// ── Actions ──────────────────────────────────────────────────
+
+async function enviarAssinatura(id) {
+  if (!confirm('Enviar contrato para assinatura digital via Assinafy + WhatsApp?')) return;
+  try {
+    showToast('Enviando para Assinafy... aguarde', 'info');
+    const r = await api(`/api/contratos/${id}/enviar-assinatura`, { method: 'POST', body: '{}' });
+    showToast('Contrato enviado para assinatura! Links enviados via WhatsApp.', 'success');
+    loadContratos();
+    openDetail(id);
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+async function reenviarLinks(contractId, signerId) {
+  if (!confirm('Reenviar links de assinatura via WhatsApp?')) return;
+  try {
+    const body = signerId ? { signer_id: signerId } : {};
+    await api(`/api/contratos/${contractId}/reenviar-links`, { method: 'POST', body: JSON.stringify(body) });
+    showToast('Links reenviados!', 'success');
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+async function cancelarContrato(id) {
+  const motivo = prompt('Motivo do cancelamento:');
+  if (!motivo) return;
+  try {
+    await api(`/api/contratos/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+    showToast('Contrato cancelado', 'success');
+    loadContratos();
+    voltarLista();
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+async function gerarPDF(id) {
+  showToast('Gerando PDF... aguarde', 'info');
+  try {
+    const r = await api(`/api/contratos/${id}`);
+    const c = r.contract;
+    const signers = r.signers || [];
+    let itens = [];
+    try { itens = JSON.parse(c.itens_json || '[]'); } catch {}
+
+    // Load config for comodante data
+    if (!configData.contrato_comodante) await loadConfig();
+    const com = configData.contrato_comodante || {};
+
+    // Build HTML contract
+    const html = buildContractHTML(c, signers, itens, com);
+
+    // Generate PDF via html2pdf.js
+    const element = document.createElement('div');
+    element.innerHTML = html;
+    element.style.position = 'absolute';
+    element.style.left = '-9999px';
+    document.body.appendChild(element);
+
+    const opt = {
+      margin: [15, 15, 15, 15],
+      filename: `Comodato_${c.numero}.pdf`,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    };
+
+    const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+    document.body.removeChild(element);
+
+    // Upload to worker
+    const resp = await fetch(API_BASE + `/api/contratos/${id}/gerar-pdf`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + getSessionToken(),
+        'Content-Type': 'application/pdf',
+      },
+      body: pdfBlob,
+    });
+    const result = await resp.json();
+    if (!result.ok) throw new Error(result.error || 'Falha ao salvar PDF');
+
+    showToast(`PDF gerado! (${Math.round(result.size/1024)}KB)`, 'success');
+    openDetail(id);
+  } catch (e) {
+    showToast('Erro ao gerar PDF: ' + e.message, 'error');
+  }
+}
+
+function buildContractHTML(contract, signers, itens, comodante) {
+  const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const comodatario = contract.tipo_pessoa === 'pf'
+    ? `<strong>${contract.razao_social}</strong>, portador(a) do CPF nº ${contract.cnpj_cpf}, residente em ${contract.endereco || 'Campo Grande/MS'}`
+    : `<strong>${contract.razao_social}</strong>, inscrita no CNPJ nº ${contract.cnpj_cpf}, com sede em ${contract.endereco || 'Campo Grande/MS'}, representada por ${contract.responsavel_nome}, CPF ${contract.responsavel_cpf}`;
+
+  const itensRows = itens.map((i, idx) =>
+    `<tr><td>${idx+1}</td><td>${i.produto || i.nome}</td><td>${i.quantidade || 1}</td><td>${i.valor_unit ? 'R$ ' + parseFloat(i.valor_unit).toFixed(2) : '-'}</td></tr>`
+  ).join('');
+
+  const test1 = signers.find(s => s.role === 'testemunha1') || {};
+  const test2 = signers.find(s => s.role === 'testemunha2') || {};
+
+  return `
+    <div style="font-family: 'Times New Roman', serif; font-size: 13px; color: #000; line-height: 1.6; max-width: 700px; margin: 0 auto; padding: 20px;">
+      <h2 style="text-align:center; font-size:16px; margin-bottom:4px;">CONTRATO DE COMODATO DE VASILHAMES</h2>
+      <p style="text-align:center; font-size:12px; color:#666; margin-bottom:20px;">Nº ${contract.numero}</p>
+
+      <p>Pelo presente instrumento particular de <strong>COMODATO</strong>, as partes abaixo qualificadas:</p>
+
+      <p><strong>COMODANTE:</strong> ${comodante.empresa || 'MOSKO LTDA'}, inscrita no CNPJ nº ${comodante.cnpj || ''}, ${comodante.ie ? 'IE ' + comodante.ie + ', ' : ''}com sede em ${comodante.endereco || 'Campo Grande/MS'}, neste ato representada por ${comodante.representante || ''}, CPF ${comodante.rep_cpf || ''}.</p>
+
+      <p><strong>COMODATÁRIO:</strong> ${comodatario}.</p>
+
+      <p>Têm entre si justo e contratado o seguinte:</p>
+
+      <p><strong>CLÁUSULA 1ª — DO OBJETO:</strong> O COMODANTE empresta ao COMODATÁRIO, a título gratuito, os seguintes vasilhames/equipamentos:</p>
+
+      <table style="width:100%; border-collapse:collapse; margin:10px 0;">
+        <thead><tr style="background:#f0f0f0;">
+          <th style="border:1px solid #ccc; padding:6px; text-align:center;">#</th>
+          <th style="border:1px solid #ccc; padding:6px;">Produto</th>
+          <th style="border:1px solid #ccc; padding:6px; text-align:center;">Qtd</th>
+          <th style="border:1px solid #ccc; padding:6px; text-align:center;">Valor Ref.</th>
+        </tr></thead>
+        <tbody>${itensRows}</tbody>
+      </table>
+
+      <p><strong>CLÁUSULA 2ª — DO PRAZO:</strong> O presente contrato é celebrado por prazo indeterminado, podendo ser rescindido por qualquer das partes mediante notificação prévia de 30 (trinta) dias.</p>
+
+      <p><strong>CLÁUSULA 3ª — DAS OBRIGAÇÕES DO COMODATÁRIO:</strong> O COMODATÁRIO se obriga a: a) conservar os vasilhames em bom estado; b) utilizá-los exclusivamente para os fins a que se destinam; c) restituí-los ao COMODANTE quando solicitado; d) responsabilizar-se por qualquer dano, perda ou extravio.</p>
+
+      <p><strong>CLÁUSULA 4ª — DA RESPONSABILIDADE:</strong> Em caso de perda, extravio ou dano irreparável dos vasilhames, o COMODATÁRIO obriga-se a indenizar o COMODANTE pelo valor de reposição vigente na data da ocorrência.</p>
+
+      <p><strong>CLÁUSULA 5ª — DO FORO:</strong> As partes elegem o Foro da Comarca de Campo Grande/MS para dirimir quaisquer dúvidas oriundas deste contrato.</p>
+
+      <p style="margin-top:20px;">E por estarem assim justos e contratados, assinam o presente instrumento eletronicamente.</p>
+      <p>Campo Grande/MS, ${hoje}.</p>
+
+      <div style="margin-top:40px; display:flex; justify-content:space-between; gap:40px;">
+        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
+          <strong>COMODANTE</strong><br>${comodante.representante || comodante.empresa || ''}
+        </div>
+        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
+          <strong>COMODATÁRIO</strong><br>${contract.responsavel_nome || contract.razao_social || ''}
+        </div>
+      </div>
+
+      <div style="margin-top:40px; display:flex; justify-content:space-between; gap:40px;">
+        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
+          <strong>TESTEMUNHA 1</strong><br>${test1.nome || ''}<br><span style="font-size:11px">CPF: ${test1.cpf || ''}</span>
+        </div>
+        <div style="text-align:center; flex:1; border-top:1px solid #000; padding-top:8px;">
+          <strong>TESTEMUNHA 2</strong><br>${test2.nome || ''}<br><span style="font-size:11px">CPF: ${test2.cpf || ''}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Config ───────────────────────────────────────────────────
+
+async function loadConfig() {
+  try {
+    const r = await api('/api/contratos/config');
+    configData = r.config || {};
+  } catch {
+    configData = {};
+  }
+}
+
+async function openConfig() {
+  await loadConfig();
+  const com = configData.contrato_comodante || {};
+  const test = configData.contrato_testemunhas || [];
+
+  document.getElementById('cfEmpresa').value = com.empresa || '';
+  document.getElementById('cfCnpj').value = com.cnpj || '';
+  document.getElementById('cfIe').value = com.ie || '';
+  document.getElementById('cfEndereco').value = com.endereco || '';
+  document.getElementById('cfRepresentante').value = com.representante || '';
+  document.getElementById('cfRepCpf').value = com.rep_cpf || '';
+
+  document.getElementById('cfTest1Nome').value = test[0]?.nome || '';
+  document.getElementById('cfTest1Cpf').value = test[0]?.cpf || '';
+  document.getElementById('cfTest1Tel').value = test[0]?.telefone || '';
+  document.getElementById('cfTest1Email').value = test[0]?.email || '';
+
+  document.getElementById('cfTest2Nome').value = test[1]?.nome || '';
+  document.getElementById('cfTest2Cpf').value = test[1]?.cpf || '';
+  document.getElementById('cfTest2Tel').value = test[1]?.telefone || '';
+  document.getElementById('cfTest2Email').value = test[1]?.email || '';
+
+  openModal('modalConfig');
+}
+
+async function salvarConfig() {
+  const body = {
+    contrato_comodante: {
+      empresa: document.getElementById('cfEmpresa').value.trim(),
+      cnpj: document.getElementById('cfCnpj').value.trim(),
+      ie: document.getElementById('cfIe').value.trim(),
+      endereco: document.getElementById('cfEndereco').value.trim(),
+      representante: document.getElementById('cfRepresentante').value.trim(),
+      rep_cpf: document.getElementById('cfRepCpf').value.trim(),
+    },
+    contrato_testemunhas: [
+      {
+        nome: document.getElementById('cfTest1Nome').value.trim(),
+        cpf: document.getElementById('cfTest1Cpf').value.trim(),
+        telefone: document.getElementById('cfTest1Tel').value.trim(),
+        email: document.getElementById('cfTest1Email').value.trim(),
+      },
+      {
+        nome: document.getElementById('cfTest2Nome').value.trim(),
+        cpf: document.getElementById('cfTest2Cpf').value.trim(),
+        telefone: document.getElementById('cfTest2Tel').value.trim(),
+        email: document.getElementById('cfTest2Email').value.trim(),
+      },
+    ],
+  };
+
+  try {
+    await api('/api/contratos/config', { method: 'POST', body: JSON.stringify(body) });
+    configData.contrato_comodante = body.contrato_comodante;
+    configData.contrato_testemunhas = body.contrato_testemunhas;
+    showToast('Configuração salva!', 'success');
+    closeModal('modalConfig');
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+
+function togglePJPF() {
+  const tipo = document.getElementById('mTipoPessoa').value;
+  document.getElementById('lblDoc').textContent = tipo === 'pf' ? 'CPF' : 'CNPJ';
+  document.getElementById('lblNome').textContent = tipo === 'pf' ? 'Nome Completo' : 'Razão Social';
+  document.getElementById('mCnpjCpf').placeholder = tipo === 'pf' ? '000.000.000-00' : '00.000.000/0001-00';
+}
+
+function clearForm() {
+  ['mTipoPessoa', 'mCnpjCpf', 'mRazaoSocial', 'mEndereco', 'mCep', 'mEmail',
+   'mRespNome', 'mRespCpf', 'mRespEmail', 'mRespTel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = el.tagName === 'SELECT' ? 'pj' : '';
+  });
+  document.getElementById('mItensContainer').innerHTML = '';
+  document.getElementById('mSignatariosContainer').innerHTML = '';
+  togglePJPF();
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// Prevent modal close on overlay click (UX rule)
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', (e) => { /* do nothing - UX rule */ });
+});
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('click', (e) => e.stopPropagation());
+});
+
+// ── Init ─────────────────────────────────────────────────────
+loadContratos();
+loadConfig();
+</script>
+</body>
+</html>

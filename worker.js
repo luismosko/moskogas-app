@@ -1,6 +1,7 @@
-// v2.24.0
+// v2.25.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.25.0: Módulo Contratos Comodato — schema, endpoints, integração Assinafy + IzChat WhatsApp
 // v2.24.0: Último pedido cliente + app_products (preços sugeridos MoskoGás)
 // v2.23.1: Fix favorites — ensureAuditTable antes de acessar product_favorites
 // v2.23.0: Produtos favoritos — tabela product_favorites + GET/POST/DELETE endpoints
@@ -481,6 +482,209 @@ async function ensureAuditTable(env) {
     created_at TEXT DEFAULT (datetime('now'))
   )`).run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bairro ON orders(bairro)').run().catch(() => {});
+}
+
+// ── Contratos (Comodato) — Tabelas e Helpers ─────────────────
+
+async function ensureContractTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contracts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero TEXT NOT NULL UNIQUE,
+    status TEXT DEFAULT 'draft',
+    tipo_pessoa TEXT DEFAULT 'pj',
+    razao_social TEXT,
+    cnpj_cpf TEXT,
+    endereco TEXT,
+    cidade TEXT DEFAULT 'Campo Grande',
+    uf TEXT DEFAULT 'MS',
+    cep TEXT,
+    responsavel_nome TEXT,
+    responsavel_cpf TEXT,
+    responsavel_email TEXT,
+    responsavel_telefone TEXT,
+    itens_json TEXT DEFAULT '[]',
+    comodante_snapshot TEXT,
+    testemunhas_snapshot TEXT,
+    template_html TEXT,
+    generated_pdf_key TEXT,
+    signed_pdf_key TEXT,
+    assinafy_doc_id TEXT,
+    assinafy_assignment_id TEXT,
+    assinafy_error TEXT,
+    created_by INTEGER,
+    created_by_nome TEXT,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch()),
+    signed_at INTEGER,
+    canceled_at INTEGER,
+    cancel_motivo TEXT
+  )`).run().catch(() => {});
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contract_signers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    nome TEXT NOT NULL,
+    cpf TEXT,
+    telefone TEXT,
+    email TEXT,
+    assinafy_signer_id TEXT,
+    signing_url TEXT,
+    signed_at INTEGER,
+    status TEXT DEFAULT 'pending',
+    whatsapp_sent_at INTEGER,
+    reject_reason TEXT,
+    FOREIGN KEY (contract_id) REFERENCES contracts(id)
+  )`).run().catch(() => {});
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contract_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id INTEGER NOT NULL,
+    tipo TEXT NOT NULL,
+    nome_arquivo TEXT,
+    r2_key TEXT NOT NULL,
+    mime TEXT,
+    bytes INTEGER,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (contract_id) REFERENCES contracts(id)
+  )`).run().catch(() => {});
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contract_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id INTEGER NOT NULL,
+    evento TEXT NOT NULL,
+    detalhes TEXT,
+    usuario_id INTEGER,
+    usuario_nome TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(() => {});
+
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_contracts_numero ON contracts(numero)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_csigners_contract ON contract_signers(contract_id)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cattach_contract ON contract_attachments(contract_id)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cevents_contract ON contract_events(contract_id)').run().catch(() => {});
+}
+
+async function logContractEvent(env, contractId, evento, detalhes, user) {
+  try {
+    await ensureContractTables(env);
+    await env.DB.prepare(
+      'INSERT INTO contract_events (contract_id, evento, detalhes, usuario_id, usuario_nome) VALUES (?, ?, ?, ?, ?)'
+    ).bind(contractId, evento, detalhes || null, user?.id || null, user?.nome || 'sistema').run();
+  } catch (e) { console.error('[logContractEvent]', e.message); }
+}
+
+async function generateContractNumber(env) {
+  const year = new Date().getFullYear();
+  const prefix = `COMOD-${year}-`;
+  const last = await env.DB.prepare(
+    "SELECT numero FROM contracts WHERE numero LIKE ? ORDER BY id DESC LIMIT 1"
+  ).bind(`${prefix}%`).first();
+  let seq = 1;
+  if (last && last.numero) {
+    const parts = last.numero.split('-');
+    seq = parseInt(parts[2] || '0') + 1;
+  }
+  return `${prefix}${String(seq).padStart(3, '0')}`;
+}
+
+// ── Assinafy API Helpers ──────────────────────────────────────
+
+async function assinaryFetch(path, options, env) {
+  const baseUrl = 'https://api.assinafy.com.br/v1';
+  const url = `${baseUrl}${path}`;
+  const headers = {
+    'X-Api-Key': env.ASSINAFY_API_KEY || '',
+    ...options.headers,
+  };
+  const resp = await fetch(url, { ...options, headers });
+  return resp;
+}
+
+async function assinaryUploadDocument(env, pdfBytes, filename) {
+  const formData = new FormData();
+  formData.append('file', new Blob([pdfBytes], { type: 'application/pdf' }), filename);
+  const accountId = env.ASSINAFY_ACCOUNT_ID || '';
+  const resp = await fetch(`https://api.assinafy.com.br/v1/accounts/${accountId}/documents`, {
+    method: 'POST',
+    headers: { 'X-Api-Key': env.ASSINAFY_API_KEY || '' },
+    body: formData,
+  });
+  if (!resp.ok) {
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`Assinafy upload failed (${resp.status}): ${errBody}`);
+  }
+  return resp.json();
+}
+
+async function assinaryCreateSigner(env, signerData) {
+  const accountId = env.ASSINAFY_ACCOUNT_ID || '';
+  const resp = await assinaryFetch(`/accounts/${accountId}/signers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      full_name: signerData.nome,
+      email: signerData.email || undefined,
+      whatsapp_phone_number: signerData.telefone ? `+55${signerData.telefone.replace(/\D/g, '')}` : undefined,
+    }),
+  }, env);
+  if (!resp.ok) {
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`Assinafy create signer failed (${resp.status}): ${errBody}`);
+  }
+  const result = await resp.json();
+  return result.data || result;
+}
+
+async function assinaryCreateAssignment(env, documentId, signerIds) {
+  const signers = signerIds.map(id => ({ id }));
+  const resp = await assinaryFetch(`/documents/${documentId}/assignments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      method: 'virtual',
+      signers,
+    }),
+  }, env);
+  if (!resp.ok) {
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`Assinafy assignment failed (${resp.status}): ${errBody}`);
+  }
+  const result = await resp.json();
+  return result.data || result;
+}
+
+async function assinaryGetDocument(env, documentId) {
+  const accountId = env.ASSINAFY_ACCOUNT_ID || '';
+  const resp = await assinaryFetch(`/accounts/${accountId}/documents`, {
+    method: 'GET',
+  }, env);
+  // Individual doc get
+  const resp2 = await fetch(`https://api.assinafy.com.br/v1/accounts/${accountId}/documents?search=${documentId}`, {
+    headers: { 'X-Api-Key': env.ASSINAFY_API_KEY || '' },
+  });
+  if (!resp2.ok) return null;
+  const data = await resp2.json();
+  const docs = data.data || [];
+  return docs.find(d => d.id === documentId) || null;
+}
+
+async function assinaryDownloadSigned(env, documentId) {
+  const resp = await fetch(`https://api.assinafy.com.br/v1/documents/${documentId}/download/certificated`, {
+    headers: { 'X-Api-Key': env.ASSINAFY_API_KEY || '' },
+  });
+  if (!resp.ok) throw new Error(`Download signed PDF failed: ${resp.status}`);
+  return resp.arrayBuffer();
+}
+
+async function assinaryResendToSigner(env, documentId, assignmentId, signerId) {
+  const resp = await assinaryFetch(
+    `/documents/${documentId}/assignments/${assignmentId}/signers/${signerId}/resend`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' } },
+    env
+  );
+  return resp.ok;
 }
 
 async function logStatusChange(env, orderId, statusAnterior, statusNovo, motivo, user) {
@@ -2864,6 +3068,602 @@ export default {
         'SELECT * FROM order_status_log WHERE order_id=? ORDER BY id DESC LIMIT 50'
       ).bind(orderId).all().then(r => r.results || []);
       return json(logs);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ── CONTRATOS (Comodato) ─────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Webhook Assinafy (PÚBLICO — sem auth) ─────────────────
+    if (method === 'POST' && path === '/api/webhooks/assinatura') {
+      try {
+        await ensureContractTables(env);
+        const payload = await request.json();
+        const event = payload.event;
+        const objectId = payload.object?.id;
+        const objectName = payload.object?.name;
+        console.log(`[assinafy-webhook] Event: ${event}, DocId: ${objectId}`);
+
+        if (!objectId) return json({ ok: true, ignored: 'no object id' });
+
+        // Find contract by assinafy_doc_id
+        const contract = await env.DB.prepare(
+          'SELECT id, status, assinafy_assignment_id FROM contracts WHERE assinafy_doc_id = ?'
+        ).bind(objectId).first();
+
+        if (!contract) {
+          console.log(`[assinafy-webhook] No contract found for doc ${objectId}`);
+          return json({ ok: true, ignored: 'contract not found' });
+        }
+
+        if (event === 'signer_signed_document') {
+          // A signer has signed — update their record
+          const signerName = payload.subject?.name;
+          if (signerName) {
+            await env.DB.prepare(
+              "UPDATE contract_signers SET status='signed', signed_at=unixepoch() WHERE contract_id=? AND nome=? AND status='pending'"
+            ).bind(contract.id, signerName).run();
+          }
+          // Check if partially signed
+          const pending = await env.DB.prepare(
+            "SELECT COUNT(*) as c FROM contract_signers WHERE contract_id=? AND status='pending'"
+          ).bind(contract.id).first();
+          if (pending && pending.c > 0) {
+            await env.DB.prepare(
+              "UPDATE contracts SET status='partially_signed', updated_at=unixepoch() WHERE id=?"
+            ).bind(contract.id).run();
+          }
+          await logContractEvent(env, contract.id, 'signer_signed', `${signerName} assinou o documento`, null);
+        }
+
+        if (event === 'document_ready') {
+          // All signers have signed — download certificated PDF
+          try {
+            const pdfBytes = await assinaryDownloadSigned(env, objectId);
+            const r2Key = `contracts/${contract.id}/signed.pdf`;
+            await env.BUCKET.put(r2Key, pdfBytes, { httpMetadata: { contentType: 'application/pdf' } });
+            await env.DB.prepare(
+              "UPDATE contracts SET status='signed', signed_pdf_key=?, signed_at=unixepoch(), updated_at=unixepoch() WHERE id=?"
+            ).bind(r2Key, contract.id).run();
+            await logContractEvent(env, contract.id, 'document_signed', 'Todos assinaram. PDF certificado salvo.', null);
+          } catch (dlErr) {
+            console.error('[assinafy-webhook] Download signed PDF error:', dlErr.message);
+            await env.DB.prepare(
+              "UPDATE contracts SET status='signed', signed_at=unixepoch(), updated_at=unixepoch(), assinafy_error=? WHERE id=?"
+            ).bind('Download PDF falhou: ' + dlErr.message, contract.id).run();
+          }
+        }
+
+        if (event === 'signer_rejected_document') {
+          const signerName = payload.subject?.name;
+          await env.DB.prepare(
+            "UPDATE contract_signers SET status='rejected', reject_reason=? WHERE contract_id=? AND nome=? AND status='pending'"
+          ).bind(payload.decline_reason || 'Rejeitado', contract.id, signerName || '').run();
+          await env.DB.prepare(
+            "UPDATE contracts SET status='error', assinafy_error=?, updated_at=unixepoch() WHERE id=?"
+          ).bind(`Rejeitado por ${signerName}: ${payload.decline_reason || ''}`, contract.id).run();
+          await logContractEvent(env, contract.id, 'signer_rejected', `${signerName} rejeitou: ${payload.decline_reason || ''}`, null);
+        }
+
+        if (event === 'document_processing_failed') {
+          await env.DB.prepare(
+            "UPDATE contracts SET status='error', assinafy_error='Processamento falhou na Assinafy', updated_at=unixepoch() WHERE id=?"
+          ).bind(contract.id).run();
+          await logContractEvent(env, contract.id, 'processing_failed', 'Assinafy não conseguiu processar o documento', null);
+        }
+
+        return json({ ok: true, processed: event });
+      } catch (e) {
+        console.error('[assinafy-webhook] Error:', e.message);
+        return json({ ok: true, error: e.message });
+      }
+    }
+
+    // ── Rotas de contratos (requerem auth admin/atendente) ────
+    if (path.startsWith('/api/contratos')) {
+      await ensureContractTables(env);
+    }
+
+    // ── GET /api/contratos — Listar ──────────────────────────
+    if (method === 'GET' && path === '/api/contratos') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const status = url.searchParams.get('status');
+      const search = url.searchParams.get('search');
+      const page = parseInt(url.searchParams.get('page') || '1');
+      const limit = parseInt(url.searchParams.get('limit') || '20');
+      const offset = (page - 1) * limit;
+
+      let where = '1=1';
+      const binds = [];
+
+      if (status) { where += ' AND c.status = ?'; binds.push(status); }
+      if (search) {
+        where += ' AND (c.numero LIKE ? OR c.razao_social LIKE ? OR c.cnpj_cpf LIKE ? OR c.responsavel_nome LIKE ?)';
+        const s = `%${search}%`;
+        binds.push(s, s, s, s);
+      }
+
+      const countRow = await env.DB.prepare(`SELECT COUNT(*) as total FROM contracts c WHERE ${where}`).bind(...binds).first();
+      const total = countRow?.total || 0;
+
+      const rows = await env.DB.prepare(
+        `SELECT c.*, (SELECT COUNT(*) FROM contract_signers WHERE contract_id=c.id AND status='signed') as assinaturas_ok,
+         (SELECT COUNT(*) FROM contract_signers WHERE contract_id=c.id) as assinaturas_total
+         FROM contracts c WHERE ${where} ORDER BY c.id DESC LIMIT ? OFFSET ?`
+      ).bind(...binds, limit, offset).all().then(r => r.results || []);
+
+      return json({ ok: true, data: rows, total, page, pages: Math.ceil(total / limit) });
+    }
+
+    // ── POST /api/contratos — Criar rascunho ─────────────────
+    if (method === 'POST' && path === '/api/contratos') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const body = await request.json();
+      const numero = await generateContractNumber(env);
+
+      const result = await env.DB.prepare(
+        `INSERT INTO contracts (numero, tipo_pessoa, razao_social, cnpj_cpf, endereco, cep,
+         responsavel_nome, responsavel_cpf, responsavel_email, responsavel_telefone,
+         itens_json, created_by, created_by_nome)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        numero,
+        body.tipo_pessoa || 'pj',
+        body.razao_social || '',
+        body.cnpj_cpf || '',
+        body.endereco || '',
+        body.cep || '',
+        body.responsavel_nome || '',
+        body.responsavel_cpf || '',
+        body.responsavel_email || '',
+        body.responsavel_telefone || '',
+        JSON.stringify(body.itens || []),
+        authCheck.id,
+        authCheck.nome
+      ).run();
+
+      const contractId = result.meta?.last_row_id;
+
+      // Create default signers if provided
+      if (body.signatarios && Array.isArray(body.signatarios)) {
+        for (const s of body.signatarios) {
+          await env.DB.prepare(
+            'INSERT INTO contract_signers (contract_id, role, nome, cpf, telefone, email) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(contractId, s.role, s.nome, s.cpf || '', s.telefone || '', s.email || '').run();
+        }
+      }
+
+      await logContractEvent(env, contractId, 'created', `Contrato ${numero} criado como rascunho`, authCheck);
+      return json({ ok: true, id: contractId, numero });
+    }
+
+    // ── GET /api/contratos/config — Config do comodato ────────
+    if (method === 'GET' && path === '/api/contratos/config') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env); // app_config table
+
+      const keys = ['contrato_comodante', 'contrato_testemunhas', 'contrato_template', 'contrato_produtos'];
+      const config = {};
+      for (const key of keys) {
+        const row = await env.DB.prepare('SELECT value FROM app_config WHERE key=?').bind(key).first();
+        try { config[key] = row ? JSON.parse(row.value) : null; } catch { config[key] = row?.value || null; }
+      }
+      return json({ ok: true, config });
+    }
+
+    // ── POST /api/contratos/config — Salvar config ────────────
+    if (method === 'POST' && path === '/api/contratos/config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
+
+      const body = await request.json();
+      for (const [key, value] of Object.entries(body)) {
+        if (!key.startsWith('contrato_')) continue;
+        const val = typeof value === 'string' ? value : JSON.stringify(value);
+        await env.DB.prepare(
+          "INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at"
+        ).bind(key, val).run();
+      }
+      await logContractEvent(env, 0, 'config_updated', 'Configuração de contratos atualizada', authCheck);
+      return json({ ok: true });
+    }
+
+    // ── GET /api/contratos/:id — Detalhe ─────────────────────
+    const contratoDetailMatch = path.match(/^\/api\/contratos\/(\d+)$/);
+    if (method === 'GET' && contratoDetailMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoDetailMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+
+      const signers = await env.DB.prepare('SELECT * FROM contract_signers WHERE contract_id=? ORDER BY id').bind(id).all().then(r => r.results || []);
+      const attachments = await env.DB.prepare('SELECT * FROM contract_attachments WHERE contract_id=? ORDER BY id').bind(id).all().then(r => r.results || []);
+      const events = await env.DB.prepare('SELECT * FROM contract_events WHERE contract_id=? ORDER BY id DESC LIMIT 50').bind(id).all().then(r => r.results || []);
+
+      return json({ ok: true, contract, signers, attachments, events });
+    }
+
+    // ── PATCH /api/contratos/:id — Editar rascunho ────────────
+    const contratoEditMatch = path.match(/^\/api\/contratos\/(\d+)$/);
+    if (method === 'PATCH' && contratoEditMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoEditMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT status FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+      if (!['draft', 'ready', 'error'].includes(contract.status)) {
+        return err('Só é possível editar contratos em rascunho, pronto ou com erro', 400);
+      }
+
+      const body = await request.json();
+      const fields = [];
+      const vals = [];
+      const allowed = ['tipo_pessoa', 'razao_social', 'cnpj_cpf', 'endereco', 'cep',
+        'responsavel_nome', 'responsavel_cpf', 'responsavel_email', 'responsavel_telefone',
+        'template_html', 'status'];
+      for (const key of allowed) {
+        if (body[key] !== undefined) { fields.push(`${key}=?`); vals.push(body[key]); }
+      }
+      if (body.itens !== undefined) { fields.push('itens_json=?'); vals.push(JSON.stringify(body.itens)); }
+      if (fields.length === 0 && !body.signatarios) return err('Nada para atualizar');
+
+      if (fields.length > 0) {
+        fields.push('updated_at=unixepoch()');
+        vals.push(id);
+        await env.DB.prepare(`UPDATE contracts SET ${fields.join(', ')} WHERE id=?`).bind(...vals).run();
+      }
+
+      // Update signers if provided
+      if (body.signatarios && Array.isArray(body.signatarios)) {
+        await env.DB.prepare('DELETE FROM contract_signers WHERE contract_id=?').bind(id).run();
+        for (const s of body.signatarios) {
+          await env.DB.prepare(
+            'INSERT INTO contract_signers (contract_id, role, nome, cpf, telefone, email) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(id, s.role, s.nome, s.cpf || '', s.telefone || '', s.email || '').run();
+        }
+      }
+
+      await logContractEvent(env, id, 'updated', 'Contrato editado', authCheck);
+      return json({ ok: true });
+    }
+
+    // ── DELETE /api/contratos/:id — Deletar rascunho ──────────
+    const contratoDeleteMatch = path.match(/^\/api\/contratos\/(\d+)$/);
+    if (method === 'DELETE' && contratoDeleteMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoDeleteMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT status FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+      if (contract.status !== 'draft') return err('Só rascunhos podem ser deletados', 400);
+
+      await env.DB.prepare('DELETE FROM contract_signers WHERE contract_id=?').bind(id).run();
+      await env.DB.prepare('DELETE FROM contract_attachments WHERE contract_id=?').bind(id).run();
+      await env.DB.prepare('DELETE FROM contract_events WHERE contract_id=?').bind(id).run();
+      await env.DB.prepare('DELETE FROM contracts WHERE id=?').bind(id).run();
+      return json({ ok: true });
+    }
+
+    // ── POST /api/contratos/:id/anexos — Upload anexo ─────────
+    const contratoAnexoMatch = path.match(/^\/api\/contratos\/(\d+)\/anexos$/);
+    if (method === 'POST' && contratoAnexoMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoAnexoMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT id FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+
+      const formData = await request.formData();
+      const file = formData.get('file');
+      const tipo = formData.get('tipo') || 'outro';
+      if (!file) return err('Arquivo obrigatório');
+
+      const bytes = await file.arrayBuffer();
+      const ext = file.name.split('.').pop() || 'pdf';
+      const r2Key = `contracts/${id}/anexos/${tipo}_${Date.now()}.${ext}`;
+
+      await env.BUCKET.put(r2Key, bytes, {
+        httpMetadata: { contentType: file.type || 'application/octet-stream' },
+      });
+
+      const result = await env.DB.prepare(
+        'INSERT INTO contract_attachments (contract_id, tipo, nome_arquivo, r2_key, mime, bytes) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(id, tipo, file.name, r2Key, file.type || '', bytes.byteLength).run();
+
+      await logContractEvent(env, id, 'attachment_added', `Anexo ${tipo}: ${file.name}`, authCheck);
+      return json({ ok: true, attachment_id: result.meta?.last_row_id, r2_key: r2Key });
+    }
+
+    // ── DELETE /api/contratos/:id/anexos/:aid — Remove anexo ──
+    const contratoDelAnexoMatch = path.match(/^\/api\/contratos\/(\d+)\/anexos\/(\d+)$/);
+    if (method === 'DELETE' && contratoDelAnexoMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const contractId = parseInt(contratoDelAnexoMatch[1]);
+      const attachId = parseInt(contratoDelAnexoMatch[2]);
+
+      const att = await env.DB.prepare('SELECT r2_key FROM contract_attachments WHERE id=? AND contract_id=?').bind(attachId, contractId).first();
+      if (!att) return err('Anexo não encontrado', 404);
+
+      await env.BUCKET.delete(att.r2_key).catch(() => {});
+      await env.DB.prepare('DELETE FROM contract_attachments WHERE id=?').bind(attachId).run();
+      await logContractEvent(env, contractId, 'attachment_removed', `Anexo removido`, authCheck);
+      return json({ ok: true });
+    }
+
+    // ── POST /api/contratos/:id/gerar-pdf — Salvar PDF no R2 ──
+    const contratoGerarPdfMatch = path.match(/^\/api\/contratos\/(\d+)\/gerar-pdf$/);
+    if (method === 'POST' && contratoGerarPdfMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoGerarPdfMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+
+      // Receive PDF bytes from client (generated by html2pdf.js)
+      const pdfBytes = await request.arrayBuffer();
+      if (!pdfBytes || pdfBytes.byteLength < 100) return err('PDF inválido');
+
+      const r2Key = `contracts/${id}/generated.pdf`;
+      await env.BUCKET.put(r2Key, pdfBytes, {
+        httpMetadata: { contentType: 'application/pdf' },
+      });
+
+      // Save comodante + testemunhas snapshot
+      await ensureAuditTable(env);
+      const comodanteRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='contrato_comodante'").first();
+      const testemunhasRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='contrato_testemunhas'").first();
+
+      await env.DB.prepare(
+        "UPDATE contracts SET generated_pdf_key=?, comodante_snapshot=?, testemunhas_snapshot=?, status='ready', updated_at=unixepoch() WHERE id=?"
+      ).bind(r2Key, comodanteRow?.value || '{}', testemunhasRow?.value || '[]', id).run();
+
+      await logContractEvent(env, id, 'pdf_generated', `PDF gerado (${Math.round(pdfBytes.byteLength/1024)}KB)`, authCheck);
+      return json({ ok: true, r2_key: r2Key, size: pdfBytes.byteLength });
+    }
+
+    // ── POST /api/contratos/:id/enviar-assinatura — Assinafy + WhatsApp ──
+    const contratoEnviarMatch = path.match(/^\/api\/contratos\/(\d+)\/enviar-assinatura$/);
+    if (method === 'POST' && contratoEnviarMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoEnviarMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+      if (!contract.generated_pdf_key) return err('Gere o PDF antes de enviar para assinatura', 400);
+      if (['waiting', 'partially_signed'].includes(contract.status)) {
+        return err('Contrato já está aguardando assinaturas', 400);
+      }
+
+      const signers = await env.DB.prepare(
+        'SELECT * FROM contract_signers WHERE contract_id=? ORDER BY id'
+      ).bind(id).all().then(r => r.results || []);
+      if (signers.length === 0) return err('Adicione signatários antes de enviar', 400);
+
+      try {
+        // 1. Download PDF from R2
+        const pdfObject = await env.BUCKET.get(contract.generated_pdf_key);
+        if (!pdfObject) return err('PDF não encontrado no R2', 404);
+        const pdfBytes = await pdfObject.arrayBuffer();
+
+        // 2. Upload to Assinafy
+        const uploadResult = await assinaryUploadDocument(env, pdfBytes, `Comodato_${contract.numero}.pdf`);
+        const docId = uploadResult.id || uploadResult.data?.id;
+        if (!docId) throw new Error('Assinafy não retornou document ID');
+
+        console.log(`[assinafy] Document uploaded: ${docId}`);
+
+        // 3. Wait for document processing (poll status)
+        // Assinafy needs a moment to process the PDF
+        await new Promise(r => setTimeout(r, 2000));
+
+        // 4. Create signers in Assinafy and collect their IDs
+        const assinarySignerIds = [];
+        for (const signer of signers) {
+          const created = await assinaryCreateSigner(env, signer);
+          const signerId = created.id;
+          assinarySignerIds.push(signerId);
+          await env.DB.prepare(
+            'UPDATE contract_signers SET assinafy_signer_id=? WHERE id=?'
+          ).bind(signerId, signer.id).run();
+          console.log(`[assinafy] Signer created: ${signerId} (${signer.nome})`);
+        }
+
+        // 5. Create assignment (virtual — no input fields needed)
+        const assignment = await assinaryCreateAssignment(env, docId, assinarySignerIds);
+        const assignmentId = assignment.id;
+        const signingUrls = assignment.signing_urls || [];
+
+        console.log(`[assinafy] Assignment created: ${assignmentId}, ${signingUrls.length} URLs`);
+
+        // 6. Save signing URLs to each signer
+        for (const su of signingUrls) {
+          await env.DB.prepare(
+            'UPDATE contract_signers SET signing_url=? WHERE contract_id=? AND assinafy_signer_id=?'
+          ).bind(su.url, id, su.signer_id).run();
+        }
+
+        // 7. Update contract with Assinafy IDs
+        await env.DB.prepare(
+          "UPDATE contracts SET assinafy_doc_id=?, assinafy_assignment_id=?, status='waiting', assinafy_error=NULL, updated_at=unixepoch() WHERE id=?"
+        ).bind(docId, assignmentId, id).run();
+
+        // 8. Send WhatsApp notifications via IzChat
+        const whatsappResults = [];
+        for (const signer of signers) {
+          const su = signingUrls.find(s => {
+            const dbSigner = signers.find(ds => ds.assinafy_signer_id === s.signer_id);
+            return dbSigner && dbSigner.id === signer.id;
+          });
+          const signingUrl = su?.url;
+          const phone = signer.telefone?.replace(/\D/g, '');
+
+          if (phone && phone.length >= 10 && signingUrl) {
+            try {
+              const msg = `📋 *MoskoGás — Contrato de Comodato*\n\nOlá ${signer.nome.split(' ')[0]}!\n\nVocê tem um contrato de comodato (${contract.numero}) para assinar digitalmente.\n\n🔗 Clique para assinar:\n${signingUrl}\n\n📌 Após clicar, siga as instruções na tela.\n\nObrigado!`;
+              const izResp = await fetch('https://api.izchat.com.br/api/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.IZCHAT_TOKEN}` },
+                body: JSON.stringify({ to: `55${phone}`, message: msg }),
+              });
+              const sent = izResp.ok;
+              if (sent) {
+                await env.DB.prepare('UPDATE contract_signers SET whatsapp_sent_at=unixepoch() WHERE id=?').bind(signer.id).run();
+              }
+              whatsappResults.push({ nome: signer.nome, sent });
+            } catch (wzErr) {
+              whatsappResults.push({ nome: signer.nome, sent: false, error: wzErr.message });
+            }
+          } else {
+            whatsappResults.push({ nome: signer.nome, sent: false, reason: 'sem telefone ou URL' });
+          }
+        }
+
+        await logContractEvent(env, id, 'sent_for_signature', `Enviado para ${signers.length} signatários via Assinafy`, authCheck);
+        return json({ ok: true, assinafy_doc_id: docId, assignment_id: assignmentId, signing_urls: signingUrls, whatsapp: whatsappResults });
+      } catch (e) {
+        console.error('[assinafy] Error:', e.message);
+        await env.DB.prepare(
+          "UPDATE contracts SET assinafy_error=?, updated_at=unixepoch() WHERE id=?"
+        ).bind(e.message, id).run();
+        await logContractEvent(env, id, 'signature_error', e.message, authCheck);
+        return err(`Erro ao enviar para Assinafy: ${e.message}`, 500);
+      }
+    }
+
+    // ── POST /api/contratos/:id/reenviar-links — Reenviar WhatsApp ──
+    const contratoReenviarMatch = path.match(/^\/api\/contratos\/(\d+)\/reenviar-links$/);
+    if (method === 'POST' && contratoReenviarMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoReenviarMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+      if (!['waiting', 'partially_signed'].includes(contract.status)) return err('Contrato não está aguardando assinaturas', 400);
+
+      const signers = await env.DB.prepare(
+        "SELECT * FROM contract_signers WHERE contract_id=? AND status='pending'"
+      ).bind(id).all().then(r => r.results || []);
+
+      const body = await request.json().catch(() => ({}));
+      const signerId = body.signer_id; // optional: resend to specific signer
+
+      const results = [];
+      for (const signer of signers) {
+        if (signerId && signer.id !== signerId) continue;
+        const phone = signer.telefone?.replace(/\D/g, '');
+        if (!phone || phone.length < 10 || !signer.signing_url) continue;
+
+        // Also resend via Assinafy email
+        if (signer.assinafy_signer_id && contract.assinafy_doc_id && contract.assinafy_assignment_id) {
+          await assinaryResendToSigner(env, contract.assinafy_doc_id, contract.assinafy_assignment_id, signer.assinafy_signer_id).catch(() => {});
+        }
+
+        try {
+          const msg = `📋 *Lembrete — Contrato de Comodato*\n\nOlá ${signer.nome.split(' ')[0]}!\n\nSeu contrato (${contract.numero}) ainda aguarda sua assinatura.\n\n🔗 Clique para assinar:\n${signer.signing_url}\n\nObrigado!`;
+          const izResp = await fetch('https://api.izchat.com.br/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.IZCHAT_TOKEN}` },
+            body: JSON.stringify({ to: `55${phone}`, message: msg }),
+          });
+          await env.DB.prepare('UPDATE contract_signers SET whatsapp_sent_at=unixepoch() WHERE id=?').bind(signer.id).run();
+          results.push({ nome: signer.nome, sent: izResp.ok });
+        } catch (e) {
+          results.push({ nome: signer.nome, sent: false, error: e.message });
+        }
+      }
+
+      await logContractEvent(env, id, 'links_resent', `Links reenviados para ${results.length} signatário(s)`, authCheck);
+      return json({ ok: true, results });
+    }
+
+    // ── POST /api/contratos/:id/cancelar — Cancelar ───────────
+    const contratoCancelarMatch = path.match(/^\/api\/contratos\/(\d+)\/cancelar$/);
+    if (method === 'POST' && contratoCancelarMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoCancelarMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+      if (contract.status === 'canceled') return err('Já está cancelado', 400);
+
+      const body = await request.json();
+      if (!body.motivo) return err('Motivo obrigatório para cancelar');
+
+      await env.DB.prepare(
+        "UPDATE contracts SET status='canceled', cancel_motivo=?, canceled_at=unixepoch(), updated_at=unixepoch() WHERE id=?"
+      ).bind(body.motivo, id).run();
+
+      await logContractEvent(env, id, 'canceled', `Cancelado: ${body.motivo}`, authCheck);
+      return json({ ok: true });
+    }
+
+    // ── GET /api/contratos/:id/status-assinatura — Poll Assinafy ──
+    const contratoStatusMatch = path.match(/^\/api\/contratos\/(\d+)\/status-assinatura$/);
+    if (method === 'GET' && contratoStatusMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoStatusMatch[1]);
+
+      const contract = await env.DB.prepare('SELECT assinafy_doc_id, status FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+      if (!contract.assinafy_doc_id) return json({ ok: true, status: contract.status, message: 'Ainda não enviado para assinatura' });
+
+      // Get fresh status from Assinafy
+      try {
+        const doc = await assinaryGetDocument(env, contract.assinafy_doc_id);
+        const signers = await env.DB.prepare('SELECT * FROM contract_signers WHERE contract_id=?').bind(id).all().then(r => r.results || []);
+        return json({
+          ok: true,
+          local_status: contract.status,
+          assinafy_status: doc?.status || 'unknown',
+          assinafy_assignment: doc?.assignment || null,
+          signers,
+        });
+      } catch (e) {
+        return json({ ok: true, local_status: contract.status, error: e.message });
+      }
+    }
+
+    // ── GET /api/contratos/:id/pdf — Download PDF do R2 ───────
+    const contratoPdfMatch = path.match(/^\/api\/contratos\/(\d+)\/pdf$/);
+    if (method === 'GET' && contratoPdfMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(contratoPdfMatch[1]);
+
+      const type = url.searchParams.get('type') || 'generated'; // generated or signed
+      const contract = await env.DB.prepare('SELECT generated_pdf_key, signed_pdf_key, numero FROM contracts WHERE id=?').bind(id).first();
+      if (!contract) return err('Contrato não encontrado', 404);
+
+      const key = type === 'signed' ? contract.signed_pdf_key : contract.generated_pdf_key;
+      if (!key) return err(`PDF ${type} não encontrado`, 404);
+
+      const obj = await env.BUCKET.get(key);
+      if (!obj) return err('Arquivo não encontrado no R2', 404);
+
+      return new Response(obj.body, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="Comodato_${contract.numero}_${type}.pdf"`,
+          ...CORS_HEADERS,
+        },
+      });
     }
 
     return err('Not found', 404);
