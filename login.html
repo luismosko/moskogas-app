@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login — MoskoApp v1.0.0</title>
+<title>Login — MoskoApp v1.1.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -43,7 +43,7 @@
     <button type="submit" class="btn-login" id="btn-submit">🔐 Entrar</button>
   </form>
 
-  <div class="version-badge">v1.0.0 — login</div>
+  <div class="version-badge">v1.1.0 — login</div>
 </div>
 
 <script>
@@ -85,10 +85,18 @@ async function doLogin(e) {
     const data = await resp.json();
 
     if (!resp.ok || !data.ok) {
-      errEl.textContent = data.error || 'Erro ao fazer login';
-      errEl.style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = '🔐 Entrar';
+      if (resp.status === 429) {
+        errEl.textContent = '⏳ Muitas tentativas. Aguarde 15 minutos e tente novamente.';
+        errEl.style.display = 'block';
+        btn.disabled = true;
+        btn.textContent = '🔒 Bloqueado';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '🔐 Entrar'; }, 60000);
+      } else {
+        errEl.textContent = data.error || 'Usuário ou senha inválidos';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '🔐 Entrar';
+      }
       return;
     }
 

@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.6.0
+// shared.js — Utilitários compartilhados MoskoGás v1.7.0
+// v1.7.0: Dropdown usuário (Trocar Senha + Sair), modal troca senha
 // v1.6.0: Loading overlay global (showLoading/hideLoading)
 // v1.5.0: Navbar azul, dropdown Relatório, menu RBAC, toast warning
 // v1.4.0: Nav com link Auditoria
@@ -146,11 +147,11 @@ const NAV_ACTIVE  = '#ffffff';
 const NAV_ITEMS = [
   { href: 'pedido.html',     icon: '➕', label: 'Novo Pedido',  roles: ['admin', 'atendente'] },
   { href: 'gestao.html',     icon: '📋', label: 'Gestão',       roles: ['admin', 'atendente'] },
-  { href: 'pagamentos.html', icon: '💰', label: 'Pagamentos',   roles: ['admin'] },
+  { href: 'pagamentos.html', icon: '💰', label: 'Pagamentos',   roles: ['admin', 'atendente'] },
   // Relatório é dropdown — tratado à parte
-  { href: 'auditoria.html',  icon: '🔍', label: 'Auditoria',    roles: ['admin'] },
-  { href: 'usuarios.html',   icon: '👥', label: 'Usuários',     roles: ['admin'] },
-  { href: 'config.html',     icon: '⚙️', label: 'Config',      roles: ['admin'] },
+  { href: 'auditoria.html',  icon: '🔍', label: 'Auditoria',    roles: ['admin', 'atendente'] },
+  { href: 'usuarios.html',   icon: '👥', label: 'Usuários',     roles: ['admin', 'atendente'] },
+  { href: 'config.html',     icon: '⚙️', label: 'Config',      roles: ['admin', 'atendente'] },
 ];
 
 // Dropdown "Relatório" — visível para admin e atendente
@@ -205,10 +206,18 @@ function buildNav() {
     </div>`;
   }
 
-  // ── User info + logout ──
+  // ── User dropdown (Trocar Senha + Sair) ──
   const userInfo = user
-    ? `<span class="mg-nav-user">👤 ${user.nome} <span class="mg-nav-role">${role.toUpperCase()}</span></span>
-    <a href="#" onclick="doLogout();return false" class="mg-nav-link mg-nav-logout">⬅ Sair</a>`
+    ? `<div class="mg-user-dropdown" id="mgUserDropdown">
+      <button class="mg-user-trigger" onclick="toggleUserDropdown(event)">
+        👤 ${user.nome} <span class="mg-nav-role">${role.toUpperCase()}</span> <span class="mg-ud-arrow">▾</span>
+      </button>
+      <div class="mg-ud-menu" id="mgUserMenu">
+        <a href="#" class="mg-ud-item" onclick="openTrocarSenha();return false;">🔑 Trocar Senha</a>
+        <div class="mg-ud-divider"></div>
+        <a href="#" class="mg-ud-item mg-ud-logout" onclick="doLogout();return false;">🚪 Sair</a>
+      </div>
+    </div>`
     : '';
 
   // ── Inserir dropdown entre Pagamentos e Auditoria ──
@@ -350,7 +359,7 @@ function buildNav() {
 .mg-dd-item:hover { background: #f1f5f9; }
 .mg-dd-active { background: #e0e7ff; color: #3730a3; }
 
-/* ── Right side (user) ────────────────────────── */
+/* ── Right side (user dropdown) ────────────────────────── */
 .mg-nav-right {
   margin-left: auto;
   display: flex;
@@ -358,11 +367,27 @@ function buildNav() {
   gap: 8px;
   flex-shrink: 0;
 }
-.mg-nav-user {
-  color: #ffffffaa;
-  font-size: 11px;
-  white-space: nowrap;
+.mg-user-dropdown {
+  position: relative;
 }
+.mg-user-trigger {
+  color: #ffffffcc;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.mg-user-trigger:hover { background: rgba(255,255,255,0.1); }
+.mg-ud-arrow { font-size: 10px; transition: transform 0.2s; }
 .mg-nav-role {
   background: rgba(255,255,255,0.15);
   padding: 1px 6px;
@@ -371,11 +396,70 @@ function buildNav() {
   font-weight: 700;
   letter-spacing: 0.5px;
 }
-.mg-nav-logout {
-  color: #fca5a5 !important;
-  font-size: 12px !important;
+.mg-ud-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  padding: 6px;
+  min-width: 180px;
+  z-index: 2001;
 }
-.mg-nav-logout:hover { color: #fef2f2 !important; background: rgba(239,68,68,0.2) !important; }
+.mg-ud-menu.mg-ud-open {
+  display: block;
+  animation: mgDdSlide 0.15s ease-out;
+}
+.mg-ud-item {
+  display: block;
+  padding: 10px 14px;
+  color: #334155;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: background 0.12s;
+  cursor: pointer;
+}
+.mg-ud-item:hover { background: #f1f5f9; }
+.mg-ud-divider { height: 1px; background: #e2e8f0; margin: 4px 6px; }
+.mg-ud-logout { color: #dc2626 !important; }
+.mg-ud-logout:hover { background: #fef2f2 !important; }
+
+/* ── Modal Trocar Senha ────────────────────────── */
+.mg-pwd-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 5000;
+  align-items: center;
+  justify-content: center;
+}
+.mg-pwd-overlay.mg-pwd-open { display: flex; }
+.mg-pwd-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.mg-pwd-box h3 { margin: 0 0 18px; font-size: 18px; color: #1e293b; }
+.mg-pwd-box label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+.mg-pwd-box input { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; margin-bottom: 12px; }
+.mg-pwd-box input:focus { outline: none; border-color: #f97316; }
+.mg-pwd-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.mg-pwd-actions button { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; }
+.mg-pwd-cancel { background: #e2e8f0; color: #475569; }
+.mg-pwd-cancel:hover { background: #cbd5e1; }
+.mg-pwd-save { background: #f97316; color: #fff; }
+.mg-pwd-save:hover { background: #ea580c; }
+.mg-pwd-save:disabled { background: #94a3b8; cursor: not-allowed; }
+.mg-pwd-error { background: #fee2e2; color: #dc2626; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-bottom: 12px; display: none; }
+.mg-pwd-ok { background: #dcfce7; color: #16a34a; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-bottom: 12px; display: none; }
 
 /* ── Hamburger mobile ────────────────────────── */
 .mg-nav-hamburger {
@@ -431,6 +515,21 @@ function buildNav() {
   .mg-dd-item { color: #ffffffcc; }
   .mg-dd-item:hover { background: rgba(255,255,255,0.1); }
   .mg-dd-active { background: rgba(255,255,255,0.15); color: #fff; }
+  /* User dropdown mobile */
+  .mg-user-trigger { width: 100%; justify-content: center; }
+  .mg-ud-menu {
+    position: static;
+    box-shadow: none;
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    margin-top: 4px;
+    min-width: auto;
+  }
+  .mg-ud-menu.mg-ud-open { display: block; }
+  .mg-ud-item { color: #ffffffcc; }
+  .mg-ud-item:hover { background: rgba(255,255,255,0.1); }
+  .mg-ud-divider { background: rgba(255,255,255,0.1); }
+  .mg-ud-logout { color: #fca5a5 !important; }
 }
 </style>`;
 }
@@ -479,6 +578,129 @@ function doLogout() {
   localStorage.removeItem('mg_user');
   localStorage.removeItem('mg_api_key');
   window.location.href = 'login.html';
+}
+
+// ── User Dropdown ─────────────────────────────────────────────
+
+function toggleUserDropdown(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('mgUserMenu');
+  if (!menu) return;
+  menu.classList.toggle('mg-ud-open');
+  if (menu.classList.contains('mg-ud-open')) {
+    setTimeout(() => {
+      document.addEventListener('click', closeUserDropdown, { once: true });
+    }, 10);
+  }
+}
+
+function closeUserDropdown() {
+  const menu = document.getElementById('mgUserMenu');
+  if (menu) menu.classList.remove('mg-ud-open');
+}
+
+// ── Modal Trocar Senha ────────────────────────────────────────
+
+function openTrocarSenha() {
+  closeUserDropdown();
+  closeMobileNav();
+  // Cria modal se não existe
+  if (!document.getElementById('mgPwdOverlay')) {
+    const div = document.createElement('div');
+    div.innerHTML = `
+    <div class="mg-pwd-overlay" id="mgPwdOverlay">
+      <div class="mg-pwd-box">
+        <h3>🔑 Trocar Senha</h3>
+        <div class="mg-pwd-error" id="mgPwdError"></div>
+        <div class="mg-pwd-ok" id="mgPwdOk"></div>
+        <label>Senha Atual</label>
+        <input type="password" id="mgPwdAtual" autocomplete="current-password">
+        <label>Nova Senha</label>
+        <input type="password" id="mgPwdNova" autocomplete="new-password">
+        <label>Confirmar Nova Senha</label>
+        <input type="password" id="mgPwdConfirm" autocomplete="new-password">
+        <div class="mg-pwd-actions">
+          <button class="mg-pwd-cancel" onclick="closeTrocarSenha()">Cancelar</button>
+          <button class="mg-pwd-save" id="mgPwdSave" onclick="salvarNovaSenha()">Salvar</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(div.firstElementChild);
+  }
+  // Reset
+  const overlay = document.getElementById('mgPwdOverlay');
+  overlay.querySelector('#mgPwdAtual').value = '';
+  overlay.querySelector('#mgPwdNova').value = '';
+  overlay.querySelector('#mgPwdConfirm').value = '';
+  overlay.querySelector('#mgPwdError').style.display = 'none';
+  overlay.querySelector('#mgPwdOk').style.display = 'none';
+  overlay.querySelector('#mgPwdSave').disabled = false;
+  overlay.classList.add('mg-pwd-open');
+  overlay.querySelector('#mgPwdAtual').focus();
+}
+
+function closeTrocarSenha() {
+  const overlay = document.getElementById('mgPwdOverlay');
+  if (overlay) overlay.classList.remove('mg-pwd-open');
+}
+
+async function salvarNovaSenha() {
+  const errEl = document.getElementById('mgPwdError');
+  const okEl = document.getElementById('mgPwdOk');
+  const btn = document.getElementById('mgPwdSave');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+
+  const senha_atual = document.getElementById('mgPwdAtual').value;
+  const nova_senha = document.getElementById('mgPwdNova').value;
+  const confirmar = document.getElementById('mgPwdConfirm').value;
+
+  if (!senha_atual || !nova_senha) {
+    errEl.textContent = 'Preencha todos os campos';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (nova_senha.length < 4) {
+    errEl.textContent = 'Nova senha deve ter pelo menos 4 caracteres';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (nova_senha !== confirmar) {
+    errEl.textContent = 'As senhas não conferem';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Salvando...';
+
+  try {
+    const resp = await api('/api/auth/me/senha', {
+      method: 'PATCH',
+      body: JSON.stringify({ senha_atual, nova_senha }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || !data.ok) {
+      errEl.textContent = data.error || 'Erro ao trocar senha';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Salvar';
+      return;
+    }
+
+    okEl.textContent = '✅ Senha alterada com sucesso!';
+    okEl.style.display = 'block';
+    btn.textContent = 'Salvar';
+    btn.disabled = false;
+
+    setTimeout(() => closeTrocarSenha(), 1500);
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão: ' + e.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Salvar';
+  }
 }
 
 // ── Verificação de Acesso ────────────────────────────────────

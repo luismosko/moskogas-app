@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Usuários — MoskoApp v1.3.0</title>
+<title>Usuários — MoskoApp v1.4.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,7 +43,7 @@
 <div id="nav-container"></div>
 
 <div class="container">
-  <h1>👥 Gestão de Usuários v1.3.0</h1>
+  <h1>👥 Gestão de Usuários v1.4.0</h1>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
@@ -64,7 +64,7 @@
     <div id="empty-msg" style="display:none;text-align:center;padding:20px;color:#94a3b8;">Nenhum usuário cadastrado</div>
   </div>
 
-  <div class="version-badge">v1.3.0 — usuários</div>
+  <div class="version-badge">v1.4.0 — usuários</div>
 </div>
 
 <!-- Modal Criar/Editar -->
@@ -127,10 +127,17 @@
 
 <script src="shared.js"></script>
 <script>
-// Auth check — admin only
-checkAuth(['admin']);
+// Auth check — admin e atendente
+checkAuth(['admin', 'atendente']);
 
 document.getElementById('nav-container').innerHTML = buildNav();
+
+// Atendente não vê opção "Admin" no dropdown de role
+const currentUser = getCurrentUser();
+if (currentUser && currentUser.role !== 'admin') {
+  const adminOpt = document.querySelector('#m-role option[value="admin"]');
+  if (adminOpt) adminOpt.remove();
+}
 
 let vendedoresBling = [];
 let allUsers = [];

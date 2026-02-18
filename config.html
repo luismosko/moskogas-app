@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.5.0 — MoskoGás</title>
+<title>Config v2.6.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,11 +30,11 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.5.0 — config</div>
-  <h1>⚙️ Configurações v2.5.0</h1>
+  <div class="version-badge">v2.6.0 — config</div>
+  <h1>⚙️ Configurações v2.6.0</h1>
 
-  <!-- API Key -->
-  <div class="card">
+  <!-- API Key (admin only) -->
+  <div class="card" id="apiKeySection">
     <h2>🔑 Chave de Acesso (APP_API_KEY)</h2>
     <label>Chave configurada no Cloudflare Worker</label>
     <input type="password" id="apiKeyInput" placeholder="Cole a APP_API_KEY aqui">
@@ -103,8 +103,8 @@
     <div id="foto-config-status"></div>
   </div>
 
-  <!-- Permissões Atendente -->
-  <div class="card">
+  <!-- Permissões Atendente (admin only) -->
+  <div class="card" id="permissoesSection">
     <h2>🔐 Permissões do Atendente</h2>
     <p style="font-size:13px;color:#64748b;margin-bottom:14px">Defina o que atendentes podem fazer. Admin sempre tem acesso total.</p>
 
@@ -172,7 +172,17 @@
 
 <script src="shared.js"></script>
 <script>
+checkAuth(['admin', 'atendente']);
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+// Esconder seções admin-only para atendente
+const _cfgUser = getCurrentUser();
+if (_cfgUser && _cfgUser.role !== 'admin') {
+  const apiSec = document.getElementById('apiKeySection');
+  if (apiSec) apiSec.style.display = 'none';
+  const permSec = document.getElementById('permissoesSection');
+  if (permSec) permSec.style.display = 'none';
+}
 
 document.getElementById('apiKeyInput').value = localStorage.getItem('mg_api_key') || '';
 

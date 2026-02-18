@@ -1,6 +1,8 @@
-// v2.20.0
+// v2.21.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.21.0: Rate limiting login (5 falhas/15min IP), PATCH /api/auth/me/senha,
+//          Permissões atendente expandidas (CRUD atendente+entregador, não admin)
 // v2.20.0: Endpoint GET /api/consulta/pedidos (filtros, paginação, resumo, dropdowns)
 // v2.19.2: Foto config defaults → WebP 1200px 85% + sharpen
 // v2.19.1: Fix /api/config auth check (requireAuth retorna user, não Response)
@@ -100,6 +102,34 @@ async function ensureAuthTables(env) {
     created_at INTEGER DEFAULT (unixepoch()),
     expires_at INTEGER NOT NULL
   )`).run();
+  // v2.21.0: Rate limiting
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL,
+    login_usado TEXT,
+    sucesso INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(()=>{});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_login_ip ON login_attempts(ip, created_at)').run().catch(()=>{});
+}
+
+// ── Rate Limiting (v2.21.0) ───────────────────────────────────
+
+async function checkRateLimit(env, ip) {
+  const quinzeMin = Math.floor(Date.now() / 1000) - 900;
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) as cnt FROM login_attempts WHERE ip = ? AND sucesso = 0 AND created_at > ?'
+  ).bind(ip, quinzeMin).first();
+  return (row?.cnt || 0) >= 5;
+}
+
+async function logLoginAttempt(env, ip, loginUsado, sucesso) {
+  await env.DB.prepare(
+    'INSERT INTO login_attempts (ip, login_usado, sucesso) VALUES (?, ?, ?)'
+  ).bind(ip, loginUsado || '', sucesso ? 1 : 0).run().catch(() => {});
+  // Limpar tentativas antigas (>24h)
+  const ontem = Math.floor(Date.now() / 1000) - 86400;
+  await env.DB.prepare('DELETE FROM login_attempts WHERE created_at < ?').bind(ontem).run().catch(() => {});
 }
 
 async function getSessionUser(request, env) {
@@ -954,10 +984,24 @@ export default {
       const body = await request.json();
       const { login, senha } = body;
       if (!login || !senha) return err('Login e senha obrigatórios');
+
+      // v2.21.0: Rate limiting — 5 falhas em 15min por IP
+      const clientIp = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+      const blocked = await checkRateLimit(env, clientIp);
+      if (blocked) return err('Muitas tentativas. Aguarde 15 minutos.', 429);
+
       const user = await env.DB.prepare('SELECT * FROM app_users WHERE login = ? AND ativo = 1').bind(login.toLowerCase().trim()).first();
-      if (!user) return err('Usuário ou senha inválidos', 401);
+      if (!user) {
+        await logLoginAttempt(env, clientIp, login, false);
+        return err('Usuário ou senha inválidos', 401);
+      }
       const valid = await verifyPassword(senha, user.senha_salt, user.senha_hash);
-      if (!valid) return err('Usuário ou senha inválidos', 401);
+      if (!valid) {
+        await logLoginAttempt(env, clientIp, login, false);
+        return err('Usuário ou senha inválidos', 401);
+      }
+
+      await logLoginAttempt(env, clientIp, login, true);
       const now = Math.floor(Date.now() / 1000);
       await env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').bind(now).run().catch(() => {});
       const token = generateToken();
@@ -978,6 +1022,32 @@ export default {
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
       if (token) await env.DB.prepare('DELETE FROM auth_sessions WHERE token = ?').bind(token).run().catch(() => {});
       return json({ ok: true });
+    }
+
+    // v2.21.0: Trocar própria senha (todos os roles)
+    if (method === 'PATCH' && path === '/api/auth/me/senha') {
+      const authCheck = await requireAuth(request, env);
+      if (authCheck instanceof Response) return authCheck;
+      const userId = authCheck.user_id || authCheck.id;
+      if (!userId || userId === 0) return err('API key não pode trocar senha', 400);
+
+      const body = await request.json();
+      const { senha_atual, nova_senha } = body;
+      if (!senha_atual || !nova_senha) return err('Senha atual e nova senha obrigatórias');
+      if (nova_senha.length < 4) return err('Nova senha deve ter pelo menos 4 caracteres');
+
+      const user = await env.DB.prepare('SELECT * FROM app_users WHERE id = ?').bind(userId).first();
+      if (!user) return err('Usuário não encontrado', 404);
+
+      const valid = await verifyPassword(senha_atual, user.senha_salt, user.senha_hash);
+      if (!valid) return err('Senha atual incorreta', 401);
+
+      const newSalt = crypto.randomUUID();
+      const newHash = await hashPassword(nova_senha, newSalt);
+      await env.DB.prepare('UPDATE app_users SET senha_hash=?, senha_salt=?, updated_at=unixepoch() WHERE id=?')
+        .bind(newHash, newSalt, userId).run();
+
+      return json({ ok: true, message: 'Senha alterada com sucesso' });
     }
 
     // ── Buscar comprovante foto do R2 (público — abre em nova aba) ──
@@ -1005,21 +1075,33 @@ export default {
     // ── AUTH: Gestão de Usuários (requer admin) ─────────────────
 
     if (method === 'GET' && path === '/api/auth/users') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuthTables(env);
-      const rows = await env.DB.prepare('SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users ORDER BY nome').all();
+      const isAdmin = authCheck.role === 'admin';
+      const sql = isAdmin
+        ? 'SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users ORDER BY nome'
+        : "SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users WHERE role IN ('atendente','entregador') ORDER BY nome";
+      const rows = await env.DB.prepare(sql).all();
       return json(rows.results || []);
     }
 
     if (method === 'POST' && path === '/api/auth/users') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuthTables(env);
+      const isAdmin = authCheck.role === 'admin';
       const body = await request.json();
       const { id, nome, login, senha, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo } = body;
       if (!nome || !login) return err('Nome e login obrigatórios');
       if (!['admin', 'atendente', 'entregador'].includes(role || 'entregador')) return err('Role inválido');
+
+      // v2.21.0: Atendente NÃO pode criar/editar admin
+      if (!isAdmin && role === 'admin') return err('Sem permissão para criar/editar administradores', 403);
+      if (!isAdmin && id) {
+        const target = await env.DB.prepare('SELECT role FROM app_users WHERE id=?').bind(id).first();
+        if (target && target.role === 'admin') return err('Sem permissão para editar administradores', 403);
+      }
 
       if (id) {
         const existing = await env.DB.prepare('SELECT * FROM app_users WHERE id = ?').bind(id).first();
