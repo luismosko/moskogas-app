@@ -1,6 +1,7 @@
-// v2.23.0
+// v2.23.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.23.1: Fix favorites — ensureAuditTable antes de acessar product_favorites
 // v2.23.0: Produtos favoritos — tabela product_favorites + GET/POST/DELETE endpoints
 // v2.22.1: Fix dashboard date filter (epoch, not text) + porHora BRT conversion
 // v2.22.0: GET /api/dashboard (KPIs, status, produtos, pagamentos, vendedores, entregadores, hora)
@@ -1211,6 +1212,7 @@ export default {
     if (method === 'GET' && path === '/api/products/favorites') {
       const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
       const rows = await env.DB.prepare('SELECT * FROM product_favorites ORDER BY sort_order ASC, id ASC').all().then(r => r.results || []);
       return json(rows);
     }
@@ -1218,6 +1220,7 @@ export default {
     if (method === 'POST' && path === '/api/products/favorites') {
       const authCheck = await requireAuth(request, env, ['admin']);
       if (authCheck instanceof Response) return authCheck;
+      await ensureAuditTable(env);
       const body = await request.json();
       const { bling_id, name, code, price } = body;
       if (!bling_id || !name) return json({ error: 'bling_id e name obrigatórios' }, 400);
