@@ -1,6 +1,7 @@
-// v2.23.1
+// v2.24.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.24.0: Último pedido cliente + app_products (preços sugeridos MoskoGás)
 // v2.23.1: Fix favorites — ensureAuditTable antes de acessar product_favorites
 // v2.23.0: Produtos favoritos — tabela product_favorites + GET/POST/DELETE endpoints
 // v2.22.1: Fix dashboard date filter (epoch, not text) + porHora BRT conversion
@@ -1439,6 +1440,97 @@ export default {
       } catch(e) {
         return json({ ok: false, error: e.message });
       }
+    }
+
+    // ── ÚLTIMO PEDIDO DO CLIENTE ────────────────────────────────
+    if (method === 'GET' && path === '/api/customer/last-order') {
+      const phone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
+      if (!phone || phone.length < 6) return json({ found: false });
+      const order = await env.DB.prepare(
+        `SELECT id, customer_name, items_json, total_value, tipo_pagamento, created_at, status
+         FROM orders WHERE phone_digits LIKE ? AND status != 'cancelado'
+         ORDER BY created_at DESC LIMIT 1`
+      ).bind(`%${phone.slice(-8)}%`).first();
+      if (!order) return json({ found: false });
+      return json({ found: true, order: { ...order, items: JSON.parse(order.items_json || '[]') } });
+    }
+
+    // ── PRODUTOS APP (preços sugeridos) ──────────────────────────
+    if (path.startsWith('/api/app-products')) {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS app_products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bling_id TEXT,
+        name TEXT NOT NULL,
+        code TEXT DEFAULT '',
+        price REAL DEFAULT 0,
+        is_favorite INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        ativo INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`).run().catch(()=>{});
+    }
+
+    if (method === 'GET' && path === '/api/app-products') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const onlyFav = url.searchParams.get('favorites') === '1';
+      const onlyActive = url.searchParams.get('active') !== '0';
+      let sql = 'SELECT * FROM app_products WHERE 1=1';
+      if (onlyFav) sql += ' AND is_favorite=1';
+      if (onlyActive) sql += ' AND ativo=1';
+      sql += ' ORDER BY sort_order ASC, name ASC';
+      const rows = await env.DB.prepare(sql).all().then(r => r.results || []);
+      return json(rows);
+    }
+
+    if (method === 'POST' && path === '/api/app-products') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body = await request.json();
+      const { id, bling_id, name, code, price, is_favorite, sort_order, ativo } = body;
+      if (!name) return err('Nome obrigatório');
+
+      if (id) {
+        // Update
+        await env.DB.prepare(
+          `UPDATE app_products SET bling_id=?, name=?, code=?, price=?, is_favorite=?, sort_order=?, ativo=? WHERE id=?`
+        ).bind(bling_id||null, name, code||'', parseFloat(price)||0, is_favorite?1:0, sort_order||0, ativo!==undefined?(ativo?1:0):1, id).run();
+        return json({ ok: true, id });
+      } else {
+        // Insert
+        const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
+        const result = await env.DB.prepare(
+          `INSERT INTO app_products (bling_id, name, code, price, is_favorite, sort_order, ativo) VALUES (?,?,?,?,?,?,?)`
+        ).bind(bling_id||null, name, code||'', parseFloat(price)||0, is_favorite?1:0, (maxSort?.mx||0)+1, 1).run();
+        return json({ ok: true, id: result.meta?.last_row_id });
+      }
+    }
+
+    if (method === 'DELETE' && path.match(/^\/api\/app-products\/\d+$/)) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const prodId = path.split('/').pop();
+      await env.DB.prepare('DELETE FROM app_products WHERE id=?').bind(prodId).run();
+      return json({ ok: true });
+    }
+
+    if (method === 'POST' && path === '/api/app-products/import-bling') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      // Importa produto do Bling para app_products
+      const body = await request.json();
+      const { bling_id, name, code, price, is_favorite } = body;
+      if (!name) return err('Nome obrigatório');
+      // Evitar duplicata por bling_id
+      if (bling_id) {
+        const exists = await env.DB.prepare('SELECT id FROM app_products WHERE bling_id=?').bind(String(bling_id)).first();
+        if (exists) return json({ ok: true, id: exists.id, message: 'Produto já existe', existing: true });
+      }
+      const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
+      const result = await env.DB.prepare(
+        `INSERT INTO app_products (bling_id, name, code, price, is_favorite, sort_order) VALUES (?,?,?,?,?,?)`
+      ).bind(String(bling_id||''), name, code||'', parseFloat(price)||0, is_favorite?1:0, (maxSort?.mx||0)+1).run();
+      return json({ ok: true, id: result.meta?.last_row_id });
     }
 
     if (method === 'GET' && path === '/api/customer/search-bling-doc') {

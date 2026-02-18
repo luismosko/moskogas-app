@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.9.2</title>
+<title>Novo Pedido — MoskoGás v2.10.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -47,9 +47,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.9.2 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.10.1 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.9.2</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.10.1</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -127,6 +127,19 @@
         📍 Outros endereços <span id="addr-count-badge" style="background:rgba(255,255,255,0.3);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span>
       </button>
       <span id="addr-selected-label" style="font-size:12px;color:#6366f1;font-weight:600"></span>
+    </div>
+  </div>
+
+  <!-- ÚLTIMO PEDIDO DO CLIENTE -->
+  <div class="card" id="last-order-card" style="display:none;padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:700;color:#0369a1">🕐 Último Pedido</span>
+      <span id="last-order-date" style="font-size:11px;color:#94a3b8"></span>
+    </div>
+    <div id="last-order-items" style="font-size:12px;color:#334155;margin-bottom:6px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span id="last-order-total" style="font-size:13px;font-weight:800;color:#0369a1"></span>
+      <button onclick="repeatLastOrder()" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer" title="Adicionar mesmos itens ao pedido atual">🔄 Repetir</button>
     </div>
   </div>
 
@@ -256,7 +269,7 @@ let searchTimer;
 // ── Produtos Favoritos (quick-add) ──────────────────────────
 (async function loadFavorites() {
   try {
-    const favs = await api('/api/products/favorites');
+    const favs = await api('/api/app-products?favorites=1');
     if (favs && favs.length) {
       const container = document.getElementById('fav-products');
       const btns = document.getElementById('fav-buttons');
@@ -389,10 +402,64 @@ async function selectCustomer(i) {
   }
   // Carrega endereços múltiplos
   if (c.phone_digits) loadSavedAddresses(c.phone_digits);
+  // Carrega último pedido (exceto Consumidor Final)
+  const nome = (c.name || c.customer_name || '').toUpperCase();
+  if (c.phone_digits && !nome.includes('CONSUMIDOR FINAL')) {
+    loadLastOrder(c.phone_digits);
+  } else {
+    document.getElementById('last-order-card').style.display = 'none';
+  }
 }
 
 let currentPhone = '';
 let allAddresses = [];
+let _lastOrderData = null;
+
+// ── Último pedido do cliente ──────────────────────────────────
+async function loadLastOrder(phone) {
+  const card = document.getElementById('last-order-card');
+  _lastOrderData = null;
+  try {
+    const res = await api(`/api/customer/last-order?phone=${phone}`);
+    if (!res.found || !res.order) { card.style.display = 'none'; return; }
+    const o = res.order;
+    _lastOrderData = o.items || [];
+    // Data formatada
+    let dateStr = '';
+    if (o.created_at) {
+      const d = typeof o.created_at === 'number' ? new Date(o.created_at * 1000) : new Date(o.created_at);
+      dateStr = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+    }
+    document.getElementById('last-order-date').textContent = `#${o.id} — ${dateStr}`;
+    document.getElementById('last-order-items').innerHTML = (o.items || []).map(it =>
+      `<span style="display:inline-block;background:#e0f2fe;padding:2px 8px;border-radius:4px;margin:2px 4px 2px 0;font-size:11px">${it.name} x${it.qty} <strong>R$${parseFloat(it.price||0).toFixed(2)}</strong></span>`
+    ).join('');
+    document.getElementById('last-order-total').textContent = `Total: R$ ${parseFloat(o.total_value||0).toFixed(2)}`;
+    card.style.display = 'block';
+  } catch(e) { card.style.display = 'none'; }
+}
+
+function repeatLastOrder() {
+  if (!_lastOrderData || !_lastOrderData.length) return;
+  for (const it of _lastOrderData) {
+    const existing = items.find(i => i.id === String(it.bling_id || it.id || it.name));
+    if (existing) {
+      existing.qty += (it.qty || 1);
+    } else {
+      items.push({
+        id: String(it.bling_id || it.id || it.name),
+        name: it.name || 'Produto',
+        qty: it.qty || 1,
+        price: parseFloat(it.price) || 0,
+        code: it.code || ''
+      });
+    }
+  }
+  renderItems();
+  renderTotal();
+  showToast('🔄 Itens do pedido anterior adicionados!', 'success');
+  document.getElementById('last-order-card').style.display = 'none';
+}
 
 // ── Banner de reautorização Bling ─────────────────────────────
 function checkBlingReauth(err) {
