@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório Entregador — MoskoGás v1.2.2</title>
+<title>Relatório Entregador — MoskoGás v1.2.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -58,14 +58,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.2</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.3</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.2</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.3</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -78,7 +78,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.2
+// v1.2.3
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -121,13 +121,14 @@ async function gerarRelatorio() {
 
   if (!date) { toast('Selecione uma data', 'error'); return; }
 
+  showLoading('Gerando relatório...');
   let rows = [];
   try {
     let url = `/api/orders/list?date_from=${date}&date_to=${date}`;
     if (driverId) url += `&driver_id=${driverId}`;
     rows = await api(url);
     if (!Array.isArray(rows)) rows = [];
-  } catch(e) { toast('Erro: ' + e.message, 'error'); return; }
+  } catch(e) { toast('Erro: ' + e.message, 'error'); hideLoading(); return; }
 
   rows = rows.filter(r => {
     if (!r.created_at) return true;
@@ -279,6 +280,7 @@ async function gerarRelatorio() {
   html += `</div>`;
 
   document.getElementById('report-content').innerHTML = html;
+  hideLoading();
 }
 
 function formatPhone(p) {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.9.0 — MoskoGás</title>
+<title>Config v2.9.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.9.0 — config</div>
-  <h1>⚙️ Configurações v2.9.0</h1>
+  <div class="version-badge">v2.9.1 — config</div>
+  <h1>⚙️ Configurações v2.9.1</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -463,13 +463,14 @@ async function salvarPermissoes() {
     atendente_editar_entregue: document.getElementById('permEditarEntregue').checked,
   };
   const el = document.getElementById('perm-status');
+  showLoading('Salvando permissões...');
   try {
     await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'permissoes', value: perms }) });
     el.innerHTML = '<div class="status ok">✅ Permissões salvas!</div>';
     setTimeout(() => el.innerHTML = '', 3000);
   } catch(e) {
     el.innerHTML = '<div class="status err">❌ ' + e.message + '</div>';
-  }
+  } finally { hideLoading(); }
 }
 
 // ── Foto Config ─────────────────────────────────────────────
@@ -498,13 +499,14 @@ async function salvarFotoConfig() {
     sharpen: document.getElementById('fotoSharpen').checked,
   };
   const el = document.getElementById('foto-config-status');
+  showLoading('Salvando configuração de foto...');
   try {
     await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'foto_config', value: config }) });
     el.innerHTML = '<div class="status ok">✅ Configuração salva! Entregadores usarão na próxima foto.</div>';
     setTimeout(() => el.innerHTML = '', 3000);
   } catch(e) {
     el.innerHTML = '<div class="status err">❌ ' + e.message + '</div>';
-  }
+  } finally { hideLoading(); }
 }
 
 function resetFotoConfig() {
@@ -599,9 +601,9 @@ async function importBlingProduct(idx) {
     document.getElementById('prodBlingSuggestions').style.display = 'none';
     _appProducts.push({ id: Date.now(), bling_id: String(p.id), name: p.name, code: p.code||'', price: p.price||0, is_favorite: 0, ativo: 1 });
     renderAppProducts();
-    showToast('📦 Produto importado!', 'success');
+    toast('📦 Produto importado!', 'success');
     setTimeout(() => loadAppProducts(), 500);
-  } catch(e) { showToast('❌ ' + e.message, 'error'); }
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
 }
 
 function showAddProductModal() {
@@ -651,24 +653,28 @@ async function saveProduct() {
     is_favorite: document.getElementById('pm_favorite').checked ? 1 : 0,
     ativo: document.getElementById('pm_ativo').checked ? 1 : 0
   };
-  if (!data.name) { showToast('❌ Nome obrigatório', 'error'); return; }
+  if (!data.name) { toast('❌ Nome obrigatório', 'error'); return; }
   if (id) data.id = parseInt(id);
+  showLoading('Salvando produto...');
   try {
     await api('/api/app-products', { method: 'POST', body: JSON.stringify(data) });
     closeProductModal();
-    showToast('💾 Produto salvo!', 'success');
+    toast('💾 Produto salvo!', 'success');
     await loadAppProducts();
-  } catch(e) { showToast('❌ ' + e.message, 'error'); }
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 async function deleteProduct(id) {
   if (!confirm('Excluir este produto?')) return;
+  showLoading('Excluindo produto...');
   try {
     await api(`/api/app-products/${id}`, { method: 'DELETE' });
     _appProducts = _appProducts.filter(p => p.id !== id);
     renderAppProducts();
-    showToast('🗑️ Produto excluído', 'warning');
-  } catch(e) { showToast('❌ ' + e.message, 'error'); }
+    toast('🗑️ Produto excluído', 'warning');
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 document.addEventListener('click', e => {
@@ -710,11 +716,13 @@ async function salvarLembreteConfig() {
     mensagem: document.getElementById('lemb-mensagem').value.trim()
   };
   if (!config.mensagem) { toast('⚠️ Mensagem não pode estar vazia', 'error'); return; }
+  showLoading('Salvando configuração...');
   try {
     const d = await api('/api/lembretes/config', { method: 'POST', body: JSON.stringify(config) });
     if (d.ok) toast('✅ Config lembretes salva!');
     else toast('❌ ' + (d.error || 'Erro'), 'error');
   } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 // ── Init ─────────────────────────────────────────────────────

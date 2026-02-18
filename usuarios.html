@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Usuários — MoskoApp v1.4.0</title>
+<title>Usuários — MoskoApp v1.4.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,7 +43,7 @@
 <div id="nav-container"></div>
 
 <div class="container">
-  <h1>👥 Gestão de Usuários v1.4.0</h1>
+  <h1>👥 Gestão de Usuários v1.4.1</h1>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
@@ -64,7 +64,7 @@
     <div id="empty-msg" style="display:none;text-align:center;padding:20px;color:#94a3b8;">Nenhum usuário cadastrado</div>
   </div>
 
-  <div class="version-badge">v1.4.0 — usuários</div>
+  <div class="version-badge">v1.4.1 — usuários</div>
 </div>
 
 <!-- Modal Criar/Editar -->
@@ -243,6 +243,7 @@ async function loadVendedores() {
 // === Ativar/Desativar usuário ===
 async function toggleAtivo(id, nome, ativar) {
   if (!confirm(`${ativar ? 'Reativar' : 'Desativar'} usuário "${nome}"?`)) return;
+  showLoading(ativar ? 'Reativando...' : 'Desativando...');
   try {
     const user = allUsers.find(u => u.id === id);
     if (!user) return;
@@ -250,9 +251,10 @@ async function toggleAtivo(id, nome, ativar) {
       method: 'POST',
       body: JSON.stringify({ id, nome: user.nome, login: user.login, role: user.role, pode_entregar: user.pode_entregar, recebe_whatsapp: user.recebe_whatsapp, ativo: ativar ? 1 : 0 })
     });
-    toast(ativar ? `"${nome}" reativado!` : `"${nome}" desativado`);
+    toast(ativar ? `✅ "${nome}" reativado!` : `✅ "${nome}" desativado`);
     loadUsers();
   } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 // === Modal ===
@@ -292,6 +294,7 @@ async function saveUser() {
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
   btn.textContent = '⏳ Salvando...';
+  showLoading('Salvando usuário...');
 
   try {
     const id = document.getElementById('m-id').value || null;
@@ -324,6 +327,7 @@ async function saveUser() {
   } catch(e) {
     toast('Erro: ' + e.message, 'error');
   } finally {
+    hideLoading();
     btn.disabled = false;
     btn.textContent = '💾 Salvar';
     btn.style.background = '#16a34a';

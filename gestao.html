@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.8.2 — MoskoGás</title>
+<title>Gestão v2.8.3 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -74,7 +74,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.2</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.3</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -123,7 +123,10 @@
 <!-- MODAL ENVIAR ENTREGADOR -->
 <div class="modal-overlay" id="modal-wa">
   <div class="modal">
-    <h2>📱 Enviar para Entregador</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">📱 Enviar para Entregador</h2>
+      <button onclick="closeModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px" title="Fechar">&times;</button>
+    </div>
     <div class="order-summary" id="modal-order-summary"></div>
     <label>Entregador *</label>
     <select id="modal-driver"></select>
@@ -141,7 +144,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v2.8.2
+// v2.8.3
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -439,20 +442,24 @@ function renderSummary(rows) {
 // ── Ações ─────────────────────────────────────────────────────
 async function selectDriver(orderId, driverId) {
   if (!driverId) return;
+  showLoading('Selecionando entregador...');
   try {
     await api(`/api/order/${orderId}/select-driver`, { method: 'POST', body: JSON.stringify({ driver_id: parseInt(driverId) }) });
     toast('✅ Entregador selecionado!');
     setTimeout(load, 500);
   } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 async function markDelivered(id) {
   if (!confirm(`Marcar pedido #${id} como ENTREGUE?`)) return;
+  showLoading('Marcando como entregue...');
   try {
     await api(`/api/order/${id}/mark-delivered`, { method: 'POST', body: JSON.stringify({}) });
     toast('✅ Pedido entregue!');
     load();
   } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 // ── Modal Cancelar ────────────────────────────────────────────
@@ -683,6 +690,7 @@ async function sendWa() {
   const obs      = document.getElementById('modal-obs').value;
   if (!driverId) { toast('Selecione um entregador!', 'error'); return; }
 
+  showLoading('Enviando WhatsApp...');
   try {
     const res = await api(`/api/order/${currentOrder.id}/send-whatsapp`, {
       method: 'POST',
@@ -696,6 +704,7 @@ async function sendWa() {
     closeModal();
     load();
   } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 // ── Impressão ─────────────────────────────────────────────────
@@ -911,7 +920,10 @@ init();
 <!-- MODAL EDITAR PEDIDO -->
 <div class="modal-overlay" id="modal-edit" style="display:none">
   <div class="modal" style="max-width:620px;width:95%;max-height:90vh;overflow-y:auto">
-    <h2>✏️ Editar Pedido <span id="edit-order-id" style="color:#f97316"></span></h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">✏️ Editar Pedido <span id="edit-order-id" style="color:#f97316"></span></h2>
+      <button onclick="closeEditModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px" title="Fechar">&times;</button>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <label style="font-size:12px;color:#64748b;font-weight:600">CLIENTE *</label>

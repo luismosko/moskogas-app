@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard — MoskoApp v1.0.0</title>
+<title>Dashboard — MoskoApp v1.0.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
@@ -80,7 +80,7 @@
 <div id="nav-placeholder"></div>
 <div class="container">
   <div class="dash-header">
-    <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.0</div>
+    <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.1</div>
     <div class="dash-controls">
       <span class="bling-badge bling-warn" id="blingBadge">⏳ Bling...</span>
       <input type="date" id="dashDate">
@@ -139,7 +139,7 @@
       </div>
     </div>
   </div>
-  <div class="version-badge">v1.0.0 — dashboard</div>
+  <div class="version-badge">v1.0.1 — dashboard</div>
 </div>
 
 <script src="shared.js"></script>
@@ -174,14 +174,15 @@ async function loadDashboard() {
   const date = document.getElementById('dashDate').value;
   const btn = document.getElementById('btnRefresh');
   btn.classList.add('loading'); btn.innerHTML = '⏳ Carregando...';
+  showLoading('Carregando dashboard...');
   try {
     const data = await api(`/api/dashboard?date=${date}`);
     render(data);
   } catch(e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
     document.getElementById('kTotal').innerHTML = '<span style="color:#ef4444;font-size:14px">⚠️ ' + e.message + '</span>';
   }
-  finally { btn.classList.remove('loading'); btn.innerHTML = '🔄 Atualizar'; }
+  finally { hideLoading(); btn.classList.remove('loading'); btn.innerHTML = '🔄 Atualizar'; }
 }
 
 function render(d) {

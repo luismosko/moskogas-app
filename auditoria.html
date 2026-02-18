@@ -157,6 +157,7 @@ async function loadAuditoria() {
   if (!date) { toast('Selecione uma data', 'error'); return; }
 
   document.getElementById('loading').style.display = 'block';
+  showLoading('Carregando auditoria...');
   ['cards-area','resumos-area','erros-area','audit-log-area','pedidos-area'].forEach(id => document.getElementById(id).style.display = 'none');
 
   try {
@@ -171,6 +172,7 @@ async function loadAuditoria() {
   } catch(e) {
     toast('Erro: ' + e.message, 'error');
   } finally {
+    hideLoading();
     document.getElementById('loading').style.display = 'none';
   }
 }
@@ -337,6 +339,7 @@ async function conciliar() {
   document.getElementById('conciliacao-loading').style.display = 'block';
   document.getElementById('conciliacao-result').innerHTML = '';
   document.getElementById('btn-conciliar').disabled = true;
+  showLoading('Conciliando com Bling...');
 
   try {
     const data = await api(`/api/auditoria/conciliacao-bling?date=${date}`);
@@ -365,6 +368,7 @@ async function conciliar() {
   } catch(e) {
     document.getElementById('conciliacao-result').innerHTML = `<p style="color:#dc2626;">Erro: ${e.message}</p>`;
   } finally {
+    hideLoading();
     document.getElementById('conciliacao-loading').style.display = 'none';
     document.getElementById('btn-conciliar').disabled = false;
   }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Pedidos v1.0.0 — MoskoGás</title>
+<title>Consulta de Pedidos v1.0.1 — MoskoGás</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
@@ -124,13 +124,13 @@ tbody td { padding: 6px; vertical-align: middle; }
 <div class="loading-bar" id="loadingBar"></div>
 
 <div class="toolbar">
-  <h1>📋 Consulta de Pedidos <small>v1.0.0</small></h1>
+  <h1>📋 Consulta de Pedidos <small>v1.0.1</small></h1>
   <div class="user-info">
     <span id="userDisplay"></span>
     <a href="gestao.html" title="Voltar à gestão">← Gestão</a>
   </div>
 </div>
-<div class="version-badge">v1.0.0 — consulta-pedidos</div>
+<div class="version-badge">v1.0.1 — consulta-pedidos</div>
 
 <div class="container">
 
@@ -256,7 +256,7 @@ tbody td { padding: 6px; vertical-align: middle; }
 
 <script src="shared.js"></script>
 <script>
-// v1.0.0
+// v1.0.1
 const API = window.API_BASE || '';
 let currentPage = 1;
 let currentOrder = 'created_at';
@@ -336,14 +336,14 @@ async function buscar(page) {
   setTimeout(() => debouncing = false, 300);
 
   currentPage = page || 1;
-  showLoading(true);
+  showLoading('Buscando pedidos...');
 
   const de = document.getElementById('fDe').value;
   const ate = document.getElementById('fAte').value;
   if (de && ate) {
     const diff = (new Date(ate) - new Date(de)) / 86400000;
-    if (diff > 92) { showToast('Período máximo: 90 dias', 'error'); showLoading(false); return; }
-    if (diff < 0) { showToast('Data inicial deve ser anterior à final', 'error'); showLoading(false); return; }
+    if (diff > 92) { toast('Período máximo: 90 dias', 'error'); hideLoading(); return; }
+    if (diff < 0) { toast('Data inicial deve ser anterior à final', 'error'); hideLoading(); return; }
   }
 
   const params = new URLSearchParams();
@@ -381,13 +381,11 @@ async function buscar(page) {
     renderTabela(data.pedidos);
     renderPaginacao(data.paginacao);
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
     document.getElementById('tbody').innerHTML = '<tr><td colspan="15" style="text-align:center;padding:30px;color:#dc2626">❌ Erro ao buscar</td></tr>';
   }
-  showLoading(false);
+  hideLoading();
 }
-
-function showLoading(v) { document.getElementById('loadingBar').style.display = v ? 'block' : 'none'; }
 
 // ── Resumo ──
 function renderResumo(r) {
