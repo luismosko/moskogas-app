@@ -1,6 +1,7 @@
-// v2.19.0
+// v2.19.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.19.1: Fix /api/config auth check (requireAuth retorna user, não Response)
 // v2.19.0: Permissões dinâmicas atendente + fix auth revert/cancel (sessão null)
 //          Config 'permissoes' controla: reabrir entregue/cancelado, cancelar, editar entregue
 //          WhatsApp admin: notifica em qualquer cancel/revert de não-admin
@@ -1375,7 +1376,7 @@ export default {
     // ── Config (admin) ──────────────────────────────────────
     if (method === 'GET' && path === '/api/config') {
       const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck) return authCheck;
+      if (authCheck instanceof Response) return authCheck;
       const key = url.searchParams.get('key');
       if (!key) return err('Informe ?key=nome_da_config');
       const row = await env.DB.prepare("SELECT value, updated_at FROM app_config WHERE key=?").bind(key).first();
@@ -1386,7 +1387,7 @@ export default {
 
     if (method === 'POST' && path === '/api/config') {
       const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck) return authCheck;
+      if (authCheck instanceof Response) return authCheck;
       const body = await request.json();
       const { key, value } = body;
       if (!key) return err('Informe key');
