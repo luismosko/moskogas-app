@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.1.1 — MoskoGás</title>
+<title>Entregador v2.2.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -127,7 +127,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.1.1</small></h1>
+  <h1>🚚 Entregas <small>v2.2.0</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -146,11 +146,11 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.1.1 — entregador</div>
+<div class="version-badge">v2.2.0 — entregador</div>
 
 <script src="shared.js"></script>
 <script>
-// v2.1.1
+// v2.2.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -423,10 +423,10 @@ async function onPhotoSelected(orderId, input) {
   const file = input.files[0];
   if (!file) return;
 
-  toast('⏳ Processando foto...', 'info');
+  toast('⏳ Processando foto (scanner)...', 'info');
 
   try {
-    const compressed = await compressImage(file, 1200, 0.7);
+    const compressed = await compressImage(file, 1200, 0.8);
     const dataUrl = URL.createObjectURL(compressed.blob);
     const sizeTxt = (compressed.blob.size / 1024).toFixed(0) + ' KB';
 
@@ -434,7 +434,7 @@ async function onPhotoSelected(orderId, input) {
 
     const btn = document.getElementById('photo-btn-' + orderId);
     btn.className = 'photo-btn has-photo';
-    btn.innerHTML = '<span class="icon">✅</span>Foto capturada ✓ (toque para trocar)';
+    btn.innerHTML = '<span class="icon">✅</span>Foto tratada ✓ (toque para trocar)';
 
     const preview = document.getElementById('photo-preview-' + orderId);
     preview.style.display = 'block';
@@ -444,7 +444,7 @@ async function onPhotoSelected(orderId, input) {
     deliverBtn.className = 'btn-deliver ready';
     deliverBtn.disabled = false;
 
-    toast('📸 Foto pronta — ' + sizeTxt);
+    toast('📸 Foto tratada — ' + sizeTxt);
   } catch(e) {
     toast('Erro ao processar foto: ' + e.message, 'error');
   }
@@ -473,6 +473,55 @@ function compressImage(file, maxWidth, quality) {
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
+
+        // ── Tratamento scanner-like ──
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const px = imageData.data;
+
+        // 1) Auto-contraste (histogram stretch)
+        let minL = 255, maxL = 0;
+        for (let i = 0; i < px.length; i += 4) {
+          const lum = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
+          if (lum < minL) minL = lum;
+          if (lum > maxL) maxL = lum;
+        }
+        // Corta 1% extremos para robustez
+        const cutLow = minL + (maxL - minL) * 0.01;
+        const cutHigh = maxL - (maxL - minL) * 0.01;
+        const range = cutHigh - cutLow || 1;
+
+        for (let i = 0; i < px.length; i += 4) {
+          px[i]   = Math.min(255, Math.max(0, ((px[i]   - cutLow) / range) * 255));
+          px[i+1] = Math.min(255, Math.max(0, ((px[i+1] - cutLow) / range) * 255));
+          px[i+2] = Math.min(255, Math.max(0, ((px[i+2] - cutLow) / range) * 255));
+        }
+
+        // 2) Desaturação parcial (70% — mais parecido com scan)
+        const satFactor = 0.3; // 0=cinza total, 1=cor original
+        for (let i = 0; i < px.length; i += 4) {
+          const gray = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
+          px[i]   = gray + (px[i]   - gray) * satFactor;
+          px[i+1] = gray + (px[i+1] - gray) * satFactor;
+          px[i+2] = gray + (px[i+2] - gray) * satFactor;
+        }
+
+        // 3) Gamma correction (clareia sombras, melhora legibilidade)
+        const gamma = 0.85;
+        const gammaLUT = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) {
+          gammaLUT[i] = Math.min(255, Math.round(255 * Math.pow(i / 255, gamma)));
+        }
+        for (let i = 0; i < px.length; i += 4) {
+          px[i]   = gammaLUT[px[i]];
+          px[i+1] = gammaLUT[px[i+1]];
+          px[i+2] = gammaLUT[px[i+2]];
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        // 4) Sharpen (unsharp mask via segundo canvas)
+        applySharpen(ctx, w, h, 0.4);
+
         canvas.toBlob(
           (blob) => {
             if (!blob) { reject(new Error('Falha na compressão')); return; }
@@ -486,6 +535,47 @@ function compressImage(file, maxWidth, quality) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+// Sharpen via convolution kernel
+function applySharpen(ctx, w, h, amount) {
+  const src = ctx.getImageData(0, 0, w, h);
+  const dst = ctx.createImageData(w, h);
+  const s = src.data;
+  const d = dst.data;
+  // Kernel: sharpen
+  //  0  -1   0
+  // -1   5  -1
+  //  0  -1   0
+  const mix = amount; // blend: 0=original, 1=full sharpen
+
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const val =
+          -s[((y-1)*w + x)*4 + c]
+          -s[(y*w + x-1)*4 + c]
+          + 5 * s[i + c]
+          -s[(y*w + x+1)*4 + c]
+          -s[((y+1)*w + x)*4 + c];
+        d[i + c] = Math.min(255, Math.max(0, Math.round(s[i + c] * (1 - mix) + val * mix)));
+      }
+      d[i + 3] = 255;
+    }
+  }
+  // Copiar bordas sem processar
+  for (let x = 0; x < w; x++) {
+    const t = x * 4, b = ((h-1)*w + x) * 4;
+    d[t]=s[t]; d[t+1]=s[t+1]; d[t+2]=s[t+2]; d[t+3]=255;
+    d[b]=s[b]; d[b+1]=s[b+1]; d[b+2]=s[b+2]; d[b+3]=255;
+  }
+  for (let y = 0; y < h; y++) {
+    const l = (y*w)*4, r = (y*w + w-1)*4;
+    d[l]=s[l]; d[l+1]=s[l+1]; d[l+2]=s[l+2]; d[l+3]=255;
+    d[r]=s[r]; d[r+1]=s[r+1]; d[r+2]=s[r+2]; d[r+3]=255;
+  }
+  ctx.putImageData(dst, 0, 0);
 }
 
 function removePhoto(orderId) {
