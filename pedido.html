@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.9.0</title>
+<title>Novo Pedido — MoskoGás v2.9.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -47,9 +47,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.9.0 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.9.1 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.9.0</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.9.1</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -870,9 +870,18 @@ function changeQty(id, delta) {
   renderItems();
 }
 
+// Converte input de preço: "120" → 120.00, "120,50" → 120.50, "25.00" → 25.00
+function parsePrice(val) {
+  if (typeof val !== 'string') val = String(val || '0');
+  val = val.trim().replace(/\s/g, '');
+  // Se tem vírgula, trata como decimal BR
+  if (val.includes(',')) val = val.replace('.', '').replace(',', '.');
+  return parseFloat(val) || 0;
+}
+
 function changePrice(id, val) {
   const item = items.find(i => i.id === id);
-  if (item) { item.price = parseFloat(val)||0; renderTotal(); }
+  if (item) { item.price = parsePrice(val); renderItems(); renderTotal(); }
 }
 
 function renderTotal() {
@@ -897,9 +906,10 @@ function renderItems() {
       <button class="qty-btn" onclick="changeQty('${it.id}',1)">+</button>
       <span style="display:flex;align-items:center;gap:4px">
         <small style="color:#94a3b8">R$</small>
-        <input type="number" step="0.01" value="${it.price.toFixed(2)}" 
-          style="width:65px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right;font-size:13px"
-          onchange="changePrice('${it.id}',this.value)">
+        <input type="text" inputmode="decimal" value="${it.price.toFixed(2)}" 
+          style="width:65px;padding:4px;border:1px solid #e2e8f0;border-radius:6px;font-weight:700;text-align:right;font-size:13px;-moz-appearance:textfield"
+          onblur="changePrice('${it.id}',this.value);this.value=parsePrice(this.value).toFixed(2)"
+          onkeydown="if(event.key==='Enter'){this.blur()}">
       </span>
       <span style="min-width:75px;text-align:right;font-weight:800;color:#1e293b;font-size:14px">=&nbsp;R$&nbsp;${(it.price*it.qty).toFixed(2)}</span>
       <button class="btn-remove" onclick="changeQty('${it.id}',-99)">✕</button>
