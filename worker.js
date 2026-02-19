@@ -1,7 +1,7 @@
-// v2.27.0
+// v2.27.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.27.0: WhatsApp Safety Layer — anti-ban, circuit breaker, rate limit, variação msgs
+// v2.27.1: Remove assinatura/fechamento e opt-out das msgs WhatsApp
 // v2.26.0: Lembretes PIX — payment_reminders, envio manual/bulk/cron, config admin
 // v2.25.2: Fix auth contratos — bypass requireApiKey para /api/contratos e /api/webhooks
 // v2.25.1: Fix IzChat contratos — usar sendWhatsApp (chatapi.izchat.com.br + {number,body})
@@ -419,8 +419,7 @@ async function getWhatsAppSafetyConfig(env) {
     horario_inicio_brt: 8,
     horario_fim_brt: 18,
     respeitar_horario: true,
-    circuit_breaker_minutos: 30,
-    opt_out_texto: '\n\n_Responda PARAR para não receber mais lembretes._'
+    circuit_breaker_minutos: 30
   };
   try {
     const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='whatsapp_safety'").first();
@@ -510,27 +509,12 @@ function isDentroHorarioComercial(config) {
 
 // Variação de mensagem — embaralha para não ser idêntica
 const MSG_SAUDACOES = ['Olá', 'Oi', 'Bom dia', 'Boa tarde', 'Prezado(a)'];
-const MSG_FECHAMENTOS = [
-  '— MoskoGás 🔥',
-  '— Equipe MoskoGás',
-  'Atenciosamente, MoskoGás 🔥',
-  '— MoskoGás · Campo Grande/MS',
-  'Obrigado! MoskoGás 🔥'
-];
 
 function variarMensagem(msg) {
   // Troca saudação se começa com emoji de sino/olá padrão
   if (msg.startsWith('🔔 Olá')) {
     const saud = MSG_SAUDACOES[Math.floor(Math.random() * MSG_SAUDACOES.length)];
     msg = msg.replace('🔔 Olá', `🔔 ${saud}`);
-  }
-  // Troca fechamento se termina com MoskoGás
-  for (const f of MSG_FECHAMENTOS) {
-    if (msg.includes(f)) {
-      const novo = MSG_FECHAMENTOS[Math.floor(Math.random() * MSG_FECHAMENTOS.length)];
-      msg = msg.replace(f, novo);
-      break;
-    }
   }
   // Adiciona espaço invisível aleatório (variação técnica anti-duplicata)
   const pos = Math.floor(Math.random() * Math.min(msg.length, 100)) + 10;
@@ -588,13 +572,6 @@ async function sendWhatsApp(env, to, message, opts = {}) {
       if (!coolCheck.ok) {
         console.log(`[WA-SAFETY] Cooldown: ${coolCheck.reason}`);
         return { ok: false, status: 0, data: {}, safety: 'cooldown_destinatario', detail: coolCheck.reason };
-      }
-    }
-
-    // 5. Adicionar opt-out em msgs de cobrança
-    if ((category === 'lembrete_pix' || category === 'cobranca') && config.opt_out_texto) {
-      if (!message.includes('PARAR') && !message.includes('parar')) {
-        message += config.opt_out_texto;
       }
     }
   }
