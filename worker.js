@@ -1,7 +1,8 @@
-// v2.28.2
+// v2.28.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.28.2: Lembretes PIX melhorados + fix erro Bling detalhado no cadastro
+// v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado (safety/status/motivo)
+// v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
 // v2.28.1: Lembretes PIX — saudação variada, {ontem}/{chave_pix}, delay 60s anti-ban
 // v2.28.0: Produtos — icon_key (upload ícone R2) + reorder endpoint + serve icon público
 // v2.27.1: Remove assinatura/fechamento e opt-out das msgs WhatsApp
@@ -539,6 +540,10 @@ function variarMensagem(msg) {
  */
 async function sendWhatsApp(env, to, message, opts = {}) {
   const { category = 'geral', skipSafety = false, variar } = opts;
+
+  // Formatar número automaticamente (garante 55 + DDD + número)
+  to = formatPhoneWA(to);
+  if (!to) return { ok: false, status: 0, data: {}, safety: 'telefone_invalido' };
 
   // Garantir tabelas
   await ensureWhatsAppTables(env);
@@ -2538,7 +2543,12 @@ export default {
         await env.DB.prepare(`UPDATE orders SET status='whatsapp_enviado', whatsapp_sent_at=unixepoch(), updated_at=unixepoch() WHERE id=?`).bind(id).run();
         await logEvent(env, id, 'whatsapp_sent', { to: order.driver_phone_cache });
         return json({ ok: true, status: 'whatsapp_enviado' });
-      } else { return json({ ok: false, error: 'IzChat falhou', detail: result }, 500); }
+      } else {
+        const errDetail = result.safety
+          ? `Bloqueado: ${result.safety.replace(/_/g, ' ')}`
+          : (result.data?.error || result.data?.message || `HTTP ${result.status}`);
+        return json({ ok: false, error: `WhatsApp: ${errDetail}`, detail: result }, 500);
+      }
     }
 
     const deliveredMatch = path.match(/^\/api\/order\/(\d+)\/mark-delivered$/);
