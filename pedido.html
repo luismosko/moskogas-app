@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.10.3</title>
+<title>Novo Pedido — MoskoGás v2.10.4</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -47,9 +47,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.10.3 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.10.4 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.10.3</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.10.4</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -1370,6 +1370,11 @@ async function saveCadastro() {
     if (cadTab === 'pf') {
       const nome = document.getElementById('cad-pf-nome').value.trim();
       if (!nome) { throw new Error('Nome obrigatório'); }
+      const cpfRaw = document.getElementById('cad-pf-cpf').value.replace(/\D/g, '');
+      // Validar CPF se preenchido
+      if (cpfRaw && (cpfRaw.length !== 11 || /^(\d)\1{10}$/.test(cpfRaw))) {
+        throw new Error('CPF inválido — verifique os dígitos');
+      }
       payload = {
         tipoPessoa: 'F',
         nome,
@@ -1384,6 +1389,10 @@ async function saveCadastro() {
       const cnpj = document.getElementById('cad-pj-cnpj').value.trim();
       if (!nome) { throw new Error('Razão Social obrigatória'); }
       if (!cnpj) { throw new Error('CNPJ obrigatório'); }
+      const cnpjRaw = cnpj.replace(/\D/g, '');
+      if (cnpjRaw.length !== 14 || /^(\d)\1{13}$/.test(cnpjRaw)) {
+        throw new Error('CNPJ inválido — verifique os dígitos');
+      }
       const ieIsento = document.getElementById('cad-pj-ie-isento').checked;
       payload = {
         tipoPessoa: 'J',

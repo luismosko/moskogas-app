@@ -1,6 +1,7 @@
-// v2.28.1
+// v2.28.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.28.2: Lembretes PIX melhorados + fix erro Bling detalhado no cadastro
 // v2.28.1: Lembretes PIX — saudação variada, {ontem}/{chave_pix}, delay 60s anti-ban
 // v2.28.0: Produtos — icon_key (upload ícone R2) + reorder endpoint + serve icon público
 // v2.27.1: Remove assinatura/fechamento e opt-out das msgs WhatsApp
@@ -2046,8 +2047,15 @@ export default {
         const bData = await bResp.json();
 
         if (!bResp.ok) {
-          const errMsg = bData?.error?.message || bData?.error?.description || JSON.stringify(bData).substring(0, 300);
-          return json({ ok: false, error: errMsg, bling_status: bResp.status });
+          // Extrair detalhes de erro do Bling v3 (fields com mensagens específicas)
+          let errMsg = bData?.error?.message || bData?.error?.description || '';
+          const fields = bData?.error?.fields || bData?.error?.errors || [];
+          if (Array.isArray(fields) && fields.length > 0) {
+            const fieldMsgs = fields.map(f => f.message || f.msg || `${f.fieldName || f.field}: erro`).join('; ');
+            errMsg = fieldMsgs || errMsg;
+          }
+          if (!errMsg) errMsg = JSON.stringify(bData).substring(0, 300);
+          return json({ ok: false, error: errMsg, bling_status: bResp.status, bling_detail: bData });
         }
 
         const blingId = bData.data?.id;
