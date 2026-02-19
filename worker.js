@@ -1,6 +1,7 @@
-// v2.27.1
+// v2.28.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.28.0: Produtos — icon_key (upload ícone R2) + reorder endpoint + serve icon público
 // v2.27.1: Remove assinatura/fechamento e opt-out das msgs WhatsApp
 // v2.26.0: Lembretes PIX — payment_reminders, envio manual/bulk/cron, config admin
 // v2.25.2: Fix auth contratos — bypass requireApiKey para /api/contratos e /api/webhooks
@@ -1667,8 +1668,8 @@ export default {
       });
     }
 
-    // Contratos e webhooks têm auth próprio (requireAuth ou público)
-    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks')) {
+    // Contratos, webhooks e rotas públicas têm auth próprio
+    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks') && !path.startsWith('/api/pub/')) {
       const authErr = requireApiKey(request, env);
       if (authErr) return authErr;
     }
@@ -2042,7 +2043,7 @@ export default {
     }
 
     // ── PRODUTOS APP (preços sugeridos) ──────────────────────────
-    if (path.startsWith('/api/app-products')) {
+    if (path.startsWith('/api/app-products') || path.startsWith('/api/pub/product-icon/')) {
       await env.DB.prepare(`CREATE TABLE IF NOT EXISTS app_products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         bling_id TEXT,
@@ -2052,8 +2053,27 @@ export default {
         is_favorite INTEGER DEFAULT 0,
         sort_order INTEGER DEFAULT 0,
         ativo INTEGER DEFAULT 1,
+        icon_key TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       )`).run().catch(()=>{});
+      // Ensure icon_key column exists (migration)
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN icon_key TEXT").run().catch(()=>{});
+    }
+
+    // Serve product icon from R2 (public)
+    if (method === 'GET' && path.startsWith('/api/pub/product-icon/')) {
+      const prodId = path.split('/').pop();
+      const prod = await env.DB.prepare('SELECT icon_key FROM app_products WHERE id=?').bind(prodId).first();
+      if (!prod?.icon_key) return err('Sem ícone', 404);
+      const obj = await env.BUCKET.get(prod.icon_key);
+      if (!obj) return err('Arquivo não encontrado no R2', 404);
+      return new Response(obj.body, {
+        headers: {
+          'Content-Type': obj.httpMetadata?.contentType || 'image/webp',
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*',
+        }
+      });
     }
 
     if (method === 'GET' && path === '/api/app-products') {
@@ -2066,7 +2086,63 @@ export default {
       if (onlyActive) sql += ' AND ativo=1';
       sql += ' ORDER BY sort_order ASC, name ASC';
       const rows = await env.DB.prepare(sql).all().then(r => r.results || []);
+      // Add icon URLs
+      rows.forEach(r => {
+        r.icon_url = r.icon_key ? `/api/pub/product-icon/${r.id}` : null;
+      });
       return json(rows);
+    }
+
+    // Reorder products (drag & drop)
+    if (method === 'POST' && path === '/api/app-products/reorder') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const { order } = await request.json(); // [{id: 1}, {id: 3}, {id: 2}]
+      if (!order?.length) return err('Array order obrigatório');
+      for (let i = 0; i < order.length; i++) {
+        await env.DB.prepare('UPDATE app_products SET sort_order=? WHERE id=?').bind(i + 1, order[i].id || order[i]).run();
+      }
+      return json({ ok: true, count: order.length });
+    }
+
+    // Upload product icon
+    if (method === 'POST' && path.match(/^\/api\/app-products\/\d+\/icon$/)) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const prodId = path.split('/')[3];
+      const prod = await env.DB.prepare('SELECT id, icon_key FROM app_products WHERE id=?').bind(prodId).first();
+      if (!prod) return err('Produto não encontrado', 404);
+
+      const formData = await request.formData();
+      const file = formData.get('icon');
+      if (!file) return err('Campo icon obrigatório');
+
+      // Delete old icon if exists
+      if (prod.icon_key) {
+        await env.BUCKET.delete(prod.icon_key).catch(() => {});
+      }
+
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const ext = (file.name || 'icon.webp').split('.').pop().toLowerCase();
+      const key = `product-icons/${prodId}_${Date.now()}.${ext}`;
+      await env.BUCKET.put(key, bytes, {
+        httpMetadata: { contentType: file.type || 'image/webp' }
+      });
+      await env.DB.prepare('UPDATE app_products SET icon_key=? WHERE id=?').bind(key, prodId).run();
+      return json({ ok: true, icon_key: key, icon_url: `/api/pub/product-icon/${prodId}` });
+    }
+
+    // Delete product icon
+    if (method === 'DELETE' && path.match(/^\/api\/app-products\/\d+\/icon$/)) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const prodId = path.split('/')[3];
+      const prod = await env.DB.prepare('SELECT icon_key FROM app_products WHERE id=?').bind(prodId).first();
+      if (prod?.icon_key) {
+        await env.BUCKET.delete(prod.icon_key).catch(() => {});
+      }
+      await env.DB.prepare('UPDATE app_products SET icon_key=NULL WHERE id=?').bind(prodId).run();
+      return json({ ok: true });
     }
 
     if (method === 'POST' && path === '/api/app-products') {

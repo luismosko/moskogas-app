@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.9.1 — MoskoGás</title>
+<title>Config v2.10.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.9.1 — config</div>
-  <h1>⚙️ Configurações v2.9.1</h1>
+  <div class="version-badge">v2.10.0 — config</div>
+  <h1>⚙️ Configurações v2.10.0</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -540,21 +540,103 @@ function renderAppProducts() {
     return;
   }
   el.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:0;font-size:12px;font-weight:700;color:#64748b;padding:6px 10px;border-bottom:2px solid #e2e8f0">
-      <span>Produto</span><span style="text-align:center;width:50px">Código</span><span style="text-align:right;width:80px">Preço</span><span style="text-align:center;width:40px">⭐</span><span style="width:60px"></span>
+    <div style="display:grid;grid-template-columns:28px 36px 1fr auto auto auto auto;gap:0;font-size:12px;font-weight:700;color:#64748b;padding:6px 10px;border-bottom:2px solid #e2e8f0">
+      <span></span><span></span><span>Produto</span><span style="text-align:center;width:50px">Código</span><span style="text-align:right;width:80px">Preço</span><span style="text-align:center;width:40px">⭐</span><span style="width:60px"></span>
     </div>
-  ` + _appProducts.map(p => `
-    <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:0;align-items:center;padding:8px 10px;border-bottom:1px solid #f1f5f9;${!p.ativo?'opacity:0.4':''}">
-      <span style="font-size:13px;font-weight:600">${p.name}</span>
+  ` + _appProducts.map((p, idx) => {
+    const iconSrc = p.icon_url ? (API_BASE + p.icon_url + '?t=' + Date.now()) : '';
+    return `
+    <div draggable="true" data-prod-idx="${idx}" data-prod-id="${p.id}"
+      ondragstart="prodDragStart(event)" ondragover="prodDragOver(event)" ondrop="prodDrop(event)" ondragend="prodDragEnd(event)"
+      style="display:grid;grid-template-columns:28px 36px 1fr auto auto auto auto;gap:0;align-items:center;padding:6px 10px;border-bottom:1px solid #f1f5f9;cursor:grab;transition:background 0.15s;${!p.ativo?'opacity:0.4':''}"
+      onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+      <span style="color:#cbd5e1;font-size:16px;cursor:grab" title="Arrastar para reordenar">☰</span>
+      <span style="width:32px;height:32px;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f1f5f9;cursor:pointer"
+        onclick="uploadProductIcon(${p.id})" title="${iconSrc ? 'Trocar ícone' : 'Adicionar ícone'}">
+        ${iconSrc
+          ? `<img src="${iconSrc}" style="width:32px;height:32px;object-fit:cover;border-radius:6px">`
+          : '<span style="font-size:14px;color:#cbd5e1">📷</span>'}
+      </span>
+      <span style="font-size:13px;font-weight:600;padding-left:4px">${p.name}</span>
       <span style="font-size:11px;color:#94a3b8;text-align:center;width:50px">${p.code||'-'}</span>
       <span style="font-size:13px;font-weight:800;color:#f97316;text-align:right;width:80px">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
       <span style="text-align:center;width:40px">${p.is_favorite?'⭐':''}</span>
       <span style="display:flex;gap:4px;width:60px">
-        <button onmousedown="event.preventDefault();editProduct(${p.id})" style="background:#e0f2fe;color:#0369a1;border:none;border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer" title="Editar">✏️</button>
-        <button onmousedown="event.preventDefault();deleteProduct(${p.id})" style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer" title="Excluir">🗑️</button>
+        <button onmousedown="event.preventDefault();event.stopPropagation();editProduct(${p.id})" style="background:#e0f2fe;color:#0369a1;border:none;border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer" title="Editar">✏️</button>
+        <button onmousedown="event.preventDefault();event.stopPropagation();deleteProduct(${p.id})" style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer" title="Excluir">🗑️</button>
       </span>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+}
+
+// ── Drag & Drop reorder ──
+let _dragProdIdx = null;
+function prodDragStart(e) {
+  _dragProdIdx = parseInt(e.currentTarget.dataset.prodIdx);
+  e.currentTarget.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+}
+function prodDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const row = e.currentTarget;
+  const rect = row.getBoundingClientRect();
+  const mid = rect.top + rect.height / 2;
+  row.style.borderTop = e.clientY < mid ? '3px solid #f97316' : '';
+  row.style.borderBottom = e.clientY >= mid ? '3px solid #f97316' : '';
+}
+function prodDragEnd(e) {
+  e.currentTarget.style.opacity = '1';
+  document.querySelectorAll('[data-prod-idx]').forEach(el => {
+    el.style.borderTop = '';
+    el.style.borderBottom = '';
+  });
+}
+async function prodDrop(e) {
+  e.preventDefault();
+  const targetIdx = parseInt(e.currentTarget.dataset.prodIdx);
+  if (_dragProdIdx === null || _dragProdIdx === targetIdx) return;
+  const item = _appProducts.splice(_dragProdIdx, 1)[0];
+  const rect = e.currentTarget.getBoundingClientRect();
+  const insertIdx = e.clientY < rect.top + rect.height / 2 ? targetIdx : targetIdx + 1;
+  const finalIdx = _dragProdIdx < targetIdx ? insertIdx - 1 : insertIdx;
+  _appProducts.splice(finalIdx, 0, item);
+  _dragProdIdx = null;
+  renderAppProducts();
+  try {
+    const order = _appProducts.map(p => ({ id: p.id }));
+    await api('/api/app-products/reorder', { method: 'POST', body: JSON.stringify({ order }) });
+    toast('✅ Ordem salva!', 'success');
+  } catch(err) { toast('❌ Erro ao salvar ordem: ' + err.message, 'error'); }
+}
+
+// ── Icon upload ──
+function uploadProductIcon(prodId) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const file = inp.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast('⚠️ Máximo 2MB', 'warning'); return; }
+    showLoading('Enviando ícone...');
+    try {
+      const fd = new FormData();
+      fd.append('icon', file);
+      const token = getSessionToken();
+      const res = await fetch(API_BASE + `/api/app-products/${prodId}/icon`, {
+        method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro upload');
+      const p = _appProducts.find(x => x.id === prodId);
+      if (p) p.icon_url = data.icon_url;
+      renderAppProducts();
+      toast('🖼️ Ícone salvo!', 'success');
+    } catch(err) { toast('❌ ' + err.message, 'error'); }
+    finally { hideLoading(); }
+  };
+  inp.click();
 }
 
 function searchBlingProduct(q) {

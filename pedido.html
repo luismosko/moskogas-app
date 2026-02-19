@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.10.2</title>
+<title>Novo Pedido — MoskoGás v2.10.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -47,9 +47,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.10.2 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.10.3 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.10.2</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.10.3</span></h1>
 
   <!-- BUSCA CLIENTE -->
   <div class="card">
@@ -276,8 +276,9 @@ let searchTimer;
       container.style.display = 'block';
       btns.innerHTML = favs.map(f => {
         const preco = parseFloat(f.price || 0).toFixed(2);
+        const iconHtml = f.icon_url ? `<img src="${API_BASE}${f.icon_url}" style="width:22px;height:22px;border-radius:4px;object-fit:cover">` : '';
         return `<button class="fav-btn" onclick="addItem('${f.bling_id}','${(f.name||'').replace(/'/g,"\\'")}',${parseFloat(f.price)||0},'${(f.code||'').replace(/'/g,"\\'")}')" title="Adicionar ${f.name} — R$ ${preco}">
-          ${f.name} <span class="fav-price">R$${preco}</span>
+          ${iconHtml}${f.name} <span class="fav-price">R$${preco}</span>
         </button>`;
       }).join('');
     }
