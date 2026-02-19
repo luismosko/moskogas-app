@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.10.1 — MoskoGás</title>
+<title>Config v2.10.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.10.1 — config</div>
-  <h1>⚙️ Configurações v2.10.1</h1>
+  <div class="version-badge">v2.10.2 — config</div>
+  <h1>⚙️ Configurações v2.10.2</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -131,6 +131,57 @@
       <button class="btn btn-orange" onclick="salvarPermissoes()" style="flex:1">💾 Salvar Permissões</button>
     </div>
     <div id="perm-status"></div>
+  </div>
+
+  <!-- WhatsApp Safety Layer (admin only) -->
+  <div class="card" id="safetySection">
+    <h2>🛡️ WhatsApp Safety Layer</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Proteção anti-ban do WhatsApp. Desative restrições apenas para testes.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="ws-habilitado" style="width:18px;height:18px" checked>
+        <span style="font-size:13px;font-weight:600">Safety Layer ativo</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="ws-horario" style="width:18px;height:18px" checked>
+        <span style="font-size:13px;font-weight:600">Respeitar horário comercial</span>
+      </label>
+      <label style="font-size:13px">
+        🕐 Início (CG/MS)
+        <select id="ws-hora-ini" style="margin-top:4px">
+          <option value="6">06:00</option><option value="7">07:00</option>
+          <option value="8" selected>08:00</option><option value="9">09:00</option>
+        </select>
+      </label>
+      <label style="font-size:13px">
+        🕐 Fim (CG/MS)
+        <select id="ws-hora-fim" style="margin-top:4px">
+          <option value="17">17:00</option><option value="18" selected>18:00</option>
+          <option value="19">19:00</option><option value="20">20:00</option>
+          <option value="21">21:00</option><option value="22">22:00</option>
+        </select>
+      </label>
+      <label style="font-size:13px">
+        ⚡ Rate limit (msg/min)
+        <input type="number" id="ws-max-min" min="1" max="50" value="25" style="width:80px;margin-top:4px">
+      </label>
+      <label style="font-size:13px">
+        ⏱️ Intervalo mínimo (seg)
+        <input type="number" id="ws-intervalo" min="1" max="60" value="4" style="width:80px;margin-top:4px">
+      </label>
+      <label style="font-size:13px">
+        🔄 Circuit breaker (min)
+        <input type="number" id="ws-breaker" min="5" max="120" value="30" style="width:80px;margin-top:4px">
+      </label>
+      <label style="font-size:13px">
+        🚫 Cooldown mesmo nº (h)
+        <input type="number" id="ws-cooldown" min="1" max="48" value="12" style="width:80px;margin-top:4px">
+      </label>
+    </div>
+    <div id="ws-status-info" style="margin-top:10px;font-size:12px;color:#94a3b8"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-orange" onclick="salvarSafetyConfig()" style="flex:1">💾 Salvar Safety Config</button>
+    </div>
   </div>
 
   <!-- Lembretes PIX (admin only) -->
@@ -779,6 +830,53 @@ if (_cfgUser && _cfgUser.role !== 'admin') {
   if (ps) ps.style.display = 'none';
 }
 
+// ── WhatsApp Safety Config ─────────────────────────────────────
+
+async function carregarSafetyConfig() {
+  try {
+    const config = await api('/api/whatsapp/safety-config');
+    document.getElementById('ws-habilitado').checked = config.habilitado !== false;
+    document.getElementById('ws-horario').checked = config.respeitar_horario !== false;
+    document.getElementById('ws-hora-ini').value = config.horario_inicio_brt || 8;
+    document.getElementById('ws-hora-fim').value = config.horario_fim_brt || 18;
+    document.getElementById('ws-max-min').value = config.max_por_minuto || 25;
+    document.getElementById('ws-intervalo').value = config.intervalo_min_segundos || 4;
+    document.getElementById('ws-breaker').value = config.circuit_breaker_minutos || 30;
+    document.getElementById('ws-cooldown').value = config.cooldown_mesmo_numero_horas || 12;
+    // Stats
+    try {
+      const stats = await api('/api/whatsapp/stats');
+      const hoje = stats.hoje || {};
+      document.getElementById('ws-status-info').innerHTML =
+        `📊 Hoje: ${hoje.total || 0} enviados, ${hoje.bloqueios || 0} bloqueios` +
+        (stats.circuit_breaker ? ' | <span style="color:#dc2626;font-weight:700">⚠️ CIRCUIT BREAKER ATIVO</span>' : ' | ✅ Operacional');
+    } catch(_) {}
+  } catch(e) {
+    const sec = document.getElementById('safetySection');
+    if (sec) sec.style.display = 'none';
+  }
+}
+
+async function salvarSafetyConfig() {
+  const config = {
+    habilitado: document.getElementById('ws-habilitado').checked,
+    respeitar_horario: document.getElementById('ws-horario').checked,
+    horario_inicio_brt: parseInt(document.getElementById('ws-hora-ini').value) || 8,
+    horario_fim_brt: parseInt(document.getElementById('ws-hora-fim').value) || 18,
+    max_por_minuto: parseInt(document.getElementById('ws-max-min').value) || 25,
+    intervalo_min_segundos: parseInt(document.getElementById('ws-intervalo').value) || 4,
+    circuit_breaker_minutos: parseInt(document.getElementById('ws-breaker').value) || 30,
+    cooldown_mesmo_numero_horas: parseInt(document.getElementById('ws-cooldown').value) || 12,
+  };
+  showLoading('Salvando Safety Config...');
+  try {
+    const d = await api('/api/whatsapp/safety-config', { method: 'POST', body: JSON.stringify(config) });
+    if (d.ok) toast('✅ Safety config salva!');
+    else toast('❌ ' + (d.error || 'Erro'), 'error');
+  } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
+}
+
 // ── Lembretes PIX Config ──────────────────────────────────────
 
 const LEMBRETE_PADRAO = `Olá {nome}. 😃 Tudo bem?
@@ -842,6 +940,7 @@ checkStreetsCount();
 carregarFotoConfig();
 carregarPermissoes();
 loadAppProducts();
+carregarSafetyConfig();
 carregarLembreteConfig();
 </script>
 </body>
