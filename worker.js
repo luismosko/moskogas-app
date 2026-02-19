@@ -1,6 +1,7 @@
-// v2.28.0
+// v2.28.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.28.1: Lembretes PIX — saudação variada, {ontem}/{chave_pix}, delay 60s anti-ban
 // v2.28.0: Produtos — icon_key (upload ícone R2) + reorder endpoint + serve icon público
 // v2.27.1: Remove assinatura/fechamento e opt-out das msgs WhatsApp
 // v2.26.0: Lembretes PIX — payment_reminders, envio manual/bulk/cron, config admin
@@ -632,8 +633,10 @@ async function getLembreteConfig(env) {
     intervalo_horas: 24,
     max_lembretes: 3,
     cron_ativo: true,
-    cron_hora_utc: 14,
-    mensagem: '🔔 Olá {nome}! Seu pedido #{id} de {itens} no valor de R$ {valor} foi entregue em {data_entrega}, mas ainda não identificamos o pagamento via PIX.\n\n💰 Valor: R$ {valor}\n📱 Chave PIX: (sua chave aqui)\n\nQualquer dúvida, estamos à disposição!\n\n— MoskoGás 🔥'
+    cron_hora_utc: 12,
+    delay_segundos: 60,
+    chave_pix: '',
+    mensagem: 'Olá {nome}. 😃 Tudo bem?\n\nSeu pedido de Gás foi entregue {ontem}, mas ainda não conseguimos conciliar o pagamento via PIX.\n\nPode nos enviar o comprovante por gentileza?\n\n💰 Valor: R$ {valor}\n📱 Chave PIX: {chave_pix}\n\nCaso já tenha sido pago por favor desconsidere essa mensagem.\n\n— MoskoGás 🔥'
   };
   try {
     const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='lembrete_pix'").first();
@@ -642,18 +645,52 @@ async function getLembreteConfig(env) {
   return defaults;
 }
 
-function buildLembreteMessage(template, order) {
+// Saudações variadas para lembretes (anti-spam WhatsApp)
+const SAUDACOES_LEMBRETE = [
+  'Olá {nome}. 😃 Tudo bem?',
+  'Oi {nome}! 😊 Tudo certo?',
+  'Olá {nome}, bom dia! 😃',
+  'Oi {nome}! Esperamos que esteja tudo bem. 😊',
+  'Olá {nome}! 👋',
+  'Oi {nome}, tudo bem com você? 😃',
+  'Olá {nome}! Como vai? 😊',
+];
+
+function buildLembreteMessage(template, order, config) {
   const items = (() => { try { return JSON.parse(order.items_json || '[]'); } catch(_) { return []; } })();
-  const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || 'produto';
-  const dataEntrega = order.delivered_at
-    ? new Date(order.delivered_at * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' })
-    : new Date(order.created_at * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' });
-  return template
-    .replace(/\{nome\}/g, order.customer_name || 'Cliente')
+  const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || 'Gás';
+
+  // Data de entrega formatada
+  const entregaTs = order.delivered_at || order.created_at;
+  const dataEntrega = new Date(entregaTs * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' });
+
+  // {ontem} = data relativa ("ontem", "há 3 dias", etc.)
+  const now = new Date();
+  const entregaDate = new Date(entregaTs * 1000);
+  const diffDias = Math.floor((now - entregaDate) / 86400000);
+  let ontem = dataEntrega;
+  if (diffDias === 0) ontem = 'hoje';
+  else if (diffDias === 1) ontem = 'ontem';
+  else if (diffDias <= 7) ontem = `há ${diffDias} dias (${dataEntrega})`;
+  else ontem = `no dia ${dataEntrega}`;
+
+  // Variação de saudação — substitui primeira linha "Olá/Oi {nome}..." por aleatória
+  const primeiroNome = (order.customer_name || 'Cliente').split(' ')[0];
+  let msg = template;
+  const saudacao = SAUDACOES_LEMBRETE[Math.floor(Math.random() * SAUDACOES_LEMBRETE.length)]
+    .replace(/\{nome\}/g, primeiroNome);
+  msg = msg.replace(/^(Olá|Oi|Ola|oi|olá)\s*\{nome\}[^\n]*/i, saudacao);
+
+  const chavePix = config?.chave_pix || '(chave PIX não configurada)';
+
+  return msg
+    .replace(/\{nome\}/g, primeiroNome)
     .replace(/\{id\}/g, order.id)
     .replace(/\{itens\}/g, itensStr)
     .replace(/\{valor\}/g, parseFloat(order.total_value || 0).toFixed(2))
-    .replace(/\{data_entrega\}/g, dataEntrega);
+    .replace(/\{data_entrega\}/g, dataEntrega)
+    .replace(/\{ontem\}/g, ontem)
+    .replace(/\{chave_pix\}/g, chavePix);
 }
 
 async function enviarLembretePix(env, order, config, user) {
@@ -684,7 +721,7 @@ async function enviarLembretePix(env, order, config, user) {
     }
   }
 
-  const message = buildLembreteMessage(config.mensagem, order);
+  const message = buildLembreteMessage(config.mensagem, order, config);
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true });
 
   const tipo = user ? 'manual' : 'cron';
@@ -756,9 +793,9 @@ async function processarLembretesCron(env) {
         }
       }
 
-      // Pausa entre envios (safety layer valida, mas delay real aqui)
-      const safetyConfig = await getWhatsAppSafetyConfig(env);
-      await new Promise(r => setTimeout(r, (safetyConfig.intervalo_min_segundos || 4) * 1000));
+      // Pausa entre envios — delay configurável (default 60s, anti-ban WhatsApp)
+      const delayMs = (config.delay_segundos || 60) * 1000;
+      await new Promise(r => setTimeout(r, delayMs));
     }
 
     console.log(`[lembrete-cron] Total: ${rows.length} pendentes, ${enviados} enviados, ${pulados} pulados, ${erros} erros`);
@@ -3120,7 +3157,7 @@ export default {
 
       const resultados = [];
       let bloqueado = false;
-      const safetyConfig = await getWhatsAppSafetyConfig(env);
+      const delayMs = (config.delay_segundos || 60) * 1000;
       for (const order of orders) {
         if (bloqueado) {
           resultados.push({ ok: false, order_id: order.id, error: 'Envio interrompido — bloqueio detectado' });
@@ -3130,8 +3167,8 @@ export default {
         resultados.push(result);
         if (result.blocked || result.wa_status === 429) {
           bloqueado = true;
-        } else if (result.ok) {
-          await new Promise(r => setTimeout(r, (safetyConfig.intervalo_min_segundos || 4) * 1000));
+        } else if (result.ok && orders.indexOf(order) < orders.length - 1) {
+          await new Promise(r => setTimeout(r, delayMs));
         }
       }
 

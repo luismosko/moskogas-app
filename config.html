@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.10.0 — MoskoGás</title>
+<title>Config v2.10.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.10.0 — config</div>
-  <h1>⚙️ Configurações v2.10.0</h1>
+  <div class="version-badge">v2.10.1 — config</div>
+  <h1>⚙️ Configurações v2.10.1</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -155,27 +155,36 @@
         <input type="number" id="lemb-max" min="1" max="10" value="3" style="width:80px;margin-top:4px">
       </label>
       <label style="font-size:13px">
-        🕐 Hora do envio automático (UTC)
+        🕐 Hora do envio automático (horário local CG/MS)
         <select id="lemb-hora" style="margin-top:4px">
-          <option value="10">10:00 UTC (07:00 BRT)</option>
-          <option value="11">11:00 UTC (08:00 BRT)</option>
-          <option value="12">12:00 UTC (09:00 BRT)</option>
-          <option value="13">13:00 UTC (10:00 BRT)</option>
-          <option value="14" selected>14:00 UTC (11:00 BRT)</option>
-          <option value="15">15:00 UTC (12:00 BRT)</option>
-          <option value="16">16:00 UTC (13:00 BRT)</option>
-          <option value="17">17:00 UTC (14:00 BRT)</option>
-          <option value="18">18:00 UTC (15:00 BRT)</option>
+          <option value="12">08:00</option>
+          <option value="13">09:00</option>
+          <option value="14">10:00</option>
+          <option value="15">11:00</option>
+          <option value="16">12:00</option>
+          <option value="17">13:00</option>
+          <option value="18">14:00</option>
         </select>
+        <span style="font-size:10px;color:#94a3b8">GMT-4 (Campo Grande/MS)</span>
+      </label>
+      <label style="font-size:13px">
+        ⏳ Intervalo entre envios (segundos)
+        <input type="number" id="lemb-delay" min="10" max="300" value="60" style="width:80px;margin-top:4px">
+        <span style="font-size:10px;color:#94a3b8">Recomendado: 60s (anti-ban)</span>
       </label>
     </div>
     <label style="font-size:13px;display:block;margin-top:12px">
+      🔑 Chave PIX (aparece na mensagem)
+      <input type="text" id="lemb-chave-pix" placeholder="Ex: 12.977.901/0001-17 ou (67) 99924-1437" style="width:100%;margin-top:4px;font-size:14px;border:2px solid #e2e8f0;border-radius:8px;padding:10px">
+    </label>
+    <label style="font-size:13px;display:block;margin-top:12px">
       💬 Mensagem do lembrete
-      <span style="font-size:10px;color:#94a3b8;display:block;margin:4px 0">Variáveis: {nome}, {id}, {itens}, {valor}, {data_entrega}</span>
-      <textarea id="lemb-mensagem" rows="6" style="width:100%;font-size:13px;border:2px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:4px;resize:vertical"></textarea>
+      <span style="font-size:10px;color:#94a3b8;display:block;margin:4px 0">Variáveis: {nome}, {itens}, {valor}, {ontem}, {chave_pix} — Saudação varia automaticamente</span>
+      <textarea id="lemb-mensagem" rows="8" style="width:100%;font-size:13px;border:2px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:4px;resize:vertical"></textarea>
     </label>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn btn-orange" onclick="salvarLembreteConfig()" style="flex:1">💾 Salvar Config Lembretes</button>
+      <button class="btn" onclick="resetLembreteTemplate()" style="background:#e2e8f0;color:#64748b">🔄 Restaurar Padrão</button>
     </div>
     <div id="lemb-status"></div>
   </div>
@@ -772,6 +781,24 @@ if (_cfgUser && _cfgUser.role !== 'admin') {
 
 // ── Lembretes PIX Config ──────────────────────────────────────
 
+const LEMBRETE_PADRAO = `Olá {nome}. 😃 Tudo bem?
+
+Seu pedido de Gás foi entregue {ontem}, mas ainda não conseguimos conciliar o pagamento via PIX.
+
+Pode nos enviar o comprovante por gentileza?
+
+💰 Valor: R$ {valor}
+📱 Chave PIX: {chave_pix}
+
+Caso já tenha sido pago por favor desconsidere essa mensagem.
+
+— MoskoGás 🔥`;
+
+function resetLembreteTemplate() {
+  document.getElementById('lemb-mensagem').value = LEMBRETE_PADRAO;
+  toast('🔄 Modelo padrão restaurado');
+}
+
 async function carregarLembreteConfig() {
   try {
     const config = await api('/api/lembretes/config');
@@ -779,10 +806,11 @@ async function carregarLembreteConfig() {
     document.getElementById('lemb-cron').checked = config.cron_ativo !== false;
     document.getElementById('lemb-intervalo').value = config.intervalo_horas || 24;
     document.getElementById('lemb-max').value = config.max_lembretes || 3;
-    document.getElementById('lemb-hora').value = config.cron_hora_utc || 14;
-    document.getElementById('lemb-mensagem').value = config.mensagem || '';
+    document.getElementById('lemb-hora').value = config.cron_hora_utc || 12;
+    document.getElementById('lemb-delay').value = config.delay_segundos || 60;
+    document.getElementById('lemb-chave-pix').value = config.chave_pix || '';
+    document.getElementById('lemb-mensagem').value = config.mensagem || LEMBRETE_PADRAO;
   } catch(e) {
-    // Admin-only — pode falhar se não-admin
     const sec = document.getElementById('lembreteSection');
     if (sec) sec.style.display = 'none';
   }
@@ -794,7 +822,9 @@ async function salvarLembreteConfig() {
     cron_ativo: document.getElementById('lemb-cron').checked,
     intervalo_horas: parseInt(document.getElementById('lemb-intervalo').value) || 24,
     max_lembretes: parseInt(document.getElementById('lemb-max').value) || 3,
-    cron_hora_utc: parseInt(document.getElementById('lemb-hora').value) || 14,
+    cron_hora_utc: parseInt(document.getElementById('lemb-hora').value) || 12,
+    delay_segundos: parseInt(document.getElementById('lemb-delay').value) || 60,
+    chave_pix: document.getElementById('lemb-chave-pix').value.trim(),
     mensagem: document.getElementById('lemb-mensagem').value.trim()
   };
   if (!config.mensagem) { toast('⚠️ Mensagem não pode estar vazia', 'error'); return; }
