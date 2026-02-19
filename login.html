@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login — MoskoApp v1.1.0</title>
+<title>Login — MoskoApp v1.2.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -43,7 +43,19 @@
     <button type="submit" class="btn-login" id="btn-submit">🔐 Entrar</button>
   </form>
 
-  <div class="version-badge">v1.1.0 — login</div>
+  <div class="version-badge">v1.2.0 — login</div>
+
+  <!-- Bling Status -->
+  <div id="bling-section" style="margin-top:16px;padding:14px;background:#f8fafc;border-radius:10px;border:2px solid #e2e8f0;display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="bling-dot" style="width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block"></span>
+        <span id="bling-label" style="font-size:13px;font-weight:600;color:#64748b">Verificando Bling...</span>
+      </div>
+      <button id="bling-btn" onclick="connectBling()" style="display:none;padding:6px 14px;background:#f97316;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">🔗 Conectar</button>
+    </div>
+    <div id="bling-detail" style="font-size:11px;color:#94a3b8;margin-top:4px"></div>
+  </div>
 </div>
 
 <script>
@@ -129,6 +141,68 @@ function redirectByRole(role) {
       break;
   }
 }
+
+// ── Bling Status ──────────────────────────────────────────────
+async function checkBlingStatus() {
+  const section = document.getElementById('bling-section');
+  const dot = document.getElementById('bling-dot');
+  const label = document.getElementById('bling-label');
+  const detail = document.getElementById('bling-detail');
+  const btn = document.getElementById('bling-btn');
+  section.style.display = 'block';
+
+  try {
+    const resp = await fetch(API_BASE + '/api/pub/bling-status');
+    const data = await resp.json();
+
+    if (data.ok) {
+      dot.style.background = '#22c55e';
+      label.style.color = '#16a34a';
+      label.textContent = '✅ Bling conectado';
+      detail.textContent = `Token válido — ${data.token_minutes_left} min restantes`;
+      btn.style.display = 'none';
+      section.style.borderColor = '#bbf7d0';
+      section.style.background = '#f0fdf4';
+    } else {
+      dot.style.background = '#dc2626';
+      label.style.color = '#dc2626';
+      label.textContent = '❌ Bling desconectado';
+      detail.textContent = data.error || 'Token expirado ou não configurado';
+      btn.style.display = 'inline-block';
+      section.style.borderColor = '#fecaca';
+      section.style.background = '#fef2f2';
+    }
+  } catch(e) {
+    dot.style.background = '#f59e0b';
+    label.style.color = '#d97706';
+    label.textContent = '⚠️ Sem conexão com API';
+    detail.textContent = e.message;
+    btn.style.display = 'none';
+    section.style.borderColor = '#fde68a';
+    section.style.background = '#fffbeb';
+  }
+}
+
+function connectBling() {
+  const w = 600, h = 700;
+  const left = (screen.width - w) / 2;
+  const top = (screen.height - h) / 2;
+  window.open(
+    API_BASE + '/bling/oauth/start',
+    'bling_oauth',
+    `width=${w},height=${h},left=${left},top=${top},scrollbars=yes`
+  );
+}
+
+// Escuta callback do popup Bling
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'bling_connected') {
+    checkBlingStatus();
+  }
+});
+
+// Check Bling ao carregar
+checkBlingStatus();
 </script>
 </body>
 </html>

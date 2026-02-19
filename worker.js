@@ -1,7 +1,8 @@
-// v2.28.3
+// v2.28.4
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado (safety/status/motivo)
+// v2.28.4: Bling OAuth callback retorna HTML com auto-close popup
+// v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado
 // v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
 // v2.28.1: Lembretes PIX — saudação variada, {ontem}/{chave_pix}, delay 60s anti-ban
 // v2.28.0: Produtos — icon_key (upload ícone R2) + reorder endpoint + serve icon público
@@ -1523,10 +1524,15 @@ export default {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'enable-jwt': '1', Authorization: 'Basic ' + btoa(`${env.BLING_CLIENT_ID}:${env.BLING_CLIENT_SECRET}`) },
         body,
       });
-      if (!resp.ok) return err('oauth_failed:' + resp.status);
+      if (!resp.ok) {
+        const errHtml = `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fee2e2"><div style="text-align:center"><h2>❌ Falha na autenticação Bling</h2><p>Status: ${resp.status}</p><button onclick="window.close()" style="margin-top:16px;padding:12px 24px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer">Fechar</button></div></body></html>`;
+        return new Response(errHtml, { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      }
       const data = await resp.json();
       await saveToken(env, data);
-      return json({ ok: true, message: 'Token salvo com sucesso!' });
+      // Retorna HTML que notifica o opener (login/pedido) e fecha o popup
+      const successHtml = `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#dcfce7"><div style="text-align:center"><h2>✅ Bling conectado!</h2><p>Token salvo com sucesso. Esta janela vai fechar automaticamente.</p></div><script>if(window.opener){window.opener.postMessage({type:'bling_connected'},'*')}setTimeout(()=>window.close(),2000)</script></body></html>`;
+      return new Response(successHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
     if (method === 'POST' && path === '/izchat/notificar-entrega') {
