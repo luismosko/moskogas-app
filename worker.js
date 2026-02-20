@@ -1,4 +1,4 @@
-// v2.29.2
+// v2.29.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -3651,6 +3651,11 @@ export default {
       const authCheck = await requireAuth(request, env, ['admin']);
       if (authCheck instanceof Response) return authCheck;
       const body = await request.json();
+      // Salvar resend_api_key separadamente no app_config (fallback quando secret não funciona)
+      if (body.resend_api_key) {
+        await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('resend_api_key', ?, datetime('now'))").bind(body.resend_api_key).run();
+        delete body.resend_api_key;
+      }
       const current = await getReportConfig(env);
       const updated = { ...current, ...body };
       await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('relatorio_email', ?, datetime('now'))").bind(JSON.stringify(updated)).run();
@@ -3662,8 +3667,8 @@ export default {
       if (authCheck instanceof Response) return authCheck;
       const body = await request.json().catch(() => ({}));
       const dateStr = body.date || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      // Força envio mesmo se desativado
-      if (!env.RESEND_API_KEY) return json({ ok: false, error: 'RESEND_API_KEY não configurada. Adicione o secret no Cloudflare.' }, 400);
+      const resendKey = await getResendKey(env, body.resend_key);
+      if (!resendKey) return json({ ok: false, error: 'RESEND_API_KEY não encontrada. Configure via: POST /api/relatorio/email-config { "resend_api_key": "re_xxx" }' }, 400);
       const report = await generateDailyReport(env, dateStr);
       if (report.total === 0) return json({ ok: true, message: `Sem pedidos em ${dateStr}`, total: 0 });
       const html = buildReportHTML(report);
@@ -3680,7 +3685,7 @@ export default {
       };
       const resp = await fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(emailPayload),
       });
       if (!resp.ok) {
@@ -4507,6 +4512,17 @@ async function getReportConfig(env) {
   return defaults;
 }
 
+// Busca RESEND_API_KEY: 1) env secret, 2) app_config, 3) body do request
+async function getResendKey(env, bodyKey) {
+  if (env.RESEND_API_KEY) return env.RESEND_API_KEY;
+  try {
+    const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='resend_api_key'").first();
+    if (row?.value) return row.value;
+  } catch {}
+  if (bodyKey) return bodyKey;
+  return null;
+}
+
 async function generateDailyReport(env, dateStr) {
   // dateStr = 'YYYY-MM-DD'
   const dayStart = Math.floor(new Date(dateStr + 'T00:00:00-04:00').getTime() / 1000);
@@ -4772,8 +4788,9 @@ async function sendDailyReportEmail(env, dateStr) {
     console.log('[relatorio] Relatório por email desativado');
     return { ok: false, reason: 'desativado' };
   }
-  if (!env.RESEND_API_KEY) {
-    console.error('[relatorio] RESEND_API_KEY não configurada');
+  const resendKey = await getResendKey(env);
+  if (!resendKey) {
+    console.error('[relatorio] RESEND_API_KEY não encontrada (env nem app_config)');
     return { ok: false, reason: 'sem_api_key' };
   }
 
@@ -4797,7 +4814,6 @@ async function sendDailyReportEmail(env, dateStr) {
   };
 
   if (csv) {
-    // Resend aceita attachments como base64
     emailPayload.attachments = [{
       filename: `pedidos_${dateStr}.csv`,
       content: btoa(unescape(encodeURIComponent(csv))),
@@ -4807,7 +4823,7 @@ async function sendDailyReportEmail(env, dateStr) {
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      Authorization: `Bearer ${resendKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(emailPayload),
