@@ -1,7 +1,7 @@
-// v2.28.8
+// v2.29.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.28.8: Fix pagamentos — skip Bling para boleto/mensalista + remove payments table dep
+// v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
 // v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado
 // v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
@@ -3636,6 +3636,87 @@ export default {
       });
     }
 
+    // ══════════════════════════════════════════════════════════
+    // RELATÓRIO DIÁRIO POR E-MAIL (v2.29.0)
+    // ══════════════════════════════════════════════════════════
+
+    if (method === 'GET' && path === '/api/relatorio/email-config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const config = await getReportConfig(env);
+      return json(config);
+    }
+
+    if (method === 'POST' && path === '/api/relatorio/email-config') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body = await request.json();
+      const current = await getReportConfig(env);
+      const updated = { ...current, ...body };
+      await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('relatorio_email', ?, datetime('now'))").bind(JSON.stringify(updated)).run();
+      return json({ ok: true, config: updated });
+    }
+
+    if (method === 'POST' && path === '/api/relatorio/enviar-email') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body = await request.json().catch(() => ({}));
+      const dateStr = body.date || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      // Força envio mesmo se desativado
+      if (!env.RESEND_API_KEY) return json({ ok: false, error: 'RESEND_API_KEY não configurada. Adicione o secret no Cloudflare.' }, 400);
+      const report = await generateDailyReport(env, dateStr);
+      if (report.total === 0) return json({ ok: true, message: `Sem pedidos em ${dateStr}`, total: 0 });
+      const html = buildReportHTML(report);
+      const csv = buildReportCSV(report);
+      const config = await getReportConfig(env);
+      const destinos = body.email ? [body.email] : config.destinos;
+      const fmtBRL = v => 'R$ ' + v.toFixed(2).replace('.', ',');
+      const emailPayload = {
+        from: 'MoskoGás <relatorio@moskogas.com.br>',
+        to: destinos,
+        subject: `Pedidos do dia — ${dateStr} — ${report.total} pedidos — ${fmtBRL(report.totalValor)}`,
+        html,
+        attachments: [{ filename: `pedidos_${dateStr}.csv`, content: btoa(unescape(encodeURIComponent(csv))) }],
+      };
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailPayload),
+      });
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '');
+        return json({ ok: false, error: `Resend ${resp.status}: ${errText.substring(0, 300)}` });
+      }
+      const result = await resp.json();
+      return json({ ok: true, email_id: result.id, total: report.total, valor: report.totalValor, destinos, date: dateStr });
+    }
+
+    if (method === 'GET' && path === '/api/relatorio/preview-email') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const dateStr = url.searchParams.get('date') || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const report = await generateDailyReport(env, dateStr);
+      if (report.total === 0) return new Response(`<h2>Sem pedidos em ${dateStr}</h2>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      const html = buildReportHTML(report);
+      return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS_HEADERS } });
+    }
+
+    if (method === 'GET' && path === '/api/relatorio/download-csv') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const dateStr = url.searchParams.get('date') || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const report = await generateDailyReport(env, dateStr);
+      if (report.total === 0) return json({ error: `Sem pedidos em ${dateStr}` }, 404);
+      const csv = buildReportCSV(report);
+      return new Response(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="pedidos_${dateStr}.csv"`,
+          ...CORS_HEADERS,
+        }
+      });
+    }
+
     // ── AUDITORIA ─────────────────────────────────────────────
 
     if (method === 'GET' && path === '/api/auditoria/diaria') {
@@ -4387,6 +4468,14 @@ export default {
     if (hour === 1) {
       ctx.waitUntil(dailyAuditSnapshot(env));
     }
+    // Relatório diário por email — verifica config para hora
+    try {
+      const reportConfig = await getReportConfig(env);
+      if (reportConfig.ativo && hour === (reportConfig.hora_utc || 6)) {
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        ctx.waitUntil(sendDailyReportEmail(env, yesterday));
+      }
+    } catch(e) { console.error('[relatorio-cron] Erro:', e.message); }
     // Lembretes PIX automáticos — verificar config para hora
     try {
       const config = await getLembreteConfig(env);
@@ -4396,6 +4485,341 @@ export default {
     } catch(e) { console.error('[lembrete-cron] Config error:', e.message); }
   },
 };
+
+// ══════════════════════════════════════════════════════════════
+// RELATÓRIO DIÁRIO POR E-MAIL — v2.29.0
+// Envia resumo + CSV dos pedidos do dia anterior via Resend
+// ══════════════════════════════════════════════════════════════
+
+async function getReportConfig(env) {
+  const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_email'").first().catch(() => null);
+  const defaults = {
+    ativo: false,
+    destinos: ['luismosko@gmail.com'],
+    hora_utc: 6, // 03:00 BRT
+    incluir_csv: true,
+    incluir_cancelados: true,
+  };
+  try { if (row?.value) return { ...defaults, ...JSON.parse(row.value) }; } catch {}
+  return defaults;
+}
+
+async function generateDailyReport(env, dateStr) {
+  // dateStr = 'YYYY-MM-DD'
+  const dayStart = Math.floor(new Date(dateStr + 'T00:00:00-04:00').getTime() / 1000);
+  const dayEnd = dayStart + 86400;
+
+  const orders = await env.DB.prepare(`
+    SELECT o.*, cc.email, cc.cpf_cnpj, cc.bling_contact_id
+    FROM orders o
+    LEFT JOIN customers_cache cc ON cc.phone_digits = o.phone_digits
+    WHERE o.created_at >= ? AND o.created_at < ?
+    ORDER BY o.id ASC
+  `).bind(dayStart, dayEnd).all().then(r => r.results || []);
+
+  // ── Resumo ──
+  const total = orders.length;
+  const totalValor = orders.reduce((s, o) => s + (parseFloat(o.total_value) || 0), 0);
+  const entregues = orders.filter(o => o.status === 'entregue').length;
+  const cancelados = orders.filter(o => o.status === 'cancelado').length;
+  const pendentes = total - entregues - cancelados;
+  const pagos = orders.filter(o => o.pago === 1).length;
+  const comBling = orders.filter(o => o.bling_pedido_id).length;
+
+  // Por tipo pagamento
+  const porTipo = {};
+  for (const o of orders) {
+    const t = o.tipo_pagamento || 'indefinido';
+    if (!porTipo[t]) porTipo[t] = { qtd: 0, valor: 0 };
+    porTipo[t].qtd++;
+    porTipo[t].valor += parseFloat(o.total_value) || 0;
+  }
+
+  // Por vendedor
+  const porVendedor = {};
+  for (const o of orders) {
+    const v = o.vendedor_nome || 'Sem vendedor';
+    if (!porVendedor[v]) porVendedor[v] = { qtd: 0, valor: 0 };
+    porVendedor[v].qtd++;
+    porVendedor[v].valor += parseFloat(o.total_value) || 0;
+  }
+
+  // Por entregador
+  const porEntregador = {};
+  for (const o of orders) {
+    if (o.driver_name_cache) {
+      const d = o.driver_name_cache;
+      if (!porEntregador[d]) porEntregador[d] = { qtd: 0, valor: 0 };
+      porEntregador[d].qtd++;
+      porEntregador[d].valor += parseFloat(o.total_value) || 0;
+    }
+  }
+
+  // Produtos vendidos (soma)
+  const produtosTotal = {};
+  for (const o of orders) {
+    if (o.status === 'cancelado') continue;
+    try {
+      const items = JSON.parse(o.items_json || '[]');
+      for (const it of items) {
+        const nome = it.name || '?';
+        if (!produtosTotal[nome]) produtosTotal[nome] = { qtd: 0, valor: 0 };
+        produtosTotal[nome].qtd += parseInt(it.qty) || 1;
+        produtosTotal[nome].valor += (parseInt(it.qty) || 1) * (parseFloat(it.price) || 0);
+      }
+    } catch {}
+  }
+
+  return {
+    dateStr, total, totalValor, entregues, cancelados, pendentes, pagos, comBling,
+    porTipo, porVendedor, porEntregador, produtosTotal, orders,
+  };
+}
+
+function buildReportHTML(report) {
+  const d = report.dateStr;
+  const fmtBRL = v => 'R$ ' + v.toFixed(2).replace('.', ',');
+  const fmtFone = f => f ? f.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3') : '—';
+  const fmtEpoch = ts => {
+    if (!ts) return '—';
+    return new Date(ts * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande', dateStyle: 'short', timeStyle: 'short' });
+  };
+
+  const statusLabel = {
+    novo: '🔴 NOVO', encaminhado: '🟡 ENCAMINHADO',
+    whatsapp_enviado: '🟢 WHATS ENVIADO', entregue: '🔵 ENTREGUE',
+    cancelado: '⚫ CANCELADO'
+  };
+  const pgtoLabel = {
+    dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX Vista', pix_receber: '⏳ PIX Receber',
+    debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista', boleto: '🧾 Boleto'
+  };
+
+  let html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;background:#f8fafc;padding:20px;color:#1e293b">
+<div style="max-width:800px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+
+<!-- Header -->
+<div style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:24px 32px">
+  <h1 style="margin:0;font-size:22px">🔥 MoskoGás — Pedidos do Dia</h1>
+  <p style="margin:4px 0 0;opacity:0.9;font-size:14px">${d} (Campo Grande/MS)</p>
+</div>
+
+<!-- KPIs -->
+<div style="padding:24px 32px">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+    <tr>
+      <td style="text-align:center;padding:16px;background:#eff6ff;border-radius:8px">
+        <div style="font-size:28px;font-weight:800;color:#1e40af">${report.total}</div>
+        <div style="font-size:12px;color:#64748b">Total Pedidos</div>
+      </td>
+      <td style="width:8px"></td>
+      <td style="text-align:center;padding:16px;background:#f0fdf4;border-radius:8px">
+        <div style="font-size:28px;font-weight:800;color:#16a34a">${fmtBRL(report.totalValor)}</div>
+        <div style="font-size:12px;color:#64748b">Faturamento</div>
+      </td>
+      <td style="width:8px"></td>
+      <td style="text-align:center;padding:16px;background:#fef3c7;border-radius:8px">
+        <div style="font-size:28px;font-weight:800;color:#d97706">${report.entregues}</div>
+        <div style="font-size:12px;color:#64748b">Entregues</div>
+      </td>
+    </tr>
+  </table>
+
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">
+    <tr>
+      <td style="padding:6px 0;color:#64748b">📦 Pendentes:</td><td style="font-weight:700">${report.pendentes}</td>
+      <td style="padding:6px 0;color:#64748b">❌ Cancelados:</td><td style="font-weight:700">${report.cancelados}</td>
+      <td style="padding:6px 0;color:#64748b">✅ Pagos:</td><td style="font-weight:700">${report.pagos}</td>
+      <td style="padding:6px 0;color:#64748b">📋 No Bling:</td><td style="font-weight:700">${report.comBling}</td>
+    </tr>
+  </table>
+
+  <!-- Produtos -->
+  <h3 style="margin:20px 0 8px;font-size:15px;color:#1e40af">📦 Produtos Vendidos</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:#f1f5f9">
+      <th style="padding:8px;text-align:left">Produto</th>
+      <th style="padding:8px;text-align:center">Qtd</th>
+      <th style="padding:8px;text-align:right">Total</th>
+    </tr></thead><tbody>`;
+
+  for (const [nome, p] of Object.entries(report.produtosTotal).sort((a,b) => b[1].valor - a[1].valor)) {
+    html += `<tr><td style="padding:6px 8px">${nome}</td><td style="padding:6px 8px;text-align:center;font-weight:700">${p.qtd}</td><td style="padding:6px 8px;text-align:right">${fmtBRL(p.valor)}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+
+  // Por tipo pagamento
+  html += `<h3 style="margin:20px 0 8px;font-size:15px;color:#1e40af">💰 Por Forma de Pagamento</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:#f1f5f9"><th style="padding:8px;text-align:left">Tipo</th><th style="padding:8px;text-align:center">Qtd</th><th style="padding:8px;text-align:right">Total</th></tr></thead><tbody>`;
+  for (const [tipo, d] of Object.entries(report.porTipo)) {
+    html += `<tr><td style="padding:6px 8px">${pgtoLabel[tipo]||tipo}</td><td style="padding:6px 8px;text-align:center;font-weight:700">${d.qtd}</td><td style="padding:6px 8px;text-align:right">${fmtBRL(d.valor)}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+
+  // Por vendedor
+  if (Object.keys(report.porVendedor).length > 0) {
+    html += `<h3 style="margin:20px 0 8px;font-size:15px;color:#1e40af">👤 Por Vendedor</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#f1f5f9"><th style="padding:8px;text-align:left">Vendedor</th><th style="padding:8px;text-align:center">Qtd</th><th style="padding:8px;text-align:right">Total</th></tr></thead><tbody>`;
+    for (const [v, d] of Object.entries(report.porVendedor).sort((a,b) => b[1].valor - a[1].valor)) {
+      html += `<tr><td style="padding:6px 8px">${v}</td><td style="padding:6px 8px;text-align:center;font-weight:700">${d.qtd}</td><td style="padding:6px 8px;text-align:right">${fmtBRL(d.valor)}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+
+  // Lista detalhada
+  html += `<h3 style="margin:24px 0 8px;font-size:15px;color:#1e40af">📋 Lista Detalhada (${report.orders.length} pedidos)</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:11px;line-height:1.4">
+    <thead><tr style="background:#1e40af;color:#fff">
+      <th style="padding:6px 4px">#</th>
+      <th style="padding:6px 4px">Status</th>
+      <th style="padding:6px 4px">Cliente</th>
+      <th style="padding:6px 4px">Telefone</th>
+      <th style="padding:6px 4px">Endereço</th>
+      <th style="padding:6px 4px">Itens</th>
+      <th style="padding:6px 4px;text-align:right">Valor</th>
+      <th style="padding:6px 4px">Pgto</th>
+      <th style="padding:6px 4px">Pago</th>
+      <th style="padding:6px 4px">Bling</th>
+      <th style="padding:6px 4px">Vendedor</th>
+      <th style="padding:6px 4px">Entregador</th>
+      <th style="padding:6px 4px">Hora</th>
+    </tr></thead><tbody>`;
+
+  for (const o of report.orders) {
+    let itensStr = '';
+    try {
+      const items = JSON.parse(o.items_json || '[]');
+      itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
+    } catch {}
+    const bg = o.status === 'cancelado' ? '#fef2f2' : (o.status === 'entregue' ? '#f0fdf4' : '#fff');
+    html += `<tr style="background:${bg};border-bottom:1px solid #e2e8f0">
+      <td style="padding:4px;font-weight:700">${o.id}</td>
+      <td style="padding:4px;font-size:10px">${statusLabel[o.status]||o.status}</td>
+      <td style="padding:4px">${o.customer_name||'—'}</td>
+      <td style="padding:4px;font-size:10px">${fmtFone(o.phone_digits)}</td>
+      <td style="padding:4px;font-size:10px">${o.address_line||''} ${o.bairro?'('+o.bairro+')':''}</td>
+      <td style="padding:4px;font-size:10px">${itensStr}</td>
+      <td style="padding:4px;text-align:right;font-weight:700">${fmtBRL(parseFloat(o.total_value)||0)}</td>
+      <td style="padding:4px;font-size:10px">${pgtoLabel[o.tipo_pagamento]||o.tipo_pagamento||'—'}</td>
+      <td style="padding:4px;text-align:center">${o.pago?'✅':'❌'}</td>
+      <td style="padding:4px;font-size:10px">${o.bling_pedido_id||'—'}</td>
+      <td style="padding:4px;font-size:10px">${o.vendedor_nome||'—'}</td>
+      <td style="padding:4px;font-size:10px">${o.driver_name_cache||'—'}</td>
+      <td style="padding:4px;font-size:10px">${fmtEpoch(o.created_at)}</td>
+    </tr>`;
+  }
+
+  html += `</tbody></table></div>
+
+<!-- Footer -->
+<div style="padding:16px 32px;background:#f1f5f9;text-align:center;font-size:11px;color:#94a3b8">
+  MoskoGás — Relatório automático gerado em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })}<br>
+  Sistema: moskogas-app.pages.dev | API: api.moskogas.com.br
+</div>
+</div></body></html>`;
+
+  return html;
+}
+
+function buildReportCSV(report) {
+  const BOM = '\uFEFF'; // UTF-8 BOM para Excel abrir corretamente
+  const headers = ['ID','Status','Cliente','Telefone','Email','CPF_CNPJ','Endereco','Bairro','Complemento','Referencia','Itens','Quantidade_Total','Valor','Tipo_Pagamento','Pago','Bling_ID','Bling_Num','Vendedor','Entregador','Observacoes','Obs_Entregador','Criado_Em','Entregue_Em'];
+
+  const escape = v => {
+    if (v == null) return '';
+    const s = String(v);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+
+  const fmtEpoch = ts => {
+    if (!ts) return '';
+    return new Date(ts * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande', dateStyle: 'short', timeStyle: 'short' });
+  };
+
+  let csv = BOM + headers.join(',') + '\n';
+  for (const o of report.orders) {
+    let itensStr = '', qtdTotal = 0;
+    try {
+      const items = JSON.parse(o.items_json || '[]');
+      itensStr = items.map(i => `${i.qty}x ${i.name}`).join(' | ');
+      qtdTotal = items.reduce((s, i) => s + (parseInt(i.qty) || 1), 0);
+    } catch {}
+
+    csv += [
+      o.id, o.status, o.customer_name || '', o.phone_digits || '', o.email || '', o.cpf_cnpj || '',
+      o.address_line || '', o.bairro || '', o.complemento || '', o.referencia || '',
+      itensStr, qtdTotal, (parseFloat(o.total_value) || 0).toFixed(2),
+      o.tipo_pagamento || '', o.pago ? 'Sim' : 'Não',
+      o.bling_pedido_id || '', o.bling_pedido_num || '',
+      o.vendedor_nome || '', o.driver_name_cache || '',
+      o.notes || '', o.observacao_entregador || '',
+      fmtEpoch(o.created_at), fmtEpoch(o.delivered_at),
+    ].map(escape).join(',') + '\n';
+  }
+  return csv;
+}
+
+async function sendDailyReportEmail(env, dateStr) {
+  const config = await getReportConfig(env);
+  if (!config.ativo) {
+    console.log('[relatorio] Relatório por email desativado');
+    return { ok: false, reason: 'desativado' };
+  }
+  if (!env.RESEND_API_KEY) {
+    console.error('[relatorio] RESEND_API_KEY não configurada');
+    return { ok: false, reason: 'sem_api_key' };
+  }
+
+  const report = await generateDailyReport(env, dateStr);
+  if (report.total === 0) {
+    console.log(`[relatorio] Sem pedidos em ${dateStr}`);
+    return { ok: true, reason: 'sem_pedidos', total: 0 };
+  }
+
+  const html = buildReportHTML(report);
+  const csv = config.incluir_csv ? buildReportCSV(report) : null;
+
+  const fmtBRL = v => 'R$ ' + v.toFixed(2).replace('.', ',');
+  const subject = `Pedidos do dia — ${dateStr} — ${report.total} pedidos — ${fmtBRL(report.totalValor)}`;
+
+  const emailPayload = {
+    from: 'MoskoGás <relatorio@moskogas.com.br>',
+    to: config.destinos,
+    subject,
+    html,
+  };
+
+  if (csv) {
+    // Resend aceita attachments como base64
+    emailPayload.attachments = [{
+      filename: `pedidos_${dateStr}.csv`,
+      content: btoa(unescape(encodeURIComponent(csv))),
+    }];
+  }
+
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(emailPayload),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    console.error(`[relatorio] Resend erro ${resp.status}: ${errText}`);
+    return { ok: false, error: `Resend ${resp.status}: ${errText.substring(0, 200)}` };
+  }
+
+  const result = await resp.json();
+  console.log(`[relatorio] Email enviado: ${dateStr} — ${report.total} pedidos — ID: ${result.id}`);
+  return { ok: true, email_id: result.id, total: report.total, valor: report.totalValor, destinos: config.destinos };
+}
 
 async function keepBlingTokenFresh(env) {
   try {
