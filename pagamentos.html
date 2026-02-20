@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.5.0</title>
+<title>Pagamentos — MoskoGás v1.5.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -55,7 +55,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.5.0 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.5.1 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -75,7 +75,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.5.0</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.5.1</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -121,7 +121,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.5.0 — Pagamentos: NFe agrupada (mensal/boleto) + Marcar Pago (PIX)
+// v1.5.1 — Pagamentos: NFe agrupada (mensal/boleto) + Marcar Pago (PIX)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -300,10 +300,11 @@ function closeNfeModal(){document.getElementById('nfe-modal').classList.remove('
 
 async function confirmarNfe(){
   if(!pendingNfeIds.length)return;
+  const ids=[...pendingNfeIds]; // salvar ANTES de fechar
   closeNfeModal();
-  showLoading('Gerando NFe para '+pendingNfeIds.length+' pedido(s)...');
+  showLoading('Gerando NFe para '+ids.length+' pedido(s)...');
   try{
-    const d=await api('/api/pagamentos/criar-vendas-bling',{method:'POST',body:JSON.stringify({order_ids:pendingNfeIds})});
+    const d=await api('/api/pagamentos/criar-vendas-bling',{method:'POST',body:JSON.stringify({order_ids:ids})});
     hideLoading();
     if(d.ok!==undefined){
       const res=d.resultados||[];
