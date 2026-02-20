@@ -1,7 +1,7 @@
-// v2.28.4
+// v2.28.5
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.28.4: Bling OAuth callback retorna HTML com auto-close popup
+// v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
 // v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado
 // v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
 // v2.28.1: Lembretes PIX — saudação variada, {ontem}/{chave_pix}, delay 60s anti-ban
@@ -1053,12 +1053,32 @@ async function assinaryCreateSigner(env, signerData) {
       whatsapp_phone_number: signerData.telefone ? `+55${signerData.telefone.replace(/\D/g, '')}` : undefined,
     }),
   }, env);
-  if (!resp.ok) {
-    const errBody = await resp.text().catch(() => '');
-    throw new Error(`Assinafy create signer failed (${resp.status}): ${errBody}`);
+
+  if (resp.ok) {
+    const result = await resp.json();
+    return result.data || result;
   }
-  const result = await resp.json();
-  return result.data || result;
+
+  // Se 400 "já existe", busca o signer existente pelo email
+  const errBody = await resp.text().catch(() => '');
+  if (resp.status === 400 && signerData.email) {
+    console.log(`[assinafy] Signer already exists (${signerData.email}), searching...`);
+    const searchResp = await assinaryFetch(
+      `/accounts/${accountId}/signers?search=${encodeURIComponent(signerData.email)}`,
+      { method: 'GET' }, env
+    );
+    if (searchResp.ok) {
+      const searchResult = await searchResp.json();
+      const signers = searchResult.data || searchResult || [];
+      const found = signers.find(s => s.email === signerData.email);
+      if (found) {
+        console.log(`[assinafy] Found existing signer: ${found.id} (${found.full_name})`);
+        return found;
+      }
+    }
+  }
+
+  throw new Error(`Assinafy create signer failed (${resp.status}): ${errBody}`);
 }
 
 async function assinaryCreateAssignment(env, documentId, signerIds) {
