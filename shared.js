@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.10.0
+// shared.js — Utilitários compartilhados MoskoGás v1.11.0
+// v1.11.0: Bling Auto-Recovery — ensureBling() + apiBling() + modal reconexão
 // v1.10.0: Contratos adicionado à navbar
 // v1.9.1: Consulta Pedidos adicionado ao dropdown Relatório
 // v1.8.0: Nav compacta — Auditoria dentro de Relatório, Usuários dentro de Config
@@ -727,3 +728,266 @@ function checkApiKey() {
     window.location.href = 'login.html';
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+// BLING AUTO-RECOVERY v1.11.0
+// ensureBling()  — verifica e reconecta antes de ações
+// apiBling(name, fn) — executa ação com auto-retry em caso de 401
+// ══════════════════════════════════════════════════════════════
+
+let _blingModalEl = null;
+let _blingOAuthWin = null;
+
+function _createBlingModal() {
+  if (_blingModalEl) return _blingModalEl;
+  const div = document.createElement('div');
+  div.id = 'bling-recovery-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:99999;font-family:system-ui,-apple-system,sans-serif';
+  div.innerHTML = `
+    <div id="bling-recovery-box" style="background:#fff;border-radius:16px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center">
+      <div id="br-icon" style="font-size:48px;margin-bottom:12px">🔗</div>
+      <div id="br-title" style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:8px">Verificando Bling...</div>
+      <div id="br-msg" style="font-size:14px;color:#64748b;margin-bottom:20px;line-height:1.5">Aguarde um momento</div>
+      <div id="br-steps" style="text-align:left;margin:0 auto 20px;max-width:320px;font-size:13px"></div>
+      <div id="br-actions" style="display:none;gap:10px;justify-content:center"></div>
+    </div>`;
+  document.body.appendChild(div);
+  _blingModalEl = div;
+  return div;
+}
+
+function _showBlingModal() {
+  const m = _createBlingModal();
+  m.style.display = 'flex';
+}
+
+function _hideBlingModal() {
+  if (_blingModalEl) _blingModalEl.style.display = 'none';
+}
+
+function _blingStep(icon, title, msg, steps, actions) {
+  _showBlingModal();
+  const box = _blingModalEl.querySelector('#bling-recovery-box');
+  box.querySelector('#br-icon').textContent = icon;
+  box.querySelector('#br-title').textContent = title;
+  box.querySelector('#br-msg').innerHTML = msg;
+  const stepsEl = box.querySelector('#br-steps');
+  stepsEl.innerHTML = (steps || []).map(s =>
+    `<div style="padding:6px 0;display:flex;align-items:center;gap:8px;${s.done ? 'color:#16a34a' : s.fail ? 'color:#dc2626' : s.active ? 'color:#1e293b;font-weight:600' : 'color:#cbd5e1'}">
+      <span style="font-size:16px">${s.done ? '✅' : s.fail ? '❌' : s.active ? '⏳' : '⬜'}</span>
+      <span>${s.text}</span>
+    </div>`
+  ).join('');
+  const actEl = box.querySelector('#br-actions');
+  if (actions && actions.length) {
+    actEl.style.display = 'flex';
+    actEl.innerHTML = actions.map(a =>
+      `<button onclick="${a.onclick}" style="padding:10px 24px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:${a.primary ? 'none' : '1px solid #e2e8f0'};background:${a.primary ? '#2563eb' : '#fff'};color:${a.primary ? '#fff' : '#64748b'}">${a.label}</button>`
+    ).join('');
+  } else {
+    actEl.style.display = 'none';
+  }
+}
+
+/**
+ * ensureBling() — Verifica conexão Bling e reconecta se necessário
+ * Retorna true se conectado, false se falhou
+ * Mostra modal com progresso e tenta:
+ * 1. keep-alive (refresh automático)
+ * 2. OAuth popup (se refresh falhar)
+ */
+async function ensureBling() {
+  // Step 1: Quick check
+  _blingStep('🔗', 'Verificando Bling...', 'Testando conexão com o ERP', [
+    { text: 'Verificar token', active: true },
+    { text: 'Reconectar se necessário' },
+    { text: 'Pronto para ação' },
+  ]);
+
+  try {
+    const token = getSessionToken();
+    const headers = token ? { Authorization: 'Bearer ' + token } : { 'X-API-KEY': apiKey() || '' };
+    const resp = await fetch(API_BASE + '/api/bling/keep-alive', { headers });
+    const data = await resp.json();
+
+    if (data.ok && data.connected) {
+      const refreshMsg = data.refreshed ? ' (token renovado!)' : '';
+      _blingStep('✅', 'Bling Conectado!', `Token válido — ${data.minutesLeft}min restantes${refreshMsg}`, [
+        { text: 'Verificar token', done: true },
+        { text: data.refreshed ? 'Token renovado automaticamente' : 'Conexão OK', done: true },
+        { text: 'Pronto para ação', done: true },
+      ]);
+      await _sleep(800);
+      _hideBlingModal();
+      return true;
+    }
+
+    // Step 2: Refresh failed — need OAuth
+    console.warn('[ensureBling] Keep-alive falhou:', data.error);
+    return await _blingOAuthFlow();
+
+  } catch (e) {
+    console.error('[ensureBling] Erro:', e);
+    return await _blingOAuthFlow();
+  }
+}
+
+async function _blingOAuthFlow() {
+  return new Promise((resolve) => {
+    _blingStep('🔑', 'Reconexão Necessária', 'O token do Bling expirou.<br>Abrindo janela de autorização...', [
+      { text: 'Verificar token', done: true },
+      { text: 'Refresh automático falhou', fail: true },
+      { text: 'Autorização manual necessária', active: true },
+    ], [
+      { label: '🔑 Conectar Bling', primary: true, onclick: '_openBlingOAuth()' },
+      { label: 'Cancelar', onclick: '_cancelBlingRecovery()' },
+    ]);
+
+    // Auto-open after brief delay
+    setTimeout(() => _openBlingOAuth(), 600);
+
+    // Listen for OAuth callback
+    const handler = async (event) => {
+      if (event.data?.type === 'bling_connected') {
+        window.removeEventListener('message', handler);
+        if (_blingOAuthWin && !_blingOAuthWin.closed) _blingOAuthWin.close();
+        _blingOAuthWin = null;
+
+        _blingStep('✅', 'Bling Reconectado!', 'Autorização concluída com sucesso!', [
+          { text: 'Verificar token', done: true },
+          { text: 'Refresh automático falhou', fail: true },
+          { text: 'Reautorizado via OAuth', done: true },
+          { text: 'Pronto para ação', done: true },
+        ]);
+        await _sleep(1000);
+        _hideBlingModal();
+        resolve(true);
+      }
+    };
+    window.addEventListener('message', handler);
+
+    // Store resolve for cancel button
+    window._blingRecoveryResolve = (val) => {
+      window.removeEventListener('message', handler);
+      resolve(val);
+    };
+  });
+}
+
+function _openBlingOAuth() {
+  const w = 600, h = 700;
+  const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
+  _blingOAuthWin = window.open(
+    API_BASE + '/bling/oauth/start',
+    'bling_oauth',
+    `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`
+  );
+  _blingStep('🔑', 'Aguardando Autorização', 'Faça login no Bling na janela que abriu.<br>Após autorizar, esta tela fechará automaticamente.', [
+    { text: 'Verificar token', done: true },
+    { text: 'Refresh automático falhou', fail: true },
+    { text: 'Aguardando autorização...', active: true },
+  ], [
+    { label: '🔄 Reabrir Janela', primary: true, onclick: '_openBlingOAuth()' },
+    { label: 'Cancelar', onclick: '_cancelBlingRecovery()' },
+  ]);
+}
+
+function _cancelBlingRecovery() {
+  if (_blingOAuthWin && !_blingOAuthWin.closed) _blingOAuthWin.close();
+  _blingOAuthWin = null;
+  _hideBlingModal();
+  if (window._blingRecoveryResolve) {
+    window._blingRecoveryResolve(false);
+    window._blingRecoveryResolve = null;
+  }
+}
+
+/**
+ * apiBling(actionName, apiCallFn) — Executa ação Bling com auto-recovery
+ *
+ * Uso:
+ *   const result = await apiBling('Gerando Venda', async () => {
+ *     return await api('/api/pagamentos/criar-vendas-bling', { method: 'POST', body: ... });
+ *   });
+ *
+ * Se o Bling retornar 401, automaticamente:
+ * 1. Mostra modal de reconexão
+ * 2. Tenta refresh / OAuth
+ * 3. Retenta a ação original
+ *
+ * Retorna: { ok, data } ou { ok: false, error, canceled }
+ */
+function _isBlingAuthError(obj) {
+  if (!obj) return false;
+  const s = typeof obj === 'string' ? obj : JSON.stringify(obj);
+  return s.includes('bling_reauth') || s.includes('invalid_token') || s.includes('Token Bling expirado');
+}
+
+async function apiBling(actionName, apiCallFn) {
+  // Attempt 1: Try direct
+  try {
+    const result = await apiCallFn();
+    // Check for Bling auth errors in response (could be nested in resultados)
+    if (_isBlingAuthError(result?.error) || _isBlingAuthError(result?.resultados)) {
+      throw new Error('bling_reauth_required');
+    }
+    return { ok: true, data: result };
+  } catch (e) {
+    if (!_isBlingAuthError(e.message)) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // Bling auth failed — try recovery
+  console.warn('[apiBling] Bling 401 detectado, iniciando recovery...');
+  const recovered = await ensureBling();
+  if (!recovered) {
+    return { ok: false, error: 'Conexão Bling não restaurada', canceled: true };
+  }
+
+  // Attempt 2: Retry after recovery
+  _blingStep('🔄', 'Retentando...', `${actionName}`, [
+    { text: 'Bling reconectado', done: true },
+    { text: actionName + '...', active: true },
+  ]);
+
+  try {
+    const result = await apiCallFn();
+    if (_isBlingAuthError(result?.error) || _isBlingAuthError(result?.resultados)) {
+      _hideBlingModal();
+      return { ok: false, error: 'Bling ainda não conectado após retry' };
+    }
+    _blingStep('✅', 'Sucesso!', `${actionName} concluído!`, [
+      { text: 'Bling reconectado', done: true },
+      { text: actionName, done: true },
+    ]);
+    await _sleep(800);
+    _hideBlingModal();
+    return { ok: true, data: result, recovered: true };
+  } catch (e) {
+    _hideBlingModal();
+    return { ok: false, error: e.message };
+  }
+}
+
+/**
+ * checkBlingBeforeAction() — Verificação rápida antes de ação
+ * Diferente do ensureBling() completo, faz check silencioso e
+ * só mostra modal se precisar reconectar.
+ * Retorna true/false
+ */
+async function checkBlingBeforeAction() {
+  try {
+    const token = getSessionToken();
+    const headers = token ? { Authorization: 'Bearer ' + token } : {};
+    const resp = await fetch(API_BASE + '/api/bling/status', { headers });
+    const data = await resp.json();
+    if (data.ok && data.connected && data.minutesLeft > 2) return true;
+    // Needs recovery
+    return await ensureBling();
+  } catch(e) {
+    return await ensureBling();
+  }
+}
+
+function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

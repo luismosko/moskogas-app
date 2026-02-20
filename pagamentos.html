@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.6.0</title>
+<title>Pagamentos — MoskoGás v1.7.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -55,7 +55,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.6.0 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.7.0 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -75,7 +75,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.6.0</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.7.0</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -121,7 +121,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.6.0 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
+// v1.7.0 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -240,13 +240,25 @@ function updateBulkBar(){
 // ═══ MARCAR PAGO (PIX a receber) ═══
 async function marcarPago(orderId){
   if(!confirm('Confirmar recebimento do PIX #'+orderId+'?'))return;
-  showLoading('Marcando como pago...');
-  try{const d=await api('/api/pagamentos/'+orderId,{method:'PATCH'});hideLoading();if(d.ok){toast('✅ Pedido #'+orderId+' pago!');loadPagamentos();}else{toast('❌ '+(d.error||'Falha'),'error');}}catch(e){hideLoading();toast(e.message,'error');}
+  showLoading('Verificando Bling...');
+  const result = await apiBling('Marcando PIX #'+orderId+' como pago', async () => {
+    return await api('/api/pagamentos/'+orderId,{method:'PATCH'});
+  });
+  hideLoading();
+  if(result.ok){
+    if(result.data.ok){toast('✅ Pedido #'+orderId+' pago!');loadPagamentos();}
+    else toast('❌ '+(result.data.error||'Falha'),'error');
+  } else if(!result.canceled) {
+    toast('❌ '+result.error,'error');
+  }
 }
 async function bulkMarcarPago(){
   const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id===id);return p&&p.tipo_pagamento==='pix_receber';});
   if(!ids.length){toast('⚠️ Nenhum PIX selecionado','error');return;}
   if(!confirm('Marcar '+ids.length+' PIX como pago(s)?'))return;
+  // Verifica Bling antes do loop
+  const blingOk = await checkBlingBeforeAction();
+  if(!blingOk){toast('⚠️ Bling não conectado — operação cancelada','error');return;}
   showLoading('Processando '+ids.length+' pagamento(s)...');
   let ok=0,fail=0;
   for(const id of ids){try{const d=await api('/api/pagamentos/'+id,{method:'PATCH'});if(d.ok)ok++;else fail++;}catch(e){fail++;}}
@@ -302,22 +314,29 @@ async function confirmarNfe(){
   if(!pendingNfeIds.length)return;
   const ids=[...pendingNfeIds]; // salvar ANTES de fechar
   closeNfeModal();
-  showLoading('Gerando Venda para '+ids.length+' pedido(s)...');
-  try{
-    const d=await api('/api/pagamentos/criar-vendas-bling',{method:'POST',body:JSON.stringify({order_ids:ids})});
-    hideLoading();
+  
+  const result = await apiBling('Gerando Venda para '+ids.length+' pedido(s)', async () => {
+    return await api('/api/pagamentos/criar-vendas-bling',{method:'POST',body:JSON.stringify({order_ids:ids})});
+  });
+  hideLoading();
+  
+  if(result.ok){
+    const d=result.data;
     if(d.ok!==undefined){
       const res=d.resultados||[];
       const ok=res.filter(r=>r.ok).length, fail=res.filter(r=>!r.ok).length;
       let msg='📄 '+ok+' Venda(s) criada(s) no Bling!';
       if(fail>0)msg+=' ⚠️ '+fail+' erro(s)';
+      if(result.recovered)msg+=' (reconectado)';
       toast(msg,fail?'error':'success');
       for(const r of res){if(!r.ok)toast('❌ '+r.cliente+': '+r.error,'error');}
     } else {
       toast('❌ '+(d.error||'Falha ao gerar Venda'),'error');
     }
     loadPagamentos();
-  }catch(e){hideLoading();toast(e.message,'error');}
+  } else if(!result.canceled) {
+    toast('❌ '+result.error,'error');
+  }
 }
 
 // ═══ LEMBRETES PIX ═══
