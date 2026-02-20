@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.1.3 — MoskoGás</title>
+<title>Contratos v1.1.4 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.1.3</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.1.4</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -245,7 +245,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.1.3 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
+// v1.1.4 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -781,24 +781,32 @@ async function gerarPDF(id) {
 
     // Build HTML contract
     const html = buildContractHTML(c, signers, itens, com);
+    console.log('[PDF] HTML length:', html?.length, 'first 200:', html?.substring(0, 200));
 
     // Generate PDF via html2pdf.js
     const element = document.createElement('div');
     element.innerHTML = html;
-    element.style.position = 'absolute';
-    element.style.left = '-9999px';
+    element.style.cssText = 'position:fixed;top:0;left:0;width:700px;z-index:-9999;opacity:0;pointer-events:none;background:#fff;';
     document.body.appendChild(element);
+
+    // Wait for content to render
+    await new Promise(r => setTimeout(r, 500));
 
     const opt = {
       margin: [15, 15, 15, 15],
       filename: `Comodato_${c.numero}.pdf`,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 700 },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     };
 
     const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
     document.body.removeChild(element);
+
+    console.log('[PDF] Blob size:', pdfBlob?.size, 'type:', pdfBlob?.type);
+    if (!pdfBlob || pdfBlob.size < 500) {
+      throw new Error(`PDF gerado está vazio (${pdfBlob?.size || 0} bytes). Verifique o template.`);
+    }
 
     // Upload to worker
     const resp = await fetch(API_BASE + `/api/contratos/${id}/gerar-pdf`, {
