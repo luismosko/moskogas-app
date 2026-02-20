@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.1</title>
+<title>Novo Pedido — MoskoGás v2.11.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.1 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.2 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.1</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.2</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -390,6 +390,8 @@ async function selectCustomer(i) {
   ['searchPhone','searchName','searchAddr'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  // v2.10.3: Salvar bling_contact_id para uso no pedido
+  window._lastBlingContactId = c.bling_contact_id || null;
   // Busca detalhes Bling
   if (c.bling_contact_id) {
     try {
@@ -1048,7 +1050,7 @@ async function saveOrder() {
       }),
     });
 
-    // Salvar cliente no cache
+    // Salvar cliente no cache (preservando bling_contact_id)
     await api('/api/customer/upsert', {
       method: 'POST',
       body: JSON.stringify({
@@ -1058,6 +1060,7 @@ async function saveOrder() {
         bairro:      document.getElementById('cBairro').value,
         complemento: document.getElementById('cComp').value,
         referencia:  document.getElementById('cRef').value,
+        bling_contact_id: window._lastBlingContactId || null,
       }),
     }).catch(() => {});
 

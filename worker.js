@@ -1,7 +1,7 @@
-// v2.28.7
+// v2.28.8
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.28.7: Fix pagamentos — skip Bling para boleto/mensalista + remove payments table dep
+// v2.28.8: Fix pagamentos — skip Bling para boleto/mensalista + remove payments table dep
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
 // v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado
 // v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
@@ -1249,18 +1249,25 @@ function mapContatos(lista) {
       complemento: end.complemento || '',
       referencia: '',
       bling_contact_id: c.id,
+      cpf_cnpj: c.numeroDocumento || '',
+      tipo_pessoa: c.tipo || '',
+      email: c.email || '',
     };
   });
 }
 
 async function saveContactsCache(result, env) {
+  // Ensure columns exist
+  for (const col of ['cpf_cnpj TEXT', 'email TEXT', 'email_nfe TEXT', 'tipo_pessoa TEXT']) {
+    await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => {});
+  }
   for (const r of result) {
     if (r.phone_digits || r.bling_contact_id) {
       try {
         await env.DB.prepare(`
-          INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, unixepoch())
-        `).bind(r.phone_digits||null, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id||null).run();
+          INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, tipo_pessoa, email, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+        `).bind(r.phone_digits||null, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id||null, r.cpf_cnpj||null, r.tipo_pessoa||null, r.email||null).run();
       } catch(_) {}
     }
   }
@@ -2290,11 +2297,16 @@ export default {
 
     if (method === 'POST' && path === '/api/customer/upsert') {
       const body = await request.json();
-      const { phone, name, address_line, bairro, complemento, referencia } = body;
+      const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj } = body;
       const digits = (phone || '').replace(/\D/g, '');
-      await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, updated_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch())`).bind(digits, name, address_line, bairro, complemento, referencia).run();
-      // v2.17.0: NÃO cria contato no Bling aqui — só cliente com CPF/CNPJ cadastrado via /customer/save-bling cria contato
-      return json({ ok: true });
+      
+      // v2.28.8: Preservar bling_contact_id existente se não fornecido
+      const existing = digits ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null) : null;
+      const finalBlingId = bling_contact_id || existing?.bling_contact_id || null;
+      const finalCpf = cpf_cnpj || existing?.cpf_cnpj || null;
+      
+      await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`).bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf).run();
+      return json({ ok: true, bling_contact_id: finalBlingId });
     }
 
     // ── PEDIDOS ──────────────────────────────────────────────
