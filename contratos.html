@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.1.2 — MoskoGás</title>
+<title>Contratos v1.1.3 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.1.2</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.1.3</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -245,7 +245,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.1.2 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
+// v1.1.3 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -417,8 +417,8 @@ async function openDetail(id) {
             ${c.status === 'ready' ? `<button class="btn btn-green btn-sm" onclick="enviarAssinatura(${c.id})">✍️ Enviar p/ Assinatura</button>` : ''}
             ${['draft','ready'].includes(c.status) ? `<button class="btn btn-purple btn-sm" onclick="gerarPDF(${c.id})">📃 Gerar PDF</button>` : ''}
             ${['waiting','partially_signed'].includes(c.status) ? `<button class="btn btn-purple btn-sm" onclick="reenviarLinks(${c.id})">📲 Reenviar WhatsApp</button>` : ''}
-            ${c.generated_pdf_key ? `<a class="btn btn-gray btn-sm" href="${API_BASE}/api/contratos/${c.id}/pdf?type=generated&api_key=${getApiKeyFallback()}" target="_blank">📥 PDF Gerado</a>` : ''}
-            ${c.signed_pdf_key ? `<a class="btn btn-green btn-sm" href="${API_BASE}/api/contratos/${c.id}/pdf?type=signed&api_key=${getApiKeyFallback()}" target="_blank">📥 PDF Assinado</a>` : ''}
+            ${c.generated_pdf_key ? `<button class="btn btn-gray btn-sm" onclick="viewPdf(${c.id},'generated')">📥 PDF Gerado</button>` : ''}
+            ${c.signed_pdf_key ? `<button class="btn btn-green btn-sm" onclick="viewPdf(${c.id},'signed')">📥 PDF Assinado</button>` : ''}
             ${c.status !== 'canceled' && c.status !== 'signed' ? `<button class="btn btn-red btn-sm" onclick="cancelarContrato(${c.id})">❌ Cancelar</button>` : ''}
           </div>
         </div>
@@ -482,6 +482,22 @@ async function openDetail(id) {
   } catch (e) {
     toast('Erro ao carregar contrato: ' + e.message, 'error');
   }
+}
+
+async function viewPdf(id, type) {
+  showLoading('Carregando PDF...');
+  try {
+    const token = localStorage.getItem('mg_session_token');
+    const resp = await fetch(`${API_BASE}/api/contratos/${id}/pdf?type=${type}`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!resp.ok) throw new Error('Erro ao buscar PDF');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally { hideLoading(); }
 }
 
 function voltarLista() {
