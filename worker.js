@@ -1,4 +1,4 @@
-// v2.29.0
+// v2.29.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -3692,8 +3692,10 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/relatorio/preview-email') {
-      const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck instanceof Response) return authCheck;
+      // Aceita auth por sessão OU API key via query (para abrir direto no browser)
+      const apiKeyParam = url.searchParams.get('key');
+      if (apiKeyParam && apiKeyParam === env.APP_API_KEY) { /* ok */ }
+      else { const authCheck = await requireAuth(request, env, ['admin']); if (authCheck instanceof Response) return authCheck; }
       const dateStr = url.searchParams.get('date') || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const report = await generateDailyReport(env, dateStr);
       if (report.total === 0) return new Response(`<h2>Sem pedidos em ${dateStr}</h2>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
@@ -3702,8 +3704,9 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/relatorio/download-csv') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
-      if (authCheck instanceof Response) return authCheck;
+      const apiKeyParam = url.searchParams.get('key');
+      if (apiKeyParam && apiKeyParam === env.APP_API_KEY) { /* ok */ }
+      else { const authCheck = await requireAuth(request, env, ['admin', 'atendente']); if (authCheck instanceof Response) return authCheck; }
       const dateStr = url.searchParams.get('date') || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const report = await generateDailyReport(env, dateStr);
       if (report.total === 0) return json({ error: `Sem pedidos em ${dateStr}` }, 404);
