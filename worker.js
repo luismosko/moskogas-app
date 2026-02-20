@@ -1,7 +1,7 @@
-// v2.28.6
+// v2.28.7
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.28.6: Fix pagamentos — skip Bling para boleto/mensalista + remove payments table dep
+// v2.28.7: Fix pagamentos — skip Bling para boleto/mensalista + remove payments table dep
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
 // v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado
 // v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
@@ -2676,8 +2676,10 @@ export default {
       }
 
       // ── v2.17.0: Criar venda no Bling AGORA (ao entregar) ──
+      // v2.28.7: Boleto/Mensalista NÃO criam Bling aqui — só via criar-vendas-bling (agrupado)
+      const TIPOS_BLING_ENTREGA = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
       let blingResult = null;
-      if (!order.bling_pedido_id) {
+      if (!order.bling_pedido_id && TIPOS_BLING_ENTREGA.includes(tipoFinal)) {
         try {
           const custData = order.phone_digits
             ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
@@ -3049,8 +3051,9 @@ export default {
 
         const itensBling = produtos.map(p => buildItemBling(p));
 
-        // v2.17.1: Só vincula contato real se tem CPF/CNPJ (>=11 dígitos)
-        const usarContatoReal = grupo.bling_contact_id && grupo.cpf_cnpj && grupo.cpf_cnpj.replace(/\D/g, '').length >= 11;
+        // v2.28.7: Para boleto/mensalista, usar contato real se bling_contact_id existe
+        // (não exigir cpf_cnpj como na NFCe — esses clientes já estão cadastrados no Bling)
+        const usarContatoReal = !!grupo.bling_contact_id;
 
         const pedidoBody = {
           contato: usarContatoReal ? { id: grupo.bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
@@ -3058,7 +3061,7 @@ export default {
           dataSaida: today,
           itens: itensBling,
           parcelas: [{ formaPagamento: { id: FORMAS_PAGAMENTO.fiado.id }, valor: grupo.total, dataVencimento: today }],
-          observacoes: `NFe Agrupada MoskoGás — ${grupo.cliente} — Pedidos: ${pedidoIds.map(i => '#'+i).join(', ')}`,
+          observacoes: `MoskoGás Venda Agrupada — ${grupo.cliente} — Pedidos: ${pedidoIds.map(i => '#'+i).join(', ')}`,
         };
 
         try {
@@ -3079,7 +3082,7 @@ export default {
 
           for (const orderId of pedidoIds) {
             await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, pago=1, sync_status=? WHERE id=?').bind(blingId, blingNum, 'synced_nfe', orderId).run();
-            await logEvent(env, orderId, 'nfe_agrupada', { bling_pedido_id: blingId, bling_pedido_num: blingNum, grupo_pedidos: pedidoIds });
+            await logEvent(env, orderId, 'venda_agrupada', { bling_pedido_id: blingId, bling_pedido_num: blingNum, grupo_pedidos: pedidoIds });
             await logBlingAudit(env, orderId, 'criar_venda_lote', 'success', { bling_pedido_id: String(blingId||''), request_payload: pedidoBody, response_data: pedidoData });
           }
 

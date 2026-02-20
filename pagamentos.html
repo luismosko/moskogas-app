@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.5.1</title>
+<title>Pagamentos — MoskoGás v1.6.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -55,7 +55,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.5.1 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.6.0 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -75,14 +75,14 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.5.1</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.6.0</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
   <input type="checkbox" id="bulk-all" onchange="toggleBulkAll(this.checked)" title="Selecionar/desmarcar todos">
   <span class="count"><span id="bulk-count">0</span> selecionados</span>
   <button class="btn" style="background:#16a34a;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkMarcarPago()" id="btn-bulk-pago" title="Marcar pagos (PIX a receber)">✅ Marcar Pagos (<span id="bulk-pix-count">0</span>)</button>
-  <button class="btn" style="background:#7c3aed;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkGerarNfe()" id="btn-bulk-nfe" title="Gerar NFe agrupada no Bling (Mensalista/Boleto)">📄 Gerar NFe Agrupada (<span id="bulk-nfe-count">0</span>)</button>
+  <button class="btn" style="background:#7c3aed;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkGerarNfe()" id="btn-bulk-nfe" title="Gerar Venda Agrupada no Bling (Mensalista/Boleto)">📄 Gerar Venda Agrupada (<span id="bulk-nfe-count">0</span>)</button>
   <button class="btn" style="background:#2563eb;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkEnviarLembrete()" id="btn-bulk-lembrete" title="Enviar lembrete WhatsApp (PIX)">📱 Enviar Lembretes</button>
 </div>
 
@@ -108,20 +108,20 @@
 <div class="modal-overlay" id="nfe-modal">
   <div class="modal-box">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <h3>📄 Preview NFe Agrupada</h3>
+      <h3>📄 Preview Venda Agrupada</h3>
       <button onclick="closeNfeModal()" style="background:none;border:none;font-size:20px;cursor:pointer" title="Fechar">✕</button>
     </div>
     <div id="nfe-modal-body"></div>
     <div class="btn-row">
       <button class="btn" style="background:#e2e8f0;color:#475569" onclick="closeNfeModal()">Cancelar</button>
-      <button class="btn" style="background:#7c3aed;color:#fff" onclick="confirmarNfe()">📄 Confirmar e Gerar NFe</button>
+      <button class="btn" style="background:#7c3aed;color:#fff" onclick="confirmarNfe()">📄 Confirmar e Gerar Venda</button>
     </div>
   </div>
 </div>
 
 <script src="shared.js"></script>
 <script>
-// v1.5.1 — Pagamentos: NFe agrupada (mensal/boleto) + Marcar Pago (PIX)
+// v1.6.0 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -188,7 +188,7 @@ function renderTable(rows) {
     }
     // Botão principal
     if(isNfe){
-      actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar NFe no Bling + marcar pago">📄 NFe</button>`;
+      actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar Venda no Bling + marcar pago">📄 Venda</button>`;
     } else {
       actionBtns+=`<button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento PIX">✅ Pago</button>`;
     }
@@ -290,8 +290,8 @@ function showNfePreview(ids){
     html+=`</tbody></table>`;
     html+=`<div class="total-line">Total: R$ ${g.total.toFixed(2)}</div></div>`;
   }
-  if(gKeys.length>1) html+=`<div style="font-size:13px;color:#64748b;text-align:right;margin-top:8px">${gKeys.length} cliente(s) → ${gKeys.length} NFe(s) no Bling</div>`;
-  html+=`<div style="margin-top:12px;padding:10px;background:#fef3c7;border-radius:8px;font-size:12px;color:#92400e">⚠️ Será criada uma venda no Bling para cada cliente, agrupando os itens. Os pedidos serão marcados como pagos.</div>`;
+  if(gKeys.length>1) html+=`<div style="font-size:13px;color:#64748b;text-align:right;margin-top:8px">${gKeys.length} cliente(s) → ${gKeys.length} Venda(s) no Bling</div>`;
+  html+=`<div style="margin-top:12px;padding:10px;background:#fef3c7;border-radius:8px;font-size:12px;color:#92400e">⚠️ Será criada uma Venda no Bling para cada cliente, agrupando os itens dos pedidos selecionados. Os pedidos serão marcados como pagos.</div>`;
   document.getElementById('nfe-modal-body').innerHTML=html;
   document.getElementById('nfe-modal').classList.add('show');
 }
@@ -302,19 +302,19 @@ async function confirmarNfe(){
   if(!pendingNfeIds.length)return;
   const ids=[...pendingNfeIds]; // salvar ANTES de fechar
   closeNfeModal();
-  showLoading('Gerando NFe para '+ids.length+' pedido(s)...');
+  showLoading('Gerando Venda para '+ids.length+' pedido(s)...');
   try{
     const d=await api('/api/pagamentos/criar-vendas-bling',{method:'POST',body:JSON.stringify({order_ids:ids})});
     hideLoading();
     if(d.ok!==undefined){
       const res=d.resultados||[];
       const ok=res.filter(r=>r.ok).length, fail=res.filter(r=>!r.ok).length;
-      let msg='📄 '+ok+' NFe(s) criada(s) no Bling!';
+      let msg='📄 '+ok+' Venda(s) criada(s) no Bling!';
       if(fail>0)msg+=' ⚠️ '+fail+' erro(s)';
       toast(msg,fail?'error':'success');
       for(const r of res){if(!r.ok)toast('❌ '+r.cliente+': '+r.error,'error');}
     } else {
-      toast('❌ '+(d.error||'Falha ao gerar NFe'),'error');
+      toast('❌ '+(d.error||'Falha ao gerar Venda'),'error');
     }
     loadPagamentos();
   }catch(e){hideLoading();toast(e.message,'error');}
