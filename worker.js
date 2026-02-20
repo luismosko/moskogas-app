@@ -1,4 +1,4 @@
-// v2.29.1
+// v2.29.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -1745,8 +1745,8 @@ export default {
       });
     }
 
-    // Contratos, webhooks e rotas públicas têm auth próprio
-    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks') && !path.startsWith('/api/pub/')) {
+    // Contratos, webhooks, rotas públicas e relatório (auth próprio) têm auth próprio
+    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks') && !path.startsWith('/api/pub/') && !path.startsWith('/api/relatorio/')) {
       const authErr = requireApiKey(request, env);
       if (authErr) return authErr;
     }
