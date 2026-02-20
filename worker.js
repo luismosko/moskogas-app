@@ -1,4 +1,4 @@
-// v2.29.3
+// v2.29.4
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -4476,12 +4476,19 @@ export default {
     if (hour === 1) {
       ctx.waitUntil(dailyAuditSnapshot(env));
     }
-    // Relatório diário por email — verifica config para hora
+    // Relatório diário por email — verifica config para hora + dedup
     try {
       const reportConfig = await getReportConfig(env);
       if (reportConfig.ativo && hour === (reportConfig.hora_utc || 6)) {
         const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-        ctx.waitUntil(sendDailyReportEmail(env, yesterday));
+        // Dedup: verificar se já enviou relatório desse dia
+        const lastSent = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_last_sent'").first().catch(() => null);
+        if (lastSent?.value !== yesterday) {
+          await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('relatorio_last_sent', ?, datetime('now'))").bind(yesterday).run();
+          ctx.waitUntil(sendDailyReportEmail(env, yesterday));
+        } else {
+          console.log(`[relatorio-cron] Já enviado para ${yesterday}, pulando.`);
+        }
       }
     } catch(e) { console.error('[relatorio-cron] Erro:', e.message); }
     // Lembretes PIX automáticos — verificar config para hora
