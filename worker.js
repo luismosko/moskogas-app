@@ -1,6 +1,7 @@
-// v2.28.5
+// v2.28.6
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.28.6: Fix pagamentos — skip Bling para boleto/mensalista + remove payments table dep
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
 // v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado
 // v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
@@ -2328,7 +2329,7 @@ export default {
       `).bind(digits||'', name||'', address_line||'', bairro||'', complemento||'', referencia||'', JSON.stringify(items||[]), total_value!=null?total_value:null, notes||null, forma_pagamento_key||null, forma_pagamento_id!=null?Number(forma_pagamento_id):null, emitir_nfce?1:0, tipoPg, pago, vendedorId, vendedorNome).run();
 
       const orderId = result.meta?.last_row_id;
-      await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, 'pendente', forma_pagamento_key||null).run();
+      try { await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, 'pendente', forma_pagamento_key||null).run(); } catch(_) {}
       await logEvent(env, orderId, 'created', { name, address_line, tipo_pagamento: tipoPg, pago, vendedor: vendedorNome });
       await logBlingAudit(env, orderId, 'criar_venda', 'skipped', { error_message: `Bling será criado ao marcar entregue` });
 
@@ -2947,7 +2948,12 @@ export default {
       if (!order) return err('Pedido não encontrado', 404);
       if (order.pago === 1) return json({ ok: true, message: 'Já estava pago' });
 
-      if (!order.bling_pedido_id) {
+      // Tipos que criam Bling individualmente (ao entregar)
+      // Boleto e Mensalista → Bling só em lote (criar-vendas-bling), não criar aqui
+      const tiposCriarBling = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
+      const deveCriarBling = !order.bling_pedido_id && tiposCriarBling.includes(order.tipo_pagamento);
+
+      if (deveCriarBling) {
         try {
           const cached = await env.DB.prepare(
             'SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?'
@@ -2989,8 +2995,7 @@ export default {
       }
 
       await env.DB.prepare('UPDATE orders SET pago=1 WHERE id=?').bind(orderId).run();
-      await env.DB.prepare('UPDATE payments SET status=?, received_at=unixepoch() WHERE order_id=?').bind('pago', orderId).run();
-      await logBlingAudit(env, orderId, 'marcar_pago', 'success', { bling_pedido_id: order.bling_pedido_id || '' });
+      await logBlingAudit(env, orderId, 'marcar_pago', 'success', { bling_pedido_id: order.bling_pedido_id || '', tipo: order.tipo_pagamento });
       await logEvent(env, orderId, 'payment_confirmed', {});
       return json({ ok: true });
     }
@@ -3074,7 +3079,6 @@ export default {
 
           for (const orderId of pedidoIds) {
             await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, pago=1, sync_status=? WHERE id=?').bind(blingId, blingNum, 'synced_nfe', orderId).run();
-            await env.DB.prepare('UPDATE payments SET status=?, received_at=unixepoch() WHERE order_id=?').bind('pago', orderId).run();
             await logEvent(env, orderId, 'nfe_agrupada', { bling_pedido_id: blingId, bling_pedido_num: blingNum, grupo_pedidos: pedidoIds });
             await logBlingAudit(env, orderId, 'criar_venda_lote', 'success', { bling_pedido_id: String(blingId||''), request_payload: pedidoBody, response_data: pedidoData });
           }
