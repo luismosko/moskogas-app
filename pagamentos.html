@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.4.0</title>
+<title>Pagamentos — MoskoGás v1.5.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -13,8 +13,7 @@
   .btn { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; }
   .btn-orange { background: #f97316; color: #fff; }
   .btn:hover { opacity: 0.85; }
-
-  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 16px; }
+  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding: 16px; }
   .s-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
   .s-card .label { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
   .s-card .value { font-size: 24px; font-weight: 900; }
@@ -23,354 +22,319 @@
   .s-card .value.gray { color: #64748b; }
   .s-card .value.green { color: #16a34a; }
   .s-card .value.blue { color: #2563eb; }
-
+  .s-card .value.purple { color: #7c3aed; }
   table { width: 100%; border-collapse: collapse; background: #fff; }
   th { background: #475569; color: #fff; padding: 8px 10px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
   td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
   tr:hover td { background: #fffbeb; }
-
   .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; }
   .btn-pago { background: #16a34a; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-pago:hover { background: #15803d; }
-  .btn-pago:disabled { background: #94a3b8; cursor: not-allowed; }
+  .btn-nfe { background: #7c3aed; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-nfe:hover { background: #6d28d9; }
   .btn-lembrete { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-lembrete:hover { background: #1d4ed8; }
-  .btn-lembrete:disabled { background: #94a3b8; cursor: not-allowed; }
+  .btn-lembrete:disabled, .btn-pago:disabled, .btn-nfe:disabled { background: #94a3b8; cursor: not-allowed; }
   .btn-lembrete .rb { background: #fbbf24; color: #92400e; border-radius: 8px; padding: 1px 5px; font-size: 10px; margin-left: 3px; }
   .empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 15px; }
-
   .bulk-bar { display: none; background: #fef3c7; padding: 10px 16px; align-items: center; gap: 12px; border-bottom: 2px solid #fbbf24; flex-wrap: wrap; }
   .bulk-bar.show { display: flex; }
   .bulk-bar .count { font-weight: 800; color: #92400e; font-size: 14px; }
-
   .actions-cell { display: flex; gap: 4px; align-items: center; }
   .ri { font-size: 10px; color: #94a3b8; margin-top: 2px; }
   .ri.w { color: #f97316; }
+  .modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:200; justify-content:center; align-items:center; }
+  .modal-overlay.show { display:flex; }
+  .modal-box { background:#fff; border-radius:16px; padding:24px; max-width:600px; width:95%; max-height:80vh; overflow-y:auto; box-shadow:0 16px 48px rgba(0,0,0,0.2); }
+  .modal-box h3 { margin-bottom:16px; font-size:18px; }
+  .modal-box table { font-size:13px; margin:12px 0; }
+  .modal-box table th { background:#7c3aed; position:static; }
+  .modal-box .total-line { font-size:18px; font-weight:900; color:#7c3aed; text-align:right; margin:12px 0; }
+  .modal-box .btn-row { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.4.0 — pagamentos</div>
-
-<!-- TOOLBAR -->
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.5.0 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
     <span style="color:#94a3b8;font-size:12px">até</span>
     <input type="date" id="fDateTo" onchange="loadPagamentos()" style="width:135px">
-    <button class="btn" onclick="setDateFilter('hoje')" id="btnHoje" title="Filtrar pagamentos de hoje" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px">Hoje</button>
-    <button class="btn" onclick="setDateFilter('ontem')" id="btnOntem" title="Filtrar pagamentos de ontem" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px">Ontem</button>
+    <button class="btn" onclick="setDateFilter('hoje')" id="btnHoje" title="Filtrar hoje" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px">Hoje</button>
+    <button class="btn" onclick="setDateFilter('ontem')" id="btnOntem" title="Filtrar ontem" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px">Ontem</button>
     <button class="btn" onclick="setDateFilter('semana')" id="btnSemana" title="Últimos 7 dias" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px">7 dias</button>
-    <button class="btn" onclick="setDateFilter('limpar')" title="Limpar filtro de data" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
+    <button class="btn" onclick="setDateFilter('limpar')" title="Limpar filtro" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
   </div>
-  <select id="fTipo" onchange="loadPagamentos()" title="Filtrar por tipo de pagamento">
+  <select id="fTipo" onchange="loadPagamentos()" title="Filtrar por tipo">
     <option value="">Todos os tipos</option>
     <option value="pix_receber">⏳ PIX a receber</option>
     <option value="mensalista">📅 Mensalista</option>
     <option value="boleto">🧾 Boleto</option>
-    <option value="nfe">📄 NFe</option>
   </select>
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
-  <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar lista">🔄 Atualizar</button>
+  <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.4.0</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.5.0</span>
 </div>
 
-<!-- BULK BAR -->
 <div class="bulk-bar" id="bulk-bar">
   <input type="checkbox" id="bulk-all" onchange="toggleBulkAll(this.checked)" title="Selecionar/desmarcar todos">
   <span class="count"><span id="bulk-count">0</span> selecionados</span>
-  <button class="btn" style="background:#16a34a;color:#fff;font-size:12px;padding:6px 14px" onclick="bulkMarcarPago()" title="Marcar pagos em lote">✅ Marcar Pagos</button>
-  <button class="btn" style="background:#2563eb;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkEnviarLembrete()" id="btn-bulk-lembrete" title="Enviar lembrete WhatsApp (só PIX)">📱 Enviar Lembretes</button>
+  <button class="btn" style="background:#16a34a;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkMarcarPago()" id="btn-bulk-pago" title="Marcar pagos (PIX a receber)">✅ Marcar Pagos (<span id="bulk-pix-count">0</span>)</button>
+  <button class="btn" style="background:#7c3aed;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkGerarNfe()" id="btn-bulk-nfe" title="Gerar NFe agrupada no Bling (Mensalista/Boleto)">📄 Gerar NFe Agrupada (<span id="bulk-nfe-count">0</span>)</button>
+  <button class="btn" style="background:#2563eb;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkEnviarLembrete()" id="btn-bulk-lembrete" title="Enviar lembrete WhatsApp (PIX)">📱 Enviar Lembretes</button>
 </div>
 
-<!-- SUMMARY CARDS -->
 <div class="summary-cards">
-  <div class="s-card">
-    <div class="label">💰 Total Pendente</div>
-    <div class="value red" id="total-pendente">R$ 0,00</div>
-  </div>
-  <div class="s-card">
-    <div class="label">📊 Qtd Pendentes</div>
-    <div class="value orange" id="count-total">0</div>
-  </div>
-  <div class="s-card">
-    <div class="label">⏳ PIX Pendente</div>
-    <div class="value blue" id="count-pix">0</div>
-  </div>
-  <div class="s-card">
-    <div class="label">✅ No Bling</div>
-    <div class="value green" id="count-bling">0</div>
-  </div>
-  <div class="s-card">
-    <div class="label">📱 Lembretes Enviados</div>
-    <div class="value gray" id="count-lembretes">0</div>
-  </div>
+  <div class="s-card"><div class="label">💰 Total Pendente</div><div class="value red" id="total-pendente">R$ 0,00</div></div>
+  <div class="s-card"><div class="label">📊 Qtd Pendentes</div><div class="value orange" id="count-total">0</div></div>
+  <div class="s-card"><div class="label">⏳ PIX a Receber</div><div class="value blue" id="count-pix">0</div></div>
+  <div class="s-card"><div class="label">📅 Mensal/Boleto</div><div class="value purple" id="count-mensal">0</div></div>
+  <div class="s-card"><div class="label">✅ Com Bling</div><div class="value green" id="count-bling">0</div></div>
+  <div class="s-card"><div class="label">📱 Lembretes</div><div class="value gray" id="count-lembretes">0</div></div>
 </div>
 
-<!-- TABELA -->
 <table>
-  <thead>
-    <tr>
-      <th style="width:30px"><input type="checkbox" id="th-check" onchange="toggleBulkAll(this.checked)" title="Selecionar todos"></th>
-      <th>#</th>
-      <th>Data</th>
-      <th>Cliente</th>
-      <th>Endereço</th>
-      <th>Itens</th>
-      <th>Valor</th>
-      <th>Tipo</th>
-      <th>Bling</th>
-      <th>Ação</th>
-    </tr>
-  </thead>
+  <thead><tr>
+    <th style="width:30px"><input type="checkbox" id="th-check" onchange="toggleBulkAll(this.checked)" title="Selecionar todos"></th>
+    <th>#</th><th>Data</th><th>Cliente</th><th>Endereço</th><th>Itens</th><th>Valor</th><th>Tipo</th><th>Bling</th><th>Ação</th>
+  </tr></thead>
   <tbody id="tbody"></tbody>
 </table>
 <div id="empty-msg" class="empty" style="display:none">✅ Nenhum pagamento pendente!</div>
 
+<!-- Modal NFe Preview -->
+<div class="modal-overlay" id="nfe-modal">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>📄 Preview NFe Agrupada</h3>
+      <button onclick="closeNfeModal()" style="background:none;border:none;font-size:20px;cursor:pointer" title="Fechar">✕</button>
+    </div>
+    <div id="nfe-modal-body"></div>
+    <div class="btn-row">
+      <button class="btn" style="background:#e2e8f0;color:#475569" onclick="closeNfeModal()">Cancelar</button>
+      <button class="btn" style="background:#7c3aed;color:#fff" onclick="confirmarNfe()">📄 Confirmar e Gerar NFe</button>
+    </div>
+  </div>
+</div>
+
 <script src="shared.js"></script>
 <script>
-// v1.4.0
+// v1.5.0 — Pagamentos: NFe agrupada (mensal/boleto) + Marcar Pago (PIX)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
 let allData = [];
 let selectedIds = new Set();
+let pendingNfeIds = [];
 
-function todayCG() { return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' }); }
-function daysCG(n) {
-  const d = new Date(); d.setDate(d.getDate() + n);
-  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
-}
+const TIPO_LABELS = { pix_receber:'⏳ PIX', mensalista:'📅 Mensal', boleto:'🧾 Boleto', dinheiro:'💵 Dinh', pix_vista:'⚡ PIX', debito:'💳 Déb', credito:'💳 Créd' };
+const TIPOS_NFE = ['mensalista','boleto'];
+
+function todayCG() { return new Date().toLocaleDateString('sv-SE',{timeZone:'America/Campo_Grande'}); }
+function daysCG(n) { const d=new Date(); d.setDate(d.getDate()+n); return d.toLocaleDateString('sv-SE',{timeZone:'America/Campo_Grande'}); }
 
 function setDateFilter(mode) {
-  const from = document.getElementById('fDateFrom');
-  const to   = document.getElementById('fDateTo');
-  const btns = { hoje: document.getElementById('btnHoje'), ontem: document.getElementById('btnOntem'), semana: document.getElementById('btnSemana') };
-  Object.values(btns).forEach(b => b.style.background = '#64748b');
-  if (mode === 'hoje') {
-    const t = todayCG(); from.value = t; to.value = t;
-    btns.hoje.style.background = '#f97316';
-  } else if (mode === 'ontem') {
-    const y = daysCG(-1); from.value = y; to.value = y;
-    btns.ontem.style.background = '#f97316';
-  } else if (mode === 'semana') {
-    from.value = daysCG(-7); to.value = todayCG();
-    btns.semana.style.background = '#f97316';
-  } else { from.value = ''; to.value = ''; }
+  const from=document.getElementById('fDateFrom'), to=document.getElementById('fDateTo');
+  const btns={hoje:document.getElementById('btnHoje'),ontem:document.getElementById('btnOntem'),semana:document.getElementById('btnSemana')};
+  Object.values(btns).forEach(b=>b.style.background='#64748b');
+  if(mode==='hoje'){const t=todayCG();from.value=t;to.value=t;btns.hoje.style.background='#f97316';}
+  else if(mode==='ontem'){const y=daysCG(-1);from.value=y;to.value=y;btns.ontem.style.background='#f97316';}
+  else if(mode==='semana'){from.value=daysCG(-7);to.value=todayCG();btns.semana.style.background='#f97316';}
+  else{from.value='';to.value='';}
   loadPagamentos();
 }
 
 let loadTimer;
-async function loadPagamentos() {
-  clearTimeout(loadTimer);
-  loadTimer = setTimeout(_loadPagamentos, 150);
-}
+function loadPagamentos(){clearTimeout(loadTimer);loadTimer=setTimeout(_load,150);}
 
-async function _loadPagamentos() {
+async function _load() {
   try {
     const data = await api('/api/pagamentos');
     allData = Array.isArray(data) ? data : [];
-
-    const dateFrom = document.getElementById('fDateFrom').value;
-    const dateTo   = document.getElementById('fDateTo').value;
-    const tipo     = document.getElementById('fTipo').value;
-    const q        = document.getElementById('fQ').value.toLowerCase().trim();
-
+    const dateFrom=document.getElementById('fDateFrom').value, dateTo=document.getElementById('fDateTo').value;
+    const tipo=document.getElementById('fTipo').value, q=document.getElementById('fQ').value.toLowerCase().trim();
     let rows = allData;
-    if (dateFrom || dateTo) {
-      rows = rows.filter(r => {
-        if (!r.created_at) return true;
-        const d = new Date(r.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
-        if (dateFrom && d < dateFrom) return false;
-        if (dateTo   && d > dateTo)   return false;
-        return true;
-      });
-    }
-    if (tipo) rows = rows.filter(r => r.tipo_pagamento === tipo);
-    if (q) rows = rows.filter(r =>
-      (r.customer_name || '').toLowerCase().includes(q) ||
-      (r.address_line || '').toLowerCase().includes(q) ||
-      String(r.id).includes(q)
-    );
-
-    renderTable(rows);
-    renderSummary(rows);
-    document.getElementById('count-badge').textContent = `${rows.length} pendentes`;
-    selectedIds.clear();
-    updateBulkBar();
-  } catch(e) { toast('Erro ao carregar: ' + e.message, 'error'); }
+    if(dateFrom||dateTo) rows=rows.filter(r=>{if(!r.created_at)return true;const d=new Date(r.created_at*1000).toLocaleDateString('sv-SE',{timeZone:'America/Campo_Grande'});return(!dateFrom||d>=dateFrom)&&(!dateTo||d<=dateTo);});
+    if(tipo) rows=rows.filter(r=>r.tipo_pagamento===tipo);
+    if(q) rows=rows.filter(r=>(r.customer_name||'').toLowerCase().includes(q)||(r.address_line||'').toLowerCase().includes(q)||String(r.id).includes(q));
+    renderTable(rows); renderSummary(rows);
+    document.getElementById('count-badge').textContent=rows.length+' pendentes';
+    selectedIds.clear(); updateBulkBar();
+  } catch(e){toast('Erro: '+e.message,'error');}
 }
 
-function timeAgo(epoch) {
-  if (!epoch) return '';
-  const diff = Math.floor(Date.now() / 1000) - epoch;
-  if (diff < 3600) return Math.floor(diff / 60) + 'min';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h';
-  return Math.floor(diff / 86400) + 'd';
-}
+function timeAgo(epoch){if(!epoch)return'';const d=Math.floor(Date.now()/1000)-epoch;if(d<3600)return Math.floor(d/60)+'min';if(d<86400)return Math.floor(d/3600)+'h';return Math.floor(d/86400)+'d';}
 
 function renderTable(rows) {
-  const tbody = document.getElementById('tbody');
-  const emptyMsg = document.getElementById('empty-msg');
-  if (!rows.length) { tbody.innerHTML = ''; emptyMsg.style.display = 'block'; return; }
-  emptyMsg.style.display = 'none';
-
-  const tipoLabels = {
-    pix_receber: '⏳ PIX', mensalista: '📅 Mensal', boleto: '🧾 Boleto', nfe: '📄 NFe',
-    dinheiro: '💵 Dinh', pix_vista: '⚡ PIX', debito: '💳 Déb', credito: '💳 Créd'
-  };
-
-  tbody.innerHTML = rows.map(p => {
-    const items = (() => { try { return JSON.parse(p.items_json || '[]'); } catch(e) { return []; } })();
-    const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
-    const dt = p.created_at ? new Date(p.created_at * 1000).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', timeZone:'America/Campo_Grande' }) : '—';
-    const hr = p.created_at ? new Date(p.created_at * 1000).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Campo_Grande' }) : '';
-
-    const blingBadge = p.bling_pedido_id
-      ? `<span class="badge" style="background:#16a34a">✅ #${p.bling_pedido_num || p.bling_pedido_id}</span>`
-      : `<span class="badge" style="background:#94a3b8">⏳</span>`;
-
-    const ck = selectedIds.has(p.id) ? 'checked' : '';
-
-    // Botão lembrete — só PIX a receber
-    let lb = '';
-    let ri = '';
-    if (p.tipo_pagamento === 'pix_receber') {
-      const cnt = p.reminder_count || 0;
-      const badge = cnt > 0 ? `<span class="rb">${cnt}</span>` : '';
-      const hasPhone = p.phone_digits && p.phone_digits.replace(/\D/g, '').length >= 10;
-      lb = hasPhone
-        ? `<button class="btn-lembrete" onclick="enviarLembrete(${p.id})" title="Enviar lembrete PIX via WhatsApp${cnt ? ' ('+cnt+' enviado'+(cnt>1?'s':'')+')':''}">📱${badge}</button>`
-        : `<button class="btn-lembrete" disabled title="Sem telefone">📱</button>`;
-      if (cnt > 0 && p.last_reminder_at) {
-        ri = `<div class="ri${cnt >= 3 ? ' w' : ''}">📱${cnt}x · ${timeAgo(p.last_reminder_at)} atrás</div>`;
-      }
+  const tbody=document.getElementById('tbody'), emptyMsg=document.getElementById('empty-msg');
+  if(!rows.length){tbody.innerHTML='';emptyMsg.style.display='block';return;}
+  emptyMsg.style.display='none';
+  tbody.innerHTML=rows.map(p=>{
+    const items=(()=>{try{return JSON.parse(p.items_json||'[]');}catch(e){return[];}})();
+    const itemsStr=items.map(i=>i.qty+'x '+i.name).join(', ')||'—';
+    const dt=p.created_at?new Date(p.created_at*1000).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',timeZone:'America/Campo_Grande'}):'—';
+    const hr=p.created_at?new Date(p.created_at*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}):'';
+    const blingBadge=p.bling_pedido_id?`<span class="badge" style="background:#16a34a">✅ #${p.bling_pedido_num||p.bling_pedido_id}</span>`:`<span class="badge" style="background:#94a3b8">⏳</span>`;
+    const ck=selectedIds.has(p.id)?'checked':'';
+    const isNfe=TIPOS_NFE.includes(p.tipo_pagamento);
+    let actionBtns='';
+    // Lembrete PIX
+    if(p.tipo_pagamento==='pix_receber'){
+      const cnt=p.reminder_count||0;const badge=cnt>0?`<span class="rb">${cnt}</span>`:'';
+      const hasPhone=p.phone_digits&&p.phone_digits.replace(/\D/g,'').length>=10;
+      actionBtns+=hasPhone?`<button class="btn-lembrete" onclick="enviarLembrete(${p.id})" title="Lembrete PIX WhatsApp${cnt?' ('+cnt+'x)':''}">📱${badge}</button>`:`<button class="btn-lembrete" disabled title="Sem telefone">📱</button>`;
     }
-
+    // Botão principal
+    if(isNfe){
+      actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar NFe no Bling + marcar pago">📄 NFe</button>`;
+    } else {
+      actionBtns+=`<button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento PIX">✅ Pago</button>`;
+    }
+    let ri='';
+    if(p.tipo_pagamento==='pix_receber'){const cnt=p.reminder_count||0;if(cnt>0&&p.last_reminder_at)ri=`<div class="ri${cnt>=3?' w':''}">\u{1F4F1}${cnt}x · ${timeAgo(p.last_reminder_at)} atrás</div>`;}
     return `<tr>
-      <td><input type="checkbox" value="${p.id}" ${ck} onchange="toggleSelect(${p.id}, this.checked)"></td>
+      <td><input type="checkbox" value="${p.id}" ${ck} onchange="toggleSelect(${p.id},this.checked)"></td>
       <td><strong>#${p.id}</strong>${ri}</td>
       <td style="white-space:nowrap;font-size:12px">${dt}<br><span style="color:#94a3b8">${hr}</span></td>
       <td style="font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.customer_name||''}">${p.customer_name||'—'}</td>
       <td style="color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.address_line||''}">${p.address_line||'—'}<br><span style="font-size:11px">${p.bairro||''}</span></td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
       <td style="font-weight:800;color:#1e293b;white-space:nowrap">R$ ${parseFloat(p.total_value||0).toFixed(2)}</td>
-      <td style="white-space:nowrap">${tipoLabels[p.tipo_pagamento]||p.tipo_pagamento||'—'}</td>
+      <td style="white-space:nowrap">${TIPO_LABELS[p.tipo_pagamento]||p.tipo_pagamento||'—'}</td>
       <td>${blingBadge}</td>
-      <td><div class="actions-cell">${lb}<button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento">✅ Pago</button></div></td>
+      <td><div class="actions-cell">${actionBtns}</div></td>
     </tr>`;
   }).join('');
 }
 
 function renderSummary(rows) {
-  let total = 0, countBling = 0, countPix = 0, totalLemb = 0;
-  rows.forEach(p => {
-    total += parseFloat(p.total_value) || 0;
-    if (p.bling_pedido_id) countBling++;
-    if (p.tipo_pagamento === 'pix_receber') countPix++;
-    totalLemb += (p.reminder_count || 0);
-  });
-  document.getElementById('total-pendente').textContent = 'R$ ' + total.toFixed(2);
-  document.getElementById('count-total').textContent = rows.length;
-  document.getElementById('count-pix').textContent = countPix;
-  document.getElementById('count-bling').textContent = countBling;
-  document.getElementById('count-lembretes').textContent = totalLemb;
+  let total=0,countBling=0,countPix=0,countMensal=0,totalLemb=0;
+  rows.forEach(p=>{total+=parseFloat(p.total_value)||0;if(p.bling_pedido_id)countBling++;if(p.tipo_pagamento==='pix_receber')countPix++;if(TIPOS_NFE.includes(p.tipo_pagamento))countMensal++;totalLemb+=(p.reminder_count||0);});
+  document.getElementById('total-pendente').textContent='R$ '+total.toFixed(2);
+  document.getElementById('count-total').textContent=rows.length;
+  document.getElementById('count-pix').textContent=countPix;
+  document.getElementById('count-mensal').textContent=countMensal;
+  document.getElementById('count-bling').textContent=countBling;
+  document.getElementById('count-lembretes').textContent=totalLemb;
 }
 
-// ── Lembrete Individual ──
-async function enviarLembrete(orderId) {
-  if (!confirm(`Enviar lembrete PIX via WhatsApp para pedido #${orderId}?`)) return;
-  showLoading('Enviando lembrete...');
-  try {
-    const d = await api(`/api/lembretes/enviar/${orderId}`, { method: 'POST' });
-    hideLoading();
-    if (d.ok) {
-      toast(`📱 Lembrete #${d.envio_num} enviado para pedido #${orderId}!`);
-      loadPagamentos();
-    } else {
-      toast('❌ ' + (d.error || 'Falha ao enviar'), 'error');
-    }
-  } catch(e) { hideLoading(); toast(e.message, 'error'); }
+// ═══ SELEÇÃO ═══
+function toggleSelect(id,checked){if(checked)selectedIds.add(id);else selectedIds.delete(id);updateBulkBar();}
+function toggleBulkAll(checked){document.querySelectorAll('#tbody input[type=checkbox]').forEach(b=>{b.checked=checked;const id=parseInt(b.value);if(checked)selectedIds.add(id);else selectedIds.delete(id);});document.getElementById('th-check').checked=checked;document.getElementById('bulk-all').checked=checked;updateBulkBar();}
+function updateBulkBar(){
+  const count=selectedIds.size;
+  document.getElementById('bulk-count').textContent=count;
+  document.getElementById('bulk-bar').classList.toggle('show',count>0);
+  const sel=[...selectedIds].map(id=>allData.find(r=>r.id===id)).filter(Boolean);
+  const pixCount=sel.filter(p=>p.tipo_pagamento==='pix_receber').length;
+  const nfeCount=sel.filter(p=>TIPOS_NFE.includes(p.tipo_pagamento)).length;
+  document.getElementById('btn-bulk-pago').style.display=pixCount>0?'':'none';
+  document.getElementById('bulk-pix-count').textContent=pixCount;
+  document.getElementById('btn-bulk-nfe').style.display=nfeCount>0?'':'none';
+  document.getElementById('bulk-nfe-count').textContent=nfeCount;
+  document.getElementById('btn-bulk-lembrete').style.display=pixCount>0?'':'none';
 }
 
-// ── Lembrete Bulk ──
-async function bulkEnviarLembrete() {
-  const ids = [...selectedIds];
-  const pixIds = ids.filter(id => {
-    const p = allData.find(r => r.id === id);
-    return p && p.tipo_pagamento === 'pix_receber' && p.phone_digits;
-  });
-  if (!pixIds.length) { toast('⚠️ Nenhum PIX com telefone selecionado', 'error'); return; }
-  if (!confirm(`Enviar lembrete PIX para ${pixIds.length} pedido(s)?`)) return;
-  showLoading(`Enviando ${pixIds.length} lembrete(s)...`);
-  try {
-    const d = await api('/api/lembretes/enviar-bulk', {
-      method: 'POST',
-      body: JSON.stringify({ order_ids: pixIds })
-    });
-    hideLoading();
-    toast(d.message || 'Lembretes processados', d.ok ? 'success' : 'error');
-    loadPagamentos();
-  } catch(e) { hideLoading(); toast(e.message, 'error'); }
+// ═══ MARCAR PAGO (PIX a receber) ═══
+async function marcarPago(orderId){
+  if(!confirm('Confirmar recebimento do PIX #'+orderId+'?'))return;
+  showLoading('Marcando como pago...');
+  try{const d=await api('/api/pagamentos/'+orderId,{method:'PATCH'});hideLoading();if(d.ok){toast('✅ Pedido #'+orderId+' pago!');loadPagamentos();}else{toast('❌ '+(d.error||'Falha'),'error');}}catch(e){hideLoading();toast(e.message,'error');}
 }
-
-// ── Pagamento ──
-async function marcarPago(orderId) {
-  if (!confirm(`Confirmar pagamento do pedido #${orderId}?`)) return;
-  showLoading('Processando...');
-  try {
-    const d = await api(`/api/pagamentos/${orderId}`, { method: 'PATCH' });
-    hideLoading();
-    if (d.ok) { toast(`✅ Pedido #${orderId} pago!`); loadPagamentos(); }
-    else { toast('❌ ' + (d.error || 'Falha'), 'error'); }
-  } catch(e) { hideLoading(); toast(e.message, 'error'); }
-}
-
-// ── Seleção ──
-function toggleSelect(id, checked) {
-  if (checked) selectedIds.add(id); else selectedIds.delete(id);
-  updateBulkBar();
-}
-function toggleBulkAll(checked) {
-  document.querySelectorAll('#tbody input[type=checkbox]').forEach(b => {
-    b.checked = checked;
-    const id = parseInt(b.value);
-    if (checked) selectedIds.add(id); else selectedIds.delete(id);
-  });
-  document.getElementById('th-check').checked = checked;
-  document.getElementById('bulk-all').checked = checked;
-  updateBulkBar();
-}
-function updateBulkBar() {
-  const count = selectedIds.size;
-  document.getElementById('bulk-count').textContent = count;
-  document.getElementById('bulk-bar').classList.toggle('show', count > 0);
-  const pixCount = [...selectedIds].filter(id => {
-    const p = allData.find(r => r.id === id);
-    return p && p.tipo_pagamento === 'pix_receber';
-  }).length;
-  const bl = document.getElementById('btn-bulk-lembrete');
-  if (bl) bl.style.display = pixCount > 0 ? '' : 'none';
-}
-
-async function bulkMarcarPago() {
-  const ids = [...selectedIds];
-  if (!ids.length) return;
-  if (!confirm(`Marcar ${ids.length} pedido(s) como pago(s)?`)) return;
-  showLoading(`Processando ${ids.length} pagamento(s)...`);
-  let ok = 0, fail = 0;
-  for (const id of ids) {
-    try { const d = await api(`/api/pagamentos/${id}`, { method: 'PATCH' }); if (d.ok) ok++; else fail++; }
-    catch(e) { fail++; }
-  }
+async function bulkMarcarPago(){
+  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id===id);return p&&p.tipo_pagamento==='pix_receber';});
+  if(!ids.length){toast('⚠️ Nenhum PIX selecionado','error');return;}
+  if(!confirm('Marcar '+ids.length+' PIX como pago(s)?'))return;
+  showLoading('Processando '+ids.length+' pagamento(s)...');
+  let ok=0,fail=0;
+  for(const id of ids){try{const d=await api('/api/pagamentos/'+id,{method:'PATCH'});if(d.ok)ok++;else fail++;}catch(e){fail++;}}
   hideLoading();
-  toast(`✅ ${ok} pago(s)${fail ? `, ${fail} erro(s)` : ''}`, fail ? 'error' : 'success');
+  toast('✅ '+ok+' pago(s)'+(fail?', '+fail+' erro(s)':''),fail?'error':'success');
   loadPagamentos();
 }
 
+// ═══ NFE AGRUPADA (Mensalista/Boleto) ═══
+function gerarNfeUnico(orderId){showNfePreview([orderId]);}
+function bulkGerarNfe(){
+  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id===id);return p&&TIPOS_NFE.includes(p.tipo_pagamento);});
+  if(!ids.length){toast('⚠️ Nenhum Mensalista/Boleto selecionado','error');return;}
+  showNfePreview(ids);
+}
+
+function showNfePreview(ids){
+  const orders=ids.map(id=>allData.find(r=>r.id===id)).filter(Boolean);
+  pendingNfeIds=ids;
+  // Agrupar por cliente
+  const grupos={};
+  for(const o of orders){
+    const key=o.phone_digits||o.customer_name||'sem_'+o.id;
+    if(!grupos[key])grupos[key]={cliente:o.customer_name,pedidos:[],produtos:{},total:0};
+    grupos[key].pedidos.push(o);
+    grupos[key].total+=parseFloat(o.total_value)||0;
+    try{const items=JSON.parse(o.items_json||'[]');for(const item of items){const pk=item.name||'?';if(!grupos[key].produtos[pk])grupos[key].produtos[pk]={name:item.name,qty:0,price:parseFloat(item.price)||0};grupos[key].produtos[pk].qty+=parseInt(item.qty)||1;}}catch(_){}
+  }
+  let html='';
+  const gKeys=Object.keys(grupos);
+  for(const key of gKeys){
+    const g=grupos[key]; const prods=Object.values(g.produtos);
+    html+=`<div style="background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:12px">`;
+    html+=`<div style="font-weight:700;font-size:15px;margin-bottom:4px">👤 ${g.cliente}</div>`;
+    html+=`<div style="font-size:12px;color:#64748b;margin-bottom:8px">Pedidos: ${g.pedidos.map(p=>'#'+p.id).join(', ')}</div>`;
+    html+=`<table style="width:100%"><thead><tr><th>Produto</th><th style="text-align:center">Qtd Total</th><th style="text-align:right">Unit.</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>`;
+    for(const p of prods){
+      const sub=p.qty*p.price;
+      html+=`<tr><td>${p.name}</td><td style="text-align:center;font-weight:700">${p.qty}</td><td style="text-align:right">R$ ${p.price.toFixed(2)}</td><td style="text-align:right;font-weight:700">R$ ${sub.toFixed(2)}</td></tr>`;
+    }
+    html+=`</tbody></table>`;
+    html+=`<div class="total-line">Total: R$ ${g.total.toFixed(2)}</div></div>`;
+  }
+  if(gKeys.length>1) html+=`<div style="font-size:13px;color:#64748b;text-align:right;margin-top:8px">${gKeys.length} cliente(s) → ${gKeys.length} NFe(s) no Bling</div>`;
+  html+=`<div style="margin-top:12px;padding:10px;background:#fef3c7;border-radius:8px;font-size:12px;color:#92400e">⚠️ Será criada uma venda no Bling para cada cliente, agrupando os itens. Os pedidos serão marcados como pagos.</div>`;
+  document.getElementById('nfe-modal-body').innerHTML=html;
+  document.getElementById('nfe-modal').classList.add('show');
+}
+
+function closeNfeModal(){document.getElementById('nfe-modal').classList.remove('show');pendingNfeIds=[];}
+
+async function confirmarNfe(){
+  if(!pendingNfeIds.length)return;
+  closeNfeModal();
+  showLoading('Gerando NFe para '+pendingNfeIds.length+' pedido(s)...');
+  try{
+    const d=await api('/api/pagamentos/criar-vendas-bling',{method:'POST',body:JSON.stringify({order_ids:pendingNfeIds})});
+    hideLoading();
+    if(d.ok!==undefined){
+      const res=d.resultados||[];
+      const ok=res.filter(r=>r.ok).length, fail=res.filter(r=>!r.ok).length;
+      let msg='📄 '+ok+' NFe(s) criada(s) no Bling!';
+      if(fail>0)msg+=' ⚠️ '+fail+' erro(s)';
+      toast(msg,fail?'error':'success');
+      for(const r of res){if(!r.ok)toast('❌ '+r.cliente+': '+r.error,'error');}
+    } else {
+      toast('❌ '+(d.error||'Falha ao gerar NFe'),'error');
+    }
+    loadPagamentos();
+  }catch(e){hideLoading();toast(e.message,'error');}
+}
+
+// ═══ LEMBRETES PIX ═══
+async function enviarLembrete(orderId){
+  if(!confirm('Enviar lembrete PIX WhatsApp para pedido #'+orderId+'?'))return;
+  showLoading('Enviando lembrete...');
+  try{const d=await api('/api/lembretes/enviar/'+orderId,{method:'POST'});hideLoading();if(d.ok){toast('📱 Lembrete #'+d.envio_num+' enviado!');loadPagamentos();}else{toast('❌ '+(d.error||'Falha'),'error');}}catch(e){hideLoading();toast(e.message,'error');}
+}
+async function bulkEnviarLembrete(){
+  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id===id);return p&&p.tipo_pagamento==='pix_receber'&&p.phone_digits;});
+  if(!ids.length){toast('⚠️ Nenhum PIX com telefone','error');return;}
+  if(!confirm('Enviar lembrete PIX para '+ids.length+' pedido(s)?'))return;
+  showLoading('Enviando '+ids.length+' lembrete(s)...');
+  try{const d=await api('/api/lembretes/enviar-bulk',{method:'POST',body:JSON.stringify({order_ids:ids})});hideLoading();toast(d.message||'Processado',d.ok?'success':'error');loadPagamentos();}catch(e){hideLoading();toast(e.message,'error');}
+}
+
 setDateFilter('semana');
-setInterval(loadPagamentos, 30000);
+setInterval(loadPagamentos,30000);
 </script>
 </body>
 </html>
