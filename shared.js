@@ -1,4 +1,4 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.12.0
+// shared.js — Utilitários compartilhados MoskoGás v1.12.1
 // v1.11.0: Bling Auto-Recovery — ensureBling() + apiBling() + modal reconexão
 // v1.10.0: Contratos adicionado à navbar
 // v1.9.1: Consulta Pedidos adicionado ao dropdown Relatório
@@ -55,14 +55,14 @@ async function api(path, options = {}) {
 
 function statusBadge(status) {
   const map = {
-    novo:             ['🔴', '#dc2626', 'NOVO'],
-    encaminhado:      ['🟡', '#d97706', 'ENCAMINHADO'],
-    whatsapp_enviado: ['🟢', '#16a34a', 'WHATS ENVIADO'],
-    entregue:         ['🔵', '#2563eb', 'ENTREGUE'],
-    cancelado:        ['⚫', '#6b7280', 'CANCELADO'],
+    novo:             ['#dc2626', 'NOVO'],
+    encaminhado:      ['#d97706', 'ENCAMINHADO'],
+    whatsapp_enviado: ['#16a34a', 'WHATS'],
+    entregue:         ['#2563eb', 'ENTREGUE'],
+    cancelado:        ['#6b7280', 'CANCELADO'],
   };
-  const [emoji, color, label] = map[status] || ['⚪', '#888', status];
-  return `<span style="background:${color};color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">${emoji} ${label}</span>`;
+  const [color, label] = map[status] || ['#888', status];
+  return `<span style="background:${color};color:#fff;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">${label}</span>`;
 }
 
 function payBadge(status) {

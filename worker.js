@@ -1,4 +1,4 @@
-// v2.29.6
+// v2.29.7
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -1177,7 +1177,10 @@ ${itemsList}
 ${observation || '—'}
 
 🗺️ Abrir no mapa:
-${mapsLink}`;
+${mapsLink}
+
+📲 Painel do Entregador:
+https://moskogas-app.pages.dev/entregador.html`;
 }
 
 // ── Import ruas ───────────────────────────────────────────────
