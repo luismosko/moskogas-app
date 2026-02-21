@@ -1,4 +1,4 @@
-// v2.29.4
+// v2.29.5
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -3677,7 +3677,7 @@ export default {
       const destinos = body.email ? [body.email] : config.destinos;
       const fmtBRL = v => 'R$ ' + v.toFixed(2).replace('.', ',');
       const emailPayload = {
-        from: 'MoskoGas <onboarding@resend.dev>',
+        from: 'MoskoGás <relatorio@moskogas.com.br>',
         to: destinos,
         subject: `Pedidos do dia — ${dateStr} — ${report.total} pedidos — ${fmtBRL(report.totalValor)}`,
         html,
@@ -4814,7 +4814,7 @@ async function sendDailyReportEmail(env, dateStr) {
   const subject = `Pedidos do dia — ${dateStr} — ${report.total} pedidos — ${fmtBRL(report.totalValor)}`;
 
   const emailPayload = {
-    from: 'MoskoGas <onboarding@resend.dev>',
+    from: 'MoskoGás <relatorio@moskogas.com.br>',
     to: config.destinos,
     subject,
     html,
