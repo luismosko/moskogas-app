@@ -1,4 +1,4 @@
-// v2.29.8
+// v2.29.9
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -313,7 +313,9 @@ async function criarPedidoBling(env, orderId, orderData) {
   const itensBling = (items || []).map(it => buildItemBling(it));
 
   const fpId = getFormaPagamentoForTipo(tipo_pagamento, forma_pagamento_key, forma_pagamento_id);
-  const total = total_value || itensBling.reduce((s, i) => s + i.valor * i.quantidade, 0);
+  // v2.29.9: Calcular total dos itens (mesmo cálculo do Bling) para evitar divergência
+  const totalItens = Math.round(itensBling.reduce((s, i) => s + i.valor * i.quantidade, 0) * 100) / 100;
+  const total = totalItens || parseFloat(total_value) || 0;
 
   const obsVendedor = vendedor_nome ? ` | ${vendedor_nome}` : '';
   const obsTipo = tipo_pagamento ? ` | ${tipo_pagamento}` : '';
@@ -3068,6 +3070,10 @@ export default {
 
         const itensBling = produtos.map(p => buildItemBling(p));
 
+        // v2.29.9: Total DEVE ser calculado dos itens (mesmo cálculo que o Bling faz)
+        // Se usar grupo.total (soma dos pedidos), pode divergir por arredondamento
+        const totalItens = Math.round(itensBling.reduce((s, i) => s + i.quantidade * i.valor, 0) * 100) / 100;
+
         // v2.28.7: Para boleto/mensalista, usar contato real se bling_contact_id existe
         // (não exigir cpf_cnpj como na NFCe — esses clientes já estão cadastrados no Bling)
         const usarContatoReal = !!grupo.bling_contact_id;
@@ -3077,7 +3083,7 @@ export default {
           data: today,
           dataSaida: today,
           itens: itensBling,
-          parcelas: [{ formaPagamento: { id: FORMAS_PAGAMENTO.fiado.id }, valor: Math.round(grupo.total * 100) / 100, dataVencimento: today }],
+          parcelas: [{ formaPagamento: { id: FORMAS_PAGAMENTO.fiado.id }, valor: totalItens, dataVencimento: today }],
           observacoes: `MoskoGás Venda Agrupada — ${grupo.cliente} — Pedidos: ${pedidoIds.map(i => '#'+i).join(', ')}`,
         };
 
