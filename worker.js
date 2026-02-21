@@ -2355,6 +2355,104 @@ export default {
       return json({ ok: true, id: orderId, bling_pedido_id: null, pago, vendedor: vendedorNome });
     }
 
+    // ══════════════════════════════════════════════════════════
+    // v2.30.0: VENDA EXTERNA (entregador cria + entrega em 1 passo)
+    // ══════════════════════════════════════════════════════════
+    if (method === 'POST' && path === '/api/order/venda-externa') {
+      const user = await getSessionUser(request, env);
+      if (!user) return err('Sessão expirada', 401);
+
+      const ct = request.headers.get('Content-Type') || '';
+      if (!ct.includes('multipart/form-data')) return err('Content-Type deve ser multipart/form-data', 400);
+
+      const formData = await request.formData();
+      const customerName = formData.get('customer_name') || 'Cliente Avulso';
+      const phone = (formData.get('phone') || '').replace(/\D/g, '');
+      const addressLine = formData.get('address_line') || '';
+      const bairro = formData.get('bairro') || '';
+      const itemsJson = formData.get('items_json') || '[]';
+      const totalValue = parseFloat(formData.get('total_value')) || 0;
+      const tipoPagamento = formData.get('tipo_pagamento') || 'dinheiro';
+      const obsEntregador = formData.get('observacao_entregador') || '';
+      const photoFile = formData.get('photo');
+
+      // Foto obrigatória
+      if (!photoFile || !(photoFile instanceof File) || photoFile.size < 100) {
+        return err('Foto do comprovante é obrigatória', 400);
+      }
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(photoFile.type)) return err('Use JPG, PNG ou WebP', 400);
+      if (photoFile.size > 5 * 1024 * 1024) return err('Foto muito grande (máx 5MB)', 400);
+
+      // 1) Criar pedido como ENTREGUE direto
+      const items = JSON.parse(itemsJson);
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+      const pago = TIPOS_PAGO_IMEDIATO.includes(tipoPagamento) ? 1 : 0;
+
+      const result = await env.DB.prepare(`
+        INSERT INTO orders (phone_digits, customer_name, address_line, bairro, items_json, total_value,
+          tipo_pagamento, pago, status, sync_status, driver_id, driver_name_cache, driver_phone_cache,
+          vendedor_id, vendedor_nome, observacao_entregador, delivered_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'entregue', 'pending', ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), unixepoch())
+      `).bind(
+        phone, customerName, addressLine, bairro, JSON.stringify(items), totalValue,
+        tipoPagamento, pago, user.user_id, user.nome, user.telefone || '',
+        user.user_id, user.nome, obsEntregador
+      ).run();
+
+      const orderId = result.meta?.last_row_id;
+
+      // 2) Upload foto para R2
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const ext = photoFile.type === 'image/png' ? 'png' : photoFile.type === 'image/webp' ? 'webp' : 'jpg';
+      const photoKey = `comprovantes/${dateStr}/pedido_${orderId}_${Date.now()}.${ext}`;
+      const arrayBuffer = await photoFile.arrayBuffer();
+      await env.BUCKET.put(photoKey, arrayBuffer, {
+        httpMetadata: { contentType: photoFile.type },
+        customMetadata: { order_id: String(orderId), uploaded_by: user.nome, type: 'venda_externa' },
+      });
+
+      await env.DB.prepare('UPDATE orders SET foto_comprovante=? WHERE id=?').bind(photoKey, orderId).run();
+
+      // 3) Criar Bling se aplicável
+      const TIPOS_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
+      let blingResult = null;
+      if (TIPOS_BLING.includes(tipoPagamento)) {
+        try {
+          const custData = phone
+            ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(phone).first()
+            : null;
+          const blingData = await criarPedidoBling(env, orderId, {
+            name: customerName, items, total_value: totalValue,
+            tipo_pagamento: tipoPagamento,
+            bling_contact_id: custData?.bling_contact_id || null,
+            cpf_cnpj: custData?.cpf_cnpj || null,
+            bling_vendedor_id: user.bling_vendedor_id || null,
+            vendedor_nome: user.bling_vendedor_nome || user.nome
+          });
+          await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?')
+            .bind(blingData.bling_pedido_id, blingData.bling_pedido_num, 'synced', orderId).run();
+          blingResult = { action: 'created', bling_pedido_id: blingData.bling_pedido_id, bling_num: blingData.bling_pedido_num };
+        } catch (e) {
+          blingResult = { action: 'create_error', error: e.message };
+          await logEvent(env, orderId, 'bling_error_venda_externa', { error: e.message });
+        }
+      }
+
+      await logEvent(env, orderId, 'venda_externa', { 
+        driver: user.nome, tipo_pagamento: tipoPagamento, total: totalValue,
+        items_count: items.length, foto: photoKey
+      });
+
+      // 4) Upsert cache cliente
+      if (phone && customerName) {
+        await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now'))`).bind(phone, customerName, addressLine, bairro).run().catch(() => {});
+      }
+
+      return json({ ok: true, id: orderId, status: 'entregue', pago, bling_result: blingResult });
+    }
+
     // [REMOVIDO v2.12.0] POST /api/order/:id/gerar-nfce — NFCe não existe na API Bling v3
 
     if (method === 'POST' && path === '/api/bling/debug-pedido') {

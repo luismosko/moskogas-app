@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.4.0 — MoskoGás</title>
+<title>Entregador v2.5.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -121,13 +121,47 @@
     .toolbar h1 { font-size: 14px; }
     .card-client { font-size: 15px; }
   }
+
+  /* ── FAB ── */
+  .fab { position: fixed; bottom: 24px; right: 20px; z-index: 90; background: #16a34a; color: #fff; border: none; border-radius: 50px; padding: 14px 20px; font-size: 16px; font-weight: 800; box-shadow: 0 4px 20px rgba(0,0,0,0.25); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .fab:active { transform: scale(0.95); }
+
+  /* ── Modal Venda ── */
+  .venda-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; justify-content: center; align-items: flex-start; padding: 10px; overflow-y: auto; }
+  .venda-overlay.active { display: flex; }
+  .venda-modal { background: #fff; border-radius: 16px; width: 100%; max-width: 500px; margin: 20px auto; box-shadow: 0 8px 40px rgba(0,0,0,0.3); }
+  .venda-header { background: #16a34a; color: #fff; padding: 14px 16px; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: center; }
+  .venda-header h2 { font-size: 17px; margin: 0; }
+  .venda-header .close-x { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 0 4px; }
+  .venda-body { padding: 14px 16px; }
+  .venda-body label { display: block; font-size: 13px; font-weight: 700; color: #374151; margin: 10px 0 4px; }
+  .venda-body input, .venda-body select, .venda-body textarea { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 14px; }
+  .venda-body input:focus, .venda-body select:focus { border-color: #16a34a; outline: none; }
+  .prod-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .prod-btn { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 10px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s; display: flex; align-items: center; gap: 4px; }
+  .prod-btn.sel { border-color: #16a34a; background: #dcfce7; }
+  .prod-btn:active { transform: scale(0.95); }
+  .cart-list { margin: 8px 0; }
+  .cart-item { display: flex; align-items: center; gap: 8px; padding: 8px; background: #f8fafc; border-radius: 8px; margin-bottom: 6px; }
+  .cart-item .name { flex: 1; font-weight: 600; font-size: 13px; }
+  .cart-item .qty-ctrl { display: flex; align-items: center; gap: 4px; }
+  .cart-item .qty-btn { width: 28px; height: 28px; border: none; border-radius: 8px; font-size: 16px; font-weight: 900; cursor: pointer; }
+  .cart-item .qty-btn.minus { background: #fee2e2; color: #dc2626; }
+  .cart-item .qty-btn.plus { background: #dcfce7; color: #16a34a; }
+  .cart-item .qty-val { font-size: 16px; font-weight: 800; min-width: 24px; text-align: center; }
+  .cart-item .price { font-weight: 800; color: #16a34a; font-size: 14px; white-space: nowrap; }
+  .venda-total { font-size: 20px; font-weight: 900; text-align: right; color: #16a34a; padding: 8px 0; border-top: 2px solid #e2e8f0; margin-top: 8px; }
+  .venda-footer { padding: 12px 16px; border-top: 2px solid #f1f5f9; }
+  .btn-venda-submit { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 800; cursor: pointer; }
+  .btn-venda-submit.ready { background: #16a34a; color: #fff; }
+  .btn-venda-submit.disabled { background: #e2e8f0; color: #94a3b8; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.4.0</small></h1>
+  <h1>🚚 Entregas <small>v2.5.0</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -146,11 +180,67 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.4.0 — entregador</div>
+<div class="version-badge">v2.5.0 — entregador</div>
+
+<!-- FAB Nova Venda -->
+<button class="fab" onclick="openVendaModal()" title="Registrar venda externa">➕ Venda</button>
+
+<!-- Modal Venda Externa -->
+<div class="venda-overlay" id="vendaOverlay">
+<div class="venda-modal">
+  <div class="venda-header">
+    <h2>🛒 Venda Externa</h2>
+    <button class="close-x" onclick="closeVendaModal()">✕</button>
+  </div>
+  <div class="venda-body">
+    <label>👤 Cliente</label>
+    <input id="ve-nome" placeholder="Nome do cliente">
+
+    <label>📞 Telefone</label>
+    <input id="ve-phone" placeholder="(67) 99999-9999" inputmode="tel">
+
+    <label>📍 Endereço</label>
+    <input id="ve-endereco" placeholder="Rua, número (opcional)">
+
+    <label>🏘️ Bairro</label>
+    <input id="ve-bairro" placeholder="Bairro (opcional)">
+
+    <label>📦 Produtos</label>
+    <div class="prod-grid" id="ve-prod-grid"></div>
+    <div class="cart-list" id="ve-cart"></div>
+    <div class="venda-total" id="ve-total" style="display:none">R$ 0.00</div>
+
+    <label>💰 Pagamento</label>
+    <select id="ve-pgto">
+      <option value="dinheiro">💵 Dinheiro</option>
+      <option value="pix_vista">⚡ PIX à vista</option>
+      <option value="pix_receber">⏳ PIX a receber</option>
+      <option value="mensalista">📅 Mensalista</option>
+      <option value="debito">💳 Débito</option>
+      <option value="credito">💳 Crédito</option>
+    </select>
+
+    <label>📝 Observação</label>
+    <textarea id="ve-obs" rows="2" placeholder="Opcional"></textarea>
+
+    <label>📸 Foto do comprovante</label>
+    <input type="file" accept="image/*" capture="environment" id="ve-photo-input" onchange="onVendaPhoto(this)" style="display:none">
+    <button class="photo-btn" id="ve-photo-btn" onclick="document.getElementById('ve-photo-input').click()" style="width:100%;margin:4px 0">
+      <span class="icon">📸</span> Tirar foto (obrigatório)
+    </button>
+    <div class="photo-preview" id="ve-photo-preview"></div>
+  </div>
+  <div class="venda-footer">
+    <button class="btn-venda-submit disabled" id="ve-submit" onclick="submitVendaExterna()" disabled>
+      ✅ Registrar Venda
+    </button>
+  </div>
+</div>
+</div>
 
 <script src="shared.js"></script>
 <script>
-// v2.4.0
+// v2.5.0
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -175,6 +265,9 @@ async function init() {
     const fc = await api('/api/pub/foto-config').catch(() => null);
     if (fc && fc.maxDim) fotoConfig = fc;
   } catch(_) {}
+
+  // Carregar produtos para venda externa
+  await loadVendaProducts();
 
   const drivers = await api('/api/drivers').catch(() => []);
   const sel = document.getElementById('fDriver');
@@ -637,6 +730,180 @@ async function deliver(orderId) {
     btn.disabled = false;
     btn.className = 'btn-deliver ready';
     btn.innerHTML = '✅ Marcar como Entregue';
+  }
+}
+
+// ══════════════════════════════════════════════
+// ── VENDA EXTERNA
+// ══════════════════════════════════════════════
+
+let vendaProducts = [];
+let vendaCart = {};
+let vendaPhoto = null;
+
+async function loadVendaProducts() {
+  try {
+    const data = await api('/api/app-products');
+    vendaProducts = (Array.isArray(data) ? data : data.products || []).filter(p => p.ativo !== 0);
+    vendaProducts.sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
+  } catch(_) { vendaProducts = []; }
+}
+
+function openVendaModal() {
+  vendaCart = {};
+  vendaPhoto = null;
+  document.getElementById('ve-nome').value = '';
+  document.getElementById('ve-phone').value = '';
+  document.getElementById('ve-endereco').value = '';
+  document.getElementById('ve-bairro').value = '';
+  document.getElementById('ve-pgto').value = 'dinheiro';
+  document.getElementById('ve-obs').value = '';
+  document.getElementById('ve-photo-preview').innerHTML = '';
+  document.getElementById('ve-photo-preview').style.display = 'none';
+  document.getElementById('ve-photo-btn').className = 'photo-btn';
+  document.getElementById('ve-photo-btn').innerHTML = '<span class="icon">📸</span> Tirar foto (obrigatório)';
+
+  // Render product grid
+  const grid = document.getElementById('ve-prod-grid');
+  grid.innerHTML = vendaProducts.map(p =>
+    `<button class="prod-btn" onclick="addToCart('${p.id}','${(p.name||'').replace(/'/g,"\\'")}',${parseFloat(p.price)||0})">
+      ${p.name} <span style="color:#16a34a;font-size:11px">R$${(parseFloat(p.price)||0).toFixed(0)}</span>
+    </button>`
+  ).join('');
+
+  renderVendaCart();
+  document.getElementById('vendaOverlay').classList.add('active');
+}
+
+function closeVendaModal() {
+  document.getElementById('vendaOverlay').classList.remove('active');
+}
+
+function addToCart(prodId, name, price) {
+  if (!vendaCart[prodId]) vendaCart[prodId] = { name, price, qty: 0 };
+  vendaCart[prodId].qty++;
+  renderVendaCart();
+}
+
+function changeCartQty(prodId, delta) {
+  if (!vendaCart[prodId]) return;
+  vendaCart[prodId].qty += delta;
+  if (vendaCart[prodId].qty <= 0) delete vendaCart[prodId];
+  renderVendaCart();
+}
+
+function renderVendaCart() {
+  const el = document.getElementById('ve-cart');
+  const totalEl = document.getElementById('ve-total');
+  const entries = Object.entries(vendaCart);
+
+  if (!entries.length) {
+    el.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 0">Toque nos produtos acima para adicionar</div>';
+    totalEl.style.display = 'none';
+    updateVendaSubmit();
+    return;
+  }
+
+  let total = 0;
+  el.innerHTML = entries.map(([id, item]) => {
+    const sub = item.qty * item.price;
+    total += sub;
+    return `<div class="cart-item">
+      <span class="name">${item.name}</span>
+      <div class="qty-ctrl">
+        <button class="qty-btn minus" onclick="changeCartQty('${id}',-1)">−</button>
+        <span class="qty-val">${item.qty}</span>
+        <button class="qty-btn plus" onclick="changeCartQty('${id}',1)">+</button>
+      </div>
+      <span class="price">R$ ${sub.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+
+  totalEl.textContent = 'R$ ' + total.toFixed(2);
+  totalEl.style.display = 'block';
+  updateVendaSubmit();
+}
+
+async function onVendaPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  toast('⏳ Processando foto...', 'info');
+  try {
+    const compressed = await compressImage(file, fotoConfig.maxDim, fotoConfig.quality / 100, fotoConfig.contraste, fotoConfig.desaturacao);
+    vendaPhoto = { blob: compressed.blob, dataUrl: URL.createObjectURL(compressed.blob), sizeTxt: (compressed.blob.size / 1024).toFixed(0) + ' KB' };
+    const btn = document.getElementById('ve-photo-btn');
+    btn.className = 'photo-btn has-photo';
+    btn.innerHTML = '<span class="icon">✅</span> Foto capturada ✓ (trocar)';
+    const preview = document.getElementById('ve-photo-preview');
+    preview.style.display = 'block';
+    preview.innerHTML = '<img src="' + vendaPhoto.dataUrl + '" style="max-width:100%;border-radius:8px;margin-top:4px"><div class="photo-size">' + vendaPhoto.sizeTxt + '</div>';
+    toast('📸 Foto pronta — ' + vendaPhoto.sizeTxt);
+  } catch(e) { toast('Erro foto: ' + e.message, 'error'); }
+  input.value = '';
+  updateVendaSubmit();
+}
+
+function updateVendaSubmit() {
+  const hasItems = Object.keys(vendaCart).length > 0;
+  const hasPhoto = !!vendaPhoto;
+  const btn = document.getElementById('ve-submit');
+  if (hasItems && hasPhoto) {
+    btn.disabled = false;
+    btn.className = 'btn-venda-submit ready';
+  } else {
+    btn.disabled = true;
+    btn.className = 'btn-venda-submit disabled';
+  }
+}
+
+async function submitVendaExterna() {
+  const entries = Object.entries(vendaCart);
+  if (!entries.length) { toast('Adicione produtos', 'error'); return; }
+  if (!vendaPhoto) { toast('Tire a foto do comprovante', 'error'); return; }
+
+  const items = entries.map(([id, item]) => ({
+    name: item.name, qty: item.qty, price: item.price,
+    bling_id: id.match(/^\d+$/) ? parseInt(id) : null
+  }));
+  const totalValue = items.reduce((s, i) => s + i.qty * i.price, 0);
+
+  showLoading('Registrando venda...');
+  try {
+    const formData = new FormData();
+    formData.append('customer_name', document.getElementById('ve-nome').value.trim() || 'Cliente Avulso');
+    formData.append('phone', document.getElementById('ve-phone').value.trim());
+    formData.append('address_line', document.getElementById('ve-endereco').value.trim());
+    formData.append('bairro', document.getElementById('ve-bairro').value.trim());
+    formData.append('items_json', JSON.stringify(items));
+    formData.append('total_value', totalValue);
+    formData.append('tipo_pagamento', document.getElementById('ve-pgto').value);
+    formData.append('observacao_entregador', document.getElementById('ve-obs').value.trim());
+    const ext = fotoConfig.formato === 'png' ? 'png' : fotoConfig.formato === 'webp' ? 'webp' : 'jpg';
+    formData.append('photo', vendaPhoto.blob, 'venda_externa.' + ext);
+
+    const token = getSessionToken();
+    const key = apiKey();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    else if (key) headers['X-API-KEY'] = key;
+
+    const resp = await fetch(API_BASE + '/api/order/venda-externa', { method: 'POST', headers, body: formData });
+    if (!resp.ok) {
+      const e = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(e.error || 'Erro ' + resp.status);
+    }
+    const result = await resp.json();
+    hideLoading();
+    closeVendaModal();
+
+    let msg = '✅ Venda #' + result.id + ' registrada!';
+    if (result.bling_result?.action === 'created') msg += ' Bling nº ' + result.bling_result.bling_num;
+    else if (result.bling_result?.action === 'create_error') msg += ' ⚠️ Bling: ' + result.bling_result.error;
+    toast(msg, result.bling_result?.action === 'create_error' ? 'warning' : 'success');
+    load();
+  } catch(e) {
+    hideLoading();
+    toast('❌ ' + e.message, 'error');
   }
 }
 
