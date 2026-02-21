@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Pedidos v1.0.4 — MoskoGás</title>
+<title>Consulta de Pedidos v1.0.5 — MoskoGás</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
@@ -125,9 +125,9 @@ tbody td { padding: 6px; vertical-align: middle; }
 <div class="loading-bar" id="loadingBar"></div>
 
 <div class="toolbar">
-  <h1>📋 Consulta de Pedidos <small>v1.0.4</small></h1>
+  <h1>📋 Consulta de Pedidos <small>v1.0.5</small></h1>
 </div>
-<div class="version-badge">v1.0.4 — consulta-pedidos</div>
+<div class="version-badge">v1.0.5 — consulta-pedidos</div>
 
 <div class="container">
 
@@ -253,7 +253,7 @@ tbody td { padding: 6px; vertical-align: middle; }
 
 <script src="shared.js"></script>
 <script>
-// v1.0.4
+// v1.0.5
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 const API = window.API_BASE || '';
 let currentPage = 1;
@@ -525,8 +525,12 @@ async function abrirModal(id) {
   // Foto
   html += `<div class="modal-section"><h4>📷 Comprovante</h4><div id="modalFotoArea">`;
   if (p.foto_comprovante) {
-    html += `<div class="modal-foto-loading" id="fotoLoading">⏳ Carregando foto...</div>
-      <img class="modal-foto" id="modalFotoImg" style="display:none" onclick="openLightbox(this.src)" title="Clique para ampliar">`;
+    const fotoUrl = API + '/api/comprovante/' + p.id;
+    html += `<img class="modal-foto" src="${fotoUrl}" onclick="openLightbox(this.src)" title="Clique para ampliar" 
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
+      style="max-width:100%;border-radius:8px;cursor:pointer;border:1px solid #e2e8f0">
+      <div style="display:none;padding:12px;color:#dc2626;font-size:13px">❌ Erro ao carregar foto 
+        <a href="${fotoUrl}" target="_blank" style="color:#2563eb;margin-left:8px">Abrir direto ↗</a></div>`;
   } else {
     html += '<div style="padding:12px;color:#dc2626;font-size:13px">📷 Sem comprovante</div>';
   }
@@ -547,27 +551,6 @@ async function abrirModal(id) {
 
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('modalOverlay').classList.add('active');
-
-  // Lazy load foto
-  if (p.foto_comprovante) {
-    try {
-      const resp = await fetch(API + '/api/comprovante/' + p.id);
-      if (resp.ok) {
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const img = document.getElementById('modalFotoImg');
-        const ld = document.getElementById('fotoLoading');
-        if (img) { img.src = url; img.style.display = 'block'; }
-        if (ld) ld.style.display = 'none';
-      } else {
-        const ld = document.getElementById('fotoLoading');
-        if (ld) ld.innerHTML = '<span style="color:#dc2626">❌ Erro ao carregar foto</span>';
-      }
-    } catch(e) {
-      const ld = document.getElementById('fotoLoading');
-      if (ld) ld.innerHTML = '<span style="color:#dc2626">❌ ' + h(e.message) + '</span>';
-    }
-  }
 }
 
 function fecharModal() { document.getElementById('modalOverlay').classList.remove('active'); }
