@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.10.2 — MoskoGás</title>
+<title>Config v2.10.3 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.10.2 — config</div>
-  <h1>⚙️ Configurações v2.10.2</h1>
+  <div class="version-badge">v2.10.3 — config</div>
+  <h1>⚙️ Configurações v2.10.3</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -238,6 +238,56 @@
       <button class="btn" onclick="resetLembreteTemplate()" style="background:#e2e8f0;color:#64748b">🔄 Restaurar Padrão</button>
     </div>
     <div id="lemb-status"></div>
+  </div>
+
+  <!-- Relatório Diário por Email -->
+  <div class="card" id="relatorioSection">
+    <h2>📧 Relatório Diário por E-mail</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Envia resumo dos pedidos do dia anterior por e-mail (HTML + CSV anexo) automaticamente via cron.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="rel-ativo" style="width:18px;height:18px">
+        <span style="font-size:13px;font-weight:600">Envio automático ativo</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="rel-csv" style="width:18px;height:18px" checked>
+        <span style="font-size:13px;font-weight:600">Incluir CSV em anexo</span>
+      </label>
+      <label style="font-size:13px">
+        🕐 Hora do envio (horário CG/MS)
+        <select id="rel-hora" style="margin-top:4px">
+          <option value="4">00:00</option>
+          <option value="5">01:00</option>
+          <option value="6">02:00</option>
+          <option value="7">03:00</option>
+          <option value="8">04:00</option>
+          <option value="9">05:00</option>
+          <option value="10">06:00</option>
+          <option value="11">07:00</option>
+          <option value="12">08:00</option>
+        </select>
+        <span style="font-size:10px;color:#94a3b8">GMT-4 (Campo Grande/MS)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="rel-cancelados" style="width:18px;height:18px" checked>
+        <span style="font-size:13px;font-weight:600">Incluir cancelados</span>
+      </label>
+    </div>
+    <label style="font-size:13px;display:block;margin-top:12px">
+      📬 E-mails de destino <span style="font-size:10px;color:#94a3b8">(um por linha)</span>
+      <textarea id="rel-destinos" rows="3" placeholder="moskogas@gmail.com&#10;luismosko@gmail.com" style="width:100%;font-size:13px;border:2px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:4px;resize:vertical"></textarea>
+    </label>
+    <label style="font-size:13px;display:block;margin-top:12px">
+      🔑 API Key do Resend <span style="font-size:10px;color:#94a3b8">(re_xxx... — necessária para envio)</span>
+      <input type="password" id="rel-resend-key" placeholder="re_aBMY..." style="width:100%;margin-top:4px;font-size:14px;border:2px solid #e2e8f0;border-radius:8px;padding:10px">
+      <span style="font-size:10px;color:#94a3b8">Deixe em branco para manter a chave atual</span>
+    </label>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-orange" onclick="salvarRelatorioConfig()" style="flex:1">💾 Salvar Config</button>
+      <button class="btn" onclick="enviarRelatorioTeste()" style="background:#3b82f6;color:#fff;flex:1">📧 Enviar Teste (Ontem)</button>
+      <button class="btn" onclick="window.open(API_BASE+'/api/relatorio/preview-email?date='+new Date(Date.now()-86400000).toISOString().slice(0,10)+'&api_key='+encodeURIComponent(localStorage.getItem('mg_api_key')||''),'_blank')" style="background:#e2e8f0;color:#64748b" title="Abre preview no navegador">👁️ Preview</button>
+    </div>
+    <div id="rel-status" style="margin-top:8px"></div>
   </div>
 
   <!-- Produtos MoskoGás -->
@@ -935,6 +985,62 @@ async function salvarLembreteConfig() {
   finally { hideLoading(); }
 }
 
+// ── Relatório Diário Email Config ─────────────────────────────
+
+async function carregarRelatorioConfig() {
+  try {
+    const config = await api('/api/relatorio/email-config');
+    document.getElementById('rel-ativo').checked = config.ativo === true;
+    document.getElementById('rel-csv').checked = config.incluir_csv !== false;
+    document.getElementById('rel-cancelados').checked = config.incluir_cancelados !== false;
+    document.getElementById('rel-hora').value = config.hora_utc || 6;
+    document.getElementById('rel-destinos').value = (config.destinos || []).join('\n');
+  } catch(e) {
+    const sec = document.getElementById('relatorioSection');
+    if (sec) sec.style.display = 'none';
+  }
+}
+
+async function salvarRelatorioConfig() {
+  const destinos = document.getElementById('rel-destinos').value
+    .split('\n').map(e => e.trim()).filter(e => e.includes('@'));
+  if (!destinos.length) { toast('⚠️ Informe ao menos um e-mail', 'error'); return; }
+  const config = {
+    ativo: document.getElementById('rel-ativo').checked,
+    incluir_csv: document.getElementById('rel-csv').checked,
+    incluir_cancelados: document.getElementById('rel-cancelados').checked,
+    hora_utc: parseInt(document.getElementById('rel-hora').value) || 6,
+    destinos,
+  };
+  const resendKey = document.getElementById('rel-resend-key').value.trim();
+  if (resendKey) config.resend_api_key = resendKey;
+  showLoading('Salvando configuração...');
+  try {
+    const d = await api('/api/relatorio/email-config', { method: 'POST', body: JSON.stringify(config) });
+    if (d.ok) {
+      toast('✅ Config relatório salva!');
+      document.getElementById('rel-resend-key').value = '';
+    }
+    else toast('❌ ' + (d.error || 'Erro'), 'error');
+  } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
+}
+
+async function enviarRelatorioTeste() {
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (!confirm(`Enviar relatório de ${yesterday} por e-mail agora?`)) return;
+  showLoading('Enviando relatório...');
+  try {
+    const d = await api('/api/relatorio/enviar-email', { method: 'POST', body: JSON.stringify({ date: yesterday }) });
+    if (d.ok) {
+      if (d.total === 0) toast(`ℹ️ Sem pedidos em ${yesterday}`, 'error');
+      else toast(`✅ Enviado! ${d.total} pedidos — ${d.destinos?.join(', ')}`);
+    }
+    else toast('❌ ' + (d.error || 'Erro ao enviar'), 'error');
+  } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
+}
+
 // ── Init ─────────────────────────────────────────────────────
 checkStreetsCount();
 carregarFotoConfig();
@@ -942,6 +1048,7 @@ carregarPermissoes();
 loadAppProducts();
 carregarSafetyConfig();
 carregarLembreteConfig();
+carregarRelatorioConfig();
 </script>
 </body>
 </html>
