@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.7.1</title>
+<title>Pagamentos — MoskoGás v1.7.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -55,7 +55,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.7.1 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.7.2 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -75,7 +75,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.7.1</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.7.2</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -121,7 +121,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.7.1 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
+// v1.7.2 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -227,14 +227,14 @@ function updateBulkBar(){
   const count=selectedIds.size;
   document.getElementById('bulk-count').textContent=count;
   document.getElementById('bulk-bar').classList.toggle('show',count>0);
-  const sel=[...selectedIds].map(id=>allData.find(r=>r.id===id)).filter(Boolean);
+  const sel=[...selectedIds].map(id=>allData.find(r=>r.id===id||r.id===String(id))).filter(Boolean);
   const pixCount=sel.filter(p=>p.tipo_pagamento==='pix_receber').length;
   const nfeCount=sel.filter(p=>TIPOS_NFE.includes(p.tipo_pagamento)).length;
-  document.getElementById('btn-bulk-pago').style.display=pixCount>0?'':'none';
+  document.getElementById('btn-bulk-pago').style.display=pixCount>0?'inline-block':'none';
   document.getElementById('bulk-pix-count').textContent=pixCount;
-  document.getElementById('btn-bulk-nfe').style.display=nfeCount>0?'':'none';
+  document.getElementById('btn-bulk-nfe').style.display=nfeCount>0?'inline-block':'none';
   document.getElementById('bulk-nfe-count').textContent=nfeCount;
-  document.getElementById('btn-bulk-lembrete').style.display=pixCount>0?'':'none';
+  document.getElementById('btn-bulk-lembrete').style.display=pixCount>0?'inline-block':'none';
 }
 
 // ═══ MARCAR PAGO (PIX a receber) ═══
