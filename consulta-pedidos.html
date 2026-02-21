@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Pedidos v1.0.5 — MoskoGás</title>
+<title>Consulta de Pedidos v1.0.6 — MoskoGás</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
@@ -125,9 +125,9 @@ tbody td { padding: 6px; vertical-align: middle; }
 <div class="loading-bar" id="loadingBar"></div>
 
 <div class="toolbar">
-  <h1>📋 Consulta de Pedidos <small>v1.0.5</small></h1>
+  <h1>📋 Consulta de Pedidos <small>v1.0.6</small></h1>
 </div>
-<div class="version-badge">v1.0.5 — consulta-pedidos</div>
+<div class="version-badge">v1.0.6 — consulta-pedidos</div>
 
 <div class="container">
 
@@ -253,9 +253,9 @@ tbody td { padding: 6px; vertical-align: middle; }
 
 <script src="shared.js"></script>
 <script>
-// v1.0.5
+// v1.0.6
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
-const API = window.API_BASE || '';
+const API = API_BASE;
 let currentPage = 1;
 let currentOrder = 'created_at';
 let currentDir = 'DESC';
