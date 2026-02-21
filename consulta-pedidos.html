@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Pedidos v1.0.2 — MoskoGás</title>
+<title>Consulta de Pedidos v1.0.3 — MoskoGás</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
@@ -125,9 +125,9 @@ tbody td { padding: 6px; vertical-align: middle; }
 <div class="loading-bar" id="loadingBar"></div>
 
 <div class="toolbar">
-  <h1>📋 Consulta de Pedidos <small>v1.0.2</small></h1>
+  <h1>📋 Consulta de Pedidos <small>v1.0.3</small></h1>
 </div>
-<div class="version-badge">v1.0.2 — consulta-pedidos</div>
+<div class="version-badge">v1.0.3 — consulta-pedidos</div>
 
 <div class="container">
 
@@ -253,7 +253,7 @@ tbody td { padding: 6px; vertical-align: middle; }
 
 <script src="shared.js"></script>
 <script>
-// v1.0.2
+// v1.0.3
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 const API = window.API_BASE || '';
 let currentPage = 1;
@@ -412,7 +412,7 @@ function renderTabela(pedidos) {
   document.getElementById('tableInfo').textContent = pedidos.length + ' nesta página';
 
   tb.innerHTML = pedidos.map(p => {
-    const dt = p.created_at ? new Date(p.created_at) : null;
+    const dt = p.created_at ? new Date(p.created_at * 1000) : null;
     const dataFmt = dt ? `${pad(dt.getDate())}/${pad(dt.getMonth()+1)} ${pad(dt.getHours())}:${pad(dt.getMinutes())}` : '—';
     const cliente = trunc(p.customer_name || '—', 22);
     const tel = fmtTel(p.phone_digits);
@@ -425,7 +425,7 @@ function renderTabela(pedidos) {
     const pgto = PGTO_LABELS[p.tipo_pagamento] || p.tipo_pagamento || '—';
     const pago = p.pago ? '<span class="pago-ok">✅</span>' : '<span class="pago-no">❌</span>';
     const bling = p.bling_pedido_id ? `<span class="bling-ok" title="Bling #${h(p.bling_pedido_num||p.bling_pedido_id)}">✅</span>` : '<span class="bling-no">❌</span>';
-    const foto = p.proof_key ? '📷' : '<span style="color:#dc2626;font-size:11px">—</span>';
+    const foto = p.foto_comprovante ? '📷' : '<span style="color:#dc2626;font-size:11px">—</span>';
 
     return `<tr onclick="abrirModal(${p.id})" title="Clique para detalhes">
       <td><strong>${p.id}</strong></td>
@@ -510,8 +510,8 @@ async function abrirModal(id) {
   </div>`;
 
   // Entrega
-  const dtC = p.created_at ? new Date(p.created_at).toLocaleString('pt-BR') : '—';
-  const dtE = p.delivered_at ? new Date(p.delivered_at).toLocaleString('pt-BR') : '—';
+  const dtC = p.created_at ? new Date(p.created_at * 1000).toLocaleString('pt-BR', {timeZone:'America/Campo_Grande'}) : '—';
+  const dtE = p.delivered_at ? new Date(p.delivered_at * 1000).toLocaleString('pt-BR', {timeZone:'America/Campo_Grande'}) : '—';
   html += `<div class="modal-section"><h4>🚚 Entrega</h4>
     ${mRow('Entregador', p.driver_name_cache)}
     ${mRow('Vendedor', p.vendedor_nome)}
@@ -524,7 +524,7 @@ async function abrirModal(id) {
 
   // Foto
   html += `<div class="modal-section"><h4>📷 Comprovante</h4><div id="modalFotoArea">`;
-  if (p.proof_key) {
+  if (p.foto_comprovante) {
     html += `<div class="modal-foto-loading" id="fotoLoading">⏳ Carregando foto...</div>
       <img class="modal-foto" id="modalFotoImg" style="display:none" onclick="openLightbox(this.src)" title="Clique para ampliar">`;
   } else {
@@ -549,7 +549,7 @@ async function abrirModal(id) {
   document.getElementById('modalOverlay').classList.add('active');
 
   // Lazy load foto
-  if (p.proof_key) {
+  if (p.foto_comprovante) {
     try {
       const token = getSessionToken();
       const resp = await fetch(API + '/api/order/' + p.id + '/prova', { headers: { 'Authorization': 'Bearer ' + token } });
