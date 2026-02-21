@@ -1,7 +1,8 @@
-// v2.30.0
+// v2.31.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
+// v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
+// v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
 // v2.28.3: Fix WhatsApp — formatPhoneWA auto em sendWhatsApp + erro detalhado
 // v2.28.2: Fix erro Bling detalhado no cadastro + validação CPF/CNPJ frontend
@@ -397,6 +398,140 @@ async function deletarVendaBling(env, orderId, blingPedidoId) {
     error_message: `HTTP ${resp.status}: ${errText.substring(0, 300)}`
   });
   return { ok: false, status: resp.status, error: errText.substring(0, 300) };
+}
+
+// ── CORA PIX — Cobrança automática via QR Code ─────────────
+// v2.31.0: Integração Direta (mTLS) com Cora para PIX receber
+// Requer binding CORA_CERT (mTLS certificate) no wrangler.toml
+// e secret CORA_CLIENT_ID no Cloudflare
+
+const CORA_API_BASE = 'https://matls-clients.api.cora.com.br';
+
+function isCoraConfigured(env) {
+  return !!(env.CORA_CERT && env.CORA_CLIENT_ID);
+}
+
+async function getCoraToken(env) {
+  // Check cached token
+  const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_access_token'").first().catch(() => null);
+  const expRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_token_expires'").first().catch(() => null);
+
+  if (row?.value && expRow?.value) {
+    const expires = parseInt(expRow.value);
+    if (Date.now() / 1000 < expires - 300) return row.value; // 5min buffer
+  }
+
+  // Request new token via mTLS
+  const resp = await env.CORA_CERT.fetch(`${CORA_API_BASE}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=client_credentials&client_id=${env.CORA_CLIENT_ID}`,
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    console.error('[Cora] Token error:', resp.status, errText);
+    throw new Error(`Cora auth failed: ${resp.status} - ${errText.substring(0, 200)}`);
+  }
+
+  const data = await resp.json();
+  const token = data.access_token;
+  const expiresAt = Math.floor(Date.now() / 1000) + (data.expires_in || 86400);
+
+  // Cache in DB
+  await env.DB.prepare("INSERT INTO app_config (key, value, updated_at) VALUES ('cora_access_token', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at").bind(token).run().catch(() => {});
+  await env.DB.prepare("INSERT INTO app_config (key, value, updated_at) VALUES ('cora_token_expires', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at").bind(String(expiresAt)).run().catch(() => {});
+
+  console.log('[Cora] Token renovado, expira em', data.expires_in, 's');
+  return token;
+}
+
+async function coraFetch(path, options = {}, env) {
+  const token = await getCoraToken(env);
+  const url = `${CORA_API_BASE}${path}`;
+  return env.CORA_CERT.fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+}
+
+async function coraCreatePixInvoice(env, orderId, orderData) {
+  const { customer_name, total_value, items, phone_digits } = orderData;
+
+  const amountCentavos = Math.round(parseFloat(total_value) * 100);
+  if (amountCentavos < 100) throw new Error('Valor mínimo para cobrança Cora: R$1,00');
+
+  // Vencimento: 3 dias a partir de hoje
+  const dueDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const itemsDesc = (items || []).map(i => {
+    const qty = i.qty || i.quantidade || 1;
+    const name = i.name || i.nome || 'Produto';
+    return `${qty}x ${name}`;
+  }).join(', ');
+
+  const body = {
+    code: `moskogas-${orderId}-${Date.now()}`,
+    customer: {
+      name: customer_name || 'Cliente MoskoGás',
+    },
+    services: [{
+      name: `MoskoGás — Pedido #${orderId}`,
+      description: itemsDesc || 'Gás/Água',
+      amount: amountCentavos,
+    }],
+    payment_terms: {
+      due_date: dueDate,
+    },
+  };
+
+  console.log('[Cora] Criando invoice para pedido', orderId, '- R$', (amountCentavos / 100).toFixed(2));
+
+  const resp = await coraFetch('/v2/invoices', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+    body: JSON.stringify(body),
+  }, env);
+
+  const respText = await resp.text();
+  let respData;
+  try { respData = JSON.parse(respText); } catch { respData = null; }
+
+  if (!resp.ok) {
+    console.error('[Cora] Invoice error:', resp.status, respText.substring(0, 500));
+    throw new Error(`Cora invoice ${resp.status}: ${respText.substring(0, 300)}`);
+  }
+
+  console.log('[Cora] Invoice criado:', JSON.stringify(respData).substring(0, 500));
+
+  // Extrair QR code PIX — a estrutura pode variar
+  const invoiceId = respData?.id || respData?.data?.id || null;
+  const brCode = respData?.pix?.emv || respData?.pix?.qr_code || respData?.pix?.br_code || respData?.payment?.pix?.emv || null;
+  const qrImageUrl = respData?.pix?.qr_code_url || respData?.pix?.image_url || null;
+
+  await logEvent(env, orderId, 'cora_invoice_created', {
+    cora_invoice_id: invoiceId,
+    has_brcode: !!brCode,
+    has_qr_image: !!qrImageUrl,
+    response_keys: Object.keys(respData || {}),
+  });
+
+  return { invoice_id: invoiceId, brCode, qr_image_url: qrImageUrl, raw: respData };
+}
+
+async function ensureCoraColumns(env) {
+  const cols = [
+    { name: 'cora_invoice_id', def: 'TEXT' },
+    { name: 'cora_qrcode', def: 'TEXT' },
+    { name: 'cora_paid_at', def: 'INTEGER' },
+  ];
+  for (const col of cols) {
+    await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col.name} ${col.def}`).run().catch(() => {});
+  }
 }
 
 // ── IzChat WhatsApp — Safety Layer v1.0 ──────────────────────
@@ -2481,7 +2616,26 @@ export default {
           VALUES (?, ?, ?, ?, datetime('now'))`).bind(phone, customerName, addressLine, bairro).run().catch(() => {});
       }
 
-      return json({ ok: true, id: orderId, status: 'entregue', pago, bling_result: blingResult });
+      // 5) v2.31.0: Cora PIX para venda externa pix_receber
+      let coraResult = null;
+      if (tipoPagamento === 'pix_receber' && isCoraConfigured(env)) {
+        try {
+          await ensureCoraColumns(env);
+          const coraData = await coraCreatePixInvoice(env, orderId, {
+            customer_name: customerName, total_value: totalValue, items, phone_digits: phone,
+          });
+          if (coraData.invoice_id) {
+            await env.DB.prepare('UPDATE orders SET cora_invoice_id=?, cora_qrcode=? WHERE id=?')
+              .bind(coraData.invoice_id, coraData.brCode || '', orderId).run();
+            coraResult = { created: true, invoice_id: coraData.invoice_id, qrcode: coraData.brCode };
+          }
+        } catch (ce) {
+          coraResult = { error: ce.message };
+          await logEvent(env, orderId, 'cora_error_venda_ext', { error: ce.message });
+        }
+      }
+
+      return json({ ok: true, id: orderId, status: 'entregue', pago, bling_result: blingResult, cora_result: coraResult });
     }
 
     // [REMOVIDO v2.12.0] POST /api/order/:id/gerar-nfce — NFCe não existe na API Bling v3
@@ -2896,6 +3050,31 @@ export default {
         }
       }
 
+      // ── v2.31.0: Cora PIX — gerar cobrança QR para pix_receber ──
+      let coraResult = null;
+      if (tipoFinal === 'pix_receber' && isCoraConfigured(env)) {
+        try {
+          await ensureCoraColumns(env);
+          const items = JSON.parse(order.items_json || '[]');
+          const coraData = await coraCreatePixInvoice(env, id, {
+            customer_name: order.customer_name,
+            total_value: order.total_value,
+            items,
+            phone_digits: order.phone_digits,
+          });
+          if (coraData.invoice_id) {
+            sql += `, cora_invoice_id=?, cora_qrcode=?`;
+            params.push(coraData.invoice_id, coraData.brCode || '');
+            coraResult = { created: true, invoice_id: coraData.invoice_id, has_qr: !!coraData.brCode };
+          }
+        } catch (ce) {
+          console.error('[Deliver] Erro criar Cora PIX:', ce.message);
+          coraResult = { created: false, error: ce.message };
+          await logEvent(env, id, 'cora_error_on_deliver', { error: ce.message });
+          // NÃO bloqueia entrega
+        }
+      }
+
       sql += ` WHERE id=?`;
       params.push(id);
 
@@ -2906,7 +3085,7 @@ export default {
         observacao: obsEntregador,
       });
 
-      return json({ ok: true, status: 'entregue', foto_key: photoKey, bling_result: blingResult });
+      return json({ ok: true, status: 'entregue', foto_key: photoKey, bling_result: blingResult, cora_result: coraResult });
     }
 
     const cancelMatch = path.match(/^\/api\/order\/(\d+)\/cancel$/);
@@ -3112,12 +3291,14 @@ export default {
     
     if (method === 'GET' && path === '/api/pagamentos') {
       await ensureAuditTable(env);
+      await ensureCoraColumns(env);
       const rows = await env.DB.prepare(`
         SELECT 
           o.id, o.customer_name, o.phone_digits, o.address_line, o.total_value, 
           o.tipo_pagamento, o.pago, o.bling_pedido_id, o.bling_pedido_num,
           o.created_at, o.delivered_at, o.status, o.items_json, o.bairro,
           o.forma_pagamento_key, o.forma_pagamento_id,
+          o.cora_invoice_id, o.cora_qrcode, o.cora_paid_at,
           cc.bling_contact_id,
           (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
           (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
@@ -3186,6 +3367,60 @@ export default {
       await logBlingAudit(env, orderId, 'marcar_pago', 'success', { bling_pedido_id: order.bling_pedido_id || '', tipo: order.tipo_pagamento });
       await logEvent(env, orderId, 'payment_confirmed', {});
       return json({ ok: true });
+    }
+
+    // ── v2.31.0: Cora PIX — QR Code do pedido ──────────────────
+    const qrMatch = path.match(/^\/api\/pagamentos\/(\d+)\/qrcode$/);
+    if (method === 'GET' && qrMatch) {
+      const orderId = parseInt(qrMatch[1]);
+      await ensureCoraColumns(env);
+      const order = await env.DB.prepare('SELECT cora_invoice_id, cora_qrcode, cora_paid_at, total_value, customer_name FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      return json({
+        ok: true,
+        cora_invoice_id: order.cora_invoice_id || null,
+        qrcode: order.cora_qrcode || null,
+        paid: !!order.cora_paid_at,
+        total_value: order.total_value,
+        customer_name: order.customer_name,
+      });
+    }
+
+    // ── v2.31.0: Cora PIX — (Re)gerar cobrança PIX ─────────────
+    const gerarPixMatch = path.match(/^\/api\/pagamentos\/(\d+)\/gerar-pix$/);
+    if (method === 'POST' && gerarPixMatch) {
+      const orderId = parseInt(gerarPixMatch[1]);
+      if (!isCoraConfigured(env)) return err('Cora PIX não configurada (mTLS binding ausente)', 400);
+
+      await ensureCoraColumns(env);
+      const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      if (order.pago === 1) return json({ ok: true, message: 'Pedido já está pago' });
+      if (order.cora_paid_at) return json({ ok: true, message: 'PIX já confirmado pela Cora' });
+
+      try {
+        const items = JSON.parse(order.items_json || '[]');
+        const coraData = await coraCreatePixInvoice(env, orderId, {
+          customer_name: order.customer_name,
+          total_value: order.total_value,
+          items,
+          phone_digits: order.phone_digits,
+        });
+
+        if (coraData.invoice_id) {
+          await env.DB.prepare('UPDATE orders SET cora_invoice_id=?, cora_qrcode=? WHERE id=?')
+            .bind(coraData.invoice_id, coraData.brCode || '', orderId).run();
+        }
+
+        return json({
+          ok: true,
+          invoice_id: coraData.invoice_id,
+          qrcode: coraData.brCode || null,
+          qr_image_url: coraData.qr_image_url || null,
+        });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
     }
 
     if (method === 'POST' && path === '/api/pagamentos/criar-vendas-bling') {
@@ -3951,6 +4186,196 @@ export default {
         'SELECT * FROM order_status_log WHERE order_id=? ORDER BY id DESC LIMIT 50'
       ).bind(orderId).all().then(r => r.results || []);
       return json(logs);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ── CORA PIX — Webhook (PÚBLICO — sem auth) ──────────────────
+    // ══════════════════════════════════════════════════════════════
+
+    if (method === 'POST' && path === '/api/webhooks/cora') {
+      try {
+        await ensureCoraColumns(env);
+        // Cora envia dados nos headers (não no body)
+        const eventId = request.headers.get('webhook-event-id') || '';
+        const eventType = request.headers.get('webhook-event-type') || '';
+        const resourceId = request.headers.get('webhook-resource-id') || '';
+
+        console.log(`[cora-webhook] Event: ${eventType}, Resource: ${resourceId}, EventId: ${eventId}`);
+
+        // Também tenta ler body (caso Cora mude o formato)
+        let bodyData = null;
+        try { bodyData = await request.json(); } catch { bodyData = null; }
+        if (bodyData) console.log('[cora-webhook] Body:', JSON.stringify(bodyData).substring(0, 500));
+
+        if (!resourceId && !bodyData) {
+          return json({ ok: true, ignored: 'no resource id and no body' });
+        }
+
+        // Determinar invoice_id
+        const invoiceId = resourceId || bodyData?.id || bodyData?.invoice?.id || bodyData?.data?.id || null;
+        if (!invoiceId) return json({ ok: true, ignored: 'no invoice id found' });
+
+        // Buscar pedido pelo cora_invoice_id
+        const order = await env.DB.prepare(
+          'SELECT id, pago, status, tipo_pagamento, cora_paid_at FROM orders WHERE cora_invoice_id = ?'
+        ).bind(invoiceId).first();
+
+        if (!order) {
+          console.log(`[cora-webhook] No order found for invoice ${invoiceId}`);
+          return json({ ok: true, ignored: 'order not found for this invoice' });
+        }
+
+        // Evento: invoice.paid
+        if (eventType === 'invoice.paid' || bodyData?.event === 'invoice.paid' || bodyData?.status === 'PAID') {
+          if (order.pago === 1 || order.cora_paid_at) {
+            console.log(`[cora-webhook] Order #${order.id} already paid, ignoring duplicate`);
+            return json({ ok: true, ignored: 'already paid' });
+          }
+
+          // Marcar pago
+          await env.DB.prepare(
+            'UPDATE orders SET pago=1, cora_paid_at=unixepoch() WHERE id=?'
+          ).bind(order.id).run();
+
+          await logEvent(env, order.id, 'cora_pix_confirmed', {
+            cora_invoice_id: invoiceId,
+            event_id: eventId,
+            event_type: eventType,
+          });
+
+          // Criar Bling se ainda não tem
+          let blingResult = null;
+          if (!order.bling_pedido_id) {
+            try {
+              const fullOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(order.id).first();
+              const cached = fullOrder?.phone_digits
+                ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(fullOrder.phone_digits).first()
+                : null;
+              let vendBlingId = null, vendNome = fullOrder?.vendedor_nome || '';
+              if (fullOrder?.vendedor_id) {
+                const vendUser = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(fullOrder.vendedor_id).first().catch(() => null);
+                if (vendUser?.bling_vendedor_id) vendBlingId = vendUser.bling_vendedor_id;
+                if (vendUser?.nome) vendNome = vendUser.nome;
+              }
+              const blingData = await criarPedidoBling(env, order.id, {
+                name: fullOrder?.customer_name,
+                items: JSON.parse(fullOrder?.items_json || '[]'),
+                total_value: fullOrder?.total_value,
+                tipo_pagamento: fullOrder?.tipo_pagamento,
+                bling_contact_id: cached?.bling_contact_id || null,
+                cpf_cnpj: cached?.cpf_cnpj || null,
+                bling_vendedor_id: vendBlingId,
+                vendedor_nome: vendNome,
+              });
+              await env.DB.prepare(
+                'UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?'
+              ).bind(blingData.bling_pedido_id, blingData.bling_pedido_num, 'synced', order.id).run();
+              blingResult = { created: true, id: blingData.bling_pedido_id };
+            } catch (be) {
+              console.error('[cora-webhook] Bling error:', be.message);
+              blingResult = { error: be.message };
+            }
+          }
+
+          // WhatsApp admin: PIX confirmado
+          try {
+            const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1").all();
+            const adminPhones = (admins.results || []).map(a => a.telefone).filter(Boolean);
+            const fullOrder = await env.DB.prepare('SELECT customer_name, total_value FROM orders WHERE id=?').bind(order.id).first();
+            const valor = parseFloat(fullOrder?.total_value || 0).toFixed(2);
+            const msg = `✅ *PIX CONFIRMADO* — Pedido #${order.id}\n\n💰 R$ ${valor} — ${fullOrder?.customer_name || 'Cliente'}\n\nPagamento via Cora PIX recebido com sucesso.`;
+            for (const phone of adminPhones) {
+              await sendWhatsApp(env, phone, msg, { category: 'admin_alerta' });
+            }
+          } catch (we) {
+            console.error('[cora-webhook] WhatsApp admin error:', we.message);
+          }
+
+          console.log(`[cora-webhook] Order #${order.id} marked as paid`);
+          return json({ ok: true, order_id: order.id, action: 'marked_paid', bling: blingResult });
+        }
+
+        // Outros eventos (cancelamento, etc) — apenas log
+        await logEvent(env, order.id, 'cora_webhook_other', { event_type: eventType, event_id: eventId });
+        return json({ ok: true, logged: true });
+
+      } catch (e) {
+        console.error('[cora-webhook] Error:', e.message);
+        return json({ ok: false, error: e.message }, 500);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ── CORA PIX — Admin endpoints ──────────────────────────────
+    // ══════════════════════════════════════════════════════════════
+
+    if (method === 'GET' && path === '/api/cora/status') {
+      const configured = isCoraConfigured(env);
+      let tokenOk = false;
+      let tokenExpires = null;
+      if (configured) {
+        try {
+          const expRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_token_expires'").first().catch(() => null);
+          tokenExpires = expRow?.value ? parseInt(expRow.value) : null;
+          tokenOk = tokenExpires && (Date.now() / 1000 < tokenExpires);
+        } catch {}
+      }
+      await ensureCoraColumns(env);
+      const stats = await env.DB.prepare(`
+        SELECT 
+          COUNT(*) as total_invoices,
+          SUM(CASE WHEN cora_paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid,
+          SUM(CASE WHEN cora_paid_at IS NULL AND pago=0 THEN 1 ELSE 0 END) as pending
+        FROM orders WHERE cora_invoice_id IS NOT NULL
+      `).first().catch(() => ({ total_invoices: 0, paid: 0, pending: 0 }));
+
+      return json({
+        configured,
+        token_valid: tokenOk,
+        token_expires: tokenExpires,
+        client_id: env.CORA_CLIENT_ID ? env.CORA_CLIENT_ID.substring(0, 10) + '...' : null,
+        stats,
+      });
+    }
+
+    if (method === 'POST' && path === '/api/cora/register-webhook') {
+      if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+
+      try {
+        const webhookUrl = 'https://api.moskogas.com.br/api/webhooks/cora';
+        const resp = await coraFetch('/endpoints/', {
+          method: 'POST',
+          body: JSON.stringify({
+            url: webhookUrl,
+            resource: 'invoice',
+            trigger: 'paid',
+          }),
+        }, env);
+
+        const respText = await resp.text();
+        let respData;
+        try { respData = JSON.parse(respText); } catch { respData = respText; }
+
+        if (!resp.ok) {
+          return json({ ok: false, error: `Cora ${resp.status}`, details: respData }, resp.status);
+        }
+
+        return json({ ok: true, webhook_registered: true, response: respData });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
+    }
+
+    if (method === 'POST' && path === '/api/cora/test-token') {
+      if (!isCoraConfigured(env)) return err('Cora não configurada (CORA_CERT e/ou CORA_CLIENT_ID ausentes)', 400);
+      try {
+        const token = await getCoraToken(env);
+        return json({ ok: true, token_preview: token.substring(0, 20) + '...', token_length: token.length });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
     }
 
     // ══════════════════════════════════════════════════════════════
