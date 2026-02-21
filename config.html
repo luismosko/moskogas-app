@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.10.3 — MoskoGás</title>
+<title>Config v2.10.4 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.10.3 — config</div>
-  <h1>⚙️ Configurações v2.10.3</h1>
+  <div class="version-badge">v2.10.4 — config</div>
+  <h1>⚙️ Configurações v2.10.4</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -238,6 +238,21 @@
       <button class="btn" onclick="resetLembreteTemplate()" style="background:#e2e8f0;color:#64748b">🔄 Restaurar Padrão</button>
     </div>
     <div id="lemb-status"></div>
+  </div>
+
+  <!-- QR Code Avaliação Google -->
+  <div class="card">
+    <h2>⭐ QR Code — Avaliação Google</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Após cada entrega, o entregador vê um QR Code para o cliente avaliar no Google. Configure a URL da sua página de avaliação.</p>
+    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px">🔗 URL Google Reviews</label>
+    <input type="url" id="review-url" placeholder="https://g.page/r/CeXXXX/review" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:13px">
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <button class="btn btn-orange" onclick="salvarReviewUrl()" style="flex:0 0 auto">💾 Salvar</button>
+      <span id="review-stats" style="font-size:12px;color:#94a3b8"></span>
+    </div>
+    <div id="review-preview" style="margin-top:10px;text-align:center;display:none">
+      <img id="review-qr-preview" style="width:150px;height:150px;border-radius:8px;border:2px solid #f97316">
+    </div>
   </div>
 
   <!-- Relatório Diário por Email -->
@@ -1042,6 +1057,44 @@ async function enviarRelatorioTeste() {
 }
 
 // ── Init ─────────────────────────────────────────────────────
+// ── QR Review Config ──
+async function carregarReviewConfig() {
+  try {
+    const data = await api('/api/config?key=google_review_url');
+    const url = data?.value || '';
+    document.getElementById('review-url').value = url;
+    if (url) {
+      const preview = document.getElementById('review-preview');
+      preview.style.display = 'block';
+      document.getElementById('review-qr-preview').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url);
+    }
+    // Stats
+    try {
+      const stats = await api('/api/qr-review/stats');
+      if (stats.total) {
+        document.getElementById('review-stats').textContent = `📊 ${stats.total} QRs mostrados — ${stats.by_driver?.map(d => d.driver + ': ' + d.total).join(', ')}`;
+      }
+    } catch(_) {}
+  } catch(_) {}
+}
+
+async function salvarReviewUrl() {
+  const url = document.getElementById('review-url').value.trim();
+  showLoading('Salvando...');
+  try {
+    await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'google_review_url', value: url }) });
+    toast('✅ URL de avaliação salva!');
+    if (url) {
+      const preview = document.getElementById('review-preview');
+      preview.style.display = 'block';
+      document.getElementById('review-qr-preview').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url);
+    } else {
+      document.getElementById('review-preview').style.display = 'none';
+    }
+  } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
+}
+
 checkStreetsCount();
 carregarFotoConfig();
 carregarPermissoes();
@@ -1049,6 +1102,7 @@ loadAppProducts();
 carregarSafetyConfig();
 carregarLembreteConfig();
 carregarRelatorioConfig();
+carregarReviewConfig();
 </script>
 </body>
 </html>

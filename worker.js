@@ -1660,6 +1660,37 @@ export default {
       try { return json({ ...defaults, ...JSON.parse(row.value) }); } catch { return json(defaults); }
     }
 
+    // v2.30.0: QR Code Avaliação Google
+    if (method === 'GET' && path === '/api/pub/review-config') {
+      const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='google_review_url'").first();
+      return json({ url: row?.value || null });
+    }
+
+    // Registrar que QR foi mostrado ao cliente
+    const qrShownMatch = path.match(/^\/api\/order\/(\d+)\/qr-shown$/);
+    if (method === 'POST' && qrShownMatch) {
+      const orderId = qrShownMatch[1];
+      const user = await getSessionUser(request, env);
+      await logEvent(env, orderId, 'qr_review_shown', {
+        driver_id: user?.user_id || user?.id,
+        driver_name: user?.nome
+      });
+      return json({ ok: true });
+    }
+
+    // Stats QR por entregador (admin)
+    if (method === 'GET' && path === '/api/qr-review/stats') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const rows = await env.DB.prepare(`
+        SELECT json_extract(details, '$.driver_name') as driver, COUNT(*) as total
+        FROM order_events WHERE evento = 'qr_review_shown'
+        GROUP BY driver ORDER BY total DESC
+      `).all().then(r => r.results || []);
+      const total = rows.reduce((s, r) => s + r.total, 0);
+      return json({ total, by_driver: rows });
+    }
+
     // ── AUTH: Login / Sessão / Logout (SEM autenticação prévia) ──
 
     if (method === 'POST' && path === '/api/auth/login') {

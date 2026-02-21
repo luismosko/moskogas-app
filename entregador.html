@@ -155,6 +155,23 @@
   .btn-venda-submit { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 800; cursor: pointer; }
   .btn-venda-submit.ready { background: #16a34a; color: #fff; }
   .btn-venda-submit.disabled { background: #e2e8f0; color: #94a3b8; }
+
+  /* ── QR Review Modal ── */
+  .qr-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 250; justify-content: center; align-items: center; padding: 20px; }
+  .qr-overlay.active { display: flex; }
+  .qr-modal { background: #fff; border-radius: 20px; width: 100%; max-width: 360px; text-align: center; overflow: hidden; animation: qrPop .3s ease; }
+  @keyframes qrPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .qr-top { background: linear-gradient(135deg, #f59e0b, #f97316); padding: 18px 16px 12px; color: #fff; }
+  .qr-top h2 { font-size: 20px; margin: 0 0 4px; }
+  .qr-top p { font-size: 13px; margin: 0; opacity: 0.9; }
+  .qr-body { padding: 20px; }
+  .qr-body img { width: 220px; height: 220px; border-radius: 12px; border: 3px solid #f97316; }
+  .qr-hint { font-size: 14px; color: #374151; margin: 14px 0 4px; font-weight: 600; }
+  .qr-sub { font-size: 12px; color: #6b7280; margin: 0 0 16px; }
+  .qr-actions { display: flex; gap: 10px; justify-content: center; padding: 0 16px 18px; }
+  .qr-btn { flex: 1; padding: 12px; border: none; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .qr-btn-show { background: #f97316; color: #fff; }
+  .qr-btn-skip { background: #f1f5f9; color: #64748b; }
 </style>
 </head>
 <body>
@@ -238,6 +255,25 @@
 </div>
 </div>
 
+<!-- QR Review Modal -->
+<div class="qr-overlay" id="qrOverlay">
+<div class="qr-modal">
+  <div class="qr-top">
+    <h2>⭐ Avalie-nos no Google!</h2>
+    <p>Mostre o QR Code ao cliente</p>
+  </div>
+  <div class="qr-body">
+    <img id="qrImg" src="" alt="QR Code">
+    <div class="qr-hint">📱 Peça ao cliente para escanear</div>
+    <div class="qr-sub">Sua avaliação nos ajuda muito!</div>
+  </div>
+  <div class="qr-actions">
+    <button class="qr-btn qr-btn-show" onclick="qrShown()">👍 Mostrei ao cliente</button>
+    <button class="qr-btn qr-btn-skip" onclick="closeQr()">Pular</button>
+  </div>
+</div>
+</div>
+
 <script src="shared.js"></script>
 <script>
 // v2.5.0
@@ -268,6 +304,9 @@ async function init() {
 
   // Carregar produtos para venda externa
   await loadVendaProducts();
+
+  // Carregar URL de avaliação Google
+  await loadReviewConfig();
 
   const drivers = await api('/api/drivers').catch(() => []);
   const sel = document.getElementById('fDriver');
@@ -723,6 +762,9 @@ async function deliver(orderId) {
     }
     toast(msg, result.bling_result && result.bling_result.action === 'create_error' ? 'warning' : 'success');
 
+    // v2.5.0: Mostrar QR de avaliação Google
+    showQrReview(orderId);
+
     load();
   } catch (e) {
     hideLoading();
@@ -731,6 +773,43 @@ async function deliver(orderId) {
     btn.className = 'btn-deliver ready';
     btn.innerHTML = '✅ Marcar como Entregue';
   }
+}
+
+// ══════════════════════════════════════════════
+// ── QR CODE AVALIAÇÃO GOOGLE
+// ══════════════════════════════════════════════
+
+let reviewUrl = null;
+let lastDeliveredOrderId = null;
+
+async function loadReviewConfig() {
+  try {
+    const data = await api('/api/pub/review-config');
+    reviewUrl = data?.url || null;
+  } catch(_) { reviewUrl = null; }
+}
+
+function showQrReview(orderId) {
+  if (!reviewUrl) return; // URL não configurada — pular
+  lastDeliveredOrderId = orderId;
+  const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(reviewUrl);
+  document.getElementById('qrImg').src = qrSrc;
+  document.getElementById('qrOverlay').classList.add('active');
+}
+
+function closeQr() {
+  document.getElementById('qrOverlay').classList.remove('active');
+  lastDeliveredOrderId = null;
+}
+
+async function qrShown() {
+  if (lastDeliveredOrderId) {
+    try {
+      await api('/api/order/' + lastDeliveredOrderId + '/qr-shown', { method: 'POST', body: '{}' });
+    } catch(_) {}
+  }
+  toast('⭐ Obrigado! Avaliação registrada.');
+  closeQr();
 }
 
 // ══════════════════════════════════════════════
@@ -900,6 +979,7 @@ async function submitVendaExterna() {
     if (result.bling_result?.action === 'created') msg += ' Bling nº ' + result.bling_result.bling_num;
     else if (result.bling_result?.action === 'create_error') msg += ' ⚠️ Bling: ' + result.bling_result.error;
     toast(msg, result.bling_result?.action === 'create_error' ? 'warning' : 'success');
+    showQrReview(result.id);
     load();
   } catch(e) {
     hideLoading();
