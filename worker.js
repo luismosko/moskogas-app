@@ -1,4 +1,4 @@
-// v2.29.7
+// v2.29.8
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -289,10 +289,12 @@ function buildItemBling(item) {
   const blingId = item.bling_id || item.id || null;
   const code = item.code || item.sku || '';
   const desc = String(item.name || 'Produto').substring(0, 120);
+  const qty = parseFloat(item.qty) || 1;
+  const price = parseFloat(item.price) || 0;
   const result = {
     descricao: desc,
-    quantidade: item.qty || 1,
-    valor: item.price || 0,
+    quantidade: qty,
+    valor: price,
   };
   if (blingId && !isNaN(Number(blingId)) && Number(blingId) > 0) {
     result.produto = { id: Number(blingId) };
@@ -3044,15 +3046,15 @@ export default {
           grupos[key] = { cliente: o.customer_name, phone: o.phone_digits, bling_contact_id: o.bling_contact_id || null, cpf_cnpj: o.cpf_cnpj || null, pedidos: [], produtos: {}, total: 0 };
         }
         grupos[key].pedidos.push(o);
-        grupos[key].total += o.total_value || 0;
+        grupos[key].total += parseFloat(o.total_value) || 0;
         try {
           const items = JSON.parse(o.items_json || '[]');
           for (const item of items) {
             const prodKey = item.bling_id || item.code || item.name;
             if (!grupos[key].produtos[prodKey]) {
-              grupos[key].produtos[prodKey] = { name: item.name, bling_id: item.bling_id || null, code: item.code || item.sku || '', sku: item.code || item.sku || '', qty: 0, price: item.price || 0 };
+              grupos[key].produtos[prodKey] = { name: item.name, bling_id: item.bling_id || null, code: item.code || item.sku || '', sku: item.code || item.sku || '', qty: 0, price: parseFloat(item.price) || 0 };
             }
-            grupos[key].produtos[prodKey].qty += item.qty || 1;
+            grupos[key].produtos[prodKey].qty += parseInt(item.qty) || 1;
           }
         } catch(_) {}
       }
@@ -3075,7 +3077,7 @@ export default {
           data: today,
           dataSaida: today,
           itens: itensBling,
-          parcelas: [{ formaPagamento: { id: FORMAS_PAGAMENTO.fiado.id }, valor: grupo.total, dataVencimento: today }],
+          parcelas: [{ formaPagamento: { id: FORMAS_PAGAMENTO.fiado.id }, valor: Math.round(grupo.total * 100) / 100, dataVencimento: today }],
           observacoes: `MoskoGás Venda Agrupada — ${grupo.cliente} — Pedidos: ${pedidoIds.map(i => '#'+i).join(', ')}`,
         };
 
@@ -3085,9 +3087,9 @@ export default {
           if (!resp.ok) {
             const errText = await resp.text();
             for (const oid of pedidoIds) {
-              await logBlingAudit(env, oid, 'criar_venda_lote', 'error', { request_payload: pedidoBody, error_message: `HTTP ${resp.status}: ${errText.substring(0,200)}` });
+              await logBlingAudit(env, oid, 'criar_venda_lote', 'error', { request_payload: pedidoBody, error_message: `HTTP ${resp.status}: ${errText.substring(0,500)}` });
             }
-            resultados.push({ cliente: grupo.cliente, ok: false, error: `Bling ${resp.status}: ${errText.substring(0, 200)}`, pedidos: pedidoIds });
+            resultados.push({ cliente: grupo.cliente, ok: false, error: `Bling ${resp.status}: ${errText.substring(0, 500)}`, pedidos: pedidoIds });
             continue;
           }
 
