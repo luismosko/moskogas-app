@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Pedidos v1.0.3 — MoskoGás</title>
+<title>Consulta de Pedidos v1.0.4 — MoskoGás</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
@@ -125,9 +125,9 @@ tbody td { padding: 6px; vertical-align: middle; }
 <div class="loading-bar" id="loadingBar"></div>
 
 <div class="toolbar">
-  <h1>📋 Consulta de Pedidos <small>v1.0.3</small></h1>
+  <h1>📋 Consulta de Pedidos <small>v1.0.4</small></h1>
 </div>
-<div class="version-badge">v1.0.3 — consulta-pedidos</div>
+<div class="version-badge">v1.0.4 — consulta-pedidos</div>
 
 <div class="container">
 
@@ -253,7 +253,7 @@ tbody td { padding: 6px; vertical-align: middle; }
 
 <script src="shared.js"></script>
 <script>
-// v1.0.3
+// v1.0.4
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 const API = window.API_BASE || '';
 let currentPage = 1;
@@ -551,8 +551,7 @@ async function abrirModal(id) {
   // Lazy load foto
   if (p.foto_comprovante) {
     try {
-      const token = getSessionToken();
-      const resp = await fetch(API + '/api/order/' + p.id + '/prova', { headers: { 'Authorization': 'Bearer ' + token } });
+      const resp = await fetch(API + '/api/comprovante/' + p.id);
       if (resp.ok) {
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
