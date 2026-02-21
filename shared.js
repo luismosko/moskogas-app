@@ -1,4 +1,4 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.11.0
+// shared.js — Utilitários compartilhados MoskoGás v1.12.0
 // v1.11.0: Bling Auto-Recovery — ensureBling() + apiBling() + modal reconexão
 // v1.10.0: Contratos adicionado à navbar
 // v1.9.1: Consulta Pedidos adicionado ao dropdown Relatório
@@ -151,7 +151,7 @@ const NAV_ACTIVE  = '#ffffff';
 const NAV_ITEMS = [
   { href: 'pedido.html',     icon: '➕', label: 'Novo Pedido',  roles: ['admin', 'atendente'] },
   { href: 'gestao.html',     icon: '📋', label: 'Gestão',       roles: ['admin', 'atendente'] },
-  { href: 'pagamentos.html', icon: '💰', label: 'Pagamentos',   roles: ['admin', 'atendente'] },
+  { href: 'pagamentos.html', icon: '💰', label: 'Financeiro',   roles: ['admin', 'atendente'] },
   { href: 'contratos.html',  icon: '📄', label: 'Contratos',    roles: ['admin', 'atendente'] },
 ];
 
