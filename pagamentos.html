@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.7.3</title>
+<title>Pagamentos — MoskoGás v1.7.4</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -55,7 +55,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.7.3 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.7.4 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -75,7 +75,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.7.3</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.7.4</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -121,7 +121,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.7.3 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
+// v1.7.4 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -150,7 +150,6 @@ let loadTimer;
 function loadPagamentos(){clearTimeout(loadTimer);loadTimer=setTimeout(_load,150);}
 
 async function _load() {
-  showLoading('Carregando pendentes...');
   try {
     const data = await api('/api/pagamentos');
     allData = Array.isArray(data) ? data : [];
@@ -197,7 +196,7 @@ function renderTable(rows) {
     let ri='';
     if(p.tipo_pagamento==='pix_receber'){const cnt=p.reminder_count||0;if(cnt>0&&p.last_reminder_at)ri=`<div class="ri${cnt>=3?' w':''}">\u{1F4F1}${cnt}x · ${timeAgo(p.last_reminder_at)} atrás</div>`;}
     return `<tr>
-      <td><input type="checkbox" value="${p.id}" ${ck} onchange="toggleSelect(${p.id},this.checked)"></td>
+      <td><input type="checkbox" value="${p.id}" data-tipo="${p.tipo_pagamento||''}" ${ck} onchange="toggleSelect(this)"></td>
       <td><strong>#${p.id}</strong>${ri}</td>
       <td style="white-space:nowrap;font-size:12px">${dt}<br><span style="color:#94a3b8">${hr}</span></td>
       <td style="font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.customer_name||''}">${p.customer_name||'—'}</td>
@@ -223,15 +222,36 @@ function renderSummary(rows) {
 }
 
 // ═══ SELEÇÃO ═══
-function toggleSelect(id,checked){if(checked)selectedIds.add(id);else selectedIds.delete(id);updateBulkBar();}
-function toggleBulkAll(checked){document.querySelectorAll('#tbody input[type=checkbox]').forEach(b=>{b.checked=checked;const id=parseInt(b.value);if(checked)selectedIds.add(id);else selectedIds.delete(id);});document.getElementById('th-check').checked=checked;document.getElementById('bulk-all').checked=checked;updateBulkBar();}
+function toggleSelect(el){
+  const id=parseInt(el.value);
+  if(el.checked)selectedIds.add(id);else selectedIds.delete(id);
+  updateBulkBar();
+}
+function toggleBulkAll(checked){
+  document.querySelectorAll('#tbody input[type=checkbox]').forEach(b=>{
+    b.checked=checked;
+    const id=parseInt(b.value);
+    if(checked)selectedIds.add(id);else selectedIds.delete(id);
+  });
+  document.getElementById('th-check').checked=checked;
+  document.getElementById('bulk-all').checked=checked;
+  updateBulkBar();
+}
 function updateBulkBar(){
-  const count=selectedIds.size;
+  // Ler tipos diretamente dos checkboxes marcados (sem depender de allData.find)
+  const checkedBoxes=[...document.querySelectorAll('#tbody input[type=checkbox]:checked')];
+  const count=checkedBoxes.length;
+  // Sincronizar selectedIds com o DOM
+  selectedIds.clear();
+  checkedBoxes.forEach(b=>selectedIds.add(parseInt(b.value)));
   document.getElementById('bulk-count').textContent=count;
   document.getElementById('bulk-bar').classList.toggle('show',count>0);
-  const sel=[...selectedIds].map(id=>allData.find(r=>r.id===id||r.id===String(id))).filter(Boolean);
-  const pixCount=sel.filter(p=>p.tipo_pagamento==='pix_receber').length;
-  const nfeCount=sel.filter(p=>TIPOS_NFE.includes(p.tipo_pagamento)).length;
+  let pixCount=0, nfeCount=0;
+  checkedBoxes.forEach(b=>{
+    const tipo=b.dataset.tipo||'';
+    if(tipo==='pix_receber')pixCount++;
+    if(TIPOS_NFE.includes(tipo))nfeCount++;
+  });
   document.getElementById('btn-bulk-pago').style.display=pixCount>0?'inline-block':'none';
   document.getElementById('bulk-pix-count').textContent=pixCount;
   document.getElementById('btn-bulk-nfe').style.display=nfeCount>0?'inline-block':'none';
@@ -255,7 +275,7 @@ async function marcarPago(orderId){
   }
 }
 async function bulkMarcarPago(){
-  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id===id);return p&&p.tipo_pagamento==='pix_receber';});
+  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&p.tipo_pagamento==='pix_receber';});
   if(!ids.length){toast('⚠️ Nenhum PIX selecionado','error');return;}
   if(!confirm('Marcar '+ids.length+' PIX como pago(s)?'))return;
   // Verifica Bling antes do loop
@@ -272,13 +292,13 @@ async function bulkMarcarPago(){
 // ═══ NFE AGRUPADA (Mensalista/Boleto) ═══
 function gerarNfeUnico(orderId){showNfePreview([orderId]);}
 function bulkGerarNfe(){
-  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id===id);return p&&TIPOS_NFE.includes(p.tipo_pagamento);});
+  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&TIPOS_NFE.includes(p.tipo_pagamento);});
   if(!ids.length){toast('⚠️ Nenhum Mensalista/Boleto selecionado','error');return;}
   showNfePreview(ids);
 }
 
 function showNfePreview(ids){
-  const orders=ids.map(id=>allData.find(r=>r.id===id)).filter(Boolean);
+  const orders=ids.map(id=>allData.find(r=>r.id==id)).filter(Boolean);
   pendingNfeIds=ids;
   // Agrupar por cliente
   const grupos={};
@@ -349,7 +369,7 @@ async function enviarLembrete(orderId){
   try{const d=await api('/api/lembretes/enviar/'+orderId,{method:'POST'});hideLoading();if(d.ok){toast('📱 Lembrete #'+d.envio_num+' enviado!');loadPagamentos();}else{toast('❌ '+(d.error||'Falha'),'error');}}catch(e){hideLoading();toast(e.message,'error');}
 }
 async function bulkEnviarLembrete(){
-  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id===id);return p&&p.tipo_pagamento==='pix_receber'&&p.phone_digits;});
+  const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&p.tipo_pagamento==='pix_receber'&&p.phone_digits;});
   if(!ids.length){toast('⚠️ Nenhum PIX com telefone','error');return;}
   if(!confirm('Enviar lembrete PIX para '+ids.length+' pedido(s)?'))return;
   showLoading('Enviando '+ids.length+' lembrete(s)...');
