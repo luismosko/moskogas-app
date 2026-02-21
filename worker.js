@@ -1,4 +1,4 @@
-// v2.29.9
+// v2.30.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.29.0: Relatório diário por email (Resend) + CSV — cron + manual + preview
@@ -313,7 +313,7 @@ async function criarPedidoBling(env, orderId, orderData) {
   const itensBling = (items || []).map(it => buildItemBling(it));
 
   const fpId = getFormaPagamentoForTipo(tipo_pagamento, forma_pagamento_key, forma_pagamento_id);
-  // v2.29.9: Calcular total dos itens (mesmo cálculo do Bling) para evitar divergência
+  // v2.30.0: Calcular total dos itens (mesmo cálculo do Bling) para evitar divergência
   const totalItens = Math.round(itensBling.reduce((s, i) => s + i.valor * i.quantidade, 0) * 100) / 100;
   const total = totalItens || parseFloat(total_value) || 0;
 
@@ -2551,13 +2551,51 @@ export default {
       const id = selectDriverMatch[1];
       const user = await getSessionUser(request, env);
       const { driver_id } = await request.json();
-      const driver = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=?').bind(driver_id).first();
+      const driver = await env.DB.prepare('SELECT id, nome, telefone, recebe_whatsapp FROM app_users WHERE id=?').bind(driver_id).first();
       if (!driver) return err('driver not found');
+
+      // v2.30.0: Detectar troca de entregador
+      const currentOrder = await env.DB.prepare('SELECT driver_id, driver_name_cache, driver_phone_cache, status FROM orders WHERE id=?').bind(id).first();
+      const oldDriverId = currentOrder?.driver_id;
+      const oldDriverName = currentOrder?.driver_name_cache;
+      const oldDriverPhone = currentOrder?.driver_phone_cache;
+      const isSwap = oldDriverId && oldDriverId !== driver_id;
+
       await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.nome, driver.telefone || '', id).run();
-      await logEvent(env, id, 'driver_selected', { driver_id, driver_name: driver.nome });
-      const prevOrder = await env.DB.prepare('SELECT status FROM orders WHERE id=?').bind(id).first();
-      await logStatusChange(env, id, 'novo', 'encaminhado', `Entregador: ${driver.nome}`, user);
-      return json({ ok: true, status: 'encaminhado' });
+      await logEvent(env, id, isSwap ? 'driver_swapped' : 'driver_selected', { 
+        driver_id, driver_name: driver.nome, 
+        ...(isSwap ? { old_driver_id: oldDriverId, old_driver_name: oldDriverName } : {})
+      });
+      await logStatusChange(env, id, currentOrder?.status || 'novo', 'encaminhado', `Entregador: ${driver.nome}${isSwap ? ` (antes: ${oldDriverName})` : ''}`, user);
+
+      // v2.30.0: WhatsApp na troca de entregador
+      let whatsappResults = { old: null, new: null };
+      if (isSwap) {
+        // Notificar entregador ANTIGO (cancelamento)
+        if (oldDriverPhone) {
+          const oldDriverUser = await env.DB.prepare('SELECT recebe_whatsapp FROM app_users WHERE id=?').bind(oldDriverId).first();
+          if (oldDriverUser?.recebe_whatsapp) {
+            const cancelMsg = `⚠️ *ENTREGA REATRIBUÍDA* — Pedido #${id}\n\nEsta entrega foi transferida para outro entregador. Por favor, *desconsidere* este pedido.\n\nEm caso de dúvidas, ligue para o administrativo ou confira suas entregas:\n📲 https://moskogas-app.pages.dev/entregador.html`;
+            const cancelResult = await sendWhatsApp(env, oldDriverPhone, cancelMsg, { category: 'entrega' });
+            whatsappResults.old = { sent: cancelResult.ok, driver: oldDriverName };
+            await logEvent(env, id, 'whatsapp_swap_cancel', { to: oldDriverPhone, driver: oldDriverName, ok: cancelResult.ok });
+          }
+        }
+
+        // Notificar entregador NOVO (entrega)
+        if (driver.recebe_whatsapp && driver.telefone) {
+          const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
+          const newMsg = buildDeliveryMessage(order, '⚠️ REATRIBUIÇÃO — Esta entrega estava com ' + oldDriverName);
+          const newResult = await sendWhatsApp(env, driver.telefone, newMsg, { category: 'entrega' });
+          whatsappResults.new = { sent: newResult.ok, driver: driver.nome };
+          if (newResult.ok) {
+            await env.DB.prepare(`UPDATE orders SET status='whatsapp_enviado', updated_at=unixepoch() WHERE id=?`).bind(id).run();
+          }
+          await logEvent(env, id, 'whatsapp_swap_new', { to: driver.telefone, driver: driver.nome, ok: newResult.ok });
+        }
+      }
+
+      return json({ ok: true, status: isSwap && whatsappResults.new?.sent ? 'whatsapp_enviado' : 'encaminhado', swap: isSwap, whatsapp: whatsappResults });
     }
 
     const sendWaMatch = path.match(/^\/api\/order\/(\d+)\/send-whatsapp$/);
@@ -3070,7 +3108,7 @@ export default {
 
         const itensBling = produtos.map(p => buildItemBling(p));
 
-        // v2.29.9: Total DEVE ser calculado dos itens (mesmo cálculo que o Bling faz)
+        // v2.30.0: Total DEVE ser calculado dos itens (mesmo cálculo que o Bling faz)
         // Se usar grupo.total (soma dos pedidos), pode divergir por arredondamento
         const totalItens = Math.round(itensBling.reduce((s, i) => s + i.quantidade * i.valor, 0) * 100) / 100;
 

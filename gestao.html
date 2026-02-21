@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.8.5 — MoskoGás</title>
+<title>Gestão v2.8.6 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.5</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.6</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -145,7 +145,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v2.8.5
+// v2.8.6
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -442,8 +442,15 @@ async function selectDriver(orderId, driverId) {
   if (!driverId) return;
   showLoading('Selecionando entregador...');
   try {
-    await api(`/api/order/${orderId}/select-driver`, { method: 'POST', body: JSON.stringify({ driver_id: parseInt(driverId) }) });
-    toast('✅ Entregador selecionado!');
+    const result = await api(`/api/order/${orderId}/select-driver`, { method: 'POST', body: JSON.stringify({ driver_id: parseInt(driverId) }) });
+    if (result.swap) {
+      let msg = '🔄 Entregador trocado!';
+      if (result.whatsapp?.old?.sent) msg += `\n📱 ${result.whatsapp.old.driver}: cancelamento enviado`;
+      if (result.whatsapp?.new?.sent) msg += `\n📱 ${result.whatsapp.new.driver}: entrega enviada`;
+      toast(msg);
+    } else {
+      toast('✅ Entregador selecionado!');
+    }
     setTimeout(load, 500);
   } catch(e) { toast(e.message, 'error'); }
   finally { hideLoading(); }
