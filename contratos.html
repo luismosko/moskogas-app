@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.1.6 — MoskoGás</title>
+<title>Contratos v1.1.7 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.1.6</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.1.7</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -245,7 +245,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.1.6 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
+// v1.1.7 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -871,24 +871,32 @@ function buildContractHTML(contract, signers, itens, comodante) {
   const test2 = signers.find(s => s.role === 'testemunha2') || {};
 
   const assinaturas = `
-    <div style="margin-top:40px;display:flex;justify-content:space-between;gap:40px">
-      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+    <div style="margin-top:60px;display:flex;justify-content:space-between;gap:50px">
+      <div style="text-align:center;flex:1;padding-top:8px">
+        <div style="border-top:1px solid #000;margin-top:60px;padding-top:6px">
         <strong>Comodante</strong><br>${comodanteSigner.nome || comodante.representante || ''}<br>
         <span style="font-size:11px">CPF: ${comodanteSigner.cpf || comodante.rep_cpf || ''}</span>
+        </div>
       </div>
-      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+      <div style="text-align:center;flex:1;padding-top:8px">
+        <div style="border-top:1px solid #000;margin-top:60px;padding-top:6px">
         <strong>Comodatária</strong><br>${comodatarioSigner.nome || contract.responsavel_nome || ''}<br>
         <span style="font-size:11px">CPF: ${comodatarioSigner.cpf || contract.responsavel_cpf || ''}</span>
+        </div>
       </div>
     </div>
-    <div style="margin-top:40px;display:flex;justify-content:space-between;gap:40px">
-      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+    <div style="margin-top:50px;display:flex;justify-content:space-between;gap:50px">
+      <div style="text-align:center;flex:1;padding-top:8px">
+        <div style="border-top:1px solid #000;margin-top:60px;padding-top:6px">
         <strong>Testemunha 1</strong><br>${test1.nome || ''}<br>
         <span style="font-size:11px">${test1.cpf ? 'CPF: ' + test1.cpf : ''}</span>
+        </div>
       </div>
-      <div style="text-align:center;flex:1;border-top:1px solid #000;padding-top:8px">
+      <div style="text-align:center;flex:1;padding-top:8px">
+        <div style="border-top:1px solid #000;margin-top:60px;padding-top:6px">
         <strong>Testemunha 2</strong><br>${test2.nome || ''}<br>
         <span style="font-size:11px">${test2.cpf ? 'CPF: ' + test2.cpf : ''}</span>
+        </div>
       </div>
     </div>`;
 
@@ -918,6 +926,16 @@ function buildContractHTML(contract, signers, itens, comodante) {
   }).join('\n');
 
   return `<div style="font-family:'Times New Roman',serif;font-size:12.5px;color:#000;line-height:1.6;max-width:700px;margin:0 auto;padding:20px">
+    <!-- TIMBRADO -->
+    <div style="display:flex;align-items:center;gap:16px;border-bottom:2px solid #1a3a5c;padding-bottom:12px;margin-bottom:16px">
+      <img src="https://moskogas.com.br/wp-content/uploads/2021/08/Logo-Moskogas-Ultragaz.png" style="height:50px" crossorigin="anonymous">
+      <div style="font-family:Arial,sans-serif;font-size:11px;color:#333;line-height:1.4">
+        <strong style="font-size:13px;color:#1a3a5c">${comodante.empresa || 'Mosko Ltda - EPP'}</strong><br>
+        CNPJ: ${comodante.cnpj || '12.977.901/0001-17'}<br>
+        ${comodante.endereco || 'Av. Panamericana, 295 – Jardim Futurista – Campo Grande/MS'}<br>
+        ${comodante.rep_telefone || comodante.telefone || '(67) 99333-0303'} – ${comodante.rep_email || comodante.email || 'moskogas@gmail.com'}
+      </div>
+    </div>
     <p style="text-align:center;font-size:11px;color:#888;margin-bottom:16px">Nº ${contract.numero}</p>
     ${paragraphs}
   </div>`;
