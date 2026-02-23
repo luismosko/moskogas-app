@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contratos v1.1.5 — MoskoGás</title>
+<title>Contratos v1.1.6 — MoskoGás</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,7 +92,7 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <h1>📄 Contratos <span class="v-badge">v1.1.5</span></h1>
+  <h1>📄 Contratos <span class="v-badge">v1.1.6</span></h1>
   <div style="flex:1"></div>
   <select id="fStatus" onchange="loadContratos()" style="width:140px">
     <option value="">Todos Status</option>
@@ -245,7 +245,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.1.5 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
+// v1.1.6 — showLoading overlay em todas ações+tel representante config editável + fix auth PDF auto-sync responsável + loading feedback em Config e Salvar showToast → toast
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -783,27 +783,19 @@ async function gerarPDF(id) {
     const html = buildContractHTML(c, signers, itens, com);
     console.log('[PDF] HTML length:', html?.length, 'first 200:', html?.substring(0, 200));
 
-    // Generate PDF via html2pdf.js
-    // Element MUST be visible — html2canvas ignores opacity:0 and offscreen elements
-    // Loading overlay covers it, so user won't see the flash
-    const element = document.createElement('div');
-    element.innerHTML = html;
-    element.style.cssText = 'position:absolute;top:0;left:0;width:700px;background:#fff;z-index:-1;';
-    document.body.appendChild(element);
-
-    // Wait for content to render
-    await new Promise(r => setTimeout(r, 300));
-
+    // Generate PDF via html2pdf.js — pass HTML string directly
+    // This avoids html2canvas visibility bugs with hidden DOM elements
     const opt = {
       margin: [15, 15, 15, 15],
       filename: `Comodato_${c.numero}.pdf`,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 700 },
+      html2canvas: { scale: 2, useCORS: true, logging: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     };
 
-    const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
-    document.body.removeChild(element);
+    // Wrap HTML in a container with explicit dimensions
+    const fullHtml = `<div style="width:700px;background:#fff;padding:0;margin:0">${html}</div>`;
+    const pdfBlob = await html2pdf().set(opt).from(fullHtml, 'string').outputPdf('blob');
 
     console.log('[PDF] Blob size:', pdfBlob?.size, 'type:', pdfBlob?.type);
     if (!pdfBlob || pdfBlob.size < 500) {
