@@ -1,4 +1,4 @@
-// v2.31.3
+// v2.31.4
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -463,7 +463,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
   const { customer_name, total_value, items, phone_digits } = orderData;
 
   const amountCentavos = Math.round(parseFloat(total_value) * 100);
-  if (amountCentavos < 100) throw new Error('Valor mínimo para cobrança Cora: R$1,00');
+  if (amountCentavos < 500) throw new Error('Valor mínimo para cobrança Cora PIX: R$5,00');
 
   // Vencimento: 3 dias a partir de hoje
   const dueDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -474,10 +474,28 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
     return `${qty}x ${name}`;
   }).join(', ');
 
+  // Buscar CPF/CNPJ do cliente no cache
+  let customerDoc = null;
+  if (phone_digits) {
+    const cached = await env.DB.prepare('SELECT cpf_cnpj FROM customers_cache WHERE phone_digits=?')
+      .bind(phone_digits).first().catch(() => null);
+    if (cached?.cpf_cnpj && cached.cpf_cnpj.replace(/\D/g, '').length >= 11) {
+      customerDoc = cached.cpf_cnpj.replace(/\D/g, '');
+    }
+  }
+
+  // Fallback: CNPJ da MoskoGás (consumidor final sem CPF)
+  if (!customerDoc) {
+    const cfgDoc = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_fallback_document'")
+      .first().catch(() => null);
+    customerDoc = cfgDoc?.value || '16931432000152'; // CNPJ MoskoGás padrão
+  }
+
   const body = {
     code: `moskogas-${orderId}-${Date.now()}`,
     customer: {
       name: customer_name || 'Cliente MoskoGás',
+      document: { identity: customerDoc, type: customerDoc.length > 11 ? 'CNPJ' : 'CPF' },
     },
     services: [{
       name: `MoskoGás — Pedido #${orderId}`,
@@ -489,7 +507,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
     },
   };
 
-  console.log('[Cora] Criando invoice para pedido', orderId, '- R$', (amountCentavos / 100).toFixed(2));
+  console.log('[Cora] Criando invoice para pedido', orderId, '- R$', (amountCentavos / 100).toFixed(2), '- Doc:', customerDoc.substring(0, 4) + '...');
 
   const resp = await coraFetch('/v2/invoices', {
     method: 'POST',
