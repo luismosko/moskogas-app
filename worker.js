@@ -1,4 +1,4 @@
-// v2.31.4
+// v2.31.5
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -488,7 +488,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
   if (!customerDoc) {
     const cfgDoc = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_fallback_document'")
       .first().catch(() => null);
-    customerDoc = cfgDoc?.value || '16931432000152'; // CNPJ MoskoGás padrão
+    customerDoc = cfgDoc?.value || '12977901000117'; // CNPJ MoskoGás (Mosko Ltda)
   }
 
   const body = {
