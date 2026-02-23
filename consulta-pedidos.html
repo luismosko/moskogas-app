@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Pedidos v1.0.6 — MoskoGás</title>
+<title>Consulta de Pedidos v1.0.7 — MoskoGás</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
@@ -125,9 +125,9 @@ tbody td { padding: 6px; vertical-align: middle; }
 <div class="loading-bar" id="loadingBar"></div>
 
 <div class="toolbar">
-  <h1>📋 Consulta de Pedidos <small>v1.0.6</small></h1>
+  <h1>📋 Consulta de Pedidos <small>v1.0.7</small></h1>
 </div>
-<div class="version-badge">v1.0.6 — consulta-pedidos</div>
+<div class="version-badge">v1.0.7 — consulta-pedidos</div>
 
 <div class="container">
 
@@ -159,7 +159,7 @@ tbody td { padding: 6px; vertical-align: middle; }
             <option value="">Todos</option>
             <option value="dinheiro">💵 Dinheiro</option>
             <option value="pix_vista">⚡ PIX à vista</option>
-            <option value="pix_receber">⏳ PIX a receber</option>
+            <option value="pix_receber">⏳ PIX Aberto</option>
             <option value="mensalista">📅 Mensalista</option>
             <option value="boleto_orgao">🧾 Boleto/Órgão</option>
           </select>
@@ -253,7 +253,7 @@ tbody td { padding: 6px; vertical-align: middle; }
 
 <script src="shared.js"></script>
 <script>
-// v1.0.6
+// v1.0.7
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 const API = API_BASE;
 let currentPage = 1;
@@ -263,11 +263,11 @@ let lastData = null;
 let debouncing = false;
 
 const PGTO_LABELS = {
-  dinheiro: '💵 Din', pix_vista: '⚡ PIXv', pix_receber: '⏳ PIXr',
+  dinheiro: '💵 Din', pix_vista: '⚡ PIXv', pix_receber: '⏳ PIX Aberto',
   mensalista: '📅 Mens', boleto_orgao: '🧾 Bol', debito: '💳 Déb', credito: '💳 Cré'
 };
 const PGTO_FULL = {
-  dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX à vista', pix_receber: '⏳ PIX a receber',
+  dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX à vista', pix_receber: '⏳ PIX Aberto',
   mensalista: '📅 Mensalista', boleto_orgao: '🧾 Boleto/Órgão', debito: '💳 Débito', credito: '💳 Crédito'
 };
 const STATUS_CLASS = {

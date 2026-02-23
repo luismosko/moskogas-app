@@ -5228,7 +5228,7 @@ function buildReportHTML(report) {
     cancelado: '⚫ CANCELADO'
   };
   const pgtoLabel = {
-    dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX Vista', pix_receber: '⏳ PIX Receber',
+    dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX Vista', pix_receber: '⏳ PIX Aberto',
     debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista', boleto: '🧾 Boleto'
   };
 
