@@ -1,4 +1,4 @@
-// v2.31.1
+// v2.31.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -4192,6 +4192,11 @@ export default {
     // ── CORA PIX — Webhook (PÚBLICO — sem auth) ──────────────────
     // ══════════════════════════════════════════════════════════════
 
+    // ── Cora webhook GET — validação de endpoint ──────────────
+    if (method === 'GET' && path === '/api/webhooks/cora') {
+      return json({ ok: true, status: 'active', service: 'moskogas' });
+    }
+
     if (method === 'POST' && path === '/api/webhooks/cora') {
       try {
         await ensureCoraColumns(env);
@@ -4338,6 +4343,7 @@ export default {
       });
     }
 
+    // ── v2.31.3: Registrar webhook Cora (formato oficial docs) ──────
     if (method === 'POST' && path === '/api/cora/register-webhook') {
       if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
       const authCheck = await requireAuth(request, env, ['admin']);
@@ -4345,72 +4351,78 @@ export default {
 
       try {
         const webhookUrl = 'https://api.moskogas.com.br/api/webhooks/cora';
+        const idempotencyKey = crypto.randomUUID();
 
-        // Tentar formato 1: events array
-        const body1 = { url: webhookUrl, events: ['invoice.paid'] };
-        const resp1 = await coraFetch('/endpoints/', {
+        // Formato oficial da Cora (docs: developers.cora.com.br/reference/criação-de-endpoints)
+        // Body: { url, resource, trigger }
+        // Headers: Idempotency-Key obrigatório
+        const body = { url: webhookUrl, resource: 'invoice', trigger: 'paid' };
+
+        const resp = await coraFetch('/endpoints/', {
           method: 'POST',
-          body: JSON.stringify(body1),
+          headers: {
+            'Idempotency-Key': idempotencyKey,
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(body),
         }, env);
-        const text1 = await resp1.text();
-        let data1; try { data1 = JSON.parse(text1); } catch { data1 = text1; }
 
-        if (resp1.ok) {
-          return json({ ok: true, webhook_registered: true, format: 'events_array', response: data1 });
+        const text = await resp.text();
+        let data; try { data = JSON.parse(text); } catch { data = text; }
+        const rh = {};
+        for (const [k, v] of resp.headers.entries()) rh[k] = v;
+
+        if (resp.ok) {
+          return json({ ok: true, webhook_registered: true, response: data });
         }
 
-        // Tentar formato 2: resource + trigger separados
-        const body2 = { url: webhookUrl, resource: 'invoice', trigger: 'paid' };
-        const resp2 = await coraFetch('/endpoints/', {
-          method: 'POST',
-          body: JSON.stringify(body2),
-        }, env);
-        const text2 = await resp2.text();
-        let data2; try { data2 = JSON.parse(text2); } catch { data2 = text2; }
-
-        if (resp2.ok) {
-          return json({ ok: true, webhook_registered: true, format: 'resource_trigger', response: data2 });
-        }
-
-        // Tentar formato 3: só url
-        const body3 = { url: webhookUrl };
-        const resp3 = await coraFetch('/endpoints/', {
-          method: 'POST',
-          body: JSON.stringify(body3),
-        }, env);
-        const text3 = await resp3.text();
-        let data3; try { data3 = JSON.parse(text3); } catch { data3 = text3; }
-
-        if (resp3.ok) {
-          return json({ ok: true, webhook_registered: true, format: 'url_only', response: data3 });
-        }
-
-        // Nenhum formato funcionou — retornar debug de todos
         return json({
           ok: false,
-          error: 'Nenhum formato funcionou',
-          attempts: [
-            { format: 'events_array', body: body1, status: resp1.status, response: data1 },
-            { format: 'resource_trigger', body: body2, status: resp2.status, response: data2 },
-            { format: 'url_only', body: body3, status: resp3.status, response: data3 },
-          ],
-        }, 400);
+          error: `Cora ${resp.status}`,
+          details: data,
+          resp_headers: rh,
+          request_sent: { url: `${CORA_API_BASE}/endpoints/`, body, idempotency_key: idempotencyKey },
+          dica: resp.status === 400
+            ? 'Se 400 vazio, possíveis causas: (1) webhook já registrado (use list-webhooks), (2) URL não acessível externamente, (3) formato não aceito para Integração Direta'
+            : null,
+        }, resp.status);
       } catch (e) {
         return json({ ok: false, error: e.message }, 500);
       }
     }
 
-    // ── v2.31.1: Listar webhooks registrados na Cora ──────────────
+    // ── v2.31.3: Listar webhooks registrados na Cora ──────────────
     if (method === 'GET' && path === '/api/cora/list-webhooks') {
       if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
       const authCheck = await requireAuth(request, env, ['admin']);
       if (authCheck instanceof Response) return authCheck;
 
       try {
-        const resp = await coraFetch('/endpoints/', { method: 'GET' }, env);
+        const resp = await coraFetch('/endpoints/', { method: 'GET', headers: { 'Accept': 'application/json' } }, env);
         const text = await resp.text();
         let data; try { data = JSON.parse(text); } catch { data = text; }
-        return json({ ok: resp.ok, status: resp.status, data });
+        const rh = {};
+        for (const [k, v] of resp.headers.entries()) rh[k] = v;
+        return json({ ok: resp.ok, status: resp.status, data, resp_headers: rh });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
+    }
+
+    // ── v2.31.3: Deletar webhook Cora por ID ──────────────────────
+    if (method === 'DELETE' && path.startsWith('/api/cora/delete-webhook/')) {
+      if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+
+      try {
+        const webhookId = path.replace('/api/cora/delete-webhook/', '');
+        if (!webhookId) return err('ID do webhook obrigatório', 400);
+
+        const resp = await coraFetch(`/endpoints/${webhookId}`, { method: 'DELETE' }, env);
+        const text = await resp.text();
+        let data; try { data = JSON.parse(text); } catch { data = text; }
+        return json({ ok: resp.ok, status: resp.status, deleted: webhookId, data });
       } catch (e) {
         return json({ ok: false, error: e.message }, 500);
       }
