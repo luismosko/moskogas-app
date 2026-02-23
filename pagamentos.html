@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.7.5</title>
+<title>Pagamentos — MoskoGás v1.8.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,11 +51,21 @@
   .modal-box table th { background:#7c3aed; position:static; }
   .modal-box .total-line { font-size:18px; font-weight:900; color:#7c3aed; text-align:right; margin:12px 0; }
   .modal-box .btn-row { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .btn-qr { background: #0891b2; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-qr:hover { background: #0e7490; }
+  .btn-qr:disabled { background: #94a3b8; cursor: not-allowed; }
+  .qr-modal-body { text-align: center; }
+  .qr-modal-body img { max-width: 280px; margin: 12px auto; border-radius: 8px; border: 2px solid #e2e8f0; }
+  .qr-code-text { background: #f1f5f9; border: 2px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 11px; word-break: break-all; max-height: 80px; overflow-y: auto; margin: 8px 0; text-align: left; font-family: monospace; }
+  .btn-copy { background: #0891b2; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-copy:hover { background: #0e7490; }
+  .btn-whats { background: #16a34a; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-whats:hover { background: #15803d; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.7.5 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.8.1 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -75,7 +85,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.7.5</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.8.1</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -120,8 +130,20 @@
 </div>
 
 <script src="shared.js"></script>
+
+<!-- Modal QR Code PIX -->
+<div class="modal-overlay" id="qr-modal">
+  <div class="modal-box" style="max-width:420px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3 id="qr-modal-title">📱 PIX — QR Code</h3>
+      <button onclick="closeQrModal()" style="background:none;border:none;font-size:20px;cursor:pointer" title="Fechar">✕</button>
+    </div>
+    <div id="qr-modal-body" class="qr-modal-body"></div>
+  </div>
+</div>
+
 <script>
-// v1.7.5 — Pagamentos: Venda agrupada (mensal/boleto) + Marcar Pago (PIX)
+// v1.8.1 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -181,8 +203,11 @@ function renderTable(rows) {
     const ck=selectedIds.has(p.id)?'checked':'';
     const isNfe=TIPOS_NFE.includes(p.tipo_pagamento);
     let actionBtns='';
-    // Lembrete PIX
+    // Lembrete PIX + QR Code
     if(p.tipo_pagamento==='pix_receber'){
+      // Botão QR Code PIX
+      const hasQr = p.pix_tx_id || p.cora_invoice_id;
+      actionBtns+=`<button class="btn-qr" onclick="showQrCode(${p.id})" title="${hasQr?'Ver QR Code PIX':'Gerar QR Code PIX'}">${hasQr?'📱 QR':'➕ PIX'}</button>`;
       const cnt=p.reminder_count||0;const badge=cnt>0?`<span class="rb">${cnt}</span>`:'';
       const hasPhone=p.phone_digits&&p.phone_digits.replace(/\D/g,'').length>=10;
       actionBtns+=hasPhone?`<button class="btn-lembrete" onclick="enviarLembrete(${p.id})" title="Lembrete PIX WhatsApp${cnt?' ('+cnt+'x)':''}">📱${badge}</button>`:`<button class="btn-lembrete" disabled title="Sem telefone">📱</button>`;
@@ -259,7 +284,7 @@ function updateBulkBar(){
   document.getElementById('btn-bulk-lembrete').style.display=pixCount>0?'inline-block':'none';
 }
 
-// ═══ MARCAR PAGO (PIX a receber) ═══
+// ═══ MARCAR PAGO (PIX Aberto) ═══
 async function marcarPago(orderId){
   if(!confirm('Confirmar recebimento do PIX #'+orderId+'?'))return;
   showLoading('Verificando Bling...');
@@ -360,6 +385,96 @@ async function confirmarNfe(){
   } else if(!result.canceled) {
     toast('❌ '+result.error,'error');
   }
+}
+
+// ═══ QR CODE PIX (PushInPay) ═══
+async function showQrCode(orderId) {
+  showLoading('Carregando QR Code...');
+  try {
+    const data = await api('/api/pagamentos/'+orderId+'/qrcode');
+    hideLoading();
+    if(!data.ok){toast('❌ '+(data.error||'Erro'),'error');return;}
+    if(data.paid){toast('✅ PIX já confirmado!');loadPagamentos();return;}
+    if(data.qrcode){
+      renderQrModal(orderId, data);
+    } else {
+      // Sem QR ainda — gerar
+      await gerarPixQr(orderId);
+    }
+  } catch(e){hideLoading();toast('❌ '+e.message,'error');}
+}
+
+async function gerarPixQr(orderId) {
+  showLoading('Gerando QR Code PIX...');
+  try {
+    const data = await api('/api/pagamentos/'+orderId+'/gerar-pix',{method:'POST'});
+    hideLoading();
+    if(!data.ok){toast('❌ '+(data.error||'Falha ao gerar PIX'),'error');return;}
+    if(!data.pix_disponivel){toast('⚠️ PIX não disponível — verifique configuração','error');return;}
+    renderQrModal(orderId, data);
+    loadPagamentos();
+  } catch(e){hideLoading();toast('❌ '+e.message,'error');}
+}
+
+function renderQrModal(orderId, data) {
+  const order = allData.find(r=>r.id===orderId);
+  const nome = order?.customer_name || 'Cliente';
+  const valor = parseFloat(order?.total_value||data.total_value||0).toFixed(2);
+  const qrImg = data.qrcode_base64 || data.qr_code_base64 || null;
+  const qrCode = data.qrcode || data.qr_code || '';
+  
+  document.getElementById('qr-modal-title').textContent = `📱 PIX — Pedido #${orderId}`;
+  
+  let html = `<div style="font-weight:700;font-size:16px;margin:8px 0">${nome}</div>`;
+  html += `<div style="font-size:28px;font-weight:900;color:#0891b2;margin:8px 0">R$ ${valor}</div>`;
+  
+  if(qrImg){
+    html += `<img src="${qrImg}" alt="QR Code PIX" />`;
+  } else {
+    html += `<div style="background:#fef3c7;border-radius:8px;padding:16px;margin:12px 0;color:#92400e;font-size:13px">⚠️ Imagem do QR não disponível, use o código Copia e Cola abaixo</div>`;
+  }
+  
+  if(qrCode){
+    html += `<div style="font-size:12px;color:#64748b;margin-top:8px;font-weight:700">PIX Copia e Cola:</div>`;
+    html += `<div class="qr-code-text" id="qr-code-text">${qrCode}</div>`;
+    html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">`;
+    html += `<button class="btn-copy" onclick="copiarPix()">📋 Copiar Código</button>`;
+    if(order?.phone_digits) {
+      html += `<button class="btn-whats" onclick="enviarPixWhats(${orderId})" title="Enviar QR Code por WhatsApp">📲 WhatsApp</button>`;
+    }
+    html += `</div>`;
+  }
+  
+  html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">`;
+  html += `<button class="btn" style="background:#e2e8f0;color:#475569" onclick="closeQrModal()">Fechar</button>`;
+  html += `<button class="btn" style="background:#0891b2;color:#fff" onclick="gerarPixQr(${orderId})" title="Gerar novo QR Code">🔄 Regerar</button>`;
+  html += `</div>`;
+  
+  document.getElementById('qr-modal-body').innerHTML = html;
+  document.getElementById('qr-modal').classList.add('show');
+}
+
+function closeQrModal(){ document.getElementById('qr-modal').classList.remove('show'); }
+
+function copiarPix(){
+  const text=document.getElementById('qr-code-text')?.textContent;
+  if(!text){toast('⚠️ Código não disponível','error');return;}
+  navigator.clipboard.writeText(text).then(()=>{toast('📋 Código PIX copiado!');}).catch(()=>{
+    // Fallback
+    const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    toast('📋 Código PIX copiado!');
+  });
+}
+
+async function enviarPixWhats(orderId){
+  if(!confirm('Enviar QR Code PIX por WhatsApp para o cliente do pedido #'+orderId+'?'))return;
+  showLoading('Enviando PIX por WhatsApp...');
+  try{
+    const data=await api('/api/lembretes/enviar/'+orderId,{method:'POST'});
+    hideLoading();
+    if(data.ok){toast('📲 PIX enviado por WhatsApp!');}
+    else{toast('❌ '+(data.error||'Falha'),'error');}
+  }catch(e){hideLoading();toast('❌ '+e.message,'error');}
 }
 
 // ═══ LEMBRETES PIX ═══
