@@ -1,4 +1,4 @@
-// v2.31.7
+// v2.31.8
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -529,36 +529,11 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
   // Extrair ID do invoice
   const invoiceId = respData?.id || respData?.data?.id || null;
 
-  // ── Passo 2: Gerar QR Code PIX para este invoice ──
-  let brCode = null, qrImageUrl = null, pixDebug = null;
-  if (invoiceId) {
-    try {
-      const pixResp = await coraFetch(`/v2/invoices/${invoiceId}/`, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-      }, env);
-      const pixText = await pixResp.text();
-      let pixData; try { pixData = JSON.parse(pixText); } catch { pixData = pixText; }
-      console.log('[Cora] PIX QR response:', pixResp.status, pixText.substring(0, 800));
-      pixDebug = { status: pixResp.status, data: pixData };
-
-      if (pixResp.ok && pixData && typeof pixData === 'object') {
-        brCode = pixData?.emv || pixData?.pix?.emv || pixData?.qr_code || pixData?.br_code || pixData?.pix?.qr_code || null;
-        qrImageUrl = pixData?.qr_code_url || pixData?.image_url || pixData?.pix?.qr_code_url || null;
-      }
-    } catch (pixErr) {
-      console.error('[Cora] PIX QR error:', pixErr.message);
-      pixDebug = { error: pixErr.message };
-    }
-  }
-
-  // Fallback: tentar extrair do próprio invoice response
-  if (!brCode) {
-    brCode = respData?.pix?.emv || respData?.pix?.qr_code || respData?.pix?.br_code || respData?.payment?.pix?.emv || null;
-  }
-  if (!qrImageUrl) {
-    qrImageUrl = respData?.pix?.qr_code_url || respData?.pix?.image_url || null;
-  }
+  // QR Code PIX é incluído automaticamente se conta Cora tem chave PIX cadastrada
+  // Sem chave PIX → pix: null (apenas boleto com código de barras)
+  const brCode = respData?.pix?.emv || respData?.pix?.qr_code || respData?.pix?.br_code || null;
+  const qrImageUrl = respData?.pix?.qr_code_url || respData?.pix?.image_url || null;
+  const bankSlipUrl = respData?.payment_options?.bank_slip?.url || null;
 
   await logEvent(env, orderId, 'cora_invoice_created', {
     cora_invoice_id: invoiceId,
@@ -567,7 +542,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
     response_keys: Object.keys(respData || {}),
   });
 
-  return { invoice_id: invoiceId, brCode, qr_image_url: qrImageUrl, raw: respData, pixDebug };
+  return { invoice_id: invoiceId, brCode, qr_image_url: qrImageUrl, bankSlipUrl, raw: respData };
 }
 
 async function ensureCoraColumns(env) {
@@ -3464,7 +3439,9 @@ export default {
           invoice_id: coraData.invoice_id,
           qrcode: coraData.brCode || null,
           qr_image_url: coraData.qr_image_url || null,
-          pix_debug: coraData.pixDebug || null,
+          bank_slip_url: coraData.bankSlipUrl || null,
+          pix_disponivel: !!coraData.brCode,
+          dica: !coraData.brCode ? 'PIX QR Code só é gerado se a conta Cora tiver chave PIX cadastrada. Cadastre no app Cora > Pix > Cadastrar chave.' : null,
         });
       } catch (e) {
         return json({ ok: false, error: e.message }, 500);
