@@ -1,4 +1,4 @@
-// v2.31.5
+// v2.31.6
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -526,10 +526,37 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
 
   console.log('[Cora] Invoice criado:', JSON.stringify(respData).substring(0, 500));
 
-  // Extrair QR code PIX — a estrutura pode variar
+  // Extrair ID do invoice
   const invoiceId = respData?.id || respData?.data?.id || null;
-  const brCode = respData?.pix?.emv || respData?.pix?.qr_code || respData?.pix?.br_code || respData?.payment?.pix?.emv || null;
-  const qrImageUrl = respData?.pix?.qr_code_url || respData?.pix?.image_url || null;
+
+  // ── Passo 2: Gerar QR Code PIX para este invoice ──
+  let brCode = null, qrImageUrl = null;
+  if (invoiceId) {
+    try {
+      const pixResp = await coraFetch(`/v2/invoices/${invoiceId}/`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      }, env);
+      const pixText = await pixResp.text();
+      let pixData; try { pixData = JSON.parse(pixText); } catch { pixData = null; }
+      console.log('[Cora] PIX QR response:', pixResp.status, pixText.substring(0, 500));
+
+      if (pixResp.ok && pixData) {
+        brCode = pixData?.emv || pixData?.pix?.emv || pixData?.qr_code || pixData?.br_code || pixData?.pix?.qr_code || null;
+        qrImageUrl = pixData?.qr_code_url || pixData?.image_url || pixData?.pix?.qr_code_url || null;
+      }
+    } catch (pixErr) {
+      console.error('[Cora] PIX QR error:', pixErr.message);
+    }
+  }
+
+  // Fallback: tentar extrair do próprio invoice response
+  if (!brCode) {
+    brCode = respData?.pix?.emv || respData?.pix?.qr_code || respData?.pix?.br_code || respData?.payment?.pix?.emv || null;
+  }
+  if (!qrImageUrl) {
+    qrImageUrl = respData?.pix?.qr_code_url || respData?.pix?.image_url || null;
+  }
 
   await logEvent(env, orderId, 'cora_invoice_created', {
     cora_invoice_id: invoiceId,
@@ -4451,6 +4478,23 @@ export default {
       try {
         const token = await getCoraToken(env);
         return json({ ok: true, token_preview: token.substring(0, 20) + '...', token_length: token.length });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
+    }
+
+    // ── v2.31.6: Debug invoice Cora (ver resposta completa) ──────
+    const debugInvoiceMatch = path.match(/^\/api\/cora\/debug-invoice\/(.+)$/);
+    if (method === 'GET' && debugInvoiceMatch) {
+      if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      try {
+        const invId = debugInvoiceMatch[1];
+        const resp = await coraFetch(`/v2/invoices/${invId}`, { method: 'GET' }, env);
+        const text = await resp.text();
+        let data; try { data = JSON.parse(text); } catch { data = text; }
+        return json({ ok: resp.ok, status: resp.status, data });
       } catch (e) {
         return json({ ok: false, error: e.message }, 500);
       }
