@@ -1,4 +1,4 @@
-// v2.31.6
+// v2.31.7
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -530,7 +530,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
   const invoiceId = respData?.id || respData?.data?.id || null;
 
   // ── Passo 2: Gerar QR Code PIX para este invoice ──
-  let brCode = null, qrImageUrl = null;
+  let brCode = null, qrImageUrl = null, pixDebug = null;
   if (invoiceId) {
     try {
       const pixResp = await coraFetch(`/v2/invoices/${invoiceId}/`, {
@@ -538,15 +538,17 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
         headers: { 'Idempotency-Key': crypto.randomUUID() },
       }, env);
       const pixText = await pixResp.text();
-      let pixData; try { pixData = JSON.parse(pixText); } catch { pixData = null; }
-      console.log('[Cora] PIX QR response:', pixResp.status, pixText.substring(0, 500));
+      let pixData; try { pixData = JSON.parse(pixText); } catch { pixData = pixText; }
+      console.log('[Cora] PIX QR response:', pixResp.status, pixText.substring(0, 800));
+      pixDebug = { status: pixResp.status, data: pixData };
 
-      if (pixResp.ok && pixData) {
+      if (pixResp.ok && pixData && typeof pixData === 'object') {
         brCode = pixData?.emv || pixData?.pix?.emv || pixData?.qr_code || pixData?.br_code || pixData?.pix?.qr_code || null;
         qrImageUrl = pixData?.qr_code_url || pixData?.image_url || pixData?.pix?.qr_code_url || null;
       }
     } catch (pixErr) {
       console.error('[Cora] PIX QR error:', pixErr.message);
+      pixDebug = { error: pixErr.message };
     }
   }
 
@@ -565,7 +567,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
     response_keys: Object.keys(respData || {}),
   });
 
-  return { invoice_id: invoiceId, brCode, qr_image_url: qrImageUrl, raw: respData };
+  return { invoice_id: invoiceId, brCode, qr_image_url: qrImageUrl, raw: respData, pixDebug };
 }
 
 async function ensureCoraColumns(env) {
@@ -3462,6 +3464,7 @@ export default {
           invoice_id: coraData.invoice_id,
           qrcode: coraData.brCode || null,
           qr_image_url: coraData.qr_image_url || null,
+          pix_debug: coraData.pixDebug || null,
         });
       } catch (e) {
         return json({ ok: false, error: e.message }, 500);
