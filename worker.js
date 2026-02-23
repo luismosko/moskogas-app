@@ -1,4 +1,4 @@
-// v2.31.9
+// v2.32.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -1151,6 +1151,9 @@ async function ensureContractTables(env) {
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_csigners_contract ON contract_signers(contract_id)').run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cattach_contract ON contract_attachments(contract_id)').run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cevents_contract ON contract_events(contract_id)').run().catch(() => {});
+  // v2.32.0: índices para busca de clientes (performance com 10k+ registros)
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers_cache(name)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers_cache(phone_digits)').run().catch(() => {});
 }
 
 async function logContractEvent(env, contractId, evento, detalhes, user) {
@@ -2124,23 +2127,26 @@ export default {
       const qAddr  = (url.searchParams.get('addr')  || '').trim();
       const results = []; const seenPhone = new Set();
 
+      // v2.28.0: busca multi-palavra — cada palavra vira um AND LIKE separado
+      const nameWords = qName ? qName.split(/\s+/).filter(Boolean) : [];
       { let sql = 'SELECT * FROM customers_cache WHERE 1=1'; const p = [];
         if (qPhone) { sql += ' AND phone_digits LIKE ?'; p.push(`%${qPhone}%`); }
-        if (qName)  { sql += ' AND name LIKE ?';         p.push(`%${qName}%`); }
+        for (const w of nameWords) { sql += ' AND name LIKE ?'; p.push(`%${w}%`); }
         if (qAddr)  { sql += ' AND (address_line LIKE ? OR bairro LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`); }
         sql += ' ORDER BY name ASC LIMIT 15';
         const rows = await env.DB.prepare(sql).bind(...p).all().then(r => r.results || []);
         for (const r of rows) { if (!seenPhone.has(r.phone_digits)) { seenPhone.add(r.phone_digits); results.push(r); } }
       }
 
-      if (qAddr || qName) {
+      if (qAddr || nameWords.length > 0) {
         const addrCond = qAddr ? '(ca.address_line LIKE ? OR ca.bairro LIKE ? OR ca.obs LIKE ?)' : null;
-        const nameCond = qName ? '(cc.name LIKE ? OR ca.obs LIKE ?)' : null;
-        const conditions = [addrCond, nameCond].filter(Boolean).join(' AND ');
+        // multi-palavra: cada palavra vira (cc.name LIKE ? OR ca.obs LIKE ?)
+        const nameCondParts = nameWords.map(() => '(cc.name LIKE ? OR ca.obs LIKE ?)');
+        const conditions = [addrCond, ...nameCondParts].filter(Boolean).join(' AND ');
         let sql2 = `SELECT cc.*, ca.address_line AS ca_addr, ca.bairro AS ca_bairro, ca.complemento AS ca_comp, ca.referencia AS ca_ref, ca.obs AS ca_obs FROM customer_addresses ca JOIN customers_cache cc ON cc.phone_digits = ca.phone_digits WHERE ${conditions}`;
         const p2 = [];
         if (qAddr) p2.push(`%${qAddr}%`, `%${qAddr}%`, `%${qAddr}%`);
-        if (qName) p2.push(`%${qName}%`, `%${qName}%`);
+        for (const w of nameWords) p2.push(`%${w}%`, `%${w}%`);
         if (qPhone) { sql2 += ' AND ca.phone_digits LIKE ?'; p2.push(`%${qPhone}%`); }
         sql2 += ' ORDER BY cc.name ASC LIMIT 15';
         const extraRows = await env.DB.prepare(sql2).bind(...p2).all().then(r => r.results || []);
@@ -2158,13 +2164,15 @@ export default {
             const resp = await blingFetch(`/contatos?pagina=1&limite=20&pesquisa=${encodeURIComponent(blingQ)}`, {}, env);
             if (resp.ok) {
               const data = await resp.json();
-              const ql_name = qName.toLowerCase(); const ql_addr = qAddr.toLowerCase();
+              const ql_addr = qAddr.toLowerCase();
               const filtrados = (data.data || []).filter(cont => {
                 const nome = (cont.nome||'').toLowerCase();
                 const end = cont.endereco || {};
                 const rua = ((end.geral?.endereco||end.endereco||'')+' '+(end.geral?.bairro||end.bairro||'')).toLowerCase();
                 const fone = (cont.celular||cont.telefone||'').replace(/\D/g,'');
-                return (!qName||nome.includes(ql_name)) && (!qAddr||rua.includes(ql_addr)) && (!qPhone||fone.includes(qPhone));
+                // multi-palavra: todas as palavras devem estar no nome
+                const nameMatch = nameWords.length === 0 || nameWords.every(w => nome.includes(w.toLowerCase()));
+                return nameMatch && (!qAddr||rua.includes(ql_addr)) && (!qPhone||fone.includes(qPhone));
               });
               const blingRows = mapContatos(filtrados);
               if (blingRows.length) await saveContactsCache(blingRows, env);
