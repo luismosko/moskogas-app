@@ -1,4 +1,4 @@
-// v2.31.8
+// v2.31.9
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -505,6 +505,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
     payment_terms: {
       due_date: dueDate,
     },
+    payment_forms: ['BANK_SLIP', 'PIX'],
   };
 
   console.log('[Cora] Criando invoice para pedido', orderId, '- R$', (amountCentavos / 100).toFixed(2), '- Doc:', customerDoc.substring(0, 4) + '...');
@@ -3441,7 +3442,8 @@ export default {
           qr_image_url: coraData.qr_image_url || null,
           bank_slip_url: coraData.bankSlipUrl || null,
           pix_disponivel: !!coraData.brCode,
-          dica: !coraData.brCode ? 'PIX QR Code só é gerado se a conta Cora tiver chave PIX cadastrada. Cadastre no app Cora > Pix > Cadastrar chave.' : null,
+          cora_pix_raw: coraData.raw?.pix || null,
+          cora_payment_options: coraData.raw?.payment_options || null,
         });
       } catch (e) {
         return json({ ok: false, error: e.message }, 500);
