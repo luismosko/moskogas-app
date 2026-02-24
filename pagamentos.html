@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.8.2</title>
+<title>Pagamentos — MoskoGás v1.8.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.8.2 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.8.3 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -85,7 +85,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.8.2</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.8.3</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -143,7 +143,7 @@
 </div>
 
 <script>
-// v1.8.2 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
+// v1.8.3 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -428,15 +428,16 @@ function renderQrModal(orderId, data) {
   const qrImg = data.qrcode_base64 || data.qr_code_base64 || null;
   const qrCode = data.qrcode || data.qr_code || '';
   
+  // v1.8.3: gerar imagem QR a partir do código texto se não vier imagem da Cora
+  const qrImgSrc = qrImg || (qrCode ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCode)}` : null);
+
   document.getElementById('qr-modal-title').textContent = `📱 PIX — Pedido #${orderId}`;
   
   let html = `<div style="font-weight:700;font-size:16px;margin:8px 0">${nome}</div>`;
   html += `<div style="font-size:28px;font-weight:900;color:#0891b2;margin:8px 0">R$ ${valor}</div>`;
   
-  if(qrImg){
-    html += `<img src="${qrImg}" alt="QR Code PIX" />`;
-  } else {
-    html += `<div style="background:#fef3c7;border-radius:8px;padding:16px;margin:12px 0;color:#92400e;font-size:13px">⚠️ Imagem do QR não disponível, use o código Copia e Cola abaixo</div>`;
+  if(qrImgSrc){
+    html += `<img src="${qrImgSrc}" alt="QR Code PIX" style="width:220px;height:220px;border-radius:8px;border:3px solid #0891b2;margin:8px auto;display:block" />`;
   }
   
   if(qrCode){
