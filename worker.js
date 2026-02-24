@@ -1,7 +1,7 @@
-// v2.38.0
+// v2.38.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.38.0: PushInPay PIX (substituiu Cora) + webhook + force lembrete
+// v2.38.1: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
@@ -3081,11 +3081,18 @@ export default {
       if (tipoFinal === 'pix_receber' && isPixConfigured(env)) {
         try {
           await ensurePixColumns(env);
-          const pixData = await pushInPayCreateCharge(env, id, order.total_value);
-          if (pixData.tx_id) {
-            sql += `, pix_tx_id=?, pix_qrcode=?, pix_qrcode_base64=?`;
-            params.push(pixData.tx_id, pixData.qr_code || '', pixData.qr_code_base64 || '');
-            pixResult = { created: true, tx_id: pixData.tx_id, has_qr: !!pixData.qr_code };
+          // Verificar se já tem QR existente (NÃO sobrescrever!)
+          const existingPix = await env.DB.prepare('SELECT pix_tx_id, pix_qrcode FROM orders WHERE id=?').bind(id).first();
+          if (existingPix?.pix_tx_id && existingPix?.pix_qrcode) {
+            console.log(`[Deliver] Reusando QR existente pedido #${id} tx=${existingPix.pix_tx_id}`);
+            pixResult = { created: false, reused: true, tx_id: existingPix.pix_tx_id };
+          } else {
+            const pixData = await pushInPayCreateCharge(env, id, order.total_value);
+            if (pixData.tx_id) {
+              sql += `, pix_tx_id=?, pix_qrcode=?, pix_qrcode_base64=?`;
+              params.push(pixData.tx_id, pixData.qr_code || '', pixData.qr_code_base64 || '');
+              pixResult = { created: true, tx_id: pixData.tx_id, has_qr: !!pixData.qr_code };
+            }
           }
         } catch (pe) {
           console.error('[Deliver] Erro criar PushInPay PIX:', pe.message);
@@ -3418,6 +3425,13 @@ export default {
       if (!order) return err('Pedido não encontrado', 404);
       if (order.pago === 1) return json({ ok: true, message: 'Pedido já está pago' });
       if (order.pix_paid_at) return json({ ok: true, message: 'PIX já confirmado' });
+
+      // Se já tem pix_tx_id + qrcode, retornar o existente (NÃO gerar novo!)
+      const forceNew = (await request.json().catch(() => ({}))).force_new === true;
+      if (order.pix_tx_id && order.pix_qrcode && !forceNew) {
+        console.log(`[PushInPay] Reusando QR existente pedido #${orderId} tx=${order.pix_tx_id}`);
+        return json({ ok: true, tx_id: order.pix_tx_id, qrcode: order.pix_qrcode, qrcode_base64: order.pix_qrcode_base64 || null, pix_disponivel: true, reused: true });
+      }
 
       try {
         const pixData = await pushInPayCreateCharge(env, orderId, order.total_value);
