@@ -1,6 +1,7 @@
-// v2.38.1
+// v2.38.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.38.2: Novos campos customers_cache: ultima_compra_glp + origem (importação GLP Master)
 // v2.38.1: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
@@ -1412,7 +1413,7 @@ function mapContatos(lista) {
 
 async function saveContactsCache(result, env) {
   // Ensure columns exist
-  for (const col of ['cpf_cnpj TEXT', 'email TEXT', 'email_nfe TEXT', 'tipo_pessoa TEXT']) {
+  for (const col of ['cpf_cnpj TEXT', 'email TEXT', 'email_nfe TEXT', 'tipo_pessoa TEXT', 'ultima_compra_glp TEXT DEFAULT \'\'', 'origem TEXT DEFAULT \'manual\'']) {
     await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => {});
   }
   for (const r of result) {
