@@ -1,7 +1,7 @@
-// v2.37.1
+// v2.37.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.37.1: PushInPay PIX (substituiu Cora) + webhook + force lembrete
+// v2.37.2: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
@@ -1836,6 +1836,17 @@ export default {
       `).all().then(r => r.results || []);
       const total = rows.reduce((s, r) => s + r.total, 0);
       return json({ total, by_driver: rows });
+    }
+
+    // ── PIX Debug (público) ─────────────────────────────────────
+    const pixDbgMatch = path.match(/^\/api\/pub\/pix-debug\/(\d+)$/);
+    if (method === 'GET' && pixDbgMatch) {
+      await ensurePixColumns(env);
+      const oid = parseInt(pixDbgMatch[1]);
+      const o = await env.DB.prepare(
+        'SELECT id, pix_tx_id, pix_qrcode, pix_paid_at, pago, status, tipo_pagamento, total_value, cora_invoice_id FROM orders WHERE id=?'
+      ).bind(oid).first();
+      return json({ ok: true, order: o || null, configured: isPixConfigured(env) });
     }
 
     // ── AUTH: Login / Sessão / Logout (SEM autenticação prévia) ──
