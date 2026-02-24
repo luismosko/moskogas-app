@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.8.6 — MoskoGás</title>
+<title>Gestão v2.8.7 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.6</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.7</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -143,9 +143,10 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.8.6
+// v2.8.7
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -378,6 +379,7 @@ function renderTable(rows) {
       </td>
       <td onclick="event.stopPropagation()">
         <div class="action-btns" style="gap:3px">
+          ${o.tipo_pagamento==='pix_receber' && !o.pago ? `<button class="btn" style="font-size:11px;padding:4px 7px;background:#0891b2;color:#fff" title="Enviar PIX QR Code" onclick="abrirPixGestao(${o.id})">💠</button>` : ''}
           ${canWa      ? `<button class="btn btn-green" style="font-size:11px;padding:4px 7px" title="Enviar/Reenviar WhatsApp" onclick="openModal(${o.id})">📲</button>` : ''}
           ${canDeliver ? `<button class="btn btn-blue"  style="font-size:11px;padding:4px 7px" title="Marcar como entregue" onclick="markDelivered(${o.id})">✅</button>` : ''}
           <button class="btn btn-gray" style="font-size:11px;padding:4px 7px" title="Imprimir recibo" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
@@ -929,6 +931,93 @@ async function saveEditOrder(confirmBling = false) {
   } catch(e) { hideLoading(); toast(e.message, 'error'); }
 }
 
+// ══════════════════════════════════════════════════════════════
+// ── PIX QR Code (Gestão) ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+async function abrirPixGestao(orderId) {
+  const overlay = document.getElementById('pix-overlay');
+  const body = document.getElementById('pix-body');
+  overlay.style.display = 'flex';
+  body.innerHTML = '<div style="text-align:center;padding:30px"><div style="width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#0891b2;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto"></div><p style="margin-top:12px;color:#64748b">Carregando PIX...</p></div>';
+
+  try {
+    // 1) Tentar pegar QR existente
+    const check = await api('/api/pagamentos/' + orderId + '/qrcode');
+    if (check.ok && check.paid) {
+      body.innerHTML = '<div style="text-align:center;padding:30px"><p style="font-size:48px">✅</p><p style="font-weight:700;color:#16a34a;font-size:18px">PIX já confirmado!</p></div><button class="pix-btn-close" onclick="fecharPixGestao()">Fechar</button>';
+      return;
+    }
+    if (check.ok && check.qrcode) {
+      renderPixGestao(orderId, check);
+      return;
+    }
+    // 2) Gerar novo QR
+    const data = await api('/api/pagamentos/' + orderId + '/gerar-pix', { method: 'POST' });
+    if (data.ok && data.qrcode) {
+      renderPixGestao(orderId, data);
+    } else {
+      body.innerHTML = '<div style="text-align:center;padding:30px"><p style="font-size:40px">⚠️</p><p style="color:#dc2626;font-weight:600">' + (data.error || 'Erro ao gerar QR') + '</p></div><button class="pix-btn-close" onclick="fecharPixGestao()">Fechar</button>';
+    }
+  } catch(e) {
+    body.innerHTML = '<div style="text-align:center;padding:30px"><p style="font-size:40px">❌</p><p style="color:#dc2626">' + e.message + '</p></div><button class="pix-btn-close" onclick="fecharPixGestao()">Fechar</button>';
+  }
+}
+
+function renderPixGestao(orderId, data) {
+  const order = allOrders.find(o => o.id === orderId) || {};
+  const nome = order.customer_name || 'Cliente';
+  const valor = parseFloat(order.total_value || data.total_value || 0).toFixed(2);
+  const qrCode = data.qrcode || data.qr_code || '';
+  const body = document.getElementById('pix-body');
+
+  let qrHtml = '';
+  try {
+    const qr = qrcode(0, 'L');
+    qr.addData(qrCode);
+    qr.make();
+    qrHtml = '<div style="display:inline-block;border:3px solid #0891b2;border-radius:12px;overflow:hidden;line-height:0">' + qr.createImgTag(5, 8) + '</div>';
+  } catch(e) {
+    qrHtml = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrCode) + '" style="width:200px;height:200px;border-radius:8px;border:3px solid #0891b2">';
+  }
+
+  body.innerHTML = `
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px">${nome}</div>
+    <div style="font-size:28px;font-weight:900;color:#0891b2;margin:4px 0 12px">R$ ${valor}</div>
+    ${qrHtml}
+    <p style="font-size:12px;color:#64748b;margin:10px 0 4px">PIX Copia e Cola:</p>
+    <div id="pix-code-text" style="background:#f0fdfa;border:2px solid #0891b2;border-radius:8px;padding:8px;font-size:10px;word-break:break-all;color:#334155;max-height:80px;overflow-y:auto">${qrCode}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:center;flex-wrap:wrap">
+      <button onclick="copiarPixGestao()" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:13px">📋 Copiar</button>
+      ${order.phone_digits ? '<button onclick="enviarPixWhatsGestao(' + orderId + ')" style="background:#25d366;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:13px">📲 WhatsApp</button>' : ''}
+      <button class="pix-btn-close" onclick="fecharPixGestao()">Fechar</button>
+    </div>
+  `;
+}
+
+function fecharPixGestao() { document.getElementById('pix-overlay').style.display = 'none'; }
+
+function copiarPixGestao() {
+  const el = document.getElementById('pix-code-text');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => toast('📋 Código PIX copiado!')).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = el.textContent; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    toast('📋 Código PIX copiado!');
+  });
+}
+
+async function enviarPixWhatsGestao(orderId) {
+  if (!confirm('Enviar PIX por WhatsApp para o cliente?')) return;
+  showLoading('Enviando PIX WhatsApp...');
+  try {
+    const d = await api('/api/lembretes/enviar/' + orderId, { method: 'POST', body: JSON.stringify({ force: true }) });
+    hideLoading();
+    if (d.ok) { toast('📲 PIX enviado por WhatsApp!'); fecharPixGestao(); }
+    else toast('❌ ' + (d.error || 'Falha'), 'error');
+  } catch(e) { hideLoading(); toast(e.message, 'error'); }
+}
+
 init();
 </script>
 
@@ -1024,5 +1113,16 @@ init();
   </div>
 </div>
 
+<!-- PIX QR Modal -->
+<div id="pix-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9999;justify-content:center;align-items:center">
+  <div style="background:#fff;border-radius:16px;padding:24px;max-width:380px;width:92%;text-align:center;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h3 style="color:#0891b2;margin-bottom:12px">💠 PIX — QR Code</h3>
+    <div id="pix-body"></div>
+  </div>
+</div>
+<style>
+  .pix-btn-close { background:#e2e8f0;color:#475569;border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:13px;margin-top:8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
 </body>
 </html>
