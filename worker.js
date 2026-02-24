@@ -1,4 +1,4 @@
-// v2.32.5
+// v2.32.6
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -806,7 +806,7 @@ async function getLembreteConfig(env) {
     cron_hora_utc: 12,
     delay_segundos: 60,
     chave_pix: '',
-    mensagem: 'Olá {nome}. 😃 Tudo bem?\n\nSeu pedido de Gás foi entregue {ontem}, mas ainda não conseguimos conciliar o pagamento via PIX.\n\nPode nos enviar o comprovante por gentileza?\n\n💰 Valor: R$ {valor}\n📱 Chave PIX: {chave_pix}\n\nCaso já tenha sido pago por favor desconsidere essa mensagem.\n\n— MoskoGás 🔥'
+    mensagem: 'Olá {nome}! 👋\n\nDia {ontem} entregamos o seguinte pedido:\n{itens}\nValor: R$ {valor}\n\nAinda não identificamos o pagamento via PIX.\n\nSegue abaixo o código Copia e Cola para efetuar o PIX. 👇\n\nCaso já tenha sido pago, por gentileza nos envie o comprovante para darmos baixa.\n\n— MoskoGás 🔥'
   };
   try {
     const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='lembrete_pix'").first();
@@ -899,14 +899,15 @@ async function enviarLembretePix(env, order, config, user) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
-  // v2.32.5: anexar PIX copia e cola automaticamente se {pix_copia_cola} não estiver no template
-  let finalMessage = message;
-  if (order.cora_qrcode && !config.mensagem.includes('{pix_copia_cola}')) {
-    finalMessage += `\n\n📋 *PIX Copia e Cola:*\n${order.cora_qrcode}`;
-  }
-  // v2.32.4: se intervalo_horas=0 (modo teste), pula cooldown da Safety Layer
+  // v2.32.6: se {pix_copia_cola} estiver no template, já foi incluído. Senão, enviar só o texto principal limpo.
   const skipSafety = config.intervalo_horas === 0 && config.max_lembretes === 0;
-  const waResult = await sendWhatsApp(env, phone, finalMessage, { category: 'lembrete_pix', variar: true, skipSafety });
+  const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
+
+  // v2.32.6: segunda mensagem SOMENTE com o código PIX (fácil de copiar no celular)
+  if (waResult.ok && order.cora_qrcode) {
+    await new Promise(r => setTimeout(r, 2000)); // pequeno delay entre mensagens
+    await sendWhatsApp(env, phone, order.cora_qrcode, { category: 'lembrete_pix', skipSafety });
+  }
 
   const tipo = user ? 'manual' : 'cron';
   await env.DB.prepare(

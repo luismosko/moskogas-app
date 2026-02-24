@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.10.9 — MoskoGás</title>
+<title>Config v2.11.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.10.9 — config</div>
-  <h1>⚙️ Configurações v2.10.9</h1>
+  <div class="version-badge">v2.11.0 — config</div>
+  <h1>⚙️ Configurações v2.11.0</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -944,16 +944,17 @@ async function salvarSafetyConfig() {
 
 // ── Lembretes PIX Config ──────────────────────────────────────
 
-const LEMBRETE_PADRAO = `Olá {nome}. 😃 Tudo bem?
+const LEMBRETE_PADRAO = `Olá {nome}! 👋
 
-Seu pedido de Gás foi entregue {ontem}, mas ainda não conseguimos conciliar o pagamento via PIX.
+Dia {ontem} entregamos o seguinte pedido:
+{itens}
+Valor: R$ {valor}
 
-Pode nos enviar o comprovante por gentileza?
+Ainda não identificamos o pagamento via PIX.
 
-💰 Valor: R$ {valor}
-📱 Chave PIX: {chave_pix}
+Segue abaixo o código Copia e Cola para efetuar o PIX. 👇
 
-Caso já tenha sido pago por favor desconsidere essa mensagem.
+Caso já tenha sido pago, por gentileza nos envie o comprovante para darmos baixa.
 
 — MoskoGás 🔥`;
 
