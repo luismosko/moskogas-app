@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.10.7 — MoskoGás</title>
+<title>Config v2.10.8 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.10.7 — config</div>
-  <h1>⚙️ Configurações v2.10.7</h1>
+  <div class="version-badge">v2.10.8 — config</div>
+  <h1>⚙️ Configurações v2.10.8</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -967,8 +967,8 @@ async function carregarLembreteConfig() {
     const config = await api('/api/lembretes/config');
     document.getElementById('lemb-ativo').checked = config.ativo !== false;
     document.getElementById('lemb-cron').checked = config.cron_ativo !== false;
-    document.getElementById('lemb-intervalo').value = config.intervalo_horas || 24;
-    document.getElementById('lemb-max').value = config.max_lembretes || 3;
+    document.getElementById('lemb-intervalo').value = config.intervalo_horas ?? 24;
+    document.getElementById('lemb-max').value = config.max_lembretes ?? 3;
     document.getElementById('lemb-hora').value = config.cron_hora_utc || 12;
     document.getElementById('lemb-delay').value = config.delay_segundos || 60;
     document.getElementById('lemb-chave-pix').value = config.chave_pix || '';
