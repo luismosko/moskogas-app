@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.8.8 — MoskoGás</title>
+<title>Gestão v2.8.9 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer" onclick="checkBlingStatus(true)">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.8</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.8.9</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -146,7 +146,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.8.8
+// v2.8.9
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -297,6 +297,7 @@ async function _load() {
   if (q)        url += `&q=${encodeURIComponent(q)}`;
 
   let rows = [];
+  window._gestaoRows = [];
   try {
     rows = await api(url);
     if (!Array.isArray(rows)) { console.error('API retornou:', rows); rows = []; }
@@ -324,6 +325,7 @@ async function _load() {
   });
 
   lastRows = rows;
+  window._gestaoRows = rows;
   renderTable(rows);
   renderSummary(rows);
   document.getElementById('count-badge').textContent = `${rows.length} pedidos`;
@@ -965,7 +967,7 @@ async function abrirPixGestao(orderId) {
 }
 
 function renderPixGestao(orderId, data) {
-  const order = allOrders.find(o => o.id === orderId) || {};
+  const order = window._gestaoRows.find(o => o.id === orderId) || {};
   const nome = order.customer_name || 'Cliente';
   const valor = parseFloat(order.total_value || data.total_value || 0).toFixed(2);
   const qrCode = data.qrcode || data.qr_code || '';
