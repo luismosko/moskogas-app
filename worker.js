@@ -1,7 +1,7 @@
-// v2.37.4
+// v2.38.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.37.4: PushInPay PIX (substituiu Cora) + webhook + force lembrete
+// v2.38.0: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
@@ -5021,8 +5021,87 @@ export default {
         ctx.waitUntil(processarLembretesCron(env));
       }
     } catch(e) { console.error('[lembrete-cron] Config error:', e.message); }
+    // PIX auto-check: verificar pagamentos pendentes na PushInPay a cada execução do cron
+    if (isPixConfigured(env)) {
+      ctx.waitUntil(checkPendingPixPayments(env));
+    }
   },
 };
+
+// ══════════════════════════════════════════════════════════════
+// PIX AUTO-CHECK — Verifica pagamentos pendentes na PushInPay
+// Roda a cada execução do cron (5 min default)
+// ══════════════════════════════════════════════════════════════
+async function checkPendingPixPayments(env) {
+  try {
+    await ensurePixColumns(env);
+    const pending = await env.DB.prepare(
+      "SELECT id, pix_tx_id, total_value, customer_name FROM orders WHERE pix_tx_id IS NOT NULL AND pago=0 AND pix_paid_at IS NULL AND status != 'cancelado' ORDER BY id DESC LIMIT 20"
+    ).all();
+    const rows = pending.results || [];
+    if (!rows.length) { console.log('[pix-autocheck] Nenhum PIX pendente'); return; }
+    
+    console.log(`[pix-autocheck] Verificando ${rows.length} PIX pendente(s)...`);
+    let confirmed = 0;
+    
+    for (const order of rows) {
+      try {
+        const txData = await pushInPayCheckStatus(env, order.pix_tx_id);
+        if (txData.status === 'paid') {
+          await env.DB.prepare('UPDATE orders SET pago=1, pix_paid_at=unixepoch() WHERE id=?').bind(order.id).run();
+          await logEvent(env, order.id, 'pix_autocheck_confirmed', { tx_id: order.pix_tx_id });
+          confirmed++;
+          console.log(`[pix-autocheck] ✅ Pedido #${order.id} confirmado como pago!`);
+          
+          // WhatsApp admin
+          try {
+            const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1").all();
+            const phones = (admins.results || []).map(a => a.telefone).filter(Boolean);
+            const valor = parseFloat(order.total_value || 0).toFixed(2);
+            const msg = `✅ *PIX CONFIRMADO (auto-check)* — Pedido #${order.id}\n\n💰 R$ ${valor} — ${order.customer_name || 'Cliente'}`;
+            for (const ph of phones) {
+              await sendWhatsApp(env, ph, msg, { category: 'admin_alerta' });
+            }
+          } catch (we) { console.error('[pix-autocheck] WhatsApp error:', we.message); }
+          
+          // Criar Bling se necessário
+          try {
+            const fullOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(order.id).first();
+            if (!fullOrder.bling_pedido_id && fullOrder.status === 'entregue') {
+              const cached = await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(fullOrder.phone_digits).first().catch(() => null);
+              let vendBlingId = null, vendNome = null;
+              if (fullOrder.vendedor_id) {
+                const vu = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(fullOrder.vendedor_id).first().catch(() => null);
+                if (vu?.bling_vendedor_id) vendBlingId = vu.bling_vendedor_id;
+                if (vu?.nome) vendNome = vu.nome;
+              }
+              const blingData = await criarPedidoBling(env, order.id, {
+                name: fullOrder.customer_name,
+                items: JSON.parse(fullOrder.items_json || '[]'),
+                total_value: fullOrder.total_value,
+                tipo_pagamento: fullOrder.tipo_pagamento,
+                bling_contact_id: cached?.bling_contact_id || null,
+                cpf_cnpj: cached?.cpf_cnpj || null,
+                bling_vendedor_id: vendBlingId,
+                vendedor_nome: vendNome,
+              });
+              await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?')
+                .bind(blingData.bling_pedido_id, blingData.bling_pedido_num, 'synced', order.id).run();
+              console.log(`[pix-autocheck] Bling criado para pedido #${order.id}`);
+            }
+          } catch (be) { console.error('[pix-autocheck] Bling error:', be.message); }
+        }
+        // Rate limit: esperar 1s entre consultas
+        await new Promise(r => setTimeout(r, 1000));
+      } catch (e) {
+        console.error(`[pix-autocheck] Erro pedido #${order.id}:`, e.message);
+      }
+    }
+    console.log(`[pix-autocheck] Concluído: ${confirmed}/${rows.length} confirmado(s)`);
+  } catch (e) {
+    console.error('[pix-autocheck] Erro geral:', e.message);
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 // RELATÓRIO DIÁRIO POR E-MAIL — v2.29.0

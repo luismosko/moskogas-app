@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.3</title>
+<title>Pagamentos — MoskoGás v1.9.4</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.3 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.4 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -85,7 +85,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.3</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.4</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -144,7 +144,7 @@
 </div>
 
 <script>
-// v1.9.3 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
+// v1.9.4 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -213,6 +213,7 @@ function renderTable(rows) {
         actionBtns+=`<button class="btn-qr" disabled title="PIX exige mínimo R$1,00 (pedido: R$${valorNum.toFixed(2)})" style="opacity:.4;cursor:not-allowed">➕ PIX</button>`;
       } else {
         actionBtns+=`<button class="btn-qr" onclick="showQrCode(${p.id})" title="${hasQr?'Ver QR Code PIX':'Gerar QR Code PIX'}">${hasQr?'📱 QR':'➕ PIX'}</button>`;
+        if(hasQr) actionBtns+=`<button class="btn-check-pix" onclick="checkPixStatus(${p.id})" title="Verificar pagamento na PushInPay" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">✔ Check</button>`;
       }
       const cnt=p.reminder_count||0;const badge=cnt>0?`<span class="rb">${cnt}</span>`:'';
       const hasPhone=p.phone_digits&&p.phone_digits.replace(/\D/g,'').length>=10;
@@ -490,6 +491,26 @@ async function enviarPixWhats(orderId){
     hideLoading();
     if(data.ok){toast('📲 PIX enviado por WhatsApp!');}
     else{toast('❌ '+(data.error||'Falha'),'error');}
+  }catch(e){hideLoading();toast('❌ '+e.message,'error');}
+}
+
+// ═══ CHECK PIX STATUS (PushInPay) ═══
+async function checkPixStatus(orderId){
+  showLoading('Verificando pagamento PIX...');
+  try{
+    const d=await api('/api/pix/check/'+orderId,{method:'POST'});
+    hideLoading();
+    if(d.action==='marked_paid'){
+      toast('✅ PIX CONFIRMADO! Pedido #'+orderId+' marcado como pago!','success');
+      loadPagamentos();
+    } else if(d.action==='still_pending'){
+      toast('⏳ PIX ainda pendente (status: '+d.tx_status+')','warning');
+    } else if(d.message==='Já está pago'){
+      toast('✅ Pedido já está pago','success');
+      loadPagamentos();
+    } else {
+      toast('ℹ️ '+(d.error||d.message||JSON.stringify(d)));
+    }
   }catch(e){hideLoading();toast('❌ '+e.message,'error');}
 }
 
