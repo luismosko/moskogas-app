@@ -1,7 +1,7 @@
-// v2.37.2
+// v2.37.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.37.2: PushInPay PIX (substituiu Cora) + webhook + force lembrete
+// v2.37.3: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
@@ -4247,8 +4247,19 @@ export default {
     if (method === 'POST' && path === '/api/webhooks/pushinpay') {
       try {
         await ensurePixColumns(env);
-        const bodyData = await request.json().catch(() => null);
-        if (!bodyData) return json({ ok: true, ignored: 'empty body' });
+        const rawBody = await request.text().catch(() => '');
+        let bodyData;
+        try { bodyData = JSON.parse(rawBody); } catch { bodyData = null; }
+        
+        // Log TUDO que chega (debug)
+        console.log(`[pushinpay-webhook] RAW BODY: ${rawBody.substring(0, 1000)}`);
+        
+        // Salvar webhook recebido no order_events pra debug
+        await env.DB.prepare(
+          "INSERT INTO order_events (order_id, evento, detalhes, created_at) VALUES (0, 'pushinpay_webhook_received', ?, unixepoch())"
+        ).bind(rawBody.substring(0, 2000)).run().catch(() => {});
+        
+        if (!bodyData) return json({ ok: true, ignored: 'empty/invalid body' });
 
         const txId = bodyData.id;
         const status = bodyData.status;
@@ -4350,6 +4361,45 @@ export default {
     // Legacy: manter /api/webhooks/cora respondendo
     if (path === '/api/webhooks/cora') {
       return json({ ok: true, message: 'Cora deprecated, use /api/webhooks/pushinpay' });
+    }
+
+    // ── PIX: Verificar pagamento via API PushInPay ──────────────
+    const pixCheckMatch = path.match(/^\/api\/pix\/check\/(\d+)$/);
+    if (method === 'POST' && pixCheckMatch) {
+      const orderId = parseInt(pixCheckMatch[1]);
+      await ensurePixColumns(env);
+      const order = await env.DB.prepare('SELECT id, pix_tx_id, pago, pix_paid_at, status, tipo_pagamento, total_value FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      if (order.pago === 1) return json({ ok: true, message: 'Já está pago', order_id: orderId });
+      if (!order.pix_tx_id) return json({ ok: false, error: 'Pedido sem pix_tx_id — QR não foi gerado via PushInPay' });
+      
+      if (!isPixConfigured(env)) return err('PushInPay não configurada', 400);
+      
+      try {
+        const txData = await pushInPayCheckStatus(env, order.pix_tx_id);
+        if (txData.status === 'paid') {
+          // Marcar pago
+          await env.DB.prepare('UPDATE orders SET pago=1, pix_paid_at=unixepoch() WHERE id=?').bind(orderId).run();
+          await logEvent(env, orderId, 'pushinpay_manual_check_paid', { tx_id: order.pix_tx_id, api_status: txData.status });
+          return json({ ok: true, action: 'marked_paid', order_id: orderId, tx_status: txData.status });
+        }
+        return json({ ok: true, action: 'still_pending', order_id: orderId, tx_status: txData.status, tx_data: txData });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
+    }
+
+    // ── PIX: Confirmar pagamento manualmente ─────────────────────
+    const pixConfirmMatch = path.match(/^\/api\/pix\/confirm\/(\d+)$/);
+    if (method === 'POST' && pixConfirmMatch) {
+      const orderId = parseInt(pixConfirmMatch[1]);
+      await ensurePixColumns(env);
+      const order = await env.DB.prepare('SELECT id, pago, pix_paid_at FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      if (order.pago === 1) return json({ ok: true, message: 'Já estava pago' });
+      await env.DB.prepare('UPDATE orders SET pago=1, pix_paid_at=unixepoch() WHERE id=?').bind(orderId).run();
+      await logEvent(env, orderId, 'pix_manual_confirm', { confirmed_by: 'admin' });
+      return json({ ok: true, action: 'marked_paid', order_id: orderId });
     }
 
     // ══════════════════════════════════════════════════════════════
