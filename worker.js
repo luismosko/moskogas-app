@@ -1,4 +1,4 @@
-// v2.32.1
+// v2.32.2
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -873,7 +873,7 @@ async function enviarLembretePix(env, order, config, user) {
     'SELECT COUNT(*) as c FROM payment_reminders WHERE order_id=?'
   ).bind(order.id).first();
   const count = countRow?.c || 0;
-  if (count >= config.max_lembretes) {
+  if (config.max_lembretes > 0 && count >= config.max_lembretes) {
     return { ok: false, order_id: order.id, error: `Limite de ${config.max_lembretes} lembretes atingido` };
   }
 
@@ -938,8 +938,8 @@ async function processarLembretesCron(env) {
     const now = Math.floor(Date.now() / 1000);
 
     for (const row of rows) {
-      // Já atingiu limite?
-      if (row.reminder_count >= config.max_lembretes) { pulados++; continue; }
+      // Já atingiu limite? (0 = sem limite)
+      if (config.max_lembretes > 0 && row.reminder_count >= config.max_lembretes) { pulados++; continue; }
 
       // Intervalo respeitado?
       if (row.last_reminder_at) {
