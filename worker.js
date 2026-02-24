@@ -1,4 +1,4 @@
-// v2.32.0
+// v2.32.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -463,7 +463,7 @@ async function coraCreatePixInvoice(env, orderId, orderData) {
   const { customer_name, total_value, items, phone_digits } = orderData;
 
   const amountCentavos = Math.round(parseFloat(total_value) * 100);
-  if (amountCentavos < 500) throw new Error('Valor mínimo para cobrança Cora PIX: R$5,00');
+  if (amountCentavos <= 0) throw new Error('Valor do pedido inválido para cobrança PIX');
 
   // Vencimento: 3 dias a partir de hoje
   const dueDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
