@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.6.1 — MoskoGás</title>
+<title>Entregador v2.6.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -190,7 +190,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.6.1</small></h1>
+  <h1>🚚 Entregas <small>v2.6.2</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -209,7 +209,7 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.6.1 — entregador</div>
+<div class="version-badge">v2.6.2 — entregador</div>
 
 <!-- PIX QR Code Modal -->
 <div class="pix-overlay" id="pixOverlay">
@@ -299,7 +299,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.6.1
+// v2.6.2
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -786,7 +786,7 @@ async function deliver(orderId) {
     }
     toast(msg, result.bling_result && result.bling_result.action === 'create_error' ? 'warning' : 'success');
 
-    // v2.6.1: Mostrar QR de avaliação Google
+    // v2.6.2: Mostrar QR de avaliação Google
     showQrReview(orderId);
 
     load();
@@ -1115,6 +1115,25 @@ async function enviarPixWhatsEntregador(orderId) {
 }
 
 init();
+
+// ═══ PIX AUTO-CHECK (entregador) ═══
+let pixCheckRunning = false;
+async function autoCheckPixEntregador(){
+  if(pixCheckRunning) return;
+  const pixPendentes = allOrders.filter(o => o.tipo_pagamento==='pix_receber' && o.status==='entregue');
+  if(!pixPendentes.length) return;
+  pixCheckRunning = true;
+  for(const o of pixPendentes){
+    try {
+      const d = await api('/api/pix/check/'+o.id, {method:'POST'});
+      if(d.action==='marked_paid'){
+        toast('✅ PIX #'+o.id+' confirmado!');
+      }
+    } catch(e) { /* silencioso */ }
+  }
+  pixCheckRunning = false;
+}
+setInterval(autoCheckPixEntregador, 30000);
 </script>
 </body>
 </html>

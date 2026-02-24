@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.4</title>
+<title>Pagamentos — MoskoGás v1.9.5</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.4 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.5 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -85,7 +85,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.4</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.5</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -144,7 +144,7 @@
 </div>
 
 <script>
-// v1.9.4 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
+// v1.9.5 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -542,6 +542,28 @@ async function bulkEnviarLembrete(){
 
 setDateFilter('semana');
 setInterval(loadPagamentos,30000);
+
+// ═══ PIX AUTO-CHECK POLLING ═══
+// Verifica automaticamente PIX pendentes a cada 30s
+let pixCheckRunning = false;
+async function autoCheckPix(){
+  if(pixCheckRunning) return;
+  const pixPendentes = allData.filter(p => p.tipo_pagamento==='pix_receber' && p.pix_tx_id && !p.pago);
+  if(!pixPendentes.length) return;
+  pixCheckRunning = true;
+  for(const p of pixPendentes){
+    try {
+      const d = await api('/api/pix/check/'+p.id, {method:'POST'});
+      if(d.action==='marked_paid'){
+        toast('✅ PIX CONFIRMADO automaticamente! Pedido #'+p.id,'success');
+        loadPagamentos();
+        break; // reload vai atualizar tudo
+      }
+    } catch(e) { /* silencioso */ }
+  }
+  pixCheckRunning = false;
+}
+setInterval(autoCheckPix, 30000); // a cada 30s
 </script>
 </body>
 </html>
