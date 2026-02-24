@@ -1,4 +1,4 @@
-// v2.32.3
+// v2.32.4
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -892,7 +892,9 @@ async function enviarLembretePix(env, order, config, user) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
-  const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true });
+  // v2.32.4: se intervalo_horas=0 (modo teste), pula cooldown da Safety Layer
+  const skipSafety = config.intervalo_horas === 0 && config.max_lembretes === 0;
+  const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
 
   const tipo = user ? 'manual' : 'cron';
   await env.DB.prepare(
@@ -3659,7 +3661,7 @@ export default {
       const config = await getLembreteConfig(env);
       if (!config.ativo) return err('Lembretes PIX estão desativados', 400);
       const result = await enviarLembretePix(env, order, config, user);
-      return json(result, result.ok ? 200 : 400);
+      return json(result, 200); // sempre 200 — ok:false carrega a mensagem de erro
     }
 
     // POST /api/lembretes/enviar-bulk — enviar lembretes em lote
