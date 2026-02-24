@@ -1,4 +1,4 @@
-// v2.32.8
+// v2.32.9
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -787,6 +787,33 @@ async function sendWhatsApp(env, to, message, opts = {}) {
   return { ok: resp.ok, status: resp.status, data, blocked: isBlocked };
 }
 
+// ── Envio de imagem via IzChat (multipart) ────────────────────
+async function sendWhatsAppImage(env, to, imageUrl, caption = '') {
+  to = formatPhoneWA(to);
+  if (!to) return { ok: false, error: 'telefone_invalido' };
+  try {
+    // Baixar imagem do qrserver
+    const imgResp = await fetch(imageUrl);
+    if (!imgResp.ok) return { ok: false, error: 'qr_download_failed' };
+    const imgBlob = await imgResp.blob();
+
+    const fd = new FormData();
+    fd.append('number', to);
+    if (caption) fd.append('body', caption);
+    fd.append('medias', imgBlob, 'qrcode.png');
+
+    const resp = await fetch('https://chatapi.izchat.com.br/api/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.IZCHAT_TOKEN}` },
+      body: fd,
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // ── Lembretes PIX ─────────────────────────────────────────────
 
 function formatPhoneWA(phone) {
@@ -902,10 +929,20 @@ async function enviarLembretePix(env, order, config, user) {
   const skipSafety = config.intervalo_horas === 0 && config.max_lembretes === 0;
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
 
-  // v2.32.6: segunda mensagem SOMENTE com o código PIX (fácil de copiar no celular)
+  // v2.32.9: segunda mensagem = imagem do QR Code, terceira = código puro para copiar
   if (waResult.ok && order.cora_qrcode) {
-    await new Promise(r => setTimeout(r, 2000)); // pequeno delay entre mensagens
-    await sendWhatsApp(env, phone, order.cora_qrcode, { category: 'lembrete_pix', skipSafety });
+    await new Promise(r => setTimeout(r, 2000));
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(order.cora_qrcode)}`;
+    const imgResult = await sendWhatsAppImage(env, phone, qrUrl);
+    // Se imagem falhou, manda só o código texto mesmo
+    if (!imgResult.ok) {
+      await new Promise(r => setTimeout(r, 1500));
+      await sendWhatsApp(env, phone, order.cora_qrcode, { category: 'lembrete_pix', skipSafety });
+    } else {
+      // Terceira mensagem: código puro para quem preferir copiar
+      await new Promise(r => setTimeout(r, 2000));
+      await sendWhatsApp(env, phone, order.cora_qrcode, { category: 'lembrete_pix', skipSafety });
+    }
   }
 
   const tipo = user ? 'manual' : 'cron';
