@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.11.2 — MoskoGás</title>
+<title>Config v2.11.3 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.11.2 — config</div>
-  <h1>⚙️ Configurações v2.11.2</h1>
+  <div class="version-badge">v2.11.3 — config</div>
+  <h1>⚙️ Configurações v2.11.3</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -172,15 +172,18 @@
       <label style="font-size:13px">
         🔄 Circuit breaker (min)
         <input type="number" id="ws-breaker" min="5" max="120" value="30" style="width:80px;margin-top:4px">
+        <span style="font-size:10px;color:#94a3b8;display:block;margin-top:2px">Se o WhatsApp bloquear (erro 429), pausa todos os envios por esse tempo. Após o prazo, volta ao normal automaticamente.</span>
       </label>
       <label style="font-size:13px">
         🚫 Cooldown mesmo nº (h)
         <input type="number" id="ws-cooldown" min="1" max="48" value="12" style="width:80px;margin-top:4px">
+        <span style="font-size:10px;color:#94a3b8;display:block;margin-top:2px">Tempo mínimo entre mensagens para o mesmo número. Evita bombardear o cliente com vários envios seguidos.</span>
       </label>
     </div>
     <div id="ws-status-info" style="margin-top:10px;font-size:12px;color:#94a3b8"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn btn-orange" onclick="salvarSafetyConfig()" style="flex:1">💾 Salvar Safety Config</button>
+      <button class="btn" onclick="resetCircuitBreaker()" style="background:#dc2626;color:#fff" title="Desbloqueia o WhatsApp imediatamente se estiver travado por circuit breaker">🔓 Desbloquear WA</button>
     </div>
   </div>
 
@@ -922,7 +925,18 @@ async function carregarSafetyConfig() {
   }
 }
 
-async function salvarSafetyConfig() {
+async function resetCircuitBreaker() {
+  if (!confirm('Desbloquear o WhatsApp agora? Use isso se os envios estiverem travados por circuit breaker.')) return;
+  showLoading('Desbloqueando...');
+  try {
+    const d = await api('/api/whatsapp/safety-config', { method: 'POST', body: JSON.stringify({ circuit_breaker_reset: true }) });
+    if (d.ok) {
+      toast('✅ WhatsApp desbloqueado! Envios liberados.', 'success');
+      carregarSafetyConfig(); // Recarrega o status
+    } else toast('❌ ' + (d.error || 'Erro'), 'error');
+  } catch(e) { toast(e.message, 'error'); }
+  finally { hideLoading(); }
+}
   const config = {
     habilitado: document.getElementById('ws-habilitado').checked,
     respeitar_horario: document.getElementById('ws-horario').checked,

@@ -1,4 +1,4 @@
-// v2.32.9
+// v2.33.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -3642,6 +3642,11 @@ export default {
       if (authCheck instanceof Response) return authCheck;
       await ensureWhatsAppTables(env);
       const body = await request.json();
+      // v2.32.9: reset do circuit breaker — limpa o bloqueio imediatamente
+      if (body.circuit_breaker_reset) {
+        await env.DB.prepare("DELETE FROM app_config WHERE key='whatsapp_last_block'").run().catch(() => {});
+        return json({ ok: true, message: 'Circuit breaker resetado' });
+      }
       const current = await getWhatsAppSafetyConfig(env);
       const updated = { ...current, ...body };
       await env.DB.prepare(
