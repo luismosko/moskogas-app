@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.10.6 — MoskoGás</title>
+<title>Config v2.10.7 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.10.6 — config</div>
-  <h1>⚙️ Configurações v2.10.6</h1>
+  <div class="version-badge">v2.10.7 — config</div>
+  <h1>⚙️ Configurações v2.10.7</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -199,7 +199,7 @@
       </label>
       <label style="font-size:13px">
         ⏱️ Intervalo entre lembretes (horas)
-        <input type="number" id="lemb-intervalo" min="1" max="168" value="24" style="width:80px;margin-top:4px">
+        <input type="number" id="lemb-intervalo" min="0" max="168" value="24" style="width:80px;margin-top:4px" title="0 = sem intervalo (para testes)"> <span style="font-size:11px;color:#94a3b8">0 = sem intervalo</span>
       </label>
       <label style="font-size:13px">
         🔢 Máximo de lembretes por pedido
@@ -983,7 +983,7 @@ async function salvarLembreteConfig() {
   const config = {
     ativo: document.getElementById('lemb-ativo').checked,
     cron_ativo: document.getElementById('lemb-cron').checked,
-    intervalo_horas: parseInt(document.getElementById('lemb-intervalo').value) || 24,
+    intervalo_horas: parseInt(document.getElementById('lemb-intervalo').value) ?? 24,
     max_lembretes: parseInt(document.getElementById('lemb-max').value) ?? 3,
     cron_hora_utc: parseInt(document.getElementById('lemb-hora').value) || 12,
     delay_segundos: parseInt(document.getElementById('lemb-delay').value) || 60,
