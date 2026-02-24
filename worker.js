@@ -1,7 +1,7 @@
-// v2.37.0
+// v2.37.1
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.37.0: PushInPay PIX (substituiu Cora) + webhook + force lembrete
+// v2.37.1: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
@@ -4193,8 +4193,45 @@ export default {
     }
 
     // ══════════════════════════════════════════════════════════════
+    // ── PUSHINPAY PIX — Debug + Test ────────────────────────────
+    // ══════════════════════════════════════════════════════════════
+
+    // Debug: verificar pix_tx_id de um pedido
+    const pixDebugMatch = path.match(/^\/api\/pix\/debug\/(\d+)$/);
+    if (method === 'GET' && pixDebugMatch) {
+      await ensurePixColumns(env);
+      const orderId = parseInt(pixDebugMatch[1]);
+      const order = await env.DB.prepare(
+        'SELECT id, pix_tx_id, pix_qrcode, pix_paid_at, pago, status, tipo_pagamento, total_value, cora_invoice_id, cora_qrcode, cora_paid_at FROM orders WHERE id=?'
+      ).bind(orderId).first();
+      return json({ ok: true, order: order || null, configured: isPixConfigured(env) });
+    }
+
+    // Test: simular webhook (manual)
+    if (method === 'POST' && path === '/api/pub/pix-simulate') {
+      const body = await request.json().catch(() => ({}));
+      const txId = body.tx_id;
+      if (!txId) return err('Informe tx_id', 400);
+      await ensurePixColumns(env);
+      const order = await env.DB.prepare(
+        'SELECT id, pago, status, pix_paid_at FROM orders WHERE pix_tx_id = ?'
+      ).bind(txId).first();
+      if (!order) return json({ ok: false, error: 'Nenhum pedido com esse pix_tx_id', tx_id: txId });
+      if (order.pago === 1) return json({ ok: true, message: 'Já estava pago', order_id: order.id });
+      
+      // Marcar como pago (simula webhook)
+      await env.DB.prepare('UPDATE orders SET pago=1, pix_paid_at=unixepoch() WHERE id=?').bind(order.id).run();
+      await logEvent(env, order.id, 'pushinpay_pix_simulated', { tx_id: txId });
+      return json({ ok: true, action: 'marked_paid', order_id: order.id });
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // ── PUSHINPAY PIX — Webhook (PÚBLICO — sem auth) ─────────────
     // ══════════════════════════════════════════════════════════════
+
+    if (method === 'GET' && path === '/api/webhooks/pushinpay') {
+      return json({ ok: true, status: 'active', service: 'moskogas-pushinpay' });
+    }
 
     if (method === 'POST' && path === '/api/webhooks/pushinpay') {
       try {
