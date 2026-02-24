@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.8.3</title>
+<title>Pagamentos — MoskoGás v1.9.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.8.3 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.3 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -85,7 +85,7 @@
   <input type="text" id="fQ" placeholder="🔍 Busca cliente..." oninput="loadPagamentos()" style="width:160px">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.8.3</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.3</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -129,6 +129,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 
 <!-- Modal QR Code PIX -->
@@ -143,7 +144,7 @@
 </div>
 
 <script>
-// v1.8.3 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
+// v1.9.3 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -205,11 +206,11 @@ function renderTable(rows) {
     let actionBtns='';
     // Lembrete PIX + QR Code
     if(p.tipo_pagamento==='pix_receber'){
-      // Botão QR Code PIX — Cora exige mínimo R$5,00
+      // Botão QR Code PIX — PushInPay mínimo R$1,00
       const hasQr = p.pix_tx_id || p.cora_invoice_id;
       const valorNum = parseFloat(p.total_value||0);
-      if(valorNum < 5){
-        actionBtns+=`<button class="btn-qr" disabled title="Cora PIX exige mínimo R$5,00 (pedido: R$${valorNum.toFixed(2)})" style="opacity:.4;cursor:not-allowed">➕ PIX</button>`;
+      if(valorNum < 1){
+        actionBtns+=`<button class="btn-qr" disabled title="PIX exige mínimo R$1,00 (pedido: R$${valorNum.toFixed(2)})" style="opacity:.4;cursor:not-allowed">➕ PIX</button>`;
       } else {
         actionBtns+=`<button class="btn-qr" onclick="showQrCode(${p.id})" title="${hasQr?'Ver QR Code PIX':'Gerar QR Code PIX'}">${hasQr?'📱 QR':'➕ PIX'}</button>`;
       }
@@ -425,19 +426,28 @@ function renderQrModal(orderId, data) {
   const order = allData.find(r=>r.id===orderId);
   const nome = order?.customer_name || 'Cliente';
   const valor = parseFloat(order?.total_value||data.total_value||0).toFixed(2);
-  const qrImg = data.qrcode_base64 || data.qr_code_base64 || null;
   const qrCode = data.qrcode || data.qr_code || '';
-  
-  // v1.8.3: gerar imagem QR a partir do código texto se não vier imagem da Cora
-  const qrImgSrc = qrImg || (qrCode ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCode)}` : null);
+
+  // Gerar QR Code localmente via qrcode-generator
+  let qrImgHtml = '';
+  if (qrCode) {
+    try {
+      const qr = qrcode(0, 'L');
+      qr.addData(qrCode);
+      qr.make();
+      qrImgHtml = '<div style="display:inline-block;border:3px solid #0891b2;border-radius:8px;overflow:hidden;line-height:0;margin:8px auto">' + qr.createImgTag(5, 8) + '</div>';
+    } catch(e) {
+      qrImgHtml = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCode)}" alt="QR Code PIX" style="width:220px;height:220px;border-radius:8px;border:3px solid #0891b2;margin:8px auto;display:block" />`;
+    }
+  }
 
   document.getElementById('qr-modal-title').textContent = `📱 PIX — Pedido #${orderId}`;
   
   let html = `<div style="font-weight:700;font-size:16px;margin:8px 0">${nome}</div>`;
   html += `<div style="font-size:28px;font-weight:900;color:#0891b2;margin:8px 0">R$ ${valor}</div>`;
   
-  if(qrImgSrc){
-    html += `<img src="${qrImgSrc}" alt="QR Code PIX" style="width:220px;height:220px;border-radius:8px;border:3px solid #0891b2;margin:8px auto;display:block" />`;
+  if(qrImgHtml){
+    html += qrImgHtml;
   }
   
   if(qrCode){
@@ -484,10 +494,22 @@ async function enviarPixWhats(orderId){
 }
 
 // ═══ LEMBRETES PIX ═══
-async function enviarLembrete(orderId){
-  if(!confirm('Enviar lembrete PIX WhatsApp para pedido #'+orderId+'?'))return;
+async function enviarLembrete(orderId, force){
+  if(!force && !confirm('Enviar lembrete PIX WhatsApp para pedido #'+orderId+'?'))return;
   showLoading('Enviando lembrete...');
-  try{const d=await api('/api/lembretes/enviar/'+orderId,{method:'POST'});hideLoading();if(d.ok){toast('📱 Lembrete #'+d.envio_num+' enviado!');loadPagamentos();}else{toast('❌ '+(d.error||'Falha'),'error');}}catch(e){hideLoading();toast(e.message,'error');}
+  try{
+    const opts = {method:'POST'};
+    if(force) opts.body = JSON.stringify({force:true});
+    const d=await api('/api/lembretes/enviar/'+orderId, opts);
+    hideLoading();
+    if(d.ok){toast('📱 Lembrete enviado!');loadPagamentos();}
+    else if(d.limite_atingido){
+      if(confirm('⚠️ Limite de '+d.count+' lembretes atingido.\n\nEnviar mesmo assim?')){
+        enviarLembrete(orderId, true);
+      }
+    }
+    else{toast('❌ '+(d.error||'Falha'),'error');}
+  }catch(e){hideLoading();toast(e.message,'error');}
 }
 async function bulkEnviarLembrete(){
   const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&p.tipo_pagamento==='pix_receber'&&p.phone_digits;});
