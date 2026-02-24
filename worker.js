@@ -1,6 +1,7 @@
-// v2.33.0
+// v2.37.0
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.37.0: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
@@ -400,154 +401,78 @@ async function deletarVendaBling(env, orderId, blingPedidoId) {
   return { ok: false, status: resp.status, error: errText.substring(0, 300) };
 }
 
-// ── CORA PIX — Cobrança automática via QR Code ─────────────
-// v2.31.0: Integração Direta (mTLS) com Cora para PIX receber
-// Requer binding CORA_CERT (mTLS certificate) no wrangler.toml
-// e secret CORA_CLIENT_ID no Cloudflare
+// ── PUSHINPAY PIX — Cobrança automática via QR Code ─────────────
+// v2.34.0: Integração PushInPay (substituiu Cora)
+// API simples: POST /api/pix/cashIn → retorna QR Code imediato
+// Webhook: POST automático quando pagamento confirmado
+// Secret: PUSHINPAY_TOKEN no Cloudflare
 
-const CORA_API_BASE = 'https://matls-clients.api.cora.com.br';
+const PUSHINPAY_API = 'https://api.pushinpay.com.br';
 
-function isCoraConfigured(env) {
-  return !!(env.CORA_CERT && env.CORA_CLIENT_ID);
+function isPixConfigured(env) {
+  return !!env.PUSHINPAY_TOKEN;
 }
 
-async function getCoraToken(env) {
-  // Check cached token
-  const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_access_token'").first().catch(() => null);
-  const expRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_token_expires'").first().catch(() => null);
+async function pushInPayCreateCharge(env, orderId, totalValue) {
+  const amountCentavos = Math.round(parseFloat(totalValue) * 100);
+  if (amountCentavos < 100) throw new Error('Valor mínimo PIX: R$1,00');
 
-  if (row?.value && expRow?.value) {
-    const expires = parseInt(expRow.value);
-    if (Date.now() / 1000 < expires - 300) return row.value; // 5min buffer
-  }
+  const webhookUrl = 'https://api.moskogas.com.br/api/webhooks/pushinpay';
 
-  // Request new token via mTLS
-  const resp = await env.CORA_CERT.fetch(`${CORA_API_BASE}/token`, {
+  console.log(`[PushInPay] Criando cobrança pedido #${orderId} - R$${(amountCentavos / 100).toFixed(2)}`);
+
+  const resp = await fetch(`${PUSHINPAY_API}/api/pix/cashIn`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=client_credentials&client_id=${env.CORA_CLIENT_ID}`,
-  });
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => '');
-    console.error('[Cora] Token error:', resp.status, errText);
-    throw new Error(`Cora auth failed: ${resp.status} - ${errText.substring(0, 200)}`);
-  }
-
-  const data = await resp.json();
-  const token = data.access_token;
-  const expiresAt = Math.floor(Date.now() / 1000) + (data.expires_in || 86400);
-
-  // Cache in DB
-  await env.DB.prepare("INSERT INTO app_config (key, value, updated_at) VALUES ('cora_access_token', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at").bind(token).run().catch(() => {});
-  await env.DB.prepare("INSERT INTO app_config (key, value, updated_at) VALUES ('cora_token_expires', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at").bind(String(expiresAt)).run().catch(() => {});
-
-  console.log('[Cora] Token renovado, expira em', data.expires_in, 's');
-  return token;
-}
-
-async function coraFetch(path, options = {}, env) {
-  const token = await getCoraToken(env);
-  const url = `${CORA_API_BASE}${path}`;
-  return env.CORA_CERT.fetch(url, {
-    ...options,
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${env.PUSHINPAY_TOKEN}`,
       'Content-Type': 'application/json',
-      ...(options.headers || {}),
     },
+    body: JSON.stringify({
+      value: amountCentavos,
+      webhook_url: webhookUrl,
+    }),
   });
-}
-
-async function coraCreatePixInvoice(env, orderId, orderData) {
-  const { customer_name, total_value, items, phone_digits } = orderData;
-
-  const amountCentavos = Math.round(parseFloat(total_value) * 100);
-  if (amountCentavos <= 0) throw new Error('Valor do pedido inválido para cobrança PIX');
-
-  // Vencimento: 3 dias a partir de hoje
-  const dueDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  const itemsDesc = (items || []).map(i => {
-    const qty = i.qty || i.quantidade || 1;
-    const name = i.name || i.nome || 'Produto';
-    return `${qty}x ${name}`;
-  }).join(', ');
-
-  // Buscar CPF/CNPJ do cliente no cache
-  let customerDoc = null;
-  if (phone_digits) {
-    const cached = await env.DB.prepare('SELECT cpf_cnpj FROM customers_cache WHERE phone_digits=?')
-      .bind(phone_digits).first().catch(() => null);
-    if (cached?.cpf_cnpj && cached.cpf_cnpj.replace(/\D/g, '').length >= 11) {
-      customerDoc = cached.cpf_cnpj.replace(/\D/g, '');
-    }
-  }
-
-  // Fallback: CNPJ da MoskoGás (consumidor final sem CPF)
-  if (!customerDoc) {
-    const cfgDoc = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_fallback_document'")
-      .first().catch(() => null);
-    customerDoc = cfgDoc?.value || '12977901000117'; // CNPJ MoskoGás (Mosko Ltda)
-  }
-
-  const body = {
-    code: `moskogas-${orderId}-${Date.now()}`,
-    customer: {
-      name: customer_name || 'Cliente MoskoGás',
-      document: { identity: customerDoc, type: customerDoc.length > 11 ? 'CNPJ' : 'CPF' },
-    },
-    services: [{
-      name: `MoskoGás — Pedido #${orderId}`,
-      description: itemsDesc || 'Gás/Água',
-      amount: amountCentavos,
-    }],
-    payment_terms: {
-      due_date: dueDate,
-    },
-    payment_forms: ['BANK_SLIP', 'PIX'],
-  };
-
-  console.log('[Cora] Criando invoice para pedido', orderId, '- R$', (amountCentavos / 100).toFixed(2), '- Doc:', customerDoc.substring(0, 4) + '...');
-
-  const resp = await coraFetch('/v2/invoices', {
-    method: 'POST',
-    headers: { 'Idempotency-Key': crypto.randomUUID() },
-    body: JSON.stringify(body),
-  }, env);
 
   const respText = await resp.text();
-  let respData;
-  try { respData = JSON.parse(respText); } catch { respData = null; }
+  let data;
+  try { data = JSON.parse(respText); } catch { data = null; }
 
   if (!resp.ok) {
-    console.error('[Cora] Invoice error:', resp.status, respText.substring(0, 500));
-    throw new Error(`Cora invoice ${resp.status}: ${respText.substring(0, 300)}`);
+    console.error(`[PushInPay] Erro ${resp.status}:`, respText.substring(0, 500));
+    throw new Error(`PushInPay ${resp.status}: ${(data?.message || respText).substring(0, 300)}`);
   }
 
-  console.log('[Cora] Invoice criado:', JSON.stringify(respData).substring(0, 500));
+  console.log(`[PushInPay] Cobrança criada: ${data?.id} - status: ${data?.status}`);
 
-  // Extrair ID do invoice
-  const invoiceId = respData?.id || respData?.data?.id || null;
-
-  // QR Code PIX é incluído automaticamente se conta Cora tem chave PIX cadastrada
-  // Sem chave PIX → pix: null (apenas boleto com código de barras)
-  const brCode = respData?.pix?.emv || respData?.pix?.qr_code || respData?.pix?.br_code || null;
-  const qrImageUrl = respData?.pix?.qr_code_url || respData?.pix?.image_url || null;
-  const bankSlipUrl = respData?.payment_options?.bank_slip?.url || null;
-
-  await logEvent(env, orderId, 'cora_invoice_created', {
-    cora_invoice_id: invoiceId,
-    has_brcode: !!brCode,
-    has_qr_image: !!qrImageUrl,
-    response_keys: Object.keys(respData || {}),
+  await logEvent(env, orderId, 'pushinpay_charge_created', {
+    pushinpay_tx_id: data?.id,
+    value: amountCentavos,
+    has_qrcode: !!data?.qr_code,
   });
 
-  return { invoice_id: invoiceId, brCode, qr_image_url: qrImageUrl, bankSlipUrl, raw: respData };
+  return {
+    tx_id: data?.id || null,
+    qr_code: data?.qr_code || null,
+    qr_code_base64: data?.qr_code_base64 || null,
+    status: data?.status || 'created',
+  };
 }
 
-async function ensureCoraColumns(env) {
+async function pushInPayCheckStatus(env, txId) {
+  const resp = await fetch(`${PUSHINPAY_API}/api/transactions/${txId}`, {
+    headers: { 'Authorization': `Bearer ${env.PUSHINPAY_TOKEN}` },
+  });
+  if (!resp.ok) throw new Error(`PushInPay status check failed: ${resp.status}`);
+  return resp.json();
+}
+
+async function ensurePixColumns(env) {
   const cols = [
+    { name: 'pix_tx_id', def: 'TEXT' },
+    { name: 'pix_qrcode', def: 'TEXT' },
+    { name: 'pix_qrcode_base64', def: 'TEXT' },
+    { name: 'pix_paid_at', def: 'INTEGER' },
+    // Legacy Cora columns
     { name: 'cora_invoice_id', def: 'TEXT' },
     { name: 'cora_qrcode', def: 'TEXT' },
     { name: 'cora_paid_at', def: 'INTEGER' },
@@ -879,8 +804,8 @@ function buildLembreteMessage(template, order, config) {
 
   const chavePix = config?.chave_pix || '(chave PIX não configurada)';
 
-  // v2.32.5: {pix_copia_cola} — código PIX copia e cola (se existir QR gerado)
-  const pixCopiaCola = order.cora_qrcode || '';
+  // {pix_copia_cola} — código PIX copia e cola (PushInPay ou legacy Cora)
+  const pixCopiaCola = order.pix_qrcode || order.cora_qrcode || '';
   const pixBlock = pixCopiaCola
     ? `\n\n📋 *PIX Copia e Cola:*\n${pixCopiaCola}`
     : '';
@@ -896,22 +821,22 @@ function buildLembreteMessage(template, order, config) {
     .replace(/\{pix_copia_cola\}/g, pixBlock.trim()); // opcional no template
 }
 
-async function enviarLembretePix(env, order, config, user) {
+async function enviarLembretePix(env, order, config, user, force = false) {
   await ensureAuditTable(env);
   const phone = formatPhoneWA(order.phone_digits);
   if (!phone) return { ok: false, order_id: order.id, error: 'Sem telefone válido' };
 
-  // Verificar limite de lembretes
+  // Verificar limite (skip se force=true)
   const countRow = await env.DB.prepare(
     'SELECT COUNT(*) as c FROM payment_reminders WHERE order_id=?'
   ).bind(order.id).first();
   const count = countRow?.c || 0;
-  if (config.max_lembretes > 0 && count >= config.max_lembretes) {
-    return { ok: false, order_id: order.id, error: `Limite de ${config.max_lembretes} lembretes atingido` };
+  if (config.max_lembretes > 0 && count >= config.max_lembretes && !force) {
+    return { ok: false, order_id: order.id, error: `Limite de ${config.max_lembretes} lembretes atingido`, limite_atingido: true, count };
   }
 
-  // Verificar intervalo mínimo
-  if (config.intervalo_horas > 0) {
+  // Verificar intervalo (skip se force=true)
+  if (config.intervalo_horas > 0 && !force) {
     const lastRow = await env.DB.prepare(
       'SELECT sent_at FROM payment_reminders WHERE order_id=? ORDER BY sent_at DESC LIMIT 1'
     ).bind(order.id).first();
@@ -924,25 +849,34 @@ async function enviarLembretePix(env, order, config, user) {
     }
   }
 
+  // Auto-gerar QR Code PushInPay se não tem ainda
+  const pixCode = order.pix_qrcode || order.cora_qrcode || null;
+  if (!pixCode && isPixConfigured(env)) {
+    try {
+      await ensurePixColumns(env);
+      const pixData = await pushInPayCreateCharge(env, order.id, order.total_value);
+      if (pixData.tx_id && pixData.qr_code) {
+        await env.DB.prepare('UPDATE orders SET pix_tx_id=?, pix_qrcode=?, pix_qrcode_base64=? WHERE id=?')
+          .bind(pixData.tx_id, pixData.qr_code, pixData.qr_code_base64 || '', order.id).run();
+        order.pix_qrcode = pixData.qr_code;
+      }
+    } catch (pe) {
+      console.error(`[lembrete] Erro ao gerar QR Code pedido #${order.id}:`, pe.message);
+    }
+  }
+
   const message = buildLembreteMessage(config.mensagem, order, config);
-  // v2.32.6: se {pix_copia_cola} estiver no template, já foi incluído. Senão, enviar só o texto principal limpo.
   const skipSafety = config.intervalo_horas === 0 && config.max_lembretes === 0;
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
 
-  // v2.32.9: segunda mensagem = imagem do QR Code, terceira = código puro para copiar
-  if (waResult.ok && order.cora_qrcode) {
+  // Segunda msg = imagem QR, terceira = código puro
+  const qrCode = order.pix_qrcode || order.cora_qrcode || null;
+  if (waResult.ok && qrCode) {
     await new Promise(r => setTimeout(r, 2000));
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(order.cora_qrcode)}`;
-    const imgResult = await sendWhatsAppImage(env, phone, qrUrl);
-    // Se imagem falhou, manda só o código texto mesmo
-    if (!imgResult.ok) {
-      await new Promise(r => setTimeout(r, 1500));
-      await sendWhatsApp(env, phone, order.cora_qrcode, { category: 'lembrete_pix', skipSafety });
-    } else {
-      // Terceira mensagem: código puro para quem preferir copiar
-      await new Promise(r => setTimeout(r, 2000));
-      await sendWhatsApp(env, phone, order.cora_qrcode, { category: 'lembrete_pix', skipSafety });
-    }
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qrCode)}`;
+    await sendWhatsAppImage(env, phone, qrUrl);
+    await new Promise(r => setTimeout(r, 2000));
+    await sendWhatsApp(env, phone, qrCode, { category: 'lembrete_pix', skipSafety: true });
   }
 
   const tipo = user ? 'manual' : 'cron';
@@ -966,6 +900,7 @@ async function enviarLembretePix(env, order, config, user) {
 async function processarLembretesCron(env) {
   try {
     await ensureAuditTable(env);
+    await ensurePixColumns(env);
     const config = await getLembreteConfig(env);
     if (!config.ativo || !config.cron_ativo) {
       console.log('[lembrete-cron] Desativado nas configs');
@@ -975,7 +910,7 @@ async function processarLembretesCron(env) {
     // Buscar pedidos PIX pendentes entregues com telefone
     const rows = await env.DB.prepare(`
       SELECT o.id, o.customer_name, o.phone_digits, o.total_value, o.items_json,
-             o.created_at, o.delivered_at,
+             o.created_at, o.delivered_at, o.pix_tx_id, o.pix_qrcode, o.cora_qrcode,
              (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
              (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
       FROM orders o
@@ -2698,26 +2633,24 @@ export default {
           VALUES (?, ?, ?, ?, datetime('now'))`).bind(phone, customerName, addressLine, bairro).run().catch(() => {});
       }
 
-      // 5) v2.31.0: Cora PIX para venda externa pix_receber
-      let coraResult = null;
-      if (tipoPagamento === 'pix_receber' && isCoraConfigured(env)) {
+      // 5) PushInPay PIX para venda externa pix_receber
+      let pixResult = null;
+      if (tipoPagamento === 'pix_receber' && isPixConfigured(env)) {
         try {
-          await ensureCoraColumns(env);
-          const coraData = await coraCreatePixInvoice(env, orderId, {
-            customer_name: customerName, total_value: totalValue, items, phone_digits: phone,
-          });
-          if (coraData.invoice_id) {
-            await env.DB.prepare('UPDATE orders SET cora_invoice_id=?, cora_qrcode=? WHERE id=?')
-              .bind(coraData.invoice_id, coraData.brCode || '', orderId).run();
-            coraResult = { created: true, invoice_id: coraData.invoice_id, qrcode: coraData.brCode };
+          await ensurePixColumns(env);
+          const pixData = await pushInPayCreateCharge(env, orderId, totalValue);
+          if (pixData.tx_id) {
+            await env.DB.prepare('UPDATE orders SET pix_tx_id=?, pix_qrcode=?, pix_qrcode_base64=? WHERE id=?')
+              .bind(pixData.tx_id, pixData.qr_code || '', pixData.qr_code_base64 || '', orderId).run();
+            pixResult = { created: true, tx_id: pixData.tx_id, qrcode: pixData.qr_code };
           }
-        } catch (ce) {
-          coraResult = { error: ce.message };
-          await logEvent(env, orderId, 'cora_error_venda_ext', { error: ce.message });
+        } catch (pe) {
+          pixResult = { error: pe.message };
+          await logEvent(env, orderId, 'pushinpay_error_venda_ext', { error: pe.message });
         }
       }
 
-      return json({ ok: true, id: orderId, status: 'entregue', pago, bling_result: blingResult, cora_result: coraResult });
+      return json({ ok: true, id: orderId, status: 'entregue', pago, bling_result: blingResult, pix_result: pixResult });
     }
 
     // [REMOVIDO v2.12.0] POST /api/order/:id/gerar-nfce — NFCe não existe na API Bling v3
@@ -3132,28 +3065,21 @@ export default {
         }
       }
 
-      // ── v2.31.0: Cora PIX — gerar cobrança QR para pix_receber ──
-      let coraResult = null;
-      if (tipoFinal === 'pix_receber' && isCoraConfigured(env)) {
+      // ── PushInPay PIX — gerar cobrança QR para pix_receber ──
+      let pixResult = null;
+      if (tipoFinal === 'pix_receber' && isPixConfigured(env)) {
         try {
-          await ensureCoraColumns(env);
-          const items = JSON.parse(order.items_json || '[]');
-          const coraData = await coraCreatePixInvoice(env, id, {
-            customer_name: order.customer_name,
-            total_value: order.total_value,
-            items,
-            phone_digits: order.phone_digits,
-          });
-          if (coraData.invoice_id) {
-            sql += `, cora_invoice_id=?, cora_qrcode=?`;
-            params.push(coraData.invoice_id, coraData.brCode || '');
-            coraResult = { created: true, invoice_id: coraData.invoice_id, has_qr: !!coraData.brCode };
+          await ensurePixColumns(env);
+          const pixData = await pushInPayCreateCharge(env, id, order.total_value);
+          if (pixData.tx_id) {
+            sql += `, pix_tx_id=?, pix_qrcode=?, pix_qrcode_base64=?`;
+            params.push(pixData.tx_id, pixData.qr_code || '', pixData.qr_code_base64 || '');
+            pixResult = { created: true, tx_id: pixData.tx_id, has_qr: !!pixData.qr_code };
           }
-        } catch (ce) {
-          console.error('[Deliver] Erro criar Cora PIX:', ce.message);
-          coraResult = { created: false, error: ce.message };
-          await logEvent(env, id, 'cora_error_on_deliver', { error: ce.message });
-          // NÃO bloqueia entrega
+        } catch (pe) {
+          console.error('[Deliver] Erro criar PushInPay PIX:', pe.message);
+          pixResult = { created: false, error: pe.message };
+          await logEvent(env, id, 'pushinpay_error_on_deliver', { error: pe.message });
         }
       }
 
@@ -3167,7 +3093,7 @@ export default {
         observacao: obsEntregador,
       });
 
-      return json({ ok: true, status: 'entregue', foto_key: photoKey, bling_result: blingResult, cora_result: coraResult });
+      return json({ ok: true, status: 'entregue', foto_key: photoKey, bling_result: blingResult, pix_result: pixResult });
     }
 
     const cancelMatch = path.match(/^\/api\/order\/(\d+)\/cancel$/);
@@ -3373,13 +3299,14 @@ export default {
     
     if (method === 'GET' && path === '/api/pagamentos') {
       await ensureAuditTable(env);
-      await ensureCoraColumns(env);
+      await ensurePixColumns(env);
       const rows = await env.DB.prepare(`
         SELECT 
           o.id, o.customer_name, o.phone_digits, o.address_line, o.total_value, 
           o.tipo_pagamento, o.pago, o.bling_pedido_id, o.bling_pedido_num,
           o.created_at, o.delivered_at, o.status, o.items_json, o.bairro,
           o.forma_pagamento_key, o.forma_pagamento_id,
+          o.pix_tx_id, o.pix_qrcode, o.pix_qrcode_base64, o.pix_paid_at,
           o.cora_invoice_id, o.cora_qrcode, o.cora_paid_at,
           cc.bling_contact_id,
           (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
@@ -3451,72 +3378,45 @@ export default {
       return json({ ok: true });
     }
 
-    // ── v2.31.0: Cora PIX — QR Code do pedido ──────────────────
+    // ── PushInPay PIX — QR Code do pedido ──────────────────
     const qrMatch = path.match(/^\/api\/pagamentos\/(\d+)\/qrcode$/);
     if (method === 'GET' && qrMatch) {
       const orderId = parseInt(qrMatch[1]);
-      await ensureCoraColumns(env);
-      const order = await env.DB.prepare('SELECT cora_invoice_id, cora_qrcode, cora_paid_at, total_value, customer_name FROM orders WHERE id=?').bind(orderId).first();
+      await ensurePixColumns(env);
+      const order = await env.DB.prepare('SELECT pix_tx_id, pix_qrcode, pix_qrcode_base64, pix_paid_at, cora_invoice_id, cora_qrcode, cora_paid_at, total_value, customer_name FROM orders WHERE id=?').bind(orderId).first();
       if (!order) return err('Pedido não encontrado', 404);
       return json({
         ok: true,
-        cora_invoice_id: order.cora_invoice_id || null,
-        qrcode: order.cora_qrcode || null,
-        paid: !!order.cora_paid_at,
+        qrcode: order.pix_qrcode || order.cora_qrcode || null,
+        qrcode_base64: order.pix_qrcode_base64 || null,
+        paid: !!(order.pix_paid_at || order.cora_paid_at),
         total_value: order.total_value,
         customer_name: order.customer_name,
+        provider: order.pix_tx_id ? 'pushinpay' : (order.cora_invoice_id ? 'cora_legacy' : null),
       });
     }
 
-    // ── v2.31.0: Cora PIX — (Re)gerar cobrança PIX ─────────────
+    // ── PushInPay PIX — (Re)gerar cobrança PIX ─────────────
     const gerarPixMatch = path.match(/^\/api\/pagamentos\/(\d+)\/gerar-pix$/);
     if (method === 'POST' && gerarPixMatch) {
       const orderId = parseInt(gerarPixMatch[1]);
-      if (!isCoraConfigured(env)) return err('Cora PIX não configurada (mTLS binding ausente)', 400);
+      if (!isPixConfigured(env)) return err('PushInPay PIX não configurada (PUSHINPAY_TOKEN ausente)', 400);
 
-      await ensureCoraColumns(env);
+      await ensurePixColumns(env);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
       if (!order) return err('Pedido não encontrado', 404);
       if (order.pago === 1) return json({ ok: true, message: 'Pedido já está pago' });
-      if (order.cora_paid_at) return json({ ok: true, message: 'PIX já confirmado pela Cora' });
-
-      // v2.32.3: Cora exige mínimo R$5,00 — verificar antes de chamar a API
-      const valorCentavos = Math.round(parseFloat(order.total_value || 0) * 100);
-      if (valorCentavos < 500) {
-        return json({ ok: false, error: `Cora PIX exige valor mínimo de R$5,00. Este pedido tem R$${parseFloat(order.total_value).toFixed(2)}. Use o botão de lembrete para cobrar manualmente por WhatsApp.` });
-      }
+      if (order.pix_paid_at) return json({ ok: true, message: 'PIX já confirmado' });
 
       try {
-        const items = JSON.parse(order.items_json || '[]');
-        const coraData = await coraCreatePixInvoice(env, orderId, {
-          customer_name: order.customer_name,
-          total_value: order.total_value,
-          items,
-          phone_digits: order.phone_digits,
-        });
-
-        if (coraData.invoice_id) {
-          await env.DB.prepare('UPDATE orders SET cora_invoice_id=?, cora_qrcode=? WHERE id=?')
-            .bind(coraData.invoice_id, coraData.brCode || '', orderId).run();
+        const pixData = await pushInPayCreateCharge(env, orderId, order.total_value);
+        if (pixData.tx_id) {
+          await env.DB.prepare('UPDATE orders SET pix_tx_id=?, pix_qrcode=?, pix_qrcode_base64=? WHERE id=?')
+            .bind(pixData.tx_id, pixData.qr_code || '', pixData.qr_code_base64 || '', orderId).run();
         }
-
-        return json({
-          ok: true,
-          invoice_id: coraData.invoice_id,
-          qrcode: coraData.brCode || null,
-          qr_image_url: coraData.qr_image_url || null,
-          bank_slip_url: coraData.bankSlipUrl || null,
-          pix_disponivel: !!coraData.brCode,
-          cora_pix_raw: coraData.raw?.pix || null,
-          cora_payment_options: coraData.raw?.payment_options || null,
-        });
+        return json({ ok: true, tx_id: pixData.tx_id, qrcode: pixData.qr_code || null, qrcode_base64: pixData.qr_code_base64 || null, pix_disponivel: !!pixData.qr_code });
       } catch (e) {
-        // Tratar erro da Cora com mensagem amigável
-        const msg = e.message || '';
-        if (msg.includes('500') || msg.includes('amount')) {
-          return json({ ok: false, error: `Cora PIX: valor mínimo é R$5,00. Pedido com R$${parseFloat(order.total_value).toFixed(2)} não pode gerar QR Code.` });
-        }
-        return json({ ok: false, error: msg }, 500);
+        return json({ ok: false, error: e.message }, 500);
       }
     }
 
@@ -3708,14 +3608,16 @@ export default {
       if (authCheck instanceof Response) return authCheck;
       const user = await getSessionUser(request, env);
       const orderId = parseInt(lembreteMatch[1]);
+      let body = {}; try { body = await request.json(); } catch(_) {}
+      const force = body.force === true;
       const order = await env.DB.prepare(
         "SELECT * FROM orders WHERE id=? AND tipo_pagamento='pix_receber' AND pago=0 AND status='entregue'"
       ).bind(orderId).first();
       if (!order) return err('Pedido não encontrado ou não é PIX pendente', 404);
       const config = await getLembreteConfig(env);
       if (!config.ativo) return err('Lembretes PIX estão desativados', 400);
-      const result = await enviarLembretePix(env, order, config, user);
-      return json(result, 200); // sempre 200 — ok:false carrega a mensagem de erro
+      const result = await enviarLembretePix(env, order, config, user, force);
+      return json(result, 200);
     }
 
     // POST /api/lembretes/enviar-bulk — enviar lembretes em lote
@@ -4291,270 +4193,115 @@ export default {
     }
 
     // ══════════════════════════════════════════════════════════════
-    // ── CORA PIX — Webhook (PÚBLICO — sem auth) ──────────────────
+    // ── PUSHINPAY PIX — Webhook (PÚBLICO — sem auth) ─────────────
     // ══════════════════════════════════════════════════════════════
 
-    // ── Cora webhook GET — validação de endpoint ──────────────
-    if (method === 'GET' && path === '/api/webhooks/cora') {
-      return json({ ok: true, status: 'active', service: 'moskogas' });
-    }
-
-    if (method === 'POST' && path === '/api/webhooks/cora') {
+    if (method === 'POST' && path === '/api/webhooks/pushinpay') {
       try {
-        await ensureCoraColumns(env);
-        // Cora envia dados nos headers (não no body)
-        const eventId = request.headers.get('webhook-event-id') || '';
-        const eventType = request.headers.get('webhook-event-type') || '';
-        const resourceId = request.headers.get('webhook-resource-id') || '';
+        await ensurePixColumns(env);
+        const bodyData = await request.json().catch(() => null);
+        if (!bodyData) return json({ ok: true, ignored: 'empty body' });
 
-        console.log(`[cora-webhook] Event: ${eventType}, Resource: ${resourceId}, EventId: ${eventId}`);
+        const txId = bodyData.id;
+        const status = bodyData.status;
+        const endToEnd = bodyData.end_to_end_id || '';
+        console.log(`[pushinpay-webhook] tx=${txId}, status=${status}, e2e=${endToEnd}`);
 
-        // Também tenta ler body (caso Cora mude o formato)
-        let bodyData = null;
-        try { bodyData = await request.json(); } catch { bodyData = null; }
-        if (bodyData) console.log('[cora-webhook] Body:', JSON.stringify(bodyData).substring(0, 500));
+        if (!txId) return json({ ok: true, ignored: 'no tx id' });
+        if (status !== 'paid') return json({ ok: true, ignored: `status=${status}` });
 
-        if (!resourceId && !bodyData) {
-          return json({ ok: true, ignored: 'no resource id and no body' });
-        }
-
-        // Determinar invoice_id
-        const invoiceId = resourceId || bodyData?.id || bodyData?.invoice?.id || bodyData?.data?.id || null;
-        if (!invoiceId) return json({ ok: true, ignored: 'no invoice id found' });
-
-        // Buscar pedido pelo cora_invoice_id
+        // Buscar pedido pelo pix_tx_id
         const order = await env.DB.prepare(
-          'SELECT id, pago, status, tipo_pagamento, cora_paid_at FROM orders WHERE cora_invoice_id = ?'
-        ).bind(invoiceId).first();
+          'SELECT id, pago, status, tipo_pagamento, pix_paid_at, bling_pedido_id FROM orders WHERE pix_tx_id = ?'
+        ).bind(txId).first();
 
         if (!order) {
-          console.log(`[cora-webhook] No order found for invoice ${invoiceId}`);
-          return json({ ok: true, ignored: 'order not found for this invoice' });
+          console.log(`[pushinpay-webhook] No order found for tx ${txId}`);
+          return json({ ok: true, ignored: 'order not found' });
         }
 
-        // Evento: invoice.paid
-        if (eventType === 'invoice.paid' || bodyData?.event === 'invoice.paid' || bodyData?.status === 'PAID') {
-          if (order.pago === 1 || order.cora_paid_at) {
-            console.log(`[cora-webhook] Order #${order.id} already paid, ignoring duplicate`);
-            return json({ ok: true, ignored: 'already paid' });
-          }
+        if (order.pago === 1 || order.pix_paid_at) {
+          console.log(`[pushinpay-webhook] Order #${order.id} already paid`);
+          return json({ ok: true, ignored: 'already paid' });
+        }
 
-          // Marcar pago
-          await env.DB.prepare(
-            'UPDATE orders SET pago=1, cora_paid_at=unixepoch() WHERE id=?'
-          ).bind(order.id).run();
+        // Marcar pago
+        await env.DB.prepare('UPDATE orders SET pago=1, pix_paid_at=unixepoch() WHERE id=?').bind(order.id).run();
+        await logEvent(env, order.id, 'pushinpay_pix_confirmed', { tx_id: txId, end_to_end: endToEnd });
 
-          await logEvent(env, order.id, 'cora_pix_confirmed', {
-            cora_invoice_id: invoiceId,
-            event_id: eventId,
-            event_type: eventType,
-          });
-
-          // Criar Bling se ainda não tem
-          let blingResult = null;
-          if (!order.bling_pedido_id) {
-            try {
-              const fullOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(order.id).first();
-              const cached = fullOrder?.phone_digits
-                ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(fullOrder.phone_digits).first()
-                : null;
-              let vendBlingId = null, vendNome = fullOrder?.vendedor_nome || '';
-              if (fullOrder?.vendedor_id) {
-                const vendUser = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(fullOrder.vendedor_id).first().catch(() => null);
-                if (vendUser?.bling_vendedor_id) vendBlingId = vendUser.bling_vendedor_id;
-                if (vendUser?.nome) vendNome = vendUser.nome;
-              }
-              const blingData = await criarPedidoBling(env, order.id, {
-                name: fullOrder?.customer_name,
-                items: JSON.parse(fullOrder?.items_json || '[]'),
-                total_value: fullOrder?.total_value,
-                tipo_pagamento: fullOrder?.tipo_pagamento,
-                bling_contact_id: cached?.bling_contact_id || null,
-                cpf_cnpj: cached?.cpf_cnpj || null,
-                bling_vendedor_id: vendBlingId,
-                vendedor_nome: vendNome,
-              });
-              await env.DB.prepare(
-                'UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?'
-              ).bind(blingData.bling_pedido_id, blingData.bling_pedido_num, 'synced', order.id).run();
-              blingResult = { created: true, id: blingData.bling_pedido_id };
-            } catch (be) {
-              console.error('[cora-webhook] Bling error:', be.message);
-              blingResult = { error: be.message };
-            }
-          }
-
-          // WhatsApp admin: PIX confirmado
+        // Criar Bling se ainda não tem
+        let blingResult = null;
+        if (!order.bling_pedido_id) {
           try {
-            const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1").all();
-            const adminPhones = (admins.results || []).map(a => a.telefone).filter(Boolean);
-            const fullOrder = await env.DB.prepare('SELECT customer_name, total_value FROM orders WHERE id=?').bind(order.id).first();
-            const valor = parseFloat(fullOrder?.total_value || 0).toFixed(2);
-            const msg = `✅ *PIX CONFIRMADO* — Pedido #${order.id}\n\n💰 R$ ${valor} — ${fullOrder?.customer_name || 'Cliente'}\n\nPagamento via Cora PIX recebido com sucesso.`;
-            for (const phone of adminPhones) {
-              await sendWhatsApp(env, phone, msg, { category: 'admin_alerta' });
+            const fullOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(order.id).first();
+            const cached = fullOrder?.phone_digits
+              ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(fullOrder.phone_digits).first()
+              : null;
+            let vendBlingId = null, vendNome = fullOrder?.vendedor_nome || '';
+            if (fullOrder?.vendedor_id) {
+              const vendUser = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(fullOrder.vendedor_id).first().catch(() => null);
+              if (vendUser?.bling_vendedor_id) vendBlingId = vendUser.bling_vendedor_id;
+              if (vendUser?.nome) vendNome = vendUser.nome;
             }
-          } catch (we) {
-            console.error('[cora-webhook] WhatsApp admin error:', we.message);
+            const blingData = await criarPedidoBling(env, order.id, {
+              name: fullOrder?.customer_name,
+              items: JSON.parse(fullOrder?.items_json || '[]'),
+              total_value: fullOrder?.total_value,
+              tipo_pagamento: fullOrder?.tipo_pagamento,
+              bling_contact_id: cached?.bling_contact_id || null,
+              cpf_cnpj: cached?.cpf_cnpj || null,
+              bling_vendedor_id: vendBlingId,
+              vendedor_nome: vendNome,
+            });
+            await env.DB.prepare(
+              'UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?'
+            ).bind(blingData.bling_pedido_id, blingData.bling_pedido_num, 'synced', order.id).run();
+            blingResult = { created: true, id: blingData.bling_pedido_id };
+          } catch (be) {
+            console.error('[pushinpay-webhook] Bling error:', be.message);
+            blingResult = { error: be.message };
           }
-
-          console.log(`[cora-webhook] Order #${order.id} marked as paid`);
-          return json({ ok: true, order_id: order.id, action: 'marked_paid', bling: blingResult });
         }
 
-        // Outros eventos (cancelamento, etc) — apenas log
-        await logEvent(env, order.id, 'cora_webhook_other', { event_type: eventType, event_id: eventId });
-        return json({ ok: true, logged: true });
+        // WhatsApp admin: PIX confirmado
+        try {
+          const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1").all();
+          const adminPhones = (admins.results || []).map(a => a.telefone).filter(Boolean);
+          const fullOrder = await env.DB.prepare('SELECT customer_name, total_value FROM orders WHERE id=?').bind(order.id).first();
+          const valor = parseFloat(fullOrder?.total_value || 0).toFixed(2);
+          const msg = `✅ *PIX CONFIRMADO* — Pedido #${order.id}\n\n💰 R$ ${valor} — ${fullOrder?.customer_name || 'Cliente'}\n\nPagamento PIX recebido com sucesso.`;
+          for (const phone of adminPhones) {
+            await sendWhatsApp(env, phone, msg, { category: 'admin_alerta' });
+          }
+        } catch (we) {
+          console.error('[pushinpay-webhook] WhatsApp admin error:', we.message);
+        }
+
+        console.log(`[pushinpay-webhook] Order #${order.id} marked as paid`);
+        return json({ ok: true, order_id: order.id, action: 'marked_paid', bling: blingResult });
 
       } catch (e) {
-        console.error('[cora-webhook] Error:', e.message);
+        console.error('[pushinpay-webhook] Error:', e.message);
         return json({ ok: false, error: e.message }, 500);
       }
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // ── CORA PIX — Admin endpoints ──────────────────────────────
-    // ══════════════════════════════════════════════════════════════
-
-    if (method === 'GET' && path === '/api/cora/status') {
-      const configured = isCoraConfigured(env);
-      let tokenOk = false;
-      let tokenExpires = null;
-      if (configured) {
-        try {
-          const expRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='cora_token_expires'").first().catch(() => null);
-          tokenExpires = expRow?.value ? parseInt(expRow.value) : null;
-          tokenOk = tokenExpires && (Date.now() / 1000 < tokenExpires);
-        } catch {}
-      }
-      await ensureCoraColumns(env);
+    // ── PushInPay PIX — Status endpoint ──────────────────────────
+    if (method === 'GET' && (path === '/api/pix/status' || path === '/api/cora/status')) {
+      await ensurePixColumns(env);
       const stats = await env.DB.prepare(`
         SELECT 
-          COUNT(*) as total_invoices,
-          SUM(CASE WHEN cora_paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid,
-          SUM(CASE WHEN cora_paid_at IS NULL AND pago=0 THEN 1 ELSE 0 END) as pending
-        FROM orders WHERE cora_invoice_id IS NOT NULL
-      `).first().catch(() => ({ total_invoices: 0, paid: 0, pending: 0 }));
-
-      return json({
-        configured,
-        token_valid: tokenOk,
-        token_expires: tokenExpires,
-        client_id: env.CORA_CLIENT_ID ? env.CORA_CLIENT_ID.substring(0, 10) + '...' : null,
-        stats,
-      });
+          COUNT(*) as total,
+          SUM(CASE WHEN pix_paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid,
+          SUM(CASE WHEN pix_paid_at IS NULL AND pago=0 THEN 1 ELSE 0 END) as pending
+        FROM orders WHERE pix_tx_id IS NOT NULL
+      `).first().catch(() => ({ total: 0, paid: 0, pending: 0 }));
+      return json({ provider: 'pushinpay', configured: isPixConfigured(env), stats, webhook_url: 'https://api.moskogas.com.br/api/webhooks/pushinpay' });
     }
 
-    // ── v2.31.3: Registrar webhook Cora (formato oficial docs) ──────
-    if (method === 'POST' && path === '/api/cora/register-webhook') {
-      if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
-      const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck instanceof Response) return authCheck;
-
-      try {
-        const webhookUrl = 'https://api.moskogas.com.br/api/webhooks/cora';
-        const idempotencyKey = crypto.randomUUID();
-
-        // Formato oficial da Cora (docs: developers.cora.com.br/reference/criação-de-endpoints)
-        // Body: { url, resource, trigger }
-        // Headers: Idempotency-Key obrigatório
-        const body = { url: webhookUrl, resource: 'invoice', trigger: 'paid' };
-
-        const resp = await coraFetch('/endpoints/', {
-          method: 'POST',
-          headers: {
-            'Idempotency-Key': idempotencyKey,
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify(body),
-        }, env);
-
-        const text = await resp.text();
-        let data; try { data = JSON.parse(text); } catch { data = text; }
-        const rh = {};
-        for (const [k, v] of resp.headers.entries()) rh[k] = v;
-
-        if (resp.ok) {
-          return json({ ok: true, webhook_registered: true, response: data });
-        }
-
-        return json({
-          ok: false,
-          error: `Cora ${resp.status}`,
-          details: data,
-          resp_headers: rh,
-          request_sent: { url: `${CORA_API_BASE}/endpoints/`, body, idempotency_key: idempotencyKey },
-          dica: resp.status === 400
-            ? 'Se 400 vazio, possíveis causas: (1) webhook já registrado (use list-webhooks), (2) URL não acessível externamente, (3) formato não aceito para Integração Direta'
-            : null,
-        }, resp.status);
-      } catch (e) {
-        return json({ ok: false, error: e.message }, 500);
-      }
-    }
-
-    // ── v2.31.3: Listar webhooks registrados na Cora ──────────────
-    if (method === 'GET' && path === '/api/cora/list-webhooks') {
-      if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
-      const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck instanceof Response) return authCheck;
-
-      try {
-        const resp = await coraFetch('/endpoints/', { method: 'GET', headers: { 'Accept': 'application/json' } }, env);
-        const text = await resp.text();
-        let data; try { data = JSON.parse(text); } catch { data = text; }
-        const rh = {};
-        for (const [k, v] of resp.headers.entries()) rh[k] = v;
-        return json({ ok: resp.ok, status: resp.status, data, resp_headers: rh });
-      } catch (e) {
-        return json({ ok: false, error: e.message }, 500);
-      }
-    }
-
-    // ── v2.31.3: Deletar webhook Cora por ID ──────────────────────
-    if (method === 'DELETE' && path.startsWith('/api/cora/delete-webhook/')) {
-      if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
-      const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck instanceof Response) return authCheck;
-
-      try {
-        const webhookId = path.replace('/api/cora/delete-webhook/', '');
-        if (!webhookId) return err('ID do webhook obrigatório', 400);
-
-        const resp = await coraFetch(`/endpoints/${webhookId}`, { method: 'DELETE' }, env);
-        const text = await resp.text();
-        let data; try { data = JSON.parse(text); } catch { data = text; }
-        return json({ ok: resp.ok, status: resp.status, deleted: webhookId, data });
-      } catch (e) {
-        return json({ ok: false, error: e.message }, 500);
-      }
-    }
-
-    if (method === 'POST' && path === '/api/cora/test-token') {
-      if (!isCoraConfigured(env)) return err('Cora não configurada (CORA_CERT e/ou CORA_CLIENT_ID ausentes)', 400);
-      try {
-        const token = await getCoraToken(env);
-        return json({ ok: true, token_preview: token.substring(0, 20) + '...', token_length: token.length });
-      } catch (e) {
-        return json({ ok: false, error: e.message }, 500);
-      }
-    }
-
-    // ── v2.31.6: Debug invoice Cora (ver resposta completa) ──────
-    const debugInvoiceMatch = path.match(/^\/api\/cora\/debug-invoice\/(.+)$/);
-    if (method === 'GET' && debugInvoiceMatch) {
-      if (!isCoraConfigured(env)) return err('Cora não configurada', 400);
-      const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck instanceof Response) return authCheck;
-      try {
-        const invId = debugInvoiceMatch[1];
-        const resp = await coraFetch(`/v2/invoices/${invId}`, { method: 'GET' }, env);
-        const text = await resp.text();
-        let data; try { data = JSON.parse(text); } catch { data = text; }
-        return json({ ok: resp.ok, status: resp.status, data });
-      } catch (e) {
-        return json({ ok: false, error: e.message }, 500);
-      }
+    // Legacy: manter /api/webhooks/cora respondendo
+    if (path === '/api/webhooks/cora') {
+      return json({ ok: true, message: 'Cora deprecated, use /api/webhooks/pushinpay' });
     }
 
     // ══════════════════════════════════════════════════════════════
