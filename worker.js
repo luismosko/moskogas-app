@@ -1,4 +1,4 @@
-// v2.32.6
+// v2.32.7
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -806,7 +806,7 @@ async function getLembreteConfig(env) {
     cron_hora_utc: 12,
     delay_segundos: 60,
     chave_pix: '',
-    mensagem: 'Olá {nome}! 👋\n\nDia {ontem} entregamos o seguinte pedido:\n{itens}\nValor: R$ {valor}\n\nAinda não identificamos o pagamento via PIX.\n\nSegue abaixo o código Copia e Cola para efetuar o PIX. 👇\n\nCaso já tenha sido pago, por gentileza nos envie o comprovante para darmos baixa.\n\n— MoskoGás 🔥'
+    mensagem: 'Olá {nome}! 👋\n\nEntregamos {ontem} o seguinte pedido:\n{itens}\nValor: R$ {valor}\n\nAinda não identificamos o pagamento via PIX.\n\nSegue abaixo o código Copia e Cola para efetuar o PIX. 👇\n\nCaso já tenha sido pago, por gentileza nos envie o comprovante para darmos baixa.\n\n— MoskoGás 🔥'
   };
   try {
     const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='lembrete_pix'").first();
