@@ -1,4 +1,4 @@
-// v2.32.4
+// v2.32.5
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -853,6 +853,12 @@ function buildLembreteMessage(template, order, config) {
 
   const chavePix = config?.chave_pix || '(chave PIX não configurada)';
 
+  // v2.32.5: {pix_copia_cola} — código PIX copia e cola (se existir QR gerado)
+  const pixCopiaCola = order.cora_qrcode || '';
+  const pixBlock = pixCopiaCola
+    ? `\n\n📋 *PIX Copia e Cola:*\n${pixCopiaCola}`
+    : '';
+
   return msg
     .replace(/\{nome\}/g, primeiroNome)
     .replace(/\{id\}/g, order.id)
@@ -860,7 +866,8 @@ function buildLembreteMessage(template, order, config) {
     .replace(/\{valor\}/g, parseFloat(order.total_value || 0).toFixed(2))
     .replace(/\{data_entrega\}/g, dataEntrega)
     .replace(/\{ontem\}/g, ontem)
-    .replace(/\{chave_pix\}/g, chavePix);
+    .replace(/\{chave_pix\}/g, chavePix)
+    .replace(/\{pix_copia_cola\}/g, pixBlock.trim()); // opcional no template
 }
 
 async function enviarLembretePix(env, order, config, user) {
@@ -892,9 +899,14 @@ async function enviarLembretePix(env, order, config, user) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
+  // v2.32.5: anexar PIX copia e cola automaticamente se {pix_copia_cola} não estiver no template
+  let finalMessage = message;
+  if (order.cora_qrcode && !config.mensagem.includes('{pix_copia_cola}')) {
+    finalMessage += `\n\n📋 *PIX Copia e Cola:*\n${order.cora_qrcode}`;
+  }
   // v2.32.4: se intervalo_horas=0 (modo teste), pula cooldown da Safety Layer
   const skipSafety = config.intervalo_horas === 0 && config.max_lembretes === 0;
-  const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
+  const waResult = await sendWhatsApp(env, phone, finalMessage, { category: 'lembrete_pix', variar: true, skipSafety });
 
   const tipo = user ? 'manual' : 'cron';
   await env.DB.prepare(
