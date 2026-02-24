@@ -1,7 +1,7 @@
-// v2.37.3
+// v2.37.4
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.37.3: PushInPay PIX (substituiu Cora) + webhook + force lembrete
+// v2.37.4: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
 // v2.28.5: Fix Assinafy — reusa signer existente se email já cadastrado
@@ -1942,7 +1942,7 @@ export default {
     }
 
     // Contratos, webhooks, rotas públicas e relatório (auth próprio) têm auth próprio
-    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks') && !path.startsWith('/api/pub/') && !path.startsWith('/api/relatorio/')) {
+    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks') && !path.startsWith('/api/pub/') && !path.startsWith('/api/pix/') && !path.startsWith('/api/relatorio/')) {
       const authErr = requireApiKey(request, env);
       if (authErr) return authErr;
     }
