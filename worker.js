@@ -1,4 +1,4 @@
-// v2.32.2
+// v2.32.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -3429,6 +3429,12 @@ export default {
       if (order.pago === 1) return json({ ok: true, message: 'Pedido já está pago' });
       if (order.cora_paid_at) return json({ ok: true, message: 'PIX já confirmado pela Cora' });
 
+      // v2.32.3: Cora exige mínimo R$5,00 — verificar antes de chamar a API
+      const valorCentavos = Math.round(parseFloat(order.total_value || 0) * 100);
+      if (valorCentavos < 500) {
+        return json({ ok: false, error: `Cora PIX exige valor mínimo de R$5,00. Este pedido tem R$${parseFloat(order.total_value).toFixed(2)}. Use o botão de lembrete para cobrar manualmente por WhatsApp.` });
+      }
+
       try {
         const items = JSON.parse(order.items_json || '[]');
         const coraData = await coraCreatePixInvoice(env, orderId, {
@@ -3454,7 +3460,12 @@ export default {
           cora_payment_options: coraData.raw?.payment_options || null,
         });
       } catch (e) {
-        return json({ ok: false, error: e.message }, 500);
+        // Tratar erro da Cora com mensagem amigável
+        const msg = e.message || '';
+        if (msg.includes('500') || msg.includes('amount')) {
+          return json({ ok: false, error: `Cora PIX: valor mínimo é R$5,00. Pedido com R$${parseFloat(order.total_value).toFixed(2)} não pode gerar QR Code.` });
+        }
+        return json({ ok: false, error: msg }, 500);
       }
     }
 
