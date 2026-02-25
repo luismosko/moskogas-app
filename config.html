@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.11.3 — MoskoGás</title>
+<title>Config v2.12.3 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -30,8 +30,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.11.3 — config</div>
-  <h1>⚙️ Configurações v2.11.3</h1>
+  <div class="version-badge">v2.12.3 — config</div>
+  <h1>⚙️ Configurações v2.12.3</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -65,6 +65,20 @@
     <input id="testTo" placeholder="5567999990000">
     <button class="btn btn-green" onclick="testIzChat()">📲 Enviar Mensagem Teste</button>
     <div id="izchat-status"></div>
+  </div>
+
+  <!-- Teste PushInPay PIX -->
+  <div class="card">
+    <h2>💠 PushInPay PIX</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Teste a integração PIX PushInPay. Verifique conexão, crie cobrança teste e veja logs de webhook.</p>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn" style="background:#0891b2;color:#fff" onclick="testPixConexao()">📡 Testar Conexão</button>
+      <button class="btn" style="background:#7c3aed;color:#fff" onclick="testPixCobranca()">💠 Cobrança Teste (R$1,01)</button>
+      <button class="btn" style="background:#059669;color:#fff" onclick="testPixWebhook()">🔔 Verificar Webhooks</button>
+      <button class="btn btn-gray" onclick="testPixStats()">📊 Estatísticas</button>
+    </div>
+    <div id="pix-status" style="margin-top:10px"></div>
   </div>
 
   <!-- Config Foto Comprovante -->
@@ -392,6 +406,7 @@
 
 </div><!-- /container -->
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
 checkAuth(['admin', 'atendente']);
@@ -451,6 +466,143 @@ async function testIzChat() {
     el.innerHTML = d.ok
       ? '<div class="status ok">✅ Mensagem enviada!</div>'
       : `<div class="status err">❌ ${JSON.stringify(d)}</div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+// ── PushInPay PIX Tests ─────────────────────────────────────────
+
+async function testPixConexao() {
+  const el = document.getElementById('pix-status');
+  el.innerHTML = '<div class="status">⏳ Testando conexão PushInPay...</div>';
+  try {
+    const d = await api('/api/pix/diagnostico');
+    let html = '<div style="background:#f0fdfa;border:2px solid #0891b2;border-radius:10px;padding:14px;font-size:13px">';
+    html += '<div style="font-weight:700;font-size:15px;margin-bottom:8px">📡 PushInPay API</div>';
+    html += `<div>Token configurado: ${d.token_configured ? '✅ Sim' : '❌ Não'}</div>`;
+    html += `<div>API acessível: ${d.api_reachable ? '✅ Sim' : '❌ Não'}</div>`;
+    if (d.api_error) html += `<div style="color:#dc2626;font-size:12px">Erro: ${d.api_error}</div>`;
+    if (d.account) {
+      if (d.account.name) html += `<div>Conta: <strong>${d.account.name}</strong></div>`;
+      if (d.account.balance !== undefined) html += `<div>Saldo: <strong style="color:#059669">R$ ${(d.account.balance/100).toFixed(2)}</strong></div>`;
+      if (d.account.note) html += `<div style="font-size:12px;color:#059669">${d.account.note}</div>`;
+      if (!d.account.name && !d.account.balance && !d.account.note) html += `<div style="font-size:11px;color:#64748b">${JSON.stringify(d.account).substring(0,200)}</div>`;
+    }
+    html += `<div>Webhook URL: <code style="font-size:11px">${d.webhook_url || '—'}</code></div>`;
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ Erro: ${e.message}</div>`;
+  }
+}
+
+async function testPixCobranca() {
+  if (!confirm('Criar cobrança PIX teste de R$1,01?\n\nIsso criará uma transação real na PushInPay.\nVocê pode pagar para testar o webhook ou cancelar.')) return;
+  const el = document.getElementById('pix-status');
+  el.innerHTML = '<div class="status">⏳ Criando cobrança teste...</div>';
+  try {
+    const d = await api('/api/pix/teste-cobranca', { method: 'POST' });
+    if (!d.ok) { el.innerHTML = `<div class="status err">❌ ${d.error}</div>`; return; }
+    let qrHtml = '';
+    if (d.qr_code && typeof qrcode === 'function') {
+      try {
+        const qr = qrcode(0, 'L');
+        qr.addData(d.qr_code);
+        qr.make();
+        qrHtml = '<div style="margin:12px 0;display:inline-block;border:3px solid #0891b2;border-radius:12px;overflow:hidden;line-height:0">' + qr.createImgTag(4, 6) + '</div>';
+      } catch(e) { qrHtml = ''; }
+    }
+    let html = '<div style="background:#f0fdfa;border:2px solid #0891b2;border-radius:10px;padding:14px;text-align:center">';
+    html += '<div style="font-weight:700;font-size:15px;margin-bottom:6px">💠 Cobrança Teste Criada</div>';
+    html += `<div style="font-size:24px;font-weight:900;color:#0891b2">R$ 1,01</div>`;
+    html += qrHtml;
+    html += `<div style="font-size:11px;color:#64748b;margin:6px 0">TX: <code>${d.tx_id}</code></div>`;
+    if (d.qr_code) {
+      html += `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:6px;font-size:10px;word-break:break-all;max-height:60px;overflow-y:auto;margin:8px 0">${d.qr_code}</div>`;
+      html += `<button onclick="navigator.clipboard.writeText('${d.qr_code.replace(/'/g,"\\'")}');toast('📋 Código copiado!')" style="background:#0891b2;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;margin:4px">📋 Copiar</button>`;
+    }
+    html += `<button onclick="checkPixTeste('${d.tx_id}')" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;margin:4px">🔍 Verificar Status</button>`;
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function checkPixTeste(txId) {
+  const el = document.getElementById('pix-status');
+  try {
+    const d = await api('/api/pix/teste-consultar/' + txId);
+    const statusColors = { paid: '#059669', created: '#d97706', canceled: '#dc2626' };
+    const statusLabels = { paid: '✅ PAGO', created: '⏳ Aguardando', canceled: '❌ Cancelado' };
+    let html = '<div style="background:#f0fdfa;border:2px solid #0891b2;border-radius:10px;padding:14px;text-align:center">';
+    html += `<div style="font-size:15px;font-weight:700;margin-bottom:6px">🔍 Status da Transação</div>`;
+    html += `<div style="font-size:11px;color:#64748b">TX: <code>${txId}</code></div>`;
+    html += `<div style="font-size:20px;font-weight:900;color:${statusColors[d.status]||'#64748b'};margin:8px 0">${statusLabels[d.status]||d.status}</div>`;
+    html += `<div>Valor: R$ ${((d.value||0)/100).toFixed(2)}</div>`;
+    if (d.end_to_end_id) html += `<div style="font-size:11px;color:#64748b">E2E: ${d.end_to_end_id}</div>`;
+    html += `<button onclick="checkPixTeste('${txId}')" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;margin-top:10px">🔄 Atualizar</button>`;
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function testPixWebhook() {
+  const el = document.getElementById('pix-status');
+  el.innerHTML = '<div class="status">⏳ Verificando webhooks recebidos...</div>';
+  try {
+    const d = await api('/api/pix/webhook-logs');
+    let html = '<div style="background:#f0fdfa;border:2px solid #0891b2;border-radius:10px;padding:14px">';
+    html += '<div style="font-weight:700;font-size:15px;margin-bottom:8px">🔔 Webhooks Recebidos (últimas 24h)</div>';
+    if (!d.logs || d.logs.length === 0) {
+      html += '<div style="color:#d97706">⚠️ Nenhum webhook recebido nas últimas 24h</div>';
+      html += '<p style="font-size:12px;color:#64748b;margin:8px 0 0">Crie uma cobrança teste, pague, e verifique se o webhook chega.</p>';
+    } else {
+      html += '<div style="max-height:300px;overflow-y:auto">';
+      d.logs.forEach(log => {
+        const time = new Date(log.created_at * 1000).toLocaleString('pt-BR', {timeZone:'America/Campo_Grande'});
+        const statusColor = log.detalhes?.includes('"paid"') ? '#059669' : '#d97706';
+        html += `<div style="border-bottom:1px solid #e2e8f0;padding:6px 0;font-size:12px">`;
+        html += `<span style="color:#64748b">${time}</span> `;
+        html += `<span style="color:${statusColor};font-weight:600">${log.evento}</span>`;
+        if (log.detalhes) {
+          const preview = log.detalhes.length > 120 ? log.detalhes.substring(0,120)+'…' : log.detalhes;
+          html += `<div style="font-size:10px;color:#94a3b8;word-break:break-all;margin-top:2px">${preview}</div>`;
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += `<div style="margin-top:10px;font-size:12px;color:#64748b">Webhook URL: <code>https://api.moskogas.com.br/api/webhooks/pushinpay</code></div>`;
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function testPixStats() {
+  const el = document.getElementById('pix-status');
+  el.innerHTML = '<div class="status">⏳ Carregando estatísticas...</div>';
+  try {
+    const d = await api('/api/pix/status');
+    let html = '<div style="background:#f0fdfa;border:2px solid #0891b2;border-radius:10px;padding:14px">';
+    html += '<div style="font-weight:700;font-size:15px;margin-bottom:8px">📊 Estatísticas PIX</div>';
+    html += `<div>Provider: <strong>${d.provider||'—'}</strong></div>`;
+    html += `<div>Configurado: ${d.configured ? '✅ Sim' : '❌ Não'}</div>`;
+    if (d.stats) {
+      html += `<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">`;
+      html += `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#64748b">PIX Pendentes</div><div style="font-size:20px;font-weight:700;color:#d97706">${d.stats.pending||0}</div></div>`;
+      html += `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#64748b">PIX Pagos</div><div style="font-size:20px;font-weight:700;color:#059669">${d.stats.paid||0}</div></div>`;
+      html += `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#64748b">Total Recebido</div><div style="font-size:20px;font-weight:700;color:#059669">R$ ${(d.stats.total_received||0).toFixed(2)}</div></div>`;
+      html += `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#64748b">Webhook URL</div><div style="font-size:9px;word-break:break-all;color:#0891b2">${d.webhook_url||'—'}</div></div>`;
+      html += '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
   } catch(e) {
     el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
   }
@@ -937,6 +1089,8 @@ async function resetCircuitBreaker() {
   } catch(e) { toast(e.message, 'error'); }
   finally { hideLoading(); }
 }
+
+async function salvarSafetyConfig() {
   const config = {
     habilitado: document.getElementById('ws-habilitado').checked,
     respeitar_horario: document.getElementById('ws-horario').checked,
