@@ -1,4 +1,4 @@
-// v2.40.10
+// v2.40.11
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -4478,6 +4478,35 @@ export default {
       } catch(e) {
         return json({ ok: false, error: e.message });
       }
+    }
+
+    // ── LIMPEZA TEMPORÁRIA: apaga pedidos de teste até 25/02/2026 ──
+    // REMOVER após uso!
+    if (method === 'POST' && path === '/api/admin/limpar-testes') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const { confirmar } = await request.json();
+      if (confirmar !== 'SIM_APAGAR_TESTES') return err('Confirmação inválida', 400);
+
+      // 25/02/2026 23:59:59 BRT = 26/02/2026 03:59:59 UTC = epoch
+      const ateEpoch = Math.floor(new Date('2026-02-26T03:59:59Z').getTime() / 1000);
+
+      // Buscar IDs dos pedidos a apagar
+      const rows = await env.DB.prepare('SELECT id FROM orders WHERE created_at <= ?').bind(ateEpoch).all();
+      const ids = (rows.results || []).map(r => r.id);
+      if (!ids.length) return json({ ok: true, apagados: 0, message: 'Nenhum pedido encontrado' });
+
+      const ph = ids.map(() => '?').join(',');
+      // Apagar tabelas relacionadas
+      await env.DB.prepare(`DELETE FROM order_events WHERE order_id IN (${ph})`).bind(...ids).run();
+      await env.DB.prepare(`DELETE FROM order_status_log WHERE order_id IN (${ph})`).bind(...ids).run();
+      await env.DB.prepare(`DELETE FROM integration_audit WHERE order_id IN (${ph})`).bind(...ids).run();
+      await env.DB.prepare(`DELETE FROM payment_reminders WHERE order_id IN (${ph})`).bind(...ids).run();
+      await env.DB.prepare(`DELETE FROM audit_snapshots WHERE order_id IN (${ph})`).bind(...ids).run().catch(()=>{});
+      // Apagar pedidos
+      const del = await env.DB.prepare(`DELETE FROM orders WHERE id IN (${ph})`).bind(...ids).run();
+
+      return json({ ok: true, apagados: ids.length, ids_apagados: ids });
     }
 
     // Legacy: manter /api/webhooks/cora respondendo
