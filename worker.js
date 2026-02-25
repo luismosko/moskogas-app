@@ -1,4 +1,4 @@
-// v2.41.1
+// v2.41.2
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -2573,6 +2573,38 @@ export default {
         `INSERT INTO app_products (bling_id, name, code, price, is_favorite, sort_order) VALUES (?,?,?,?,?,?)`
       ).bind(String(bling_id||''), name, code||'', parseFloat(price)||0, is_favorite?1:0, (maxSort?.mx||0)+1).run();
       return json({ ok: true, id: result.meta?.last_row_id });
+    }
+
+    // ── Busca contato Bling por nome (para vincular cliente) ──
+    if (method === 'GET' && path === '/api/customer/search-bling-nome') {
+      const q = (url.searchParams.get('q') || '').trim();
+      if (!q || q.length < 2) return json([]);
+      try {
+        const resp = await blingFetch(`/contatos?pagina=1&limite=10&pesquisa=${encodeURIComponent(q)}&situacao=A`, {}, env);
+        if (!resp.ok) return json([]);
+        const data = await resp.json();
+        const results = (data.data || []).map(c => ({
+          id: c.id,
+          nome: c.nome,
+          fantasia: c.fantasia || '',
+          numeroDocumento: c.numeroDocumento || '',
+          telefone: c.telefone || c.celular || '',
+          email: c.email || '',
+        }));
+        return json(results);
+      } catch(e) { return json([]); }
+    }
+
+    // ── Vincular cliente local ao Bling contact ──
+    if (method === 'POST' && path === '/api/customer/vincular-bling') {
+      const { phone_digits, bling_contact_id, bling_nome } = await request.json();
+      if (!phone_digits || !bling_contact_id) return err('phone_digits e bling_contact_id obrigatórios');
+      await env.DB.prepare(
+        `UPDATE customers_cache SET bling_contact_id=?, updated_at=unixepoch() WHERE phone_digits=?`
+      ).bind(String(bling_contact_id), phone_digits).run();
+      // Log
+      console.log(`[vincular-bling] ${phone_digits} → Bling ${bling_contact_id} (${bling_nome})`);
+      return json({ ok: true, phone_digits, bling_contact_id });
     }
 
     if (method === 'GET' && path === '/api/customer/search-bling-doc') {
