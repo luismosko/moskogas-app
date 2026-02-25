@@ -1,4 +1,4 @@
-// v2.40.5
+// v2.40.6
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -3005,8 +3005,8 @@ export default {
         const body = await request.json();
         tipoPagamento = body.tipo_pagamento || null;
         obsEntregador = body.observacao_entregador || null;
-        // Admin pode marcar sem foto
-        if (user?.role !== 'admin') {
+        // Admin e atendente podem marcar sem foto (gestao.html)
+        if (!['admin', 'atendente'].includes(user?.role)) {
           return err('Foto do comprovante é obrigatória para entregadores', 400);
         }
       } else {
