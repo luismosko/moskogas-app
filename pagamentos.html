@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.9</title>
+<title>Pagamentos — MoskoGás v1.9.10</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.9 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.10 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -86,7 +86,7 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.9</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.10</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -206,7 +206,7 @@ function printRec(id) {
   const o = allData.find(r => r.id == id);
   if (o) {
     try {
-      sessionStorage.setItem('mg_print_order', JSON.stringify(o));
+      localStorage.setItem('mg_print_order', JSON.stringify(o));
       window.open('print.html?id=' + id + '&src=session', '_blank');
     } catch(e) {
       // fallback: URL param (pode falhar se muito grande)
