@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Recibo MoskoGás v2.0.2</title>
+<title>Recibo MoskoGás v2.0.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; background: #e2e8f0; padding: 20px; }
@@ -228,6 +228,25 @@ async function load() {
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
   const dataParam = params.get('data');
+  const srcSession = params.get('src') === 'session';
+
+  // Modo 0: sessionStorage (passado por pagamentos.html para evitar limite de URL)
+  if (srcSession && id) {
+    try {
+      const raw = sessionStorage.getItem('mg_print_order');
+      if (raw) {
+        const o = JSON.parse(raw);
+        if (String(o.id) === String(id)) {
+          sessionStorage.removeItem('mg_print_order');
+          const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
+          fillVia('v1', o, items);
+          fillVia('v2', o, items);
+          document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.3';
+          return;
+        }
+      }
+    } catch(e) { /* fallback */ }
+  }
 
   // Modo 1: ?data=JSON (vindo do gestao.html com objeto completo)
   if (dataParam) {
@@ -236,7 +255,7 @@ async function load() {
       const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
       fillVia('v1', o, items);
       fillVia('v2', o, items);
-      document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.2';
+      document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.3';
       return;
     } catch(e) { /* fallback para API */ }
   }
@@ -254,7 +273,7 @@ async function load() {
     const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
     fillVia('v1', o, items);
     fillVia('v2', o, items);
-    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.2';
+    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.3';
   } catch(e) {
     document.getElementById('pagina').innerHTML = '<p style="padding:40px;color:#dc2626;text-align:center">Erro ao carregar pedido: ' + e.message + '</p>';
   }
