@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Recibo MoskoGás v2.0.0</title>
+<title>Recibo MoskoGás v2.0.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; background: #e2e8f0; padding: 20px; }
@@ -38,6 +38,7 @@
   .cliente-row2 { font-size: 13px; margin-bottom: 10px; }
   .lbl { font-weight: 700; color: #1F4E79; }
   .val { color: #1e293b; }
+  .val-nome { color: #1e293b; font-size: 15px; font-weight: 700; }
 
   /* TABELA */
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 9px; }
@@ -95,16 +96,12 @@
     </div>
     <div class="section-title">Dados do Cliente</div>
     <div class="cliente-row1">
-      <div><span class="lbl">👤 Nome: </span><span class="val" id="v1-nome">—</span></div>
+      <div><span class="lbl">👤 Nome: </span><span class="val-nome" id="v1-nome">—</span></div>
       <div id="v1-doc-wrap" style="display:none"><span class="lbl" id="v1-doc-label">🪪 CPF: </span><span class="val" id="v1-doc">—</span></div>
       <div><span class="lbl">📞 Telefone: </span><span class="val" id="v1-tel">—</span></div>
     </div>
     <div class="cliente-row2"><span class="lbl">📍 Endereço: </span><span class="val" id="v1-end">—</span></div>
-    <table>
-      <thead><tr>
-        <th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:right">Unit</th><th style="text-align:right">Subtotal</th>
-      </tr></thead>
-      <tbody id="v1-items"></tbody>
+    <div class="cliente-row2" id="v1-unidade-wrap" style="display:none"><span class="lbl">🏢 Nome / Unidade: </span><span class="val" id="v1-unidade" style="font-weight:600">—</span></div>
       <tfoot><tr class="total-row">
         <td colspan="3">TOTAL</td><td class="right" id="v1-total">R$ 0,00</td>
       </tr></tfoot>
@@ -147,11 +144,12 @@
     </div>
     <div class="section-title">Dados do Cliente</div>
     <div class="cliente-row1">
-      <div><span class="lbl">👤 Nome: </span><span class="val" id="v2-nome">—</span></div>
+      <div><span class="lbl">👤 Nome: </span><span class="val-nome" id="v2-nome">—</span></div>
       <div id="v2-doc-wrap" style="display:none"><span class="lbl" id="v2-doc-label">🪪 CPF: </span><span class="val" id="v2-doc">—</span></div>
       <div><span class="lbl">📞 Telefone: </span><span class="val" id="v2-tel">—</span></div>
     </div>
     <div class="cliente-row2"><span class="lbl">📍 Endereço: </span><span class="val" id="v2-end">—</span></div>
+    <div class="cliente-row2" id="v2-unidade-wrap" style="display:none"><span class="lbl">🏢 Nome / Unidade: </span><span class="val" id="v2-unidade" style="font-weight:600">—</span></div>
     <table>
       <thead><tr>
         <th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:right">Unit</th><th style="text-align:right">Subtotal</th>
@@ -203,8 +201,14 @@ function fillVia(prefix, o, items) {
 
   let end = o.address_line || '';
   if (o.bairro) end += ' — ' + o.bairro;
-  if (end) end += ' — Campo Grande/MS';
   document.getElementById(prefix+'-end').textContent = end || '—';
+
+  // Campo NOME / UNIDADE (complemento ou referencia)
+  const unidade = o.complemento || o.referencia || '';
+  if (unidade) {
+    document.getElementById(prefix+'-unidade-wrap').style.display = '';
+    document.getElementById(prefix+'-unidade').textContent = unidade;
+  }
 
   const tbody = document.getElementById(prefix+'-items');
   tbody.innerHTML = items.map(it => {
@@ -232,7 +236,7 @@ async function load() {
       const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
       fillVia('v1', o, items);
       fillVia('v2', o, items);
-      document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.0';
+      document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.2';
       return;
     } catch(e) { /* fallback para API */ }
   }
@@ -250,7 +254,7 @@ async function load() {
     const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
     fillVia('v1', o, items);
     fillVia('v2', o, items);
-    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.0';
+    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.2';
   } catch(e) {
     document.getElementById('pagina').innerHTML = '<p style="padding:40px;color:#dc2626;text-align:center">Erro ao carregar pedido: ' + e.message + '</p>';
   }
