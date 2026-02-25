@@ -1,4 +1,4 @@
-// v2.40.11
+// v2.40.12
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -4108,14 +4108,14 @@ export default {
       await ensureAuditTable(env);
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
-      const dateStart = `${date} 00:00:00`;
-      const dateEnd = `${date} 23:59:59`;
+      const epochStart = Math.floor(new Date(date + 'T00:00:00-04:00').getTime() / 1000);
+      const epochEnd   = Math.floor(new Date(date + 'T23:59:59-04:00').getTime() / 1000);
 
       // Pedidos do dia
       const orders = await env.DB.prepare(
         `SELECT id, customer_name, total_value, tipo_pagamento, pago, bling_pedido_id, bling_pedido_num, vendedor_nome, items_json, status, created_at
-         FROM orders WHERE created_at BETWEEN ? AND ? ORDER BY id`
-      ).bind(dateStart, dateEnd).all().then(r => r.results || []);
+         FROM orders WHERE created_at >= ? AND created_at <= ? ORDER BY id`
+      ).bind(epochStart, epochEnd).all().then(r => r.results || []);
 
       const totalPedidos = orders.length;
       const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
@@ -4162,7 +4162,7 @@ export default {
          FROM integration_audit ia
          LEFT JOIN orders o ON o.id = ia.order_id
          WHERE ia.status='error' AND ia.created_at BETWEEN ? AND ? ORDER BY ia.id DESC`
-      ).bind(dateStart, dateEnd).all().then(r => r.results || []).catch(() => []);
+      ).bind(date + ' 00:00:00', date + ' 23:59:59').all().then(r => r.results || []).catch(() => []);
 
       // Todos os logs de auditoria do dia (com dados do pedido)
       const auditLogs = await env.DB.prepare(
@@ -4171,7 +4171,7 @@ export default {
          FROM integration_audit ia
          LEFT JOIN orders o ON o.id = ia.order_id
          WHERE ia.created_at BETWEEN ? AND ? ORDER BY ia.id DESC LIMIT 200`
-      ).bind(dateStart, dateEnd).all().then(r => r.results || []).catch(() => []);
+      ).bind(date + ' 00:00:00', date + ' 23:59:59').all().then(r => r.results || []).catch(() => []);
 
       return json({
         date,
@@ -4188,12 +4188,12 @@ export default {
       if (authCheck instanceof Response) return authCheck;
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
-      const dateStart = `${date} 00:00:00`;
-      const dateEnd = `${date} 23:59:59`;
+      const epochStart = Math.floor(new Date(date + 'T00:00:00-04:00').getTime() / 1000);
+      const epochEnd   = Math.floor(new Date(date + 'T23:59:59-04:00').getTime() / 1000);
 
       const orders = await env.DB.prepare(
-        `SELECT id, customer_name, total_value, bling_pedido_id, bling_pedido_num, tipo_pagamento FROM orders WHERE created_at BETWEEN ? AND ? AND bling_pedido_id IS NOT NULL AND bling_pedido_id != '' ORDER BY id`
-      ).bind(dateStart, dateEnd).all().then(r => r.results || []);
+        `SELECT id, customer_name, total_value, bling_pedido_id, bling_pedido_num, tipo_pagamento FROM orders WHERE created_at >= ? AND created_at <= ? AND bling_pedido_id IS NOT NULL AND bling_pedido_id != '' ORDER BY id`
+      ).bind(epochStart, epochEnd).all().then(r => r.results || []);
 
       const conciliados = [];
       const faltando_bling = [];
