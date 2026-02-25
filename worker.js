@@ -1,4 +1,4 @@
-// v2.41.2
+// v2.41.3
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -5327,11 +5327,15 @@ export default {
       const clienteMatch = path.match(/^\/api\/empenhos\/cliente\/(.+)$/);
       if (method === 'GET' && clienteMatch) {
         const phone = clienteMatch[1].replace(/\D/g, '');
+        // Busca o bling_contact_id do cliente pelo phone (para buscar empenhos cadastrados pelo ID Bling)
+        const cc = await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits=?').bind(phone).first().catch(() => null);
+        const blingId = cc?.bling_contact_id ? String(cc.bling_contact_id) : null;
         const rows = await env.DB.prepare(
-          `SELECT e.*, cc.bling_contact_id as cc_bling FROM gov_empenhos e
-           LEFT JOIN customers_cache cc ON cc.phone_digits = e.cliente_phone
-           WHERE (e.cliente_phone=? OR cc.phone_digits=?) AND e.status='ativo' ORDER BY e.created_at DESC`
-        ).bind(phone, phone).all().then(r => r.results || []);
+          `SELECT e.* FROM gov_empenhos e
+           WHERE e.status='ativo'
+             AND (e.cliente_phone=? OR (? IS NOT NULL AND e.bling_contact_id=?))
+           ORDER BY e.created_at DESC`
+        ).bind(phone, blingId, blingId).all().then(r => r.results || []);
         const result = [];
         for (const e of rows) {
           const itens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(e.id).all().then(r => r.results || []);
