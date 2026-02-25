@@ -247,7 +247,7 @@ function renderTable(rows) {
     // Botão imprimir (sempre disponível)
     actionBtns += `<button onclick="printRec(${p.id})" title="Imprimir recibo" style="background:#1F4E79;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">🖨️</button>`;
     let ri='';
-    if(p.tipo_pagamento==='pix_receber'){const cnt=p.reminder_count||0;if(cnt>0&&p.last_reminder_at)ri=`<div class="ri${cnt>=3?' w':`}">📱${cnt}x · ${timeAgo(p.last_reminder_at)} atrás</div>`;}`
+    if(p.tipo_pagamento==="pix_receber"){const cnt=p.reminder_count||0;if(cnt>0&&p.last_reminder_at)ri=`<div class="ri${cnt>=3?" w":""}">📱${cnt}x · ${timeAgo(p.last_reminder_at)} atrás</div>`;}
     const trStyle = p.pago ? 'background:#f0fdf4;opacity:0.75' : '';
     const pagoTag = p.pago ? `<span style="font-size:10px;background:#16a34a;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">✅ pago</span>` : '';
     return `<tr style="${trStyle}">
