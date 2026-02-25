@@ -1,7 +1,7 @@
-// v2.38.2
+// v2.38.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
-// v2.38.2: Novos campos customers_cache: ultima_compra_glp + origem (importação GLP Master)
+// v2.38.3: Novos campos customers_cache: ultima_compra_glp + origem (importação GLP Master)
 // v2.38.1: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
 // v2.30.0: WhatsApp troca entregador + Venda externa + QR avaliação Google
@@ -3332,10 +3332,10 @@ export default {
           (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
         FROM orders o
         LEFT JOIN customers_cache cc ON cc.phone_digits = o.phone_digits
-        WHERE o.pago = 0 AND o.status = 'entregue'
+        WHERE (o.pago = 0 OR (? = 1 AND o.pago = 1)) AND o.status = 'entregue'
         ORDER BY o.created_at DESC
-        LIMIT 200
-      `).all();
+        LIMIT 500
+      `).bind(url.searchParams.get('incluir_pagos') === '1' ? 1 : 0).all();
       return json(rows.results || []);
     }
 
