@@ -1,6 +1,8 @@
-// v2.38.3
+// v2.40.3
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
+// v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
+// v2.40.2: (Cloudflare Quick Edit) PushInPay PIX + webhook + auto-check cron
 // v2.38.3: Novos campos customers_cache: ultima_compra_glp + origem (importação GLP Master)
 // v2.38.1: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
