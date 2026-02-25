@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Recibo MoskoGás v2.0.9</title>
+<title>Recibo MoskoGás v2.0.10</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; background: #e2e8f0; padding: 20px; }
@@ -240,28 +240,28 @@ async function load() {
     const headers = {};
     if (token) headers['Authorization'] = 'Bearer ' + token;
     else if (apiKey) headers['X-API-Key'] = apiKey;
-    else throw new Error('Sessão não encontrada. Faça login e tente novamente.');
+    else throw new Error('Sessao nao encontrada. Faca login novamente.');
 
     const resp = await fetch(API_BASE + '/api/order/' + id, { headers });
 
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
-      throw new Error('Pedido #' + id + ' não encontrado (HTTP ' + resp.status + ')' + (txt ? ': ' + txt.substring(0,100) : ''));
+      throw new Error('Pedido #' + id + ' nao encontrado (HTTP ' + resp.status + ')' + (txt ? ': ' + txt.substring(0,100) : ''));
     }
 
     const o = await resp.json();
     const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
     fillVia('v1', o, items);
     fillVia('v2', o, items);
-    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.9';
+    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.10';
   } catch(e) {
     document.getElementById('pagina').innerHTML =
-      '<p style="padding:40px;color:#dc2626;text-align:center;font-size:16px">❌ ' + e.message + '</p>' +
-      '<p style="text-align:center"><button onclick="location.reload()" style="padding:8px 20px;background:#1F4E79;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🔄 Tentar novamente</button></p>';
+      '<p style="padding:40px;color:#dc2626;text-align:center;font-size:16px">Erro: ' + e.message + '</p>' +
+      '<p style="text-align:center"><button onclick="location.reload()" style="padding:8px 20px;background:#1F4E79;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">Tentar novamente</button></p>';
   }
 }
 
-load();
+document.addEventListener("DOMContentLoaded", load);
 </script>
 </body>
 </html>
