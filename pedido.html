@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.9</title>
+<title>Novo Pedido — MoskoGás v2.11.10</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.9 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.10 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.9</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.10</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -458,6 +458,8 @@ async function selectCustomer(i) {
   // v2.41.0: Verificar empenhos ativos para este cliente
   window._empenhoSelecionado = null;
   window._empenhosCliente = [];
+  document.getElementById('empenho-selecionado-info').style.display = 'none';
+  restaurarFavoritosOriginais();
   if (c.phone_digits && !nome.includes('CONSUMIDOR FINAL')) {
     checkEmpenhosCliente(c.phone_digits);
   } else {
@@ -963,6 +965,12 @@ function setConsumidorFinal() {
   // Destacar visualmente
   document.getElementById('cName').style.background = '#f0f9ff';
   document.getElementById('cName').style.borderColor = '#7dd3fc';
+  // Restaurar favoritos e limpar empenho
+  restaurarFavoritosOriginais();
+  window._empenhosCliente = [];
+  window._empenhoSelecionado = null;
+  document.getElementById('empenho-aviso').style.display = 'none';
+  document.getElementById('empenho-selecionado-info').style.display = 'none';
   toast('👤 Consumidor Final — endereço não obrigatório', 'ok');
 }
 
@@ -1133,7 +1141,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.9: Não redireciona — limpa form para novo pedido
+    // v2.11.10: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1154,6 +1162,11 @@ async function saveOrder() {
       btn.textContent = '✅ SALVAR PEDIDO';
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
+      // v2.11.10: Restaurar favoritos originais
+      restaurarFavoritosOriginais();
+      window._empenhosCliente = [];
+      window._empenhoSelecionado = null;
+      document.getElementById('empenho-aviso').style.display = 'none';
     }, 1200);
 
   } catch(e) {
@@ -1167,37 +1180,133 @@ async function saveOrder() {
 
 renderItems();
 
-// ── Empenhos GOV v2.41.0 ─────────────────────────────────────────
+// ── Empenhos GOV v2.11.10 ──────────────────────────────────────────
+// Salva HTML original dos favoritos para restaurar ao trocar de cliente
+let _favOrigHTML    = null;
+let _favOrigVisible = false;
+
+function _salvarFavOriginais() {
+  if (_favOrigHTML !== null) return; // já salvou
+  _favOrigHTML    = document.getElementById('fav-buttons').innerHTML;
+  _favOrigVisible = document.getElementById('fav-products').style.display !== 'none';
+}
+
+function restaurarFavoritosOriginais() {
+  if (_favOrigHTML === null) return;
+  document.getElementById('fav-buttons').innerHTML = _favOrigHTML;
+  document.getElementById('fav-products').style.display = _favOrigVisible ? 'block' : 'none';
+  // Restaurar label
+  const lbl = document.querySelector('#fav-products > div:first-child');
+  if (lbl) lbl.innerHTML = '⭐ Produtos Rápidos';
+  // Remover banner de empenho
+  const b = document.getElementById('empenho-fav-banner');
+  if (b) b.remove();
+}
+
+function _aplicarProdutosEmpenho(empenho) {
+  _salvarFavOriginais();
+  const container = document.getElementById('fav-products');
+  const btns      = document.getElementById('fav-buttons');
+  container.style.display = 'block';
+
+  // Trocar label
+  const lbl = container.querySelector('div:first-child');
+  if (lbl) lbl.innerHTML =
+    `🏛️ Produtos do Empenho &nbsp;<span style="background:#f59e0b;color:#fff;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:800">${empenho.numero}</span>`;
+
+  const itens = empenho.itens || [];
+  if (!itens.length) {
+    btns.innerHTML = '<span style="font-size:12px;color:#94a3b8">Nenhum produto no empenho</span>';
+    return;
+  }
+
+  btns.innerHTML = itens.map(it => {
+    const saldo    = (it.quantidade_total || 0) - (it.quantidade_usada || 0);
+    const esgotado = saldo <= 0;
+    const preco    = parseFloat(it.preco_unitario || 0).toFixed(2);
+    const saldoCor = saldo <= 5 ? '#dc2626' : saldo <= 10 ? '#f59e0b' : '#16a34a';
+    const nomeEsc  = (it.produto_nome || '').replace(/'/g, "\\'");
+    const blingEsc = (it.produto_bling_id || '').replace(/'/g, "\\'");
+    return `<button class="fav-btn" ${esgotado ? 'disabled' : ''}
+      style="${esgotado ? 'opacity:.35;cursor:not-allowed;' : ''}"
+      onclick="addItem('${blingEsc}','${nomeEsc}',${parseFloat(it.preco_unitario)||0},'')"
+      title="${it.produto_nome} — R$ ${preco} — Saldo: ${saldo}">
+      ${it.produto_nome}
+      <span class="fav-price">R$${preco}</span>
+      <span style="background:${saldoCor};color:#fff;padding:0 5px;border-radius:8px;font-size:9px;font-weight:800;margin-left:2px">${saldo}</span>
+    </button>`;
+  }).join('');
+
+  // Banner informativo abaixo dos botões
+  let banner = document.getElementById('empenho-fav-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'empenho-fav-banner';
+    container.appendChild(banner);
+  }
+  banner.innerHTML = `<div style="font-size:11px;color:#78350f;margin-top:6px;padding:5px 10px;background:#fef3c7;border-radius:6px;border:1px solid #fbbf24">
+    🏛️ Preços do empenho aplicados. Use a busca abaixo para adicionar outros produtos fora do empenho.
+  </div>`;
+}
+
 async function checkEmpenhosCliente(phone) {
   try {
     const empenhos = await api(`/api/empenhos/cliente/${phone}`);
     window._empenhosCliente = empenhos || [];
     const aviso = document.getElementById('empenho-aviso');
-    if (!empenhos || !empenhos.length) { aviso.style.display = 'none'; return; }
+
+    if (!empenhos || !empenhos.length) {
+      aviso.style.display = 'none';
+      restaurarFavoritosOriginais();
+      return;
+    }
+
     aviso.style.display = 'block';
-    const info = document.getElementById('empenho-aviso-info');
-    info.textContent = `${empenhos.length} empenho(s) ativo(s) — ${empenhos.map(e => e.numero).join(', ')}`;
+
+    // 1 empenho → seleciona e aplica automaticamente
+    if (empenhos.length === 1) {
+      window._empenhoSelecionado = empenhos[0];
+      _atualizarInfoSelecionado(empenhos[0]);
+      _aplicarProdutosEmpenho(empenhos[0]);
+      document.getElementById('empenho-aviso-info').textContent =
+        `Empenho ${empenhos[0].numero} aplicado automaticamente`;
+    } else {
+      // Vários → pedir seleção
+      document.getElementById('empenho-aviso-info').textContent =
+        `${empenhos.length} empenhos ativos — selecione qual usar neste pedido`;
+    }
   } catch(_) {
     window._empenhosCliente = [];
     document.getElementById('empenho-aviso').style.display = 'none';
+    restaurarFavoritosOriginais();
   }
+}
+
+function _atualizarInfoSelecionado(e) {
+  const el = document.getElementById('empenho-selecionado-info');
+  el.style.display = 'block';
+  const itensInfo = (e.itens || [])
+    .map(it => `${it.produto_nome}: ${(it.quantidade_total||0)-(it.quantidade_usada||0)} rest.`)
+    .join(' · ');
+  el.innerHTML = `✅ <strong>${e.numero}</strong> — ${itensInfo}`;
 }
 
 function abrirModalEmpenho() {
   const empenhos = window._empenhosCliente || [];
   if (!empenhos.length) return;
-  const modal = document.getElementById('modal-empenho');
-  const opcoes = document.getElementById('empenho-opcoes');
 
+  const opcoes = document.getElementById('empenho-opcoes');
   opcoes.innerHTML = empenhos.map(e => {
-    const itensInfo = (e.itens || []).map(it => {
-      const saldo = it.quantidade_total - it.quantidade_usada;
-      return `<span style="background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:4px;font-size:11px;margin-right:4px">${it.produto_nome}: ${saldo} restantes</span>`;
-    }).join('');
     const selecionado = window._empenhoSelecionado?.id === e.id;
-    return `
-    <div onclick="selecionarOpcaoEmpenho(${e.id})" id="emp-opt-${e.id}"
-         style="padding:12px 14px;border:2px solid ${selecionado ? '#6366f1' : '#e2e8f0'};border-radius:10px;cursor:pointer;margin-bottom:8px;background:${selecionado ? '#eef2ff' : '#fff'};transition:all .15s">
+    const itensInfo = (e.itens || []).map(it => {
+      const saldo = (it.quantidade_total||0) - (it.quantidade_usada||0);
+      const cor   = saldo <= 5 ? '#dc2626' : saldo <= 10 ? '#f59e0b' : '#16a34a';
+      return `<span style="background:#f1f5f9;color:#1e293b;padding:2px 7px;border-radius:4px;font-size:11px;margin-right:4px;border:1px solid #e2e8f0">
+        ${it.produto_nome} <b style="color:${cor}">${saldo}</b></span>`;
+    }).join('');
+    return `<div onclick="selecionarOpcaoEmpenho(${e.id})" id="emp-opt-${e.id}"
+      style="padding:12px 14px;border:2px solid ${selecionado?'#6366f1':'#e2e8f0'};border-radius:10px;
+             cursor:pointer;margin-bottom:8px;background:${selecionado?'#eef2ff':'#fff'};transition:all .15s">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <span style="font-size:14px;font-weight:800;color:#1e293b">📄 ${e.numero}</span>
         ${e.data_validade ? `<span style="font-size:11px;color:#64748b">📅 Validade: ${e.data_validade}</span>` : ''}
@@ -1207,30 +1316,29 @@ function abrirModalEmpenho() {
     </div>`;
   }).join('');
 
-  modal.style.display = 'flex';
+  document.getElementById('modal-empenho').style.display = 'flex';
 }
 
 function selecionarOpcaoEmpenho(id) {
   const empenhos = window._empenhosCliente || [];
   window._empenhoSelecionado = empenhos.find(e => e.id === id) || null;
-  // Atualizar visual
   empenhos.forEach(e => {
     const el = document.getElementById('emp-opt-' + e.id);
     if (!el) return;
     const sel = e.id === id;
     el.style.borderColor = sel ? '#6366f1' : '#e2e8f0';
-    el.style.background = sel ? '#eef2ff' : '#fff';
+    el.style.background  = sel ? '#eef2ff' : '#fff';
   });
 }
 
 function confirmarEmpenho() {
   if (!window._empenhoSelecionado) { toast('⚠️ Selecione um empenho', 'error'); return; }
   fecharModalEmpenho();
-  const info = document.getElementById('empenho-selecionado-info');
-  info.style.display = 'block';
   const e = window._empenhoSelecionado;
-  const itensInfo = (e.itens || []).map(it => `${it.produto_nome}: ${it.quantidade_total - it.quantidade_usada} restantes`).join(' | ');
-  info.innerHTML = `✅ Empenho selecionado: <strong>${e.numero}</strong> — ${itensInfo}`;
+  _atualizarInfoSelecionado(e);
+  _aplicarProdutosEmpenho(e);
+  document.getElementById('empenho-aviso-info').textContent =
+    `Empenho ${e.numero} selecionado`;
 }
 
 function fecharModalEmpenho() {
