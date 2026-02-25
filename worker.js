@@ -1,4 +1,4 @@
-// v2.40.6
+// v2.40.7
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -2852,7 +2852,13 @@ export default {
         sql += ` AND o.created_at >= ? AND o.created_at < ?`;
         params.push(dayStart, dayEnd);
       }
-      if (q) { sql += ` AND (o.customer_name LIKE ? OR o.phone_digits LIKE ? OR o.address_line LIKE ?)`; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+      if (q) {
+        const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        for (const w of words) {
+          sql += ` AND (o.customer_name LIKE ? OR o.phone_digits LIKE ? OR o.address_line LIKE ?)`;
+          params.push(`%${w}%`, `%${w}%`, `%${w}%`);
+        }
+      }
       sql += ' ORDER BY o.created_at DESC LIMIT 200';
       const rows = await env.DB.prepare(sql).bind(...params).all();
       return json(rows.results || []);
@@ -3778,7 +3784,10 @@ export default {
       const consumidor_final = url.searchParams.get('consumidor_final');
 
       if (pedido_id) { conditions.push('id = ?'); params.push(parseInt(pedido_id)); }
-      if (cliente) { conditions.push("customer_name LIKE ?"); params.push(`%${cliente}%`); }
+      if (cliente) {
+        const clienteWords = cliente.trim().split(/\s+/).filter(Boolean);
+        for (const w of clienteWords) { conditions.push("customer_name LIKE ?"); params.push(`%${w}%`); }
+      }
       if (telefone) { conditions.push("phone_digits LIKE ?"); params.push(`%${telefone}%`); }
       if (produto) { conditions.push("items_json LIKE ?"); params.push(`%${produto}%`); }
       if (entregador) { conditions.push("driver_name_cache = ?"); params.push(entregador); }

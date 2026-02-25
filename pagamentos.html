@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.13</title>
+<title>Pagamentos — MoskoGás v1.9.14</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.13 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.14 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -86,7 +86,7 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.13</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.14</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -192,7 +192,13 @@ async function _load() {
     let rows = allData;
     if(dateFrom||dateTo) rows=rows.filter(r=>{if(!r.created_at)return true;const d=new Date(r.created_at*1000).toLocaleDateString('sv-SE',{timeZone:'America/Campo_Grande'});return(!dateFrom||d>=dateFrom)&&(!dateTo||d<=dateTo);});
     if(tipo) rows=rows.filter(r=>r.tipo_pagamento===tipo);
-    if(q) rows=rows.filter(r=>(r.customer_name||'').toLowerCase().includes(q)||(r.address_line||'').toLowerCase().includes(q)||String(r.id).includes(q));
+    if(q) {
+      const words = q.split(/\s+/).filter(Boolean);
+      rows = rows.filter(r => {
+        const haystack = ((r.customer_name||'') + ' ' + (r.address_line||'') + ' ' + String(r.id)).toLowerCase();
+        return words.every(w => haystack.includes(w));
+      });
+    }
     renderTable(rows); renderSummary(rows);
     document.getElementById('count-badge').textContent = mostrarPagos
       ? rows.length + ' registros (' + rows.filter(r=>r.pago).length + ' pagos)'
