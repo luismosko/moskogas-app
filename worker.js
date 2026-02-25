@@ -1,5 +1,5 @@
-// v2.40.4
-// =============================================================
+// v2.40.5
+// v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
 // v2.40.4: (Cloudflare Quick Edit) PushInPay PIX + webhook + auto-check cron
@@ -4377,7 +4377,8 @@ export default {
 
     // ── PushInPay: Diagnóstico de conexão ──────────────────────
     if (method === 'GET' && path === '/api/pix/diagnostico') {
-      await requireAuth(['admin', 'atendente'], request, env);
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
       const configured = isPixConfigured(env);
       let api_reachable = false;
       let api_error = null;
@@ -4401,9 +4402,26 @@ export default {
       return json({ token_configured: configured, api_reachable, api_error, account, webhook_url: 'https://api.moskogas.com.br/api/webhooks/pushinpay' });
     }
 
+    // ── PushInPay: Logs de webhooks recebidos ──────────────────
+    if (method === 'GET' && path === '/api/pix/webhook-logs') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const since = Math.floor(Date.now() / 1000) - 86400; // últimas 24h
+      const rows = await env.DB.prepare(
+        "SELECT id, evento, detalhes, created_at FROM order_events WHERE event='pushinpay_webhook_received' AND rowid IN (SELECT rowid FROM order_events WHERE event='pushinpay_webhook_received' ORDER BY id DESC LIMIT 50)"
+      ).all().catch(() => ({ results: [] }));
+      // Tentar também pelo campo evento (nome pode variar)
+      const rows2 = await env.DB.prepare(
+        "SELECT id, evento, detalhes, created_at FROM order_events WHERE (event='pushinpay_webhook_received' OR evento='pushinpay_webhook_received') ORDER BY id DESC LIMIT 50"
+      ).all().catch(() => ({ results: [] }));
+      const logs = (rows2.results || rows.results || []);
+      return json({ ok: true, logs, webhook_url: 'https://api.moskogas.com.br/api/webhooks/pushinpay' });
+    }
+
     // ── PushInPay: Cobrança teste R$1,01 ───────────────────────
     if (method === 'POST' && path === '/api/pix/teste-cobranca') {
-      await requireAuth(['admin'], request, env);
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
       if (!isPixConfigured(env)) return err('PUSHINPAY_TOKEN não configurado', 400);
       try {
         const data = await pushInPayCreateCharge(env, 0, 1.01);
@@ -4416,7 +4434,8 @@ export default {
     // ── PushInPay: Consultar status de transação ────────────────
     const pixTesteConsultarMatch = path.match(/^\/api\/pix\/teste-consultar\/(.+)$/);
     if (method === 'GET' && pixTesteConsultarMatch) {
-      await requireAuth(['admin'], request, env);
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
       if (!isPixConfigured(env)) return err('PUSHINPAY_TOKEN não configurado', 400);
       const txId = pixTesteConsultarMatch[1];
       try {
