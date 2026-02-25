@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório Entregador — MoskoGás v1.2.5</title>
+<title>Relatório Entregador — MoskoGás v1.2.6</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -26,7 +26,7 @@
   .report th { background: #f1f5f9; color: #334155; padding: 4px 5px; text-align: left; font-size: 12px; font-weight: 700; border: 1px solid #cbd5e1; white-space: nowrap; }
   .report td { padding: 3px 5px; border: 1px solid #e2e8f0; font-size: 12px; vertical-align: top; }
   .report .order-first td { border-top: 1.5px solid #94a3b8; }
-  .report .subtotal-row td { font-weight: 600; font-size: 9px; background: #f8fafc; border-top: 1px solid #cbd5e1; color: #64748b; }
+  .report .subtotal-row td { font-weight: 900; font-size: 11px; background: #f1f5f9; border-top: 2px solid #94a3b8; color: #1e293b; }
   .report .grand-total td { font-weight: 900; font-size: 13px; background: #e2e8f0; color: #1e293b; }
 
   .report .pgto-summary { margin-top: 12px; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
@@ -58,14 +58,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.5</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.6</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.5</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.6</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -78,7 +78,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.5
+// v1.2.6
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
