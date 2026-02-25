@@ -1,4 +1,4 @@
-// v2.40.9
+// v2.40.10
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -2125,7 +2125,7 @@ export default {
       const qPhone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
       const qName  = (url.searchParams.get('name')  || '').trim();
       const qAddr  = (url.searchParams.get('addr')  || '').trim();
-      const results = []; const seenPhone = new Set();
+      const results = []; const seenPhone = new Set(); const seenBling = new Set();
 
       // v2.28.0: busca multi-palavra — cada palavra vira um AND LIKE separado
       const nameWords = qName ? qName.split(/\s+/).filter(Boolean) : [];
@@ -2135,7 +2135,13 @@ export default {
         if (qAddr)  { sql += ' AND (address_line LIKE ? OR bairro LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`); }
         sql += ' ORDER BY name ASC LIMIT 15';
         const rows = await env.DB.prepare(sql).bind(...p).all().then(r => r.results || []);
-        for (const r of rows) { if (!seenPhone.has(r.phone_digits)) { seenPhone.add(r.phone_digits); results.push(r); } }
+        for (const r of rows) {
+          if (seenPhone.has(r.phone_digits)) continue;
+          if (r.bling_contact_id && seenBling.has(r.bling_contact_id)) continue;
+          seenPhone.add(r.phone_digits);
+          if (r.bling_contact_id) seenBling.add(r.bling_contact_id);
+          results.push(r);
+        }
       }
 
       if (qAddr || nameWords.length > 0) {
@@ -2152,8 +2158,12 @@ export default {
         const extraRows = await env.DB.prepare(sql2).bind(...p2).all().then(r => r.results || []);
         for (const r of extraRows) {
           const enriched = { ...r, address_line: r.ca_addr||r.address_line, bairro: r.ca_bairro||r.bairro, complemento: r.ca_comp||r.complemento, referencia: r.ca_ref||r.referencia, _extra_obs: r.ca_obs };
-          if (!seenPhone.has(r.phone_digits)) { seenPhone.add(r.phone_digits); results.push(enriched); }
-          else { const idx = results.findIndex(x => x.phone_digits === r.phone_digits); if (idx >= 0) results[idx] = enriched; }
+          if (!seenPhone.has(r.phone_digits)) {
+            if (enriched.bling_contact_id && seenBling.has(enriched.bling_contact_id)) continue;
+            seenPhone.add(r.phone_digits);
+            if (enriched.bling_contact_id) seenBling.add(enriched.bling_contact_id);
+            results.push(enriched);
+          } else { const idx = results.findIndex(x => x.phone_digits === r.phone_digits); if (idx >= 0) results[idx] = enriched; }
         }
       }
 
