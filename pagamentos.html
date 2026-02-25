@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.7</title>
+<title>Pagamentos — MoskoGás v1.9.8</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.7 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.8 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -86,7 +86,7 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.7</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.8</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -145,7 +145,7 @@
 </div>
 
 <script>
-// v1.9.6 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
+// v1.9.8 — Pagamentos: QR Code PIX PushInPay + Venda agrupada + Marcar Pago
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -223,29 +223,41 @@ function renderTable(rows) {
     const ck=selectedIds.has(p.id)?'checked':'';
     const isNfe=TIPOS_NFE.includes(p.tipo_pagamento);
     let actionBtns='';
-    // Lembrete PIX + QR Code
-    if(p.tipo_pagamento==='pix_receber'){
-      // Botão QR Code PIX — PushInPay mínimo R$1,00
-      const hasQr = p.pix_tx_id || p.cora_invoice_id;
-      const valorNum = parseFloat(p.total_value||0);
-      if(valorNum < 1){
-        actionBtns+=`<button class="btn-qr" disabled title="PIX exige mínimo R$1,00 (pedido: R$${valorNum.toFixed(2)})" style="opacity:.4;cursor:not-allowed">➕ PIX</button>`;
-      } else {
-        actionBtns+=`<button class="btn-qr" onclick="showQrCode(${p.id})" title="${hasQr?'Ver QR Code PIX':'Gerar QR Code PIX'}">${hasQr?'📱 QR':'➕ PIX'}</button>`;
-        if(hasQr) actionBtns+=`<button class="btn-check-pix" onclick="checkPixStatus(${p.id})" title="Verificar pagamento na PushInPay" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">✔ Check</button>`;
+    if(p.pago){
+      // ── PAGO: só imprimir + Bling se ainda não enviado ──────────────
+      if(!p.bling_pedido_id){
+        if(isNfe){
+          actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar Venda no Bling">📄 Bling</button>`;
+        } else {
+          actionBtns+=`<button class="btn-nfe" onclick="gerarVendaBling(${p.id})" title="Enviar ao Bling" style="background:#0891b2">📤 Bling</button>`;
+        }
       }
-      const cnt=p.reminder_count||0;const badge=cnt>0?`<span class="rb">${cnt}</span>`:'';
-      const hasPhone=p.phone_digits&&p.phone_digits.replace(/\D/g,'').length>=10;
-      actionBtns+=hasPhone?`<button class="btn-lembrete" onclick="enviarLembrete(${p.id})" title="Lembrete PIX WhatsApp${cnt?' ('+cnt+'x)':''}">📱${badge}</button>`:`<button class="btn-lembrete" disabled title="Sem telefone">📱</button>`;
-    }
-    // Botão principal
-    if(isNfe){
-      actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar Venda no Bling + marcar pago">📄 Venda</button>`;
+      actionBtns += `<button onclick="printRec(${p.id})" title="Imprimir recibo" style="background:#1F4E79;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">🖨️</button>`;
     } else {
-      actionBtns+=`<button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento PIX">✅ Pago</button>`;
+      // ── NÃO PAGO: todos os botões normais ───────────────────────────
+      if(p.tipo_pagamento==='pix_receber'){
+        // Botão QR Code PIX — PushInPay mínimo R$1,00
+        const hasQr = p.pix_tx_id || p.cora_invoice_id;
+        const valorNum = parseFloat(p.total_value||0);
+        if(valorNum < 1){
+          actionBtns+=`<button class="btn-qr" disabled title="PIX exige mínimo R$1,00 (pedido: R$${valorNum.toFixed(2)})" style="opacity:.4;cursor:not-allowed">➕ PIX</button>`;
+        } else {
+          actionBtns+=`<button class="btn-qr" onclick="showQrCode(${p.id})" title="${hasQr?'Ver QR Code PIX':'Gerar QR Code PIX'}">${hasQr?'📱 QR':'➕ PIX'}</button>`;
+          if(hasQr) actionBtns+=`<button class="btn-check-pix" onclick="checkPixStatus(${p.id})" title="Verificar pagamento na PushInPay" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">✔ Check</button>`;
+        }
+        const cnt=p.reminder_count||0;const badge=cnt>0?`<span class="rb">${cnt}</span>`:'';
+        const hasPhone=p.phone_digits&&p.phone_digits.replace(/\D/g,'').length>=10;
+        actionBtns+=hasPhone?`<button class="btn-lembrete" onclick="enviarLembrete(${p.id})" title="Lembrete PIX WhatsApp${cnt?' ('+cnt+'x)':''}">📱${badge}</button>`:`<button class="btn-lembrete" disabled title="Sem telefone">📱</button>`;
+      }
+      // Botão principal
+      if(isNfe){
+        actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar Venda no Bling + marcar pago">📄 Venda</button>`;
+      } else {
+        actionBtns+=`<button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento PIX">✅ Pago</button>`;
+      }
+      // Botão imprimir
+      actionBtns += `<button onclick="printRec(${p.id})" title="Imprimir recibo" style="background:#1F4E79;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">🖨️</button>`;
     }
-    // Botão imprimir (sempre disponível)
-    actionBtns += `<button onclick="printRec(${p.id})" title="Imprimir recibo" style="background:#1F4E79;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">🖨️</button>`;
     let ri='';
     if(p.tipo_pagamento==="pix_receber"){const cnt=p.reminder_count||0;if(cnt>0&&p.last_reminder_at)ri=`<div class="ri${cnt>=3?" w":""}">📱${cnt}x · ${timeAgo(p.last_reminder_at)} atrás</div>`;}
     const trStyle = p.pago ? 'background:#f0fdf4;opacity:0.75' : '';
@@ -346,6 +358,21 @@ async function bulkMarcarPago(){
 
 // ═══ NFE AGRUPADA (Mensalista/Boleto) ═══
 function gerarNfeUnico(orderId){showNfePreview([orderId]);}
+
+async function gerarVendaBling(orderId){
+  if(!confirm('Criar venda no Bling para o pedido #'+orderId+'?\n\nO pedido já está marcado como pago.'))return;
+  showLoading('Criando no Bling...');
+  const result = await apiBling('Criando venda Bling #'+orderId, async () => {
+    return await api('/api/pagamentos/criar-vendas-bling',{method:'POST',body:JSON.stringify({order_ids:[orderId]})});
+  });
+  hideLoading();
+  if(result.ok){
+    if(result.data.ok||result.data.results){toast('✅ Venda criada no Bling!','success');loadPagamentos();}
+    else toast('❌ '+(result.data.error||'Falha'),'error');
+  } else if(!result.canceled){
+    toast('❌ '+result.error,'error');
+  }
+}
 function bulkGerarNfe(){
   const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&TIPOS_NFE.includes(p.tipo_pagamento);});
   if(!ids.length){toast('⚠️ Nenhum Mensalista/Boleto selecionado','error');return;}
