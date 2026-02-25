@@ -109,7 +109,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 </style>
 </head>
 <body>
-<div id="mg-nav-container"></div>
+<div id="nav-placeholder"></div>
 
 <div class="page-header">
   <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.0</span></h1>
@@ -251,8 +251,8 @@ let produtosDisponiveis = [];
 
 // ── Init ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
   await checkAuth(['admin', 'atendente']);
-  initNav('');
   await carregarProdutos();
   await carregarEmpenhos();
 });
@@ -694,11 +694,6 @@ function formatBytes(b) {
   if (b > 1024*1024) return (b/1024/1024).toFixed(1) + ' MB';
   return (b/1024).toFixed(0) + ' KB';
 }
-
-const API_BASE = (() => {
-  const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
-  return base || 'https://api.moskogas.com.br';
-})();
 </script>
 </body>
 </html>
