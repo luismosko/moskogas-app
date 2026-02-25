@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.1</title>
+<title>Empenhos GOV — MoskoGás v1.0.2</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -75,6 +75,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .item-edit-row input:focus { border-color: #6366f1; }
 .btn-add-item { width: 100%; padding: 8px; background: #f0fdf4; border: 1.5px dashed #86efac; border-radius: 0 0 8px 8px; color: #16a34a; font-weight: 700; font-size: 12px; cursor: pointer; }
 
+.prod-search-wrap { position: relative; }
+.prod-search-input { width: 100%; padding: 6px 8px; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 12px; outline: none; }
+.prod-search-input:focus { border-color: #6366f1; }
+.prod-search-drop { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1.5px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px; z-index: 200; max-height: 200px; overflow-y: auto; box-shadow: 0 8px 20px rgba(0,0,0,.12); display: none; }
+.prod-search-item { padding: 8px 10px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.prod-search-item:hover { background: #f0f9ff; }
+.prod-selected-tag { background: #e0e7ff; color: #3730a3; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.prod-selected-tag span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+
 .arquivos-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .arquivo-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
 .arquivo-nome { flex: 1; font-size: 12px; font-weight: 600; color: #1e293b; }
@@ -112,7 +121,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.1</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.2</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -243,7 +252,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.1
+// v1.0.2
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -252,18 +261,9 @@ let editandoId = null;
 let currentTab = 'dados';
 let pendingFiles = [];
 let clienteSearchTimer = null;
-let produtosDisponiveis = [];
 
 // ── Init ──────────────────────────────────────────────────────────
-carregarProdutos();
 carregarEmpenhos();
-
-async function carregarProdutos() {
-  try {
-    const r = await api('/api/app-products?ativo=1');
-    produtosDisponiveis = (r || []).filter(p => p.ativo !== 0);
-  } catch(_) {}
-}
 
 async function carregarEmpenhos() {
   const status = document.getElementById('filtroStatus').value;
@@ -459,59 +459,135 @@ document.addEventListener('click', e => {
 });
 
 // ── Itens ─────────────────────────────────────────────────────────
+let _itemTimers = {};
+
 function addItemRow(item = {}) {
   const rows = document.getElementById('itens-rows');
-  const idx = rows.children.length;
-  const options = produtosDisponiveis.map(p =>
-    `<option value="${p.name}" data-bling="${p.bling_id||''}" ${item.produto_nome===p.name?'selected':''}>${p.name}</option>`
-  ).join('');
-
+  const idx = Date.now() + Math.random(); // id único
   const div = document.createElement('div');
   div.className = 'item-edit-row';
+  div.dataset.idx = idx;
+
+  const nomeExibido = item.produto_nome || '';
+  const blingId    = item.produto_bling_id || '';
+  const qtd        = item.quantidade_total  || '';
+  const preco      = item.preco_unitario    || '';
+
   div.innerHTML = `
-    <select onchange="onProdutoChange(this, ${idx})" style="font-size:12px">
-      <option value="">Produto...</option>
-      ${options}
-      <option value="__custom" ${!produtosDisponiveis.find(p=>p.name===item.produto_nome)&&item.produto_nome?'selected':''}>Outro...</option>
-    </select>
-    <input type="text" placeholder="ID Bling" id="bling-id-${idx}" value="${item.produto_bling_id||''}" style="font-size:11px">
-    <input type="number" placeholder="Qtd" min="1" value="${item.quantidade_total||''}" id="qtd-${idx}">
-    <input type="number" placeholder="R$ unit." min="0" step="0.01" value="${item.preco_unitario||''}" id="preco-${idx}">
+    <div class="prod-search-wrap">
+      ${nomeExibido
+        ? `<div class="prod-selected-tag" onclick="limparProdutoLinha(this)" title="Clique para trocar">
+             <span>${nomeExibido}</span> <small style="opacity:.6">✕</small>
+           </div>`
+        : `<input type="text" class="prod-search-input" placeholder="Buscar produto..." autocomplete="off"
+             oninput="buscarProdutoLinha(this, '${idx}')"
+             onfocus="this.select()">`
+      }
+      <div class="prod-search-drop" id="pdrop-${idx}"></div>
+      <input type="hidden" class="item-nome-hidden"   value="${nomeExibido}">
+      <input type="hidden" class="item-bling-hidden"  value="${blingId}">
+    </div>
+    <input type="text"   class="item-bling-id-vis" placeholder="ID Bling" value="${blingId}" style="font-size:11px;color:#94a3b8">
+    <input type="number" class="item-qtd"           placeholder="Qtd"     value="${qtd}"   min="1">
+    <input type="number" class="item-preco"         placeholder="R$ unit." value="${preco}" min="0" step="0.01">
     <button onclick="this.closest('.item-edit-row').remove()" style="background:#fee2e2;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;color:#dc2626;font-weight:700">✕</button>`;
   rows.appendChild(div);
 }
 
-function onProdutoChange(sel, idx) {
-  if (sel.value === '__custom') {
-    const name = prompt('Nome do produto:');
-    if (name) sel.value = name;
-    return;
-  }
-  const prod = produtosDisponiveis.find(p => p.name === sel.value);
-  if (prod) {
-    const blingEl = document.getElementById('bling-id-' + idx);
-    const precoEl = document.getElementById('preco-' + idx);
-    if (blingEl && prod.bling_id) blingEl.value = prod.bling_id;
-    if (precoEl && prod.price) precoEl.value = prod.price;
-  }
+function limparProdutoLinha(tag) {
+  const row = tag.closest('.item-edit-row');
+  const idx = row.dataset.idx;
+  row.querySelector('.item-nome-hidden').value  = '';
+  row.querySelector('.item-bling-hidden').value = '';
+  row.querySelector('.item-bling-id-vis').value = '';
+  // Substituir tag por input de busca
+  const wrap = tag.closest('.prod-search-wrap');
+  tag.remove();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'prod-search-input';
+  input.placeholder = 'Buscar produto...';
+  input.autocomplete = 'off';
+  input.setAttribute('oninput', `buscarProdutoLinha(this, '${idx}')`);
+  wrap.prepend(input);
+  input.focus();
 }
+
+function buscarProdutoLinha(input, idx) {
+  const q = input.value.trim();
+  const drop = document.getElementById('pdrop-' + idx);
+  clearTimeout(_itemTimers[idx]);
+  if (q.length < 2) { drop.style.display = 'none'; return; }
+  drop.style.display = 'block';
+  drop.innerHTML = '<div style="padding:8px 10px;color:#94a3b8;font-size:11px">🔍 Buscando...</div>';
+  _itemTimers[idx] = setTimeout(async () => {
+    try {
+      const list = await api(`/api/products/search?q=${encodeURIComponent(q)}`);
+      if (!list || !list.length) {
+        drop.innerHTML = '<div style="padding:8px 10px;color:#94a3b8;font-size:11px">Nenhum produto encontrado</div>';
+        return;
+      }
+      drop._data = list;
+      drop.innerHTML = list.slice(0, 15).map((p, i) => `
+        <div class="prod-search-item" onclick="selecionarProdutoLinha('${idx}', ${i})">
+          <span style="font-weight:600;color:#1e293b">${p.name || 'Produto'}</span>
+          <span style="color:#f97316;font-weight:700;white-space:nowrap">R$ ${parseFloat(p.price||0).toFixed(2)}</span>
+        </div>`).join('');
+    } catch(_) {
+      drop.innerHTML = '<div style="padding:8px 10px;color:#dc2626;font-size:11px">❌ Erro ao buscar</div>';
+    }
+  }, 280);
+}
+
+function selecionarProdutoLinha(idx, i) {
+  const drop = document.getElementById('pdrop-' + idx);
+  const p = (drop._data || [])[i];
+  if (!p) return;
+  drop.style.display = 'none';
+
+  const row = document.querySelector(`.item-edit-row[data-idx="${idx}"]`);
+  const wrap = row.querySelector('.prod-search-wrap');
+
+  // Atualizar hidden fields
+  row.querySelector('.item-nome-hidden').value  = p.name || '';
+  row.querySelector('.item-bling-hidden').value = p.bling_id || '';
+  row.querySelector('.item-bling-id-vis').value = p.bling_id || '';
+  if (!row.querySelector('.item-preco').value && p.price)
+    row.querySelector('.item-preco').value = parseFloat(p.price).toFixed(2);
+  if (!row.querySelector('.item-qtd').value) row.querySelector('.item-qtd').value = 1;
+
+  // Substituir input por tag
+  const input = wrap.querySelector('.prod-search-input');
+  if (input) input.remove();
+  const tag = document.createElement('div');
+  tag.className = 'prod-selected-tag';
+  tag.setAttribute('onclick', `limparProdutoLinha(this)`);
+  tag.title = 'Clique para trocar';
+  tag.innerHTML = `<span>${p.name}</span> <small style="opacity:.6">✕</small>`;
+  wrap.prepend(tag);
+}
+
+// Fechar drops ao clicar fora
+document.addEventListener('click', e => {
+  if (!e.target.closest('.prod-search-wrap'))
+    document.querySelectorAll('.prod-search-drop').forEach(d => d.style.display = 'none');
+});
 
 function coletarItens() {
   const rows = document.querySelectorAll('.item-edit-row');
   const itens = [];
-  rows.forEach((row, idx) => {
-    const sel = row.querySelector('select');
-    const nome = sel?.value;
-    if (!nome || nome === '__custom') return;
-    itens.push({
-      produto_nome: nome,
-      produto_bling_id: (document.getElementById('bling-id-' + idx)?.value || '').trim(),
-      quantidade_total: parseInt(document.getElementById('qtd-' + idx)?.value) || 0,
-      preco_unitario: parseFloat(document.getElementById('preco-' + idx)?.value) || 0,
-    });
+  rows.forEach(row => {
+    const nome  = row.querySelector('.item-nome-hidden')?.value?.trim();
+    const bling = row.querySelector('.item-bling-hidden')?.value?.trim() || row.querySelector('.item-bling-id-vis')?.value?.trim() || '';
+    const qtd   = parseInt(row.querySelector('.item-qtd')?.value) || 0;
+    const preco = parseFloat(row.querySelector('.item-preco')?.value) || 0;
+    if (!nome) return;
+    itens.push({ produto_nome: nome, produto_bling_id: bling, quantidade_total: qtd, preco_unitario: preco });
   });
   return itens;
 }
+
+function onProdutoChange() {} // compat
 
 // ── Arquivos ──────────────────────────────────────────────────────
 async function carregarArquivos(id) {
