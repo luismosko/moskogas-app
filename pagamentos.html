@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.12</title>
+<title>Pagamentos — MoskoGás v1.9.13</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.12 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.13 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -78,7 +78,7 @@
   </div>
   <select id="fTipo" onchange="loadPagamentos()" title="Filtrar por tipo">
     <option value="">Todos os tipos</option>
-    <option value="pix_receber">⏳ PIX Aberto</option>
+    <option value="pix_receber">⏳ PIX a Receber</option>
     <option value="mensalista">📅 Mensalista</option>
     <option value="boleto">🧾 Boleto</option>
   </select>
@@ -86,13 +86,13 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.12</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.13</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
   <input type="checkbox" id="bulk-all" onchange="toggleBulkAll(this.checked)" title="Selecionar/desmarcar todos">
   <span class="count"><span id="bulk-count">0</span> selecionados</span>
-  <button class="btn" style="background:#16a34a;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkMarcarPago()" id="btn-bulk-pago" title="Marcar pagos (PIX Aberto)">✅ Marcar Pagos (<span id="bulk-pix-count">0</span>)</button>
+  <button class="btn" style="background:#16a34a;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkMarcarPago()" id="btn-bulk-pago" title="Marcar pagos (PIX a Receber)">✅ Marcar Pagos (<span id="bulk-pix-count">0</span>)</button>
   <button class="btn" style="background:#7c3aed;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkGerarNfe()" id="btn-bulk-nfe" title="Gerar Venda Agrupada no Bling (Mensalista/Boleto)">📄 Gerar Venda Agrupada (<span id="bulk-nfe-count">0</span>)</button>
   <button class="btn" style="background:#2563eb;color:#fff;font-size:12px;padding:6px 14px;display:none" onclick="bulkEnviarLembrete()" id="btn-bulk-lembrete" title="Enviar lembrete WhatsApp (PIX)">📱 Enviar Lembretes</button>
 </div>
@@ -153,7 +153,7 @@ let allData = [];
 let selectedIds = new Set();
 let pendingNfeIds = [];
 
-const TIPO_LABELS = { pix_receber:'⏳ PIX Aberto', mensalista:'📅 Mensal', boleto:'🧾 Boleto', dinheiro:'💵 Dinh', pix_vista:'⚡ PIX', debito:'💳 Déb', credito:'💳 Créd' };
+const TIPO_LABELS = { pix_receber:'⏳ PIX a Receber', mensalista:'📅 Mensal', boleto:'🧾 Boleto', dinheiro:'💵 Dinh', pix_vista:'✅ PIX Pago', debito:'💳 Déb', credito:'💳 Créd' };
 const TIPOS_NFE = ['mensalista','boleto'];
 let mostrarPagos = false;
 
@@ -325,7 +325,7 @@ function updateBulkBar(){
   document.getElementById('btn-bulk-lembrete').style.display=pixCount>0?'inline-block':'none';
 }
 
-// ═══ MARCAR PAGO (PIX Aberto) ═══
+// ═══ MARCAR PAGO (PIX a Receber) ═══
 async function marcarPago(orderId){
   if(!confirm('Confirmar recebimento do PIX #'+orderId+'?'))return;
   showLoading('Verificando Bling...');

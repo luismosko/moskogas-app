@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.6.3 — MoskoGás</title>
+<title>Entregador v2.6.4 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -190,7 +190,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.6.3</small></h1>
+  <h1>🚚 Entregas <small>v2.6.4</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -209,7 +209,7 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.6.3 — entregador</div>
+<div class="version-badge">v2.6.4 — entregador</div>
 
 <!-- PIX QR Code Modal -->
 <div class="pix-overlay" id="pixOverlay">
@@ -252,8 +252,8 @@
     <label>💰 Pagamento</label>
     <select id="ve-pgto">
       <option value="dinheiro">💵 Dinheiro</option>
-      <option value="pix_vista">⚡ PIX à vista</option>
-      <option value="pix_receber">⏳ PIX a receber</option>
+      <option value="pix_vista">✅ PIX Pago</option>
+      <option value="pix_receber">⏳ PIX a Receber</option>
       <option value="mensalista">📅 Mensalista</option>
       <option value="debito">💳 Débito</option>
       <option value="credito">💳 Crédito</option>
@@ -299,12 +299,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.6.3
+// v2.6.4
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
 const TIPO_LABELS = {
-  dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX à vista', pix_receber: '⏳ PIX a receber',
+  dinheiro: '💵 Dinheiro', pix_vista: '✅ PIX Pago', pix_receber: '⏳ PIX a Receber',
   mensalista: '📅 Mensalista', boleto: '🧾 Boleto/Órgão', debito: '💳 Débito', credito: '💳 Crédito'
 };
 const TIPO_ICONS = {
@@ -786,7 +786,7 @@ async function deliver(orderId) {
     }
     toast(msg, result.bling_result && result.bling_result.action === 'create_error' ? 'warning' : 'success');
 
-    // v2.6.3: Mostrar QR de avaliação Google
+    // v2.6.4: Mostrar QR de avaliação Google
     showQrReview(orderId);
 
     load();
