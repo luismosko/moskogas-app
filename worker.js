@@ -1,8 +1,8 @@
-// v2.40.3
+// v2.40.4
 // =============================================================
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
-// v2.40.2: (Cloudflare Quick Edit) PushInPay PIX + webhook + auto-check cron
+// v2.40.4: (Cloudflare Quick Edit) PushInPay PIX + webhook + auto-check cron
 // v2.38.3: Novos campos customers_cache: ultima_compra_glp + origem (importação GLP Master)
 // v2.38.1: PushInPay PIX (substituiu Cora) + webhook + force lembrete
 // v2.31.0: Cora PIX — cobrança automática, QR code, webhook pagamento, WhatsApp
@@ -4373,6 +4373,58 @@ export default {
         FROM orders WHERE pix_tx_id IS NOT NULL
       `).first().catch(() => ({ total: 0, paid: 0, pending: 0 }));
       return json({ provider: 'pushinpay', configured: isPixConfigured(env), stats, webhook_url: 'https://api.moskogas.com.br/api/webhooks/pushinpay' });
+    }
+
+    // ── PushInPay: Diagnóstico de conexão ──────────────────────
+    if (method === 'GET' && path === '/api/pix/diagnostico') {
+      await requireAuth(['admin', 'atendente'], request, env);
+      const configured = isPixConfigured(env);
+      let api_reachable = false;
+      let api_error = null;
+      let account = null;
+      if (configured) {
+        try {
+          const r = await fetch(`${PUSHINPAY_API}/api/transactions?per_page=1`, {
+            headers: { 'Authorization': `Bearer ${env.PUSHINPAY_TOKEN}`, 'Accept': 'application/json' }
+          });
+          if (r.ok) {
+            api_reachable = true;
+            account = { note: 'API respondendo normalmente' };
+          } else {
+            const t = await r.text().catch(() => '');
+            api_error = `HTTP ${r.status}: ${t.substring(0, 200)}`;
+          }
+        } catch(e) {
+          api_error = e.message;
+        }
+      }
+      return json({ token_configured: configured, api_reachable, api_error, account, webhook_url: 'https://api.moskogas.com.br/api/webhooks/pushinpay' });
+    }
+
+    // ── PushInPay: Cobrança teste R$1,01 ───────────────────────
+    if (method === 'POST' && path === '/api/pix/teste-cobranca') {
+      await requireAuth(['admin'], request, env);
+      if (!isPixConfigured(env)) return err('PUSHINPAY_TOKEN não configurado', 400);
+      try {
+        const data = await pushInPayCreateCharge(env, 0, 1.01);
+        return json({ ok: true, tx_id: data.tx_id || data.id, qr_code: data.qr_code, status: data.status });
+      } catch(e) {
+        return json({ ok: false, error: e.message });
+      }
+    }
+
+    // ── PushInPay: Consultar status de transação ────────────────
+    const pixTesteConsultarMatch = path.match(/^\/api\/pix\/teste-consultar\/(.+)$/);
+    if (method === 'GET' && pixTesteConsultarMatch) {
+      await requireAuth(['admin'], request, env);
+      if (!isPixConfigured(env)) return err('PUSHINPAY_TOKEN não configurado', 400);
+      const txId = pixTesteConsultarMatch[1];
+      try {
+        const data = await pushInPayCheckStatus(env, txId);
+        return json({ ok: true, status: data.status, value: data.value, end_to_end_id: data.end_to_end_id });
+      } catch(e) {
+        return json({ ok: false, error: e.message });
+      }
     }
 
     // Legacy: manter /api/webhooks/cora respondendo
