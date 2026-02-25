@@ -1,6 +1,6 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.12.4
-// v1.11.0: Bling Auto-Recovery — ensureBling() + apiBling() + modal reconexão
-// v1.10.0: Contratos adicionado à navbar
+// shared.js — Utilitários compartilhados MoskoGás v1.13.0
+// v1.13.0: Dropdown Financeiro (Pagamentos + Empenhos GOV) na navbar
+// v1.11.0: Contratos adicionado à navbar
 // v1.9.1: Consulta Pedidos adicionado ao dropdown Relatório
 // v1.8.0: Nav compacta — Auditoria dentro de Relatório, Usuários dentro de Config
 // v1.7.0: Dropdown usuário (Trocar Senha + Sair), modal troca senha
@@ -151,12 +151,18 @@ const NAV_ACTIVE  = '#ffffff';
 const NAV_ITEMS = [
   { href: 'pedido.html',     icon: '➕', label: 'Novo Pedido',  roles: ['admin', 'atendente'] },
   { href: 'gestao.html',     icon: '📋', label: 'Gestão',       roles: ['admin', 'atendente'] },
-  { href: 'pagamentos.html', icon: '💰', label: 'Financeiro',   roles: ['admin', 'atendente'] },
   { href: 'contratos.html',  icon: '📄', label: 'Contratos',    roles: ['admin', 'atendente'] },
 ];
 
 // Dropdowns — cada um com ID único para abrir/fechar independente
 const NAV_DROPDOWNS = [
+  {
+    id: 'financeiro', icon: '💰', label: 'Financeiro', roles: ['admin', 'atendente'],
+    children: [
+      { href: 'pagamentos.html', icon: '💳', label: 'Pagamentos Pendentes' },
+      { href: 'empenhos.html',   icon: '🏛️', label: 'Empenhos GOV' },
+    ]
+  },
   {
     id: 'relatorio', icon: '📊', label: 'Relatório', roles: ['admin', 'atendente'],
     children: [

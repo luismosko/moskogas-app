@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.8</title>
+<title>Novo Pedido — MoskoGás v2.11.9</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.8 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.9 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.8</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.9</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -136,6 +136,20 @@
     </div>
   </div>
 
+  <!-- AVISO EMPENHO GOV v2.41.0 -->
+  <div id="empenho-aviso" style="display:none;margin-bottom:10px;padding:10px 14px;background:#fef3c7;border:2px solid #f59e0b;border-radius:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div>
+        <span style="font-size:13px;font-weight:800;color:#92400e">🏛️ EMPENHO GOV ATIVO</span>
+        <div id="empenho-aviso-info" style="font-size:12px;color:#78350f;margin-top:2px"></div>
+      </div>
+      <button onclick="abrirModalEmpenho()" style="background:#f59e0b;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">
+        Selecionar Empenho
+      </button>
+    </div>
+    <div id="empenho-selecionado-info" style="display:none;margin-top:8px;padding:6px 10px;background:#fff;border-radius:6px;font-size:12px;color:#166534;font-weight:700;border:1px solid #86efac"></div>
+  </div>
+
   <!-- ÚLTIMO PEDIDO DO CLIENTE -->
   <div class="card" id="last-order-card" style="display:none;padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -212,6 +226,27 @@
 
   </div><!-- /col-right -->
   </div><!-- /two-col -->
+</div>
+
+<!-- MODAL SELEÇÃO EMPENHO GOV v2.41.0 -->
+<div id="modal-empenho" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="padding:20px 24px 0;display:flex;align-items:center;justify-content:space-between">
+      <h2 style="font-size:17px;font-weight:800;color:#1e293b">🏛️ Selecionar Empenho GOV</h2>
+      <button onclick="fecharModalEmpenho()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8">✕</button>
+    </div>
+    <div style="padding:16px 24px 20px">
+      <p style="font-size:12px;color:#64748b;margin-bottom:14px">Este cliente possui empenhos GOV ativos. Selecione o empenho correspondente a esta venda:</p>
+      <div id="empenho-opcoes"></div>
+      <div style="margin-top:14px;padding:10px;background:#fef3c7;border-radius:8px;font-size:12px;color:#92400e">
+        ⚠️ A seleção do empenho é <strong>obrigatória</strong> para clientes com empenho ativo.
+      </div>
+    </div>
+    <div style="padding:0 24px 20px;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="fecharModalEmpenho()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer">Cancelar</button>
+      <button onclick="confirmarEmpenho()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer">✅ Confirmar Empenho</button>
+    </div>
+  </div>
 </div>
 
 <script src="shared.js"></script>
@@ -419,6 +454,14 @@ async function selectCustomer(i) {
     loadLastOrder(c.phone_digits);
   } else {
     document.getElementById('last-order-card').style.display = 'none';
+  }
+  // v2.41.0: Verificar empenhos ativos para este cliente
+  window._empenhoSelecionado = null;
+  window._empenhosCliente = [];
+  if (c.phone_digits && !nome.includes('CONSUMIDOR FINAL')) {
+    checkEmpenhosCliente(c.phone_digits);
+  } else {
+    document.getElementById('empenho-aviso').style.display = 'none';
   }
 }
 
@@ -1028,6 +1071,13 @@ async function saveOrder() {
 
   if (!items.length) { toast('⚠️ Adicione pelo menos 1 produto ao pedido', 'error'); return; }
 
+  // v2.41.0: Se cliente tem empenhos ativos, vincular é obrigatório
+  if ((window._empenhosCliente || []).length > 0 && !window._empenhoSelecionado) {
+    toast('🏛️ Selecione o empenho GOV antes de salvar!', 'error');
+    abrirModalEmpenho();
+    return;
+  }
+
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
   btn.textContent = '⏳ Salvando...';
@@ -1050,6 +1100,7 @@ async function saveOrder() {
         tipo_pagamento:   tipoPgto,
         forma_pagamento_key: document.getElementById('forma_pagamento_key').value,
         bling_contact_id: isConsumidorFinal ? CONSUMIDOR_FINAL_BLING_ID : (window._lastBlingContactId || null),
+        empenho_id: window._empenhoSelecionado?.id || null,
       }),
     });
 
@@ -1082,7 +1133,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.8: Não redireciona — limpa form para novo pedido
+    // v2.11.9: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1115,6 +1166,76 @@ async function saveOrder() {
 }
 
 renderItems();
+
+// ── Empenhos GOV v2.41.0 ─────────────────────────────────────────
+async function checkEmpenhosCliente(phone) {
+  try {
+    const empenhos = await api(`/api/empenhos/cliente/${phone}`);
+    window._empenhosCliente = empenhos || [];
+    const aviso = document.getElementById('empenho-aviso');
+    if (!empenhos || !empenhos.length) { aviso.style.display = 'none'; return; }
+    aviso.style.display = 'block';
+    const info = document.getElementById('empenho-aviso-info');
+    info.textContent = `${empenhos.length} empenho(s) ativo(s) — ${empenhos.map(e => e.numero).join(', ')}`;
+  } catch(_) {
+    window._empenhosCliente = [];
+    document.getElementById('empenho-aviso').style.display = 'none';
+  }
+}
+
+function abrirModalEmpenho() {
+  const empenhos = window._empenhosCliente || [];
+  if (!empenhos.length) return;
+  const modal = document.getElementById('modal-empenho');
+  const opcoes = document.getElementById('empenho-opcoes');
+
+  opcoes.innerHTML = empenhos.map(e => {
+    const itensInfo = (e.itens || []).map(it => {
+      const saldo = it.quantidade_total - it.quantidade_usada;
+      return `<span style="background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:4px;font-size:11px;margin-right:4px">${it.produto_nome}: ${saldo} restantes</span>`;
+    }).join('');
+    const selecionado = window._empenhoSelecionado?.id === e.id;
+    return `
+    <div onclick="selecionarOpcaoEmpenho(${e.id})" id="emp-opt-${e.id}"
+         style="padding:12px 14px;border:2px solid ${selecionado ? '#6366f1' : '#e2e8f0'};border-radius:10px;cursor:pointer;margin-bottom:8px;background:${selecionado ? '#eef2ff' : '#fff'};transition:all .15s">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:14px;font-weight:800;color:#1e293b">📄 ${e.numero}</span>
+        ${e.data_validade ? `<span style="font-size:11px;color:#64748b">📅 Validade: ${e.data_validade}</span>` : ''}
+        ${selecionado ? '<span style="background:#6366f1;color:#fff;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700">✓ SELECIONADO</span>' : ''}
+      </div>
+      <div>${itensInfo}</div>
+    </div>`;
+  }).join('');
+
+  modal.style.display = 'flex';
+}
+
+function selecionarOpcaoEmpenho(id) {
+  const empenhos = window._empenhosCliente || [];
+  window._empenhoSelecionado = empenhos.find(e => e.id === id) || null;
+  // Atualizar visual
+  empenhos.forEach(e => {
+    const el = document.getElementById('emp-opt-' + e.id);
+    if (!el) return;
+    const sel = e.id === id;
+    el.style.borderColor = sel ? '#6366f1' : '#e2e8f0';
+    el.style.background = sel ? '#eef2ff' : '#fff';
+  });
+}
+
+function confirmarEmpenho() {
+  if (!window._empenhoSelecionado) { toast('⚠️ Selecione um empenho', 'error'); return; }
+  fecharModalEmpenho();
+  const info = document.getElementById('empenho-selecionado-info');
+  info.style.display = 'block';
+  const e = window._empenhoSelecionado;
+  const itensInfo = (e.itens || []).map(it => `${it.produto_nome}: ${it.quantidade_total - it.quantidade_usada} restantes`).join(' | ');
+  info.innerHTML = `✅ Empenho selecionado: <strong>${e.numero}</strong> — ${itensInfo}`;
+}
+
+function fecharModalEmpenho() {
+  document.getElementById('modal-empenho').style.display = 'none';
+}
 </script>
 
 <!-- ── MODAL ENDEREÇOS ────────────────────────────────────────── -->

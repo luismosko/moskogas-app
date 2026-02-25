@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Empenhos GOV — MoskoGás v1.0.0</title>
+<script src="shared.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
+
+.page-header { max-width: 1100px; margin: 24px auto 0; padding: 0 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.page-header h1 { font-size: 22px; font-weight: 800; color: #1e293b; flex: 1; }
+.badge-version { background: #1e293b; color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+
+.toolbar { max-width: 1100px; margin: 16px auto 0; padding: 0 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.toolbar input, .toolbar select { padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: #fff; outline: none; }
+.toolbar input:focus, .toolbar select:focus { border-color: #6366f1; }
+.toolbar input { flex: 1; min-width: 180px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: none; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+.btn:hover { opacity: .85; }
+.btn-primary { background: #6366f1; color: #fff; }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-ghost { background: #f1f5f9; color: #475569; border: 1.5px solid #e2e8f0; }
+.btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
+
+.grid { max-width: 1100px; margin: 16px auto; padding: 0 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+
+.card { background: #fff; border-radius: 12px; border: 1.5px solid #e2e8f0; overflow: hidden; transition: box-shadow .2s; }
+.card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.1); }
+.card-header { padding: 14px 16px 10px; display: flex; align-items: flex-start; gap: 10px; border-bottom: 1px solid #f1f5f9; }
+.card-num { font-size: 15px; font-weight: 800; color: #1e293b; flex: 1; }
+.card-cliente { font-size: 12px; color: #64748b; margin-top: 2px; }
+.card-body { padding: 12px 16px; }
+.card-footer { padding: 10px 16px; background: #f8fafc; display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid #f1f5f9; }
+
+.status-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+.status-ativo { background: #dcfce7; color: #166534; }
+.status-esgotado { background: #fee2e2; color: #991b1b; }
+.status-cancelado { background: #f1f5f9; color: #64748b; }
+.status-vencido { background: #fef3c7; color: #92400e; }
+
+.alerta-badge { background: #fef3c7; color: #92400e; border: 1.5px solid #fbbf24; }
+.alerta-critico { background: #fee2e2; color: #991b1b; border: 1.5px solid #f87171; }
+
+.item-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+.item-nome { flex: 1; font-size: 13px; font-weight: 600; color: #1e293b; }
+.item-saldo { font-size: 12px; color: #475569; }
+.progress-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+.prog-ok { background: #22c55e; }
+.prog-warn { background: #f59e0b; }
+.prog-danger { background: #ef4444; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; overflow-y: auto; padding: 20px; }
+.modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; }
+.modal { background: #fff; border-radius: 16px; width: 100%; max-width: 680px; margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.modal-head { padding: 20px 24px 0; display: flex; align-items: center; justify-content: space-between; }
+.modal-head h2 { font-size: 18px; font-weight: 800; color: #1e293b; }
+.modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #94a3b8; line-height: 1; padding: 4px; }
+.modal-body { padding: 16px 24px 20px; }
+.modal-footer { padding: 0 24px 20px; display: flex; gap: 10px; justify-content: flex-end; }
+
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 9px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 13px; outline: none; }
+.form-group input:focus, .form-group select:focus { border-color: #6366f1; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.itens-editor { border: 1.5px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+.itens-editor-head { background: #f8fafc; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: grid; grid-template-columns: 1fr 110px 100px 100px 36px; gap: 8px; }
+.item-edit-row { display: grid; grid-template-columns: 1fr 110px 100px 100px 36px; gap: 8px; padding: 8px 12px; border-top: 1px solid #f1f5f9; align-items: center; }
+.item-edit-row input, .item-edit-row select { padding: 6px 8px; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 12px; width: 100%; outline: none; }
+.item-edit-row input:focus { border-color: #6366f1; }
+.btn-add-item { width: 100%; padding: 8px; background: #f0fdf4; border: 1.5px dashed #86efac; border-radius: 0 0 8px 8px; color: #16a34a; font-weight: 700; font-size: 12px; cursor: pointer; }
+
+.arquivos-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.arquivo-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+.arquivo-nome { flex: 1; font-size: 12px; font-weight: 600; color: #1e293b; }
+.arquivo-size { font-size: 11px; color: #94a3b8; }
+.upload-area { border: 2px dashed #e2e8f0; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; color: #94a3b8; font-size: 13px; transition: border-color .2s; }
+.upload-area:hover { border-color: #6366f1; color: #6366f1; }
+.upload-area input { display: none; }
+
+.historico-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.historico-table th { background: #f8fafc; padding: 8px 10px; text-align: left; font-weight: 700; color: #475569; border-bottom: 2px solid #e2e8f0; }
+.historico-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
+
+.empty-state { max-width: 400px; margin: 60px auto; text-align: center; }
+.empty-state .icon { font-size: 56px; margin-bottom: 16px; }
+.empty-state p { color: #64748b; font-size: 14px; }
+
+.loading-state { text-align: center; padding: 60px; color: #94a3b8; font-size: 14px; }
+
+.tab-row { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 0; }
+.tab-btn { padding: 8px 16px; border: none; background: none; font-size: 13px; font-weight: 600; color: #94a3b8; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab-btn.active { color: #6366f1; border-bottom-color: #6366f1; }
+
+.search-cliente { position: relative; }
+.search-cliente input { width: 100%; padding: 9px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 13px; outline: none; }
+.search-cliente input:focus { border-color: #6366f1; }
+.sc-dropdown { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1.5px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px; z-index: 100; max-height: 220px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,.1); display: none; }
+.sc-item { padding: 10px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+.sc-item:hover { background: #f0fdf4; }
+.sc-item strong { display: block; color: #1e293b; }
+.sc-item small { color: #94a3b8; }
+.bling-tag { display: inline-block; background: #16a34a; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
+</style>
+</head>
+<body>
+<div id="mg-nav-container"></div>
+
+<div class="page-header">
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.0</span></h1>
+  <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="filtroQ" placeholder="🔍 Buscar por número ou cliente..." oninput="filtrar()" />
+  <select id="filtroStatus" onchange="filtrar()">
+    <option value="ativo">Ativos</option>
+    <option value="esgotado">Esgotados</option>
+    <option value="cancelado">Cancelados</option>
+    <option value="todos">Todos</option>
+  </select>
+</div>
+
+<div id="grid" class="grid"><div class="loading-state">⏳ Carregando empenhos...</div></div>
+
+<!-- ══ MODAL NOVO/EDITAR ══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalEmp">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-title">🏛️ Novo Empenho</h2>
+      <button class="modal-close" onclick="fecharModal('modalEmp')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="tab-row">
+        <button class="tab-btn active" id="tab-dados" onclick="switchTab('dados')">📋 Dados</button>
+        <button class="tab-btn" id="tab-itens" onclick="switchTab('itens')">📦 Produtos</button>
+        <button class="tab-btn" id="tab-arquivos" onclick="switchTab('arquivos')">📎 Arquivos</button>
+      </div>
+
+      <!-- TAB DADOS -->
+      <div id="pane-dados">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Número do Empenho *</label>
+            <input type="text" id="emp-numero" placeholder="Ex: 2026NE1502" style="text-transform:uppercase">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="emp-status">
+              <option value="ativo">Ativo</option>
+              <option value="cancelado">Cancelado</option>
+              <option value="vencido">Vencido</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Cliente / Órgão *</label>
+          <div class="search-cliente">
+            <input type="text" id="emp-cliente-search" placeholder="Buscar cliente cadastrado no Bling..." oninput="buscarCliente(this.value)" autocomplete="off">
+            <div class="sc-dropdown" id="sc-drop"></div>
+          </div>
+          <input type="hidden" id="emp-cliente-nome">
+          <input type="hidden" id="emp-cliente-phone">
+          <input type="hidden" id="emp-bling-id">
+          <div id="cliente-selecionado" style="display:none;margin-top:6px;padding:8px 12px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#166534;font-weight:600;border:1px solid #86efac"></div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data de Emissão</label>
+            <input type="date" id="emp-data-emissao">
+          </div>
+          <div class="form-group">
+            <label>Data de Validade</label>
+            <input type="date" id="emp-data-validade">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Valor Total do Empenho (R$)</label>
+          <input type="number" id="emp-valor" placeholder="0.00" step="0.01" min="0">
+        </div>
+
+        <div class="form-group">
+          <label>Observações</label>
+          <textarea id="emp-obs" rows="2" style="resize:vertical" placeholder="Observações internas..."></textarea>
+        </div>
+      </div>
+
+      <!-- TAB ITENS -->
+      <div id="pane-itens" style="display:none">
+        <p style="font-size:12px;color:#64748b;margin-bottom:12px">Cadastre os produtos e quantidades deste empenho.</p>
+        <div class="itens-editor">
+          <div class="itens-editor-head">
+            <span>Produto</span><span>Produto Bling</span><span>Quantidade</span><span>Preço Unit.</span><span></span>
+          </div>
+          <div id="itens-rows"></div>
+          <button class="btn-add-item" onclick="addItemRow()">＋ Adicionar Produto</button>
+        </div>
+      </div>
+
+      <!-- TAB ARQUIVOS -->
+      <div id="pane-arquivos" style="display:none">
+        <p style="font-size:12px;color:#64748b;margin-bottom:12px">Anexe o(s) PDF(s) do empenho.</p>
+        <div id="arquivos-existentes" class="arquivos-list"></div>
+        <div style="margin-top:12px">
+          <div class="upload-area" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" accept=".pdf" multiple onchange="onFilesSelected(this.files)">
+            📎 Clique para anexar PDF(s) do empenho
+          </div>
+          <div id="uploads-pendentes" class="arquivos-list" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal('modalEmp')">Cancelar</button>
+      <button class="btn btn-success" onclick="salvarEmpenho()">✅ Salvar Empenho</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL DETALHE/HISTÓRICO ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalDetalhe">
+  <div class="modal" style="max-width:780px">
+    <div class="modal-head">
+      <h2 id="detalhe-title">Empenho</h2>
+      <button class="modal-close" onclick="fecharModal('modalDetalhe')">✕</button>
+    </div>
+    <div class="modal-body" id="detalhe-body">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal('modalDetalhe')">Fechar</button>
+      <button class="btn btn-primary" id="btn-editar-detalhe" onclick="">✏️ Editar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let empenhos = [];
+let editandoId = null;
+let currentTab = 'dados';
+let pendingFiles = [];
+let clienteSearchTimer = null;
+let produtosDisponiveis = [];
+
+// ── Init ──────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await checkAuth(['admin', 'atendente']);
+  initNav('');
+  await carregarProdutos();
+  await carregarEmpenhos();
+});
+
+async function carregarProdutos() {
+  try {
+    const r = await api('/api/app-products?ativo=1');
+    produtosDisponiveis = (r || []).filter(p => p.ativo !== 0);
+  } catch(_) {}
+}
+
+async function carregarEmpenhos() {
+  const status = document.getElementById('filtroStatus').value;
+  const q = document.getElementById('filtroQ').value;
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '<div class="loading-state">⏳ Carregando...</div>';
+  try {
+    const params = new URLSearchParams({ status });
+    if (q) params.set('q', q);
+    empenhos = await api(`/api/empenhos?${params}`);
+    renderGrid();
+  } catch(e) {
+    grid.innerHTML = `<div class="loading-state">❌ Erro: ${e.message}</div>`;
+  }
+}
+
+function filtrar() {
+  clearTimeout(window._filtroTimer);
+  window._filtroTimer = setTimeout(carregarEmpenhos, 300);
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  if (!empenhos.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="icon">🏛️</div><p>Nenhum empenho encontrado</p></div>`;
+    return;
+  }
+  grid.innerHTML = empenhos.map(e => renderCard(e)).join('');
+}
+
+function renderCard(e) {
+  const statusClass = `status-${e.status}`;
+  const statusLabel = { ativo: '✅ Ativo', esgotado: '🔴 Esgotado', cancelado: '⚪ Cancelado', vencido: '🟡 Vencido' }[e.status] || e.status;
+
+  const itensHtml = (e.itens || []).map(it => {
+    const saldo = it.quantidade_total - it.quantidade_usada;
+    const pct = it.quantidade_total > 0 ? Math.round(it.quantidade_usada / it.quantidade_total * 100) : 0;
+    const pctClass = pct >= 90 ? 'prog-danger' : pct >= 70 ? 'prog-warn' : 'prog-ok';
+    const alertaClass = saldo <= 10 || pct >= 90 ? 'alerta-critico' : saldo <= Math.max(10, Math.ceil(it.quantidade_total * 0.2)) ? 'alerta-badge' : '';
+    return `
+      <div class="item-row">
+        <div style="flex:1">
+          <div class="item-nome">${it.produto_nome}</div>
+          <div class="progress-bar"><div class="progress-fill ${pctClass}" style="width:${pct}%"></div></div>
+        </div>
+        <div style="text-align:right">
+          <div class="item-saldo" style="font-weight:700">${saldo} <small style="font-weight:400">/ ${it.quantidade_total}</small></div>
+          ${alertaClass ? `<span class="status-badge ${alertaClass}" style="font-size:9px">⚠️ SALDO BAIXO</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  const vencHtml = e.data_validade ? `<div style="font-size:11px;color:#64748b;margin-top:4px">📅 Validade: ${formatDate(e.data_validade)}</div>` : '';
+  const alertaGeral = e.tem_alerta ? `<span class="status-badge alerta-badge" style="margin-left:6px">⚠️ Saldo baixo</span>` : '';
+
+  return `
+  <div class="card">
+    <div class="card-header">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="card-num">📄 ${e.numero}</div>
+          <span class="status-badge ${statusClass}">${statusLabel}</span>
+          ${alertaGeral}
+        </div>
+        <div class="card-cliente">🏛️ ${e.cliente_nome}</div>
+        ${vencHtml}
+      </div>
+      ${e.valor_total ? `<div style="font-size:14px;font-weight:800;color:#6366f1">R$ ${parseFloat(e.valor_total).toFixed(2)}</div>` : ''}
+    </div>
+    <div class="card-body">
+      ${itensHtml || '<div style="color:#94a3b8;font-size:12px">Nenhum produto cadastrado</div>'}
+    </div>
+    <div class="card-footer">
+      <button class="btn btn-ghost btn-sm" onclick="abrirDetalhe(${e.id})">🔍 Detalhe / Histórico</button>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalEditar(${e.id})">✏️ Editar</button>
+      ${e.status === 'ativo' ? `<button class="btn btn-danger btn-sm" onclick="cancelarEmpenho(${e.id})">✕ Cancelar</button>` : ''}
+    </div>
+  </div>`;
+}
+
+// ── Modal Novo ────────────────────────────────────────────────────
+function abrirModalNovo() {
+  editandoId = null;
+  document.getElementById('modal-title').textContent = '🏛️ Novo Empenho';
+  resetForm();
+  switchTab('dados');
+  document.getElementById('modalEmp').classList.add('open');
+}
+
+function abrirModalEditar(id) {
+  const e = empenhos.find(x => x.id === id);
+  if (!e) return;
+  editandoId = id;
+  document.getElementById('modal-title').textContent = `✏️ Editar — ${e.numero}`;
+  resetForm();
+
+  document.getElementById('emp-numero').value = e.numero || '';
+  document.getElementById('emp-status').value = e.status || 'ativo';
+  document.getElementById('emp-data-emissao').value = e.data_emissao || '';
+  document.getElementById('emp-data-validade').value = e.data_validade || '';
+  document.getElementById('emp-valor').value = e.valor_total || '';
+  document.getElementById('emp-obs').value = e.observacoes || '';
+
+  if (e.cliente_nome) {
+    document.getElementById('emp-cliente-search').value = e.cliente_nome;
+    document.getElementById('emp-cliente-nome').value = e.cliente_nome;
+    document.getElementById('emp-bling-id').value = e.bling_contact_id || '';
+    document.getElementById('emp-cliente-phone').value = e.cliente_phone || '';
+    mostrarClienteSelecionado(e.cliente_nome, e.bling_contact_id);
+  }
+
+  // Itens
+  const rows = document.getElementById('itens-rows');
+  rows.innerHTML = '';
+  (e.itens || []).forEach(it => addItemRow(it));
+
+  switchTab('dados');
+  document.getElementById('modalEmp').classList.add('open');
+}
+
+function fecharModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function resetForm() {
+  ['emp-numero','emp-data-emissao','emp-data-validade','emp-valor','emp-obs'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('emp-status').value = 'ativo';
+  document.getElementById('emp-cliente-search').value = '';
+  document.getElementById('emp-cliente-nome').value = '';
+  document.getElementById('emp-cliente-phone').value = '';
+  document.getElementById('emp-bling-id').value = '';
+  document.getElementById('cliente-selecionado').style.display = 'none';
+  document.getElementById('itens-rows').innerHTML = '';
+  document.getElementById('arquivos-existentes').innerHTML = '';
+  document.getElementById('uploads-pendentes').innerHTML = '';
+  pendingFiles = [];
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  ['dados','itens','arquivos'].forEach(t => {
+    document.getElementById('pane-' + t).style.display = t === tab ? 'block' : 'none';
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'arquivos' && editandoId) carregarArquivos(editandoId);
+}
+
+// ── Busca cliente ─────────────────────────────────────────────────
+function buscarCliente(q) {
+  clearTimeout(clienteSearchTimer);
+  const drop = document.getElementById('sc-drop');
+  if (q.length < 2) { drop.style.display = 'none'; return; }
+  clienteSearchTimer = setTimeout(async () => {
+    try {
+      const r = await api(`/api/customer/search-multi?name=${encodeURIComponent(q)}`);
+      // Só mostrar clientes com bling_contact_id
+      const comBling = (r || []).filter(c => c.bling_contact_id);
+      if (!comBling.length) {
+        drop.innerHTML = '<div class="sc-item" style="color:#94a3b8">Nenhum cliente com Bling encontrado</div>';
+        drop.style.display = 'block';
+        return;
+      }
+      drop.innerHTML = comBling.slice(0, 10).map((c, i) => `
+        <div class="sc-item" onclick="selecionarCliente(${i})">
+          <strong>${c.name || c.customer_name} <span class="bling-tag">B</span></strong>
+          <small>${c.phone_digits || ''} ${c.address_line ? '— '+c.address_line : ''}</small>
+        </div>`).join('');
+      drop._data = comBling;
+      drop.style.display = 'block';
+    } catch(_) { drop.style.display = 'none'; }
+  }, 280);
+}
+
+function selecionarCliente(i) {
+  const drop = document.getElementById('sc-drop');
+  const c = drop._data[i];
+  document.getElementById('emp-cliente-search').value = c.name || c.customer_name;
+  document.getElementById('emp-cliente-nome').value = c.name || c.customer_name;
+  document.getElementById('emp-cliente-phone').value = c.phone_digits || '';
+  document.getElementById('emp-bling-id').value = c.bling_contact_id || '';
+  drop.style.display = 'none';
+  mostrarClienteSelecionado(c.name || c.customer_name, c.bling_contact_id);
+}
+
+function mostrarClienteSelecionado(nome, blingId) {
+  const el = document.getElementById('cliente-selecionado');
+  el.style.display = 'block';
+  el.innerHTML = `✅ ${nome} <span class="bling-tag">Bling ID: ${blingId}</span>`;
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-cliente')) document.getElementById('sc-drop').style.display = 'none';
+});
+
+// ── Itens ─────────────────────────────────────────────────────────
+function addItemRow(item = {}) {
+  const rows = document.getElementById('itens-rows');
+  const idx = rows.children.length;
+  const options = produtosDisponiveis.map(p =>
+    `<option value="${p.name}" data-bling="${p.bling_id||''}" ${item.produto_nome===p.name?'selected':''}>${p.name}</option>`
+  ).join('');
+
+  const div = document.createElement('div');
+  div.className = 'item-edit-row';
+  div.innerHTML = `
+    <select onchange="onProdutoChange(this, ${idx})" style="font-size:12px">
+      <option value="">Produto...</option>
+      ${options}
+      <option value="__custom" ${!produtosDisponiveis.find(p=>p.name===item.produto_nome)&&item.produto_nome?'selected':''}>Outro...</option>
+    </select>
+    <input type="text" placeholder="ID Bling" id="bling-id-${idx}" value="${item.produto_bling_id||''}" style="font-size:11px">
+    <input type="number" placeholder="Qtd" min="1" value="${item.quantidade_total||''}" id="qtd-${idx}">
+    <input type="number" placeholder="R$ unit." min="0" step="0.01" value="${item.preco_unitario||''}" id="preco-${idx}">
+    <button onclick="this.closest('.item-edit-row').remove()" style="background:#fee2e2;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;color:#dc2626;font-weight:700">✕</button>`;
+  rows.appendChild(div);
+}
+
+function onProdutoChange(sel, idx) {
+  if (sel.value === '__custom') {
+    const name = prompt('Nome do produto:');
+    if (name) sel.value = name;
+    return;
+  }
+  const prod = produtosDisponiveis.find(p => p.name === sel.value);
+  if (prod) {
+    const blingEl = document.getElementById('bling-id-' + idx);
+    const precoEl = document.getElementById('preco-' + idx);
+    if (blingEl && prod.bling_id) blingEl.value = prod.bling_id;
+    if (precoEl && prod.price) precoEl.value = prod.price;
+  }
+}
+
+function coletarItens() {
+  const rows = document.querySelectorAll('.item-edit-row');
+  const itens = [];
+  rows.forEach((row, idx) => {
+    const sel = row.querySelector('select');
+    const nome = sel?.value;
+    if (!nome || nome === '__custom') return;
+    itens.push({
+      produto_nome: nome,
+      produto_bling_id: (document.getElementById('bling-id-' + idx)?.value || '').trim(),
+      quantidade_total: parseInt(document.getElementById('qtd-' + idx)?.value) || 0,
+      preco_unitario: parseFloat(document.getElementById('preco-' + idx)?.value) || 0,
+    });
+  });
+  return itens;
+}
+
+// ── Arquivos ──────────────────────────────────────────────────────
+async function carregarArquivos(id) {
+  try {
+    const e = await api(`/api/empenhos/${id}`);
+    const el = document.getElementById('arquivos-existentes');
+    el.innerHTML = (e.arquivos || []).map(a => `
+      <div class="arquivo-item">
+        <span style="font-size:20px">📄</span>
+        <a class="arquivo-nome" href="${API_BASE}/api/empenhos/${id}/pdf/${a.id}" target="_blank">${a.nome_arquivo}</a>
+        <span class="arquivo-size">${formatBytes(a.bytes)}</span>
+        <button class="btn btn-danger btn-sm" onclick="removerArquivo(${id}, ${a.id})">✕</button>
+      </div>`).join('') || '<div style="color:#94a3b8;font-size:12px">Nenhum arquivo anexado</div>';
+  } catch(_) {}
+}
+
+function onFilesSelected(files) {
+  Array.from(files).forEach(f => {
+    pendingFiles.push(f);
+    const el = document.getElementById('uploads-pendentes');
+    const div = document.createElement('div');
+    div.className = 'arquivo-item';
+    div.innerHTML = `<span>📄</span><span class="arquivo-nome">${f.name}</span><span class="arquivo-size">${formatBytes(f.size)} — será salvo ao salvar o empenho</span>`;
+    el.appendChild(div);
+  });
+  document.getElementById('file-input').value = '';
+}
+
+async function removerArquivo(empId, arqId) {
+  if (!confirm('Remover este arquivo?')) return;
+  await api(`/api/empenhos/${empId}/arquivos/${arqId}`, { method: 'DELETE' });
+  toast('✅ Arquivo removido');
+  await carregarArquivos(empId);
+}
+
+// ── Salvar ────────────────────────────────────────────────────────
+async function salvarEmpenho() {
+  const numero = document.getElementById('emp-numero').value.trim().toUpperCase();
+  const clienteNome = document.getElementById('emp-cliente-nome').value.trim();
+  const blingId = document.getElementById('emp-bling-id').value.trim();
+
+  if (!numero) { toast('⚠️ Informe o número do empenho', 'error'); switchTab('dados'); return; }
+  if (!clienteNome || !blingId) { toast('⚠️ Selecione um cliente com Bling', 'error'); switchTab('dados'); return; }
+
+  const itens = coletarItens();
+  if (!itens.length) { toast('⚠️ Adicione pelo menos 1 produto', 'error'); switchTab('itens'); return; }
+  if (itens.some(it => !it.quantidade_total || it.quantidade_total <= 0)) {
+    toast('⚠️ Informe a quantidade de todos os produtos', 'error'); switchTab('itens'); return;
+  }
+
+  const payload = {
+    numero,
+    cliente_nome: clienteNome,
+    cliente_phone: document.getElementById('emp-cliente-phone').value || null,
+    bling_contact_id: blingId,
+    data_emissao: document.getElementById('emp-data-emissao').value || null,
+    data_validade: document.getElementById('emp-data-validade').value || null,
+    valor_total: parseFloat(document.getElementById('emp-valor').value) || 0,
+    observacoes: document.getElementById('emp-obs').value || null,
+    status: document.getElementById('emp-status').value,
+    itens,
+  };
+
+  showLoading(editandoId ? 'Atualizando empenho...' : 'Salvando empenho...');
+  try {
+    let empId = editandoId;
+    if (editandoId) {
+      await api(`/api/empenhos/${editandoId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      await api(`/api/empenhos/${editandoId}/itens`, { method: 'POST', body: JSON.stringify({ itens }) });
+    } else {
+      const r = await api('/api/empenhos', { method: 'POST', body: JSON.stringify(payload) });
+      empId = r.id;
+    }
+    // Upload PDFs pendentes
+    for (const f of pendingFiles) {
+      const fd = new FormData(); fd.append('arquivo', f);
+      const token = getSessionToken();
+      await fetch(`${API_BASE}/api/empenhos/${empId}/upload-pdf`, { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {}, body: fd });
+    }
+    toast(`✅ Empenho ${numero} salvo!`);
+    fecharModal('modalEmp');
+    await carregarEmpenhos();
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally { hideLoading(); }
+}
+
+// ── Detalhe / Histórico ───────────────────────────────────────────
+async function abrirDetalhe(id) {
+  showLoading('Carregando...');
+  try {
+    const [e, hist] = await Promise.all([
+      api(`/api/empenhos/${id}`),
+      api(`/api/empenhos/${id}/historico`),
+    ]);
+    hideLoading();
+
+    document.getElementById('detalhe-title').textContent = `📄 ${e.numero} — ${e.cliente_nome}`;
+    document.getElementById('btn-editar-detalhe').onclick = () => { fecharModal('modalDetalhe'); abrirModalEditar(id); };
+
+    const itensHtml = (e.itens || []).map(it => {
+      const saldo = it.quantidade_total - it.quantidade_usada;
+      const pct = it.quantidade_total > 0 ? Math.round(it.quantidade_usada / it.quantidade_total * 100) : 0;
+      const cor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
+      return `<tr>
+        <td>${it.produto_nome}</td>
+        <td style="text-align:center">${it.quantidade_total}</td>
+        <td style="text-align:center">${it.quantidade_usada}</td>
+        <td style="text-align:center;font-weight:700;color:${cor}">${saldo}</td>
+        <td style="text-align:center">${pct}%</td>
+      </tr>`;
+    }).join('');
+
+    const arquivosHtml = (e.arquivos || []).map(a =>
+      `<a href="${API_BASE}/api/empenhos/${id}/pdf/${a.id}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#f1f5f9;border-radius:6px;font-size:12px;color:#6366f1;text-decoration:none;margin:2px">📄 ${a.nome_arquivo}</a>`
+    ).join('') || '<span style="color:#94a3b8;font-size:12px">Nenhum arquivo</span>';
+
+    const histHtml = hist.length ? hist.map(v => {
+      const qtds = JSON.parse(v.quantidade_json || '{}');
+      const qtdTxt = Object.entries(qtds).map(([k,q]) => `${q}x ${k}`).join(', ');
+      return `<tr>
+        <td>#${v.order_id}</td>
+        <td>${v.customer_name || '—'}</td>
+        <td>${qtdTxt || '—'}</td>
+        <td>R$ ${parseFloat(v.total_value||0).toFixed(2)}</td>
+        <td>${formatDate(new Date(v.pedido_data * 1000).toISOString().slice(0,10))}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px">Nenhuma venda vinculada</td></tr>';
+
+    document.getElementById('detalhe-body').innerHTML = `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        ${e.data_emissao ? `<div style="font-size:12px"><b>Emissão:</b> ${formatDate(e.data_emissao)}</div>` : ''}
+        ${e.data_validade ? `<div style="font-size:12px"><b>Validade:</b> ${formatDate(e.data_validade)}</div>` : ''}
+        ${e.valor_total ? `<div style="font-size:12px"><b>Valor:</b> R$ ${parseFloat(e.valor_total).toFixed(2)}</div>` : ''}
+        ${e.observacoes ? `<div style="font-size:12px"><b>Obs:</b> ${e.observacoes}</div>` : ''}
+      </div>
+
+      <h3 style="font-size:13px;font-weight:700;color:#475569;margin-bottom:8px;text-transform:uppercase">📦 Saldo por Produto</h3>
+      <table class="historico-table" style="margin-bottom:16px">
+        <thead><tr><th>Produto</th><th style="text-align:center">Total</th><th style="text-align:center">Usado</th><th style="text-align:center">Saldo</th><th style="text-align:center">%</th></tr></thead>
+        <tbody>${itensHtml}</tbody>
+      </table>
+
+      <h3 style="font-size:13px;font-weight:700;color:#475569;margin-bottom:8px;text-transform:uppercase">📎 Arquivos</h3>
+      <div style="margin-bottom:16px">${arquivosHtml}</div>
+
+      <h3 style="font-size:13px;font-weight:700;color:#475569;margin-bottom:8px;text-transform:uppercase">📋 Histórico de Vendas Vinculadas</h3>
+      <table class="historico-table">
+        <thead><tr><th>Pedido</th><th>Cliente</th><th>Produtos</th><th>Valor</th><th>Data</th></tr></thead>
+        <tbody>${histHtml}</tbody>
+      </table>`;
+
+    document.getElementById('modalDetalhe').classList.add('open');
+  } catch(e) {
+    hideLoading();
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+// ── Cancelar ──────────────────────────────────────────────────────
+async function cancelarEmpenho(id) {
+  const motivo = prompt('Motivo do cancelamento:');
+  if (motivo === null) return;
+  showLoading('Cancelando...');
+  try {
+    await api(`/api/empenhos/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelado', observacoes: motivo }) });
+    toast('✅ Empenho cancelado');
+    await carregarEmpenhos();
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { hideLoading(); }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
+function formatDate(d) {
+  if (!d) return '';
+  const parts = d.slice(0,10).split('-');
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+function formatBytes(b) {
+  if (!b) return '';
+  if (b > 1024*1024) return (b/1024/1024).toFixed(1) + ' MB';
+  return (b/1024).toFixed(0) + ' KB';
+}
+
+const API_BASE = (() => {
+  const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
+  return base || 'https://api.moskogas.com.br';
+})();
+</script>
+</body>
+</html>

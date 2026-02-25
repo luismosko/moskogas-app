@@ -1,4 +1,4 @@
-// v2.40.13
+// v2.41.0
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -1062,8 +1062,90 @@ async function ensureAuditTable(env) {
 
 // ── Contratos (Comodato) — Tabelas e Helpers ─────────────────
 
-async function ensureContractTables(env) {
-  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contracts (
+// ── Empenhos GOV ──────────────────────────────────────────────────────────────
+async function ensureEmpenhoTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gov_empenhos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero TEXT NOT NULL UNIQUE,
+    cliente_nome TEXT NOT NULL,
+    cliente_phone TEXT,
+    bling_contact_id TEXT NOT NULL,
+    status TEXT DEFAULT 'ativo',
+    data_emissao TEXT,
+    data_validade TEXT,
+    valor_total REAL DEFAULT 0,
+    observacoes TEXT,
+    created_by INTEGER,
+    created_by_nome TEXT,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(() => {});
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gov_empenho_arquivos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empenho_id INTEGER NOT NULL,
+    nome_arquivo TEXT,
+    r2_key TEXT,
+    bytes INTEGER,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (empenho_id) REFERENCES gov_empenhos(id)
+  )`).run().catch(() => {});
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gov_empenho_itens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empenho_id INTEGER NOT NULL,
+    produto_nome TEXT NOT NULL,
+    produto_bling_id TEXT,
+    quantidade_total INTEGER NOT NULL DEFAULT 0,
+    quantidade_usada INTEGER NOT NULL DEFAULT 0,
+    preco_unitario REAL DEFAULT 0,
+    FOREIGN KEY (empenho_id) REFERENCES gov_empenhos(id)
+  )`).run().catch(() => {});
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gov_empenho_vendas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empenho_id INTEGER NOT NULL,
+    order_id INTEGER NOT NULL,
+    quantidade_json TEXT DEFAULT '{}',
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (empenho_id) REFERENCES gov_empenhos(id)
+  )`).run().catch(() => {});
+}
+
+async function alertarSaldoBaixo(env, empenho, item) {
+  const saldo = item.quantidade_total - item.quantidade_usada;
+  const pct = item.quantidade_total > 0 ? Math.round(saldo / item.quantidade_total * 100) : 0;
+  if (pct > 10 && saldo > 10) return;
+  const msg = `⚠️ ALERTA EMPENHO GOV\nEmpenho: ${empenho.numero}\nCliente: ${empenho.cliente_nome}\nProduto: ${item.produto_nome}\nSaldo restante: ${saldo} unidades (${pct}% do total)\n\nAcesse o sistema para verificar.`;
+  const admins = await env.DB.prepare(`SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1`).all().then(r => r.results || []);
+  for (const adm of admins) {
+    if (adm.telefone) await sendWhatsApp(env, adm.telefone, msg, { category: 'admin_alerta' }).catch(() => {});
+  }
+  try {
+    const emailCfg = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_email'").first();
+    if (emailCfg?.value) {
+      const cfg = JSON.parse(emailCfg.value);
+      const destinos = (cfg.destinos || '').split('\n').map(s => s.trim()).filter(Boolean);
+      if (destinos.length > 0) {
+        const resendKey = env.RESEND_API_KEY || (await env.DB.prepare("SELECT value FROM app_config WHERE key='resend_api_key'").first())?.value;
+        if (resendKey) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'MoskoGás <noreply@moskogas.com.br>',
+              to: destinos,
+              subject: `⚠️ Alerta Empenho ${empenho.numero} — Saldo Baixo`,
+              html: `<h2>⚠️ Saldo Baixo — Empenho ${empenho.numero}</h2><p><b>Cliente:</b> ${empenho.cliente_nome}</p><p><b>Produto:</b> ${item.produto_nome}</p><p><b>Saldo:</b> ${saldo} unidades (${pct}% do total)</p>`
+            })
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch(_) {}
+}
+
+
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     numero TEXT NOT NULL UNIQUE,
     status TEXT DEFAULT 'draft',
@@ -2527,7 +2609,7 @@ export default {
 
     if (method === 'POST' && path === '/api/order/create') {
       const body = await request.json();
-      const { phone, name, address_line, bairro, complemento, referencia, items, total_value, notes, emitir_nfce, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento } = body;
+      const { phone, name, address_line, bairro, complemento, referencia, items, total_value, notes, emitir_nfce, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, empenho_id } = body;
       const digits = (phone || '').replace(/\D/g, '');
 
       const cols = ['forma_pagamento_id INTEGER','forma_pagamento_key TEXT','emitir_nfce INTEGER','nfce_gerada INTEGER','nfce_numero TEXT','nfce_chave TEXT','bling_pedido_id INTEGER','bling_pedido_num INTEGER','pago INTEGER DEFAULT 0','tipo_pagamento TEXT','vendedor_id INTEGER','vendedor_nome TEXT','foto_comprovante TEXT','observacao_entregador TEXT','tipo_pagamento_original TEXT','delivered_at TEXT'];
@@ -2558,6 +2640,36 @@ export default {
       try { await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, 'pendente', forma_pagamento_key||null).run(); } catch(_) {}
       await logEvent(env, orderId, 'created', { name, address_line, tipo_pagamento: tipoPg, pago, vendedor: vendedorNome });
       await logBlingAudit(env, orderId, 'criar_venda', 'skipped', { error_message: `Bling será criado ao marcar entregue` });
+
+      // v2.41.0: Vincular empenho GOV se informado
+      if (empenho_id) {
+        await ensureEmpenhoTables(env);
+        try {
+          const empenho = await env.DB.prepare('SELECT * FROM gov_empenhos WHERE id=?').bind(parseInt(empenho_id)).first();
+          if (empenho) {
+            // Montar itens_vendidos a partir dos items do pedido
+            const itensVendidos = (items || []).map(it => ({ produto_nome: it.name, qty: parseInt(it.qty) || 1 }));
+            const qtdJson = {};
+            for (const iv of itensVendidos) {
+              const item = await env.DB.prepare(`SELECT * FROM gov_empenho_itens WHERE empenho_id=? AND produto_nome=?`).bind(parseInt(empenho_id), iv.produto_nome).first();
+              if (item) {
+                await env.DB.prepare(`UPDATE gov_empenho_itens SET quantidade_usada=quantidade_usada+? WHERE id=?`).bind(iv.qty, item.id).run();
+                qtdJson[iv.produto_nome] = iv.qty;
+                const itemAtualizado = { ...item, quantidade_usada: item.quantidade_usada + iv.qty };
+                await alertarSaldoBaixo(env, empenho, itemAtualizado).catch(() => {});
+              }
+            }
+            await env.DB.prepare(`INSERT INTO gov_empenho_vendas (empenho_id, order_id, quantidade_json) VALUES (?, ?, ?)`)
+              .bind(parseInt(empenho_id), orderId, JSON.stringify(qtdJson)).run();
+            // Verificar esgotamento
+            const todosItens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(parseInt(empenho_id)).all().then(r => r.results || []);
+            if (todosItens.every(it => it.quantidade_usada >= it.quantidade_total)) {
+              await env.DB.prepare(`UPDATE gov_empenhos SET status='esgotado', updated_at=unixepoch() WHERE id=?`).bind(parseInt(empenho_id)).run();
+            }
+            await logEvent(env, orderId, 'empenho_vinculado', { empenho_id, empenho_numero: empenho.numero });
+          }
+        } catch(e) { console.error('[empenho] vincular error:', e.message); }
+      }
 
       return json({ ok: true, id: orderId, bling_pedido_id: null, pago, vendedor: vendedorNome });
     }
@@ -5109,6 +5221,221 @@ export default {
           ...CORS_HEADERS,
         },
       });
+    }
+
+    // ════════════════════════════════════════════════════════
+    // EMPENHOS GOV (v2.41.0)
+    // ════════════════════════════════════════════════════════
+    if (path.startsWith('/api/empenhos')) {
+      await ensureEmpenhoTables(env);
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const user = authCheck;
+
+      // ── Helpers ──────────────────────────────────────────
+      async function getEmpenhoComSaldo(id) {
+        const e = await env.DB.prepare('SELECT * FROM gov_empenhos WHERE id=?').bind(id).first();
+        if (!e) return null;
+        const itens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(id).all().then(r => r.results || []);
+        const arquivos = await env.DB.prepare('SELECT * FROM gov_empenho_arquivos WHERE empenho_id=?').bind(id).all().then(r => r.results || []);
+        // Calcular saldo por item
+        const itensComSaldo = itens.map(it => ({
+          ...it,
+          quantidade_saldo: it.quantidade_total - it.quantidade_usada,
+          pct_usado: it.quantidade_total > 0 ? Math.round(it.quantidade_usada / it.quantidade_total * 100) : 0,
+          alerta: it.quantidade_total > 0 && (it.quantidade_total - it.quantidade_usada) <= Math.max(10, Math.ceil(it.quantidade_total * 0.1))
+        }));
+        const temAlerta = itensComSaldo.some(it => it.alerta);
+        return { ...e, itens: itensComSaldo, arquivos, tem_alerta: temAlerta };
+      }
+
+
+
+      // ── GET /api/empenhos — listar ────────────────────────
+      if (method === 'GET' && path === '/api/empenhos') {
+        const status = url.searchParams.get('status') || 'ativo';
+        const q = url.searchParams.get('q') || '';
+        let sql = 'SELECT * FROM gov_empenhos WHERE 1=1';
+        const p = [];
+        if (status !== 'todos') { sql += ' AND status=?'; p.push(status); }
+        if (q) { sql += ' AND (numero LIKE ? OR cliente_nome LIKE ?)'; p.push(`%${q}%`, `%${q}%`); }
+        sql += ' ORDER BY created_at DESC LIMIT 100';
+        const rows = await env.DB.prepare(sql).bind(...p).all().then(r => r.results || []);
+        // Enriquecer com itens/saldo
+        const result = [];
+        for (const e of rows) {
+          const itens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(e.id).all().then(r => r.results || []);
+          const temAlerta = itens.some(it => it.quantidade_total > 0 && (it.quantidade_total - it.quantidade_usada) <= Math.max(10, Math.ceil(it.quantidade_total * 0.1)));
+          result.push({ ...e, itens, tem_alerta: temAlerta });
+        }
+        return json(result);
+      }
+
+      // ── POST /api/empenhos — criar ────────────────────────
+      if (method === 'POST' && path === '/api/empenhos') {
+        const body = await request.json();
+        const { numero, cliente_nome, cliente_phone, bling_contact_id, data_emissao, data_validade, valor_total, observacoes, itens } = body;
+        if (!numero || !cliente_nome || !bling_contact_id) return err('Número, cliente e Bling ID são obrigatórios');
+        const ins = await env.DB.prepare(
+          `INSERT INTO gov_empenhos (numero, cliente_nome, cliente_phone, bling_contact_id, data_emissao, data_validade, valor_total, observacoes, created_by, created_by_nome)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(numero, cliente_nome, cliente_phone || null, bling_contact_id, data_emissao || null, data_validade || null, parseFloat(valor_total) || 0, observacoes || null, user.id, user.nome).run();
+        const empenhoId = ins.meta?.last_row_id;
+        // Inserir itens
+        if (itens && itens.length > 0) {
+          for (const it of itens) {
+            await env.DB.prepare(`INSERT INTO gov_empenho_itens (empenho_id, produto_nome, produto_bling_id, quantidade_total, preco_unitario) VALUES (?, ?, ?, ?, ?)`)
+              .bind(empenhoId, it.produto_nome, it.produto_bling_id || null, parseInt(it.quantidade_total) || 0, parseFloat(it.preco_unitario) || 0).run();
+          }
+        }
+        return json({ ok: true, id: empenhoId });
+      }
+
+      // ── GET /api/empenhos/cliente/:phone — empenhos ativos do cliente ──
+      const clienteMatch = path.match(/^\/api\/empenhos\/cliente\/(.+)$/);
+      if (method === 'GET' && clienteMatch) {
+        const phone = clienteMatch[1].replace(/\D/g, '');
+        const rows = await env.DB.prepare(
+          `SELECT e.*, cc.bling_contact_id as cc_bling FROM gov_empenhos e
+           LEFT JOIN customers_cache cc ON cc.phone_digits = e.cliente_phone
+           WHERE (e.cliente_phone=? OR cc.phone_digits=?) AND e.status='ativo' ORDER BY e.created_at DESC`
+        ).bind(phone, phone).all().then(r => r.results || []);
+        const result = [];
+        for (const e of rows) {
+          const itens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(e.id).all().then(r => r.results || []);
+          result.push({ ...e, itens });
+        }
+        return json(result);
+      }
+
+      // ── GET /api/empenhos/:id — detalhe ──────────────────
+      const empIdMatch = path.match(/^\/api\/empenhos\/(\d+)$/);
+      if (method === 'GET' && empIdMatch) {
+        const e = await getEmpenhoComSaldo(parseInt(empIdMatch[1]));
+        if (!e) return err('Empenho não encontrado', 404);
+        return json(e);
+      }
+
+      // ── PATCH /api/empenhos/:id — editar ─────────────────
+      if (method === 'PATCH' && empIdMatch) {
+        const id = parseInt(empIdMatch[1]);
+        const body = await request.json();
+        const { numero, cliente_nome, cliente_phone, bling_contact_id, data_emissao, data_validade, valor_total, observacoes, status } = body;
+        await env.DB.prepare(
+          `UPDATE gov_empenhos SET numero=COALESCE(?,numero), cliente_nome=COALESCE(?,cliente_nome), cliente_phone=COALESCE(?,cliente_phone),
+           bling_contact_id=COALESCE(?,bling_contact_id), data_emissao=COALESCE(?,data_emissao), data_validade=COALESCE(?,data_validade),
+           valor_total=COALESCE(?,valor_total), observacoes=COALESCE(?,observacoes), status=COALESCE(?,status), updated_at=unixepoch()
+           WHERE id=?`
+        ).bind(numero||null, cliente_nome||null, cliente_phone||null, bling_contact_id||null, data_emissao||null, data_validade||null,
+               valor_total != null ? parseFloat(valor_total) : null, observacoes||null, status||null, id).run();
+        return json({ ok: true });
+      }
+
+      // ── POST /api/empenhos/:id/upload-pdf ─────────────────
+      if (method === 'POST' && path.match(/^\/api\/empenhos\/(\d+)\/upload-pdf$/)) {
+        const id = parseInt(path.match(/\/empenhos\/(\d+)\//)[1]);
+        const formData = await request.formData();
+        const file = formData.get('arquivo');
+        if (!file) return err('Arquivo não enviado');
+        const bytes = await file.arrayBuffer();
+        const r2Key = `empenhos/${id}/${Date.now()}_${file.name}`;
+        await env.BUCKET.put(r2Key, bytes, { httpMetadata: { contentType: file.type || 'application/pdf' } });
+        const ins = await env.DB.prepare(`INSERT INTO gov_empenho_arquivos (empenho_id, nome_arquivo, r2_key, bytes) VALUES (?, ?, ?, ?)`)
+          .bind(id, file.name, r2Key, bytes.byteLength).run();
+        return json({ ok: true, id: ins.meta?.last_row_id, nome: file.name, r2_key: r2Key });
+      }
+
+      // ── DELETE /api/empenhos/:id/arquivos/:fid ────────────
+      const delArqMatch = path.match(/^\/api\/empenhos\/(\d+)\/arquivos\/(\d+)$/);
+      if (method === 'DELETE' && delArqMatch) {
+        const [, empId, fid] = delArqMatch;
+        const arq = await env.DB.prepare('SELECT r2_key FROM gov_empenho_arquivos WHERE id=? AND empenho_id=?').bind(parseInt(fid), parseInt(empId)).first();
+        if (arq?.r2_key) await env.BUCKET.delete(arq.r2_key).catch(() => {});
+        await env.DB.prepare('DELETE FROM gov_empenho_arquivos WHERE id=?').bind(parseInt(fid)).run();
+        return json({ ok: true });
+      }
+
+      // ── GET /api/empenhos/:id/pdf/:fid — download PDF ─────
+      const getPdfMatch = path.match(/^\/api\/empenhos\/(\d+)\/pdf\/(\d+)$/);
+      if (method === 'GET' && getPdfMatch) {
+        const [, empId, fid] = getPdfMatch;
+        const arq = await env.DB.prepare('SELECT * FROM gov_empenho_arquivos WHERE id=? AND empenho_id=?').bind(parseInt(fid), parseInt(empId)).first();
+        if (!arq) return err('Arquivo não encontrado', 404);
+        const obj = await env.BUCKET.get(arq.r2_key);
+        if (!obj) return err('Arquivo não encontrado no storage', 404);
+        return new Response(obj.body, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${arq.nome_arquivo}"` } });
+      }
+
+      // ── POST /api/empenhos/:id/vincular-venda — abater saldo ──
+      if (method === 'POST' && path.match(/^\/api\/empenhos\/(\d+)\/vincular-venda$/)) {
+        const id = parseInt(path.match(/\/empenhos\/(\d+)\//)[1]);
+        const body = await request.json();
+        const { order_id, itens_vendidos } = body; // itens_vendidos: [{produto_nome, qty}]
+        if (!order_id || !itens_vendidos?.length) return err('Dados inválidos');
+
+        // Verificar empenho
+        const empenho = await env.DB.prepare('SELECT * FROM gov_empenhos WHERE id=? AND status=?').bind(id, 'ativo').first();
+        if (!empenho) return err('Empenho não encontrado ou inativo', 404);
+
+        // Abater cada item
+        const qtdJson = {};
+        for (const iv of itens_vendidos) {
+          const item = await env.DB.prepare(`SELECT * FROM gov_empenho_itens WHERE empenho_id=? AND produto_nome=?`).bind(id, iv.produto_nome).first();
+          if (!item) continue;
+          const saldo = item.quantidade_total - item.quantidade_usada;
+          if (iv.qty > saldo) return err(`Saldo insuficiente para ${iv.produto_nome}: saldo ${saldo}, pedido ${iv.qty}`, 400);
+          await env.DB.prepare(`UPDATE gov_empenho_itens SET quantidade_usada=quantidade_usada+? WHERE id=?`).bind(iv.qty, item.id).run();
+          qtdJson[iv.produto_nome] = iv.qty;
+          // Verificar alerta após abate
+          const itemAtualizado = { ...item, quantidade_usada: item.quantidade_usada + iv.qty };
+          await alertarSaldoBaixo(env, empenho, itemAtualizado).catch(() => {});
+        }
+
+        // Registrar venda
+        await env.DB.prepare(`INSERT INTO gov_empenho_vendas (empenho_id, order_id, quantidade_json) VALUES (?, ?, ?)`)
+          .bind(id, order_id, JSON.stringify(qtdJson)).run();
+
+        // Salvar empenho_id no pedido
+        await env.DB.prepare(`UPDATE orders SET notes=CASE WHEN notes IS NULL OR notes='' THEN ? ELSE notes||' | '||? END WHERE id=?`)
+          .bind(`[Empenho: ${empenho.numero}]`, `[Empenho: ${empenho.numero}]`, order_id).run().catch(() => {});
+
+        // Verificar se todos itens esgotados → fechar empenho
+        const todosItens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(id).all().then(r => r.results || []);
+        const todosEsgotados = todosItens.every(it => it.quantidade_usada >= it.quantidade_total);
+        if (todosEsgotados) await env.DB.prepare(`UPDATE gov_empenhos SET status='esgotado', updated_at=unixepoch() WHERE id=?`).bind(id).run();
+
+        return json({ ok: true, qtd_abatida: qtdJson });
+      }
+
+      // ── GET /api/empenhos/:id/historico ───────────────────
+      if (method === 'GET' && path.match(/^\/api\/empenhos\/(\d+)\/historico$/)) {
+        const id = parseInt(path.match(/\/empenhos\/(\d+)\//)[1]);
+        const vendas = await env.DB.prepare(
+          `SELECT ev.*, o.customer_name, o.created_at as pedido_data, o.tipo_pagamento, o.total_value, o.status as pedido_status
+           FROM gov_empenho_vendas ev
+           LEFT JOIN orders o ON o.id = ev.order_id
+           WHERE ev.empenho_id=? ORDER BY ev.created_at DESC`
+        ).bind(id).all().then(r => r.results || []);
+        return json(vendas);
+      }
+
+      // ── POST /api/empenhos/:id/itens — add/replace itens ─
+      if (method === 'POST' && path.match(/^\/api\/empenhos\/(\d+)\/itens$/)) {
+        const id = parseInt(path.match(/\/empenhos\/(\d+)\//)[1]);
+        const { itens } = await request.json();
+        // Deletar itens sem uso e reinserir
+        await env.DB.prepare('DELETE FROM gov_empenho_itens WHERE empenho_id=? AND quantidade_usada=0').bind(id).run();
+        for (const it of (itens || [])) {
+          const exists = await env.DB.prepare('SELECT id FROM gov_empenho_itens WHERE empenho_id=? AND produto_nome=?').bind(id, it.produto_nome).first();
+          if (exists) {
+            await env.DB.prepare('UPDATE gov_empenho_itens SET quantidade_total=?, preco_unitario=? WHERE id=?').bind(parseInt(it.quantidade_total)||0, parseFloat(it.preco_unitario)||0, exists.id).run();
+          } else {
+            await env.DB.prepare('INSERT INTO gov_empenho_itens (empenho_id, produto_nome, produto_bling_id, quantidade_total, preco_unitario) VALUES (?,?,?,?,?)')
+              .bind(id, it.produto_nome, it.produto_bling_id||null, parseInt(it.quantidade_total)||0, parseFloat(it.preco_unitario)||0).run();
+          }
+        }
+        return json({ ok: true });
+      }
     }
 
     return err('Not found', 404);
