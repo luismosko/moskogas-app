@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Recibo MoskoGás v2.0.10</title>
+<title>Recibo MoskoGás v2.0.11</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; background: #e2e8f0; padding: 20px; }
@@ -102,6 +102,11 @@
     </div>
     <div class="cliente-row2"><span class="lbl">📍 Endereço: </span><span class="val" id="v1-end">—</span></div>
     <div class="cliente-row2" id="v1-unidade-wrap" style="display:none"><span class="lbl">🏢 Nome / Unidade: </span><span class="val" id="v1-unidade" style="font-weight:600">—</span></div>
+    <table>
+      <thead><tr>
+        <th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:right">Unit</th><th style="text-align:right">Subtotal</th>
+      </tr></thead>
+      <tbody id="v1-items"></tbody>
       <tfoot><tr class="total-row">
         <td colspan="3">TOTAL</td><td class="right" id="v1-total">R$ 0,00</td>
       </tr></tfoot>
@@ -196,7 +201,7 @@ function fillVia(prefix, o, items) {
     document.getElementById(prefix+'-doc').textContent = cpfCnpj;
   }
 
-  const phone = (o.phone_digits||'').replace(/^55/,'').replace(/(\d{2})(\d{5})(\d{4})/,'() -');
+  const phone = (o.phone_digits||'').replace(/^55/,'').replace(/(\d{2})(\d{4,5})(\d{4})/,'($1) $2-$3');
   document.getElementById(prefix+'-tel').textContent = phone || '—';
 
   let end = o.address_line || '';
@@ -253,7 +258,7 @@ async function load() {
     const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
     fillVia('v1', o, items);
     fillVia('v2', o, items);
-    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.10';
+    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.11';
   } catch(e) {
     document.getElementById('pagina').innerHTML =
       '<p style="padding:40px;color:#dc2626;text-align:center;font-size:16px">Erro: ' + e.message + '</p>' +
