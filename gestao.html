@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.9.0 — MoskoGás</title>
+<title>Gestão v2.9.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -718,8 +718,13 @@ async function sendWa() {
 
 // ── Impressão ─────────────────────────────────────────────────
 function printOrder(order) {
-  const params = encodeURIComponent(JSON.stringify(order));
-  window.open(`print.html?data=${params}`, '_blank');
+  try {
+    sessionStorage.setItem('mg_print_order', JSON.stringify(order));
+    window.open(`print.html?id=${order.id}&src=session`, '_blank');
+  } catch(e) {
+    // fallback URL (pode ser truncado em pedidos grandes)
+    window.open(`print.html?id=${order.id}`, '_blank');
+  }
 }
 
 // ── Auto refresh ──────────────────────────────────────────────
