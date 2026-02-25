@@ -1,4 +1,4 @@
-// v2.41.0
+// v2.41.1
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -1146,9 +1146,9 @@ async function alertarSaldoBaixo(env, empenho, item) {
 }
 
 
+async function ensureContractTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contracts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero TEXT NOT NULL UNIQUE,
-    status TEXT DEFAULT 'draft',
     tipo_pessoa TEXT DEFAULT 'pj',
     razao_social TEXT,
     cnpj_cpf TEXT,
