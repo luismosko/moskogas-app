@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Recibo MoskoGás v2.0.5</title>
+<title>Recibo MoskoGás v2.0.6</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; background: #e2e8f0; padding: 20px; }
@@ -230,22 +230,20 @@ async function load() {
   const dataParam = params.get('data');
   const srcSession = params.get('src') === 'session';
 
-  // Modo 0: localStorage (passado por pagamentos.html para evitar limite de URL)
-  if (srcSession && id) {
+  // Modo 0: localStorage com chave por ID (evita conflito entre pedidos)
+  if (id) {
     try {
-      const raw = localStorage.getItem('mg_print_order');
+      const raw = localStorage.getItem('mg_print_' + id);
       if (raw) {
+        localStorage.removeItem('mg_print_' + id);
         const o = JSON.parse(raw);
-        if (String(o.id) === String(id)) {
-          localStorage.removeItem('mg_print_order');
-          const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
-          fillVia('v1', o, items);
-          fillVia('v2', o, items);
-          document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.5';
-          return;
-        }
+        const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
+        fillVia('v1', o, items);
+        fillVia('v2', o, items);
+        document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.6';
+        return;
       }
-    } catch(e) { /* fallback */ }
+    } catch(e) { /* fallback para API */ }
   }
 
   // Modo 1: ?data=JSON (vindo do gestao.html com objeto completo)
@@ -255,7 +253,7 @@ async function load() {
       const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
       fillVia('v1', o, items);
       fillVia('v2', o, items);
-      document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.5';
+      document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.6';
       return;
     } catch(e) {
       // JSON truncado pela URL — tenta extrair o id e busca na API
@@ -270,7 +268,7 @@ async function load() {
             const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
             fillVia('v1', o, items);
             fillVia('v2', o, items);
-            document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.5';
+            document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.6';
             return;
           }
         }
@@ -291,7 +289,7 @@ async function load() {
     const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
     fillVia('v1', o, items);
     fillVia('v2', o, items);
-    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.5';
+    document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.6';
   } catch(e) {
     document.getElementById('pagina').innerHTML = '<p style="padding:40px;color:#dc2626;text-align:center">Erro ao carregar pedido: ' + e.message + '</p>';
   }
