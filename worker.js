@@ -1,4 +1,4 @@
-// v2.40.7
+// v2.40.8
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -2919,17 +2919,24 @@ export default {
     const sendWaMatch = path.match(/^\/api\/order\/(\d+)\/send-whatsapp$/);
     if (method === 'POST' && sendWaMatch) {
       const id = sendWaMatch[1];
-      const { observation, driver_id } = await request.json();
+      const { observation, driver_id, skip_whatsapp } = await request.json();
       let order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('order not found', 404);
-      if (driver_id && !order.driver_id) {
+      if (driver_id) {
         const driver = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=?').bind(driver_id).first();
         if (driver) {
-          await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.nome, driver.telefone || '', id).run();
+          await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.nome, driver.telefone || '', id).run();
           order = { ...order, driver_id, driver_name_cache: driver.nome, driver_phone_cache: driver.telefone || '' };
         }
       }
       if (!order.driver_id) return err('Nenhum entregador selecionado');
+
+      // Marcar como enviado sem WhatsApp (botão "Marcar Enviado" na gestão)
+      if (skip_whatsapp) {
+        await env.DB.prepare(`UPDATE orders SET status='whatsapp_enviado', updated_at=unixepoch() WHERE id=?`).bind(id).run();
+        await logEvent(env, id, 'whatsapp_skipped', { driver_id: order.driver_id, reason: 'manual_skip' });
+        return json({ ok: true, status: 'whatsapp_enviado', whatsapp_skipped: true });
+      }
       // Checar se entregador recebe WhatsApp
       const driverUser = await env.DB.prepare('SELECT recebe_whatsapp, telefone FROM app_users WHERE id=?').bind(order.driver_id).first();
       if (!driverUser || !driverUser.recebe_whatsapp) {

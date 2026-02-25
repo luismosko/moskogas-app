@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.6.4 — MoskoGás</title>
+<title>Entregador v2.6.5 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -190,7 +190,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.6.4</small></h1>
+  <h1>🚚 Entregas <small>v2.6.5</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -209,7 +209,7 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.6.4 — entregador</div>
+<div class="version-badge">v2.6.5 — entregador</div>
 
 <!-- PIX QR Code Modal -->
 <div class="pix-overlay" id="pixOverlay">
@@ -299,7 +299,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.6.4
+// v2.6.5
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -464,10 +464,16 @@ function renderPendentes(rows) {
       <div class="delivery-section" id="delivery-${o.id}">
         <h3>📋 Finalizar Entrega</h3>
 
+        <div class="delivery-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+          <label>💰 Pgto solicitado:</label>
+          <div style="width:100%;padding:8px 12px;background:#f1f5f9;border-radius:8px;font-weight:700;color:#334155;font-size:13px">${pgtoLabel}</div>
+        </div>
+
         <div class="delivery-row">
-          <label>💰 Pgto:</label>
-          <select id="pgto-${o.id}">
-            ${Object.entries(TIPO_LABELS).map(([k,v]) => '<option value="' + k + '"' + (k===o.tipo_pagamento?' selected':'') + '>' + v + '</option>').join('')}
+          <label>✅ Pgto recebido: *</label>
+          <select id="pgto-${o.id}" required>
+            <option value="">— Selecione como recebeu —</option>
+            ${Object.entries(TIPO_LABELS).map(([k,v]) => '<option value="' + k + '">' + v + '</option>').join('')}
           </select>
         </div>
 
@@ -743,6 +749,12 @@ async function deliver(orderId) {
   }
 
   const tipoPg = document.getElementById('pgto-' + orderId);
+  if (!tipoPg || !tipoPg.value) {
+    toast('💰 Selecione a forma de pagamento recebida!', 'error');
+    tipoPg && tipoPg.focus();
+    return;
+  }
+  const tipoPg = document.getElementById('pgto-' + orderId);
   const obs = document.getElementById('obs-' + orderId);
 
   const btn = document.getElementById('deliver-btn-' + orderId);
@@ -786,7 +798,7 @@ async function deliver(orderId) {
     }
     toast(msg, result.bling_result && result.bling_result.action === 'create_error' ? 'warning' : 'success');
 
-    // v2.6.4: Mostrar QR de avaliação Google
+    // v2.6.5: Mostrar QR de avaliação Google
     showQrReview(orderId);
 
     load();
