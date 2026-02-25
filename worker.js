@@ -1,4 +1,4 @@
-// v2.40.8
+// v2.40.9
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -3485,7 +3485,15 @@ export default {
       for (const o of orders) {
         const key = o.phone_digits || o.customer_name || 'sem_id_' + o.id;
         if (!grupos[key]) {
-          grupos[key] = { cliente: o.customer_name, phone: o.phone_digits, bling_contact_id: o.bling_contact_id || null, cpf_cnpj: o.cpf_cnpj || null, pedidos: [], produtos: {}, total: 0 };
+          // Se não achou bling_contact_id via phone (phone nulo), buscar por nome
+          let blingContactId = o.bling_contact_id || null;
+          if (!blingContactId && !o.phone_digits && o.customer_name) {
+            const byName = await env.DB.prepare(
+              `SELECT bling_contact_id FROM customers_cache WHERE LOWER(name) = LOWER(?) AND bling_contact_id IS NOT NULL LIMIT 1`
+            ).bind(o.customer_name).first().catch(() => null);
+            blingContactId = byName?.bling_contact_id || null;
+          }
+          grupos[key] = { cliente: o.customer_name, phone: o.phone_digits, bling_contact_id: blingContactId, cpf_cnpj: o.cpf_cnpj || null, pedidos: [], produtos: {}, total: 0 };
         }
         grupos[key].pedidos.push(o);
         grupos[key].total += parseFloat(o.total_value) || 0;

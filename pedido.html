@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.6</title>
+<title>Novo Pedido — MoskoGás v2.11.7</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.6 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.7 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.6</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.7</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -339,9 +339,10 @@ function showSuggestions(list) {
   box.style.display = 'block';
   box.innerHTML = list.map((c, i) => {
     const addrLabel = c._extra_obs ? `<span style="background:#ede9fe;color:#6366f1;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px">${c._extra_obs}</span>` : '';
+    const blingBadge = c.bling_contact_id ? `<span style="background:#16a34a;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;margin-left:6px" title="Cadastrado no Bling (ID: ${c.bling_contact_id})">B</span>` : '';
     return `
     <div class="suggestion-item" onclick="selectCustomer(${i})">
-      <strong>${c.name || c.customer_name}</strong>
+      <strong>${c.name || c.customer_name}</strong>${blingBadge}
       <span style="margin-left:8px;color:#f97316">${c.phone_digits || ''}</span><br>
       <small>${addrLabel}${c.address_line || ''} ${c.bairro ? '— ' + c.bairro : ''}</small>
     </div>`;
@@ -1081,7 +1082,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.6: Não redireciona — limpa form para novo pedido
+    // v2.11.7: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
