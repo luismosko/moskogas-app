@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.0</title>
-<script src="shared.js"></script>
+<title>Empenhos GOV — MoskoGás v1.0.1</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -112,7 +112,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.0</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.1</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -241,7 +241,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   </div>
 </div>
 
+<script src="shared.js"></script>
 <script>
+// v1.0.1
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+checkApiKey();
+
 let empenhos = [];
 let editandoId = null;
 let currentTab = 'dados';
@@ -250,12 +255,8 @@ let clienteSearchTimer = null;
 let produtosDisponiveis = [];
 
 // ── Init ──────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
-  await checkAuth(['admin', 'atendente']);
-  await carregarProdutos();
-  await carregarEmpenhos();
-});
+carregarProdutos();
+carregarEmpenhos();
 
 async function carregarProdutos() {
   try {
