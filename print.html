@@ -223,6 +223,21 @@ function fillVia(prefix, o, items) {
 async function load() {
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
+  const dataParam = params.get('data');
+
+  // Modo 1: ?data=JSON (vindo do gestao.html com objeto completo)
+  if (dataParam) {
+    try {
+      const o = JSON.parse(decodeURIComponent(dataParam));
+      const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
+      fillVia('v1', o, items);
+      fillVia('v2', o, items);
+      document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.0';
+      return;
+    } catch(e) { /* fallback para API */ }
+  }
+
+  // Modo 2: ?id=X (busca na API)
   if (!id) { document.getElementById('pagina').innerHTML = '<p style="padding:40px;color:#dc2626;text-align:center">⚠️ Nenhum pedido selecionado. Acesse via gestao.html.</p>'; return; }
 
   try {
@@ -233,10 +248,8 @@ async function load() {
     if (!resp.ok) throw new Error('Pedido não encontrado');
     const o = await resp.json();
     const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : (o.items_json || []);
-
     fillVia('v1', o, items);
     fillVia('v2', o, items);
-
     document.title = 'Recibo #' + o.id + ' — MoskoGás v2.0.0';
   } catch(e) {
     document.getElementById('pagina').innerHTML = '<p style="padding:40px;color:#dc2626;text-align:center">Erro ao carregar pedido: ' + e.message + '</p>';
