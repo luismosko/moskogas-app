@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.15</title>
+<title>Novo Pedido — MoskoGás v2.11.16</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.15 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.16 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.15</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.16</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -98,7 +98,7 @@
       </div>
     </div>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;min-height:22px">
-      <span id="bling-badge-cliente" style="display:none;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:2px 9px;font-size:11px;font-weight:700">✅ Vinculado ao Bling</span>
+      <span id="bling-badge-cliente" onclick="abrirModalDadosBling()" style="display:none;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:2px 9px;font-size:11px;font-weight:700;cursor:pointer" title="Ver cadastro completo no Bling">✅ Vinculado ao Bling 🔍</span>
       <button id="btn-vincular-bling" onclick="abrirModalVincularBling()" style="display:none;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:3px 10px;font-size:11px;color:#92400e;cursor:pointer;font-weight:600" title="Buscar este cliente no Bling e vincular">🔗 Vincular ao Bling</button>
     </div>
     <div class="row" style="margin-bottom:12px">
@@ -230,6 +230,26 @@
 
   </div><!-- /col-right -->
   </div><!-- /two-col -->
+</div>
+
+<!-- MODAL DADOS BLING -->
+<div id="modal-dados-bling" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2002;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="padding:20px 24px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #f1f5f9">
+      <div>
+        <h2 style="font-size:17px;font-weight:800;color:#1e293b">🔗 Cadastro no Bling</h2>
+        <div id="modal-bling-nome" style="font-size:12px;color:#6366f1;margin-top:2px"></div>
+      </div>
+      <button onclick="document.getElementById('modal-dados-bling').style.display='none'" style="background:#f1f5f9;border:none;border-radius:8px;width:34px;height:34px;font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div id="modal-bling-body" style="padding:20px 24px">
+      <div style="text-align:center;color:#94a3b8;padding:30px">🔍 Carregando...</div>
+    </div>
+    <div style="padding:14px 24px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #f1f5f9">
+      <a id="modal-bling-link" href="#" target="_blank" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none">✏️ Editar no Bling</a>
+      <button onclick="document.getElementById('modal-dados-bling').style.display='none'" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer">Fechar</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL VINCULAR AO BLING -->
@@ -1187,7 +1207,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.15: Não redireciona — limpa form para novo pedido
+    // v2.11.16: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1208,7 +1228,7 @@ async function saveOrder() {
       btn.textContent = '✅ SALVAR PEDIDO';
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.15: Restaurar favoritos originais
+      // v2.11.16: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1225,6 +1245,54 @@ async function saveOrder() {
 }
 
 renderItems();
+
+// ── Modal dados completos Bling ───────────────────────────────────
+async function abrirModalDadosBling() {
+  const blingId = window._lastBlingContactId;
+  if (!blingId) return;
+  const modal = document.getElementById('modal-dados-bling');
+  const body  = document.getElementById('modal-bling-body');
+  const nomeEl = document.getElementById('modal-bling-nome');
+  body.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px">🔍 Carregando dados do Bling...</div>';
+  modal.style.display = 'flex';
+  try {
+    const d = await api(`/api/customer/bling-detail/${blingId}`);
+    if (d.error) throw new Error(d.error);
+    nomeEl.textContent = `ID Bling: ${blingId}`;
+    document.getElementById('modal-bling-link').href = d.bling_url || `https://www.bling.com.br/contatos.php#edit/${blingId}`;
+    const tipoLabel = d.tipo === 'J' ? 'Pessoa Jurídica' : d.tipo === 'F' ? 'Pessoa Física' : d.tipo || '—';
+    const docLabel  = d.tipo === 'J' ? 'CNPJ' : 'CPF';
+    const ieRgLabel = d.tipo === 'J' ? 'IE' : 'RG';
+    const row = (label, value) => value
+      ? `<div style="display:grid;grid-template-columns:130px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px">
+           <span style="color:#64748b;font-weight:600">${label}</span>
+           <span style="color:#1e293b;font-weight:500">${value}</span>
+         </div>` : '';
+    body.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div style="font-size:18px;font-weight:800;color:#1e293b">${d.name || '—'}</div>
+        ${d.fantasia ? `<div style="font-size:12px;color:#64748b">${d.fantasia}</div>` : ''}
+        <span style="background:${d.situacao==='A'?'#dcfce7':'#fee2e2'};color:${d.situacao==='A'?'#166534':'#991b1b'};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">${d.situacao==='A'?'✅ Ativo':'⛔ Inativo'}</span>
+        <span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;margin-left:4px">${tipoLabel}</span>
+      </div>
+      <div>
+        ${row(docLabel, d.numeroDocumento)}
+        ${row(ieRgLabel, d.rg_ie)}
+        ${row('Telefone', d.telefone)}
+        ${row('Celular', d.celular)}
+        ${row('E-mail', d.email)}
+        ${row('E-mail NFe', d.emailNfe)}
+        ${row('Endereço', d.address_line)}
+        ${row('Bairro', d.bairro)}
+        ${row('Complemento', d.complemento)}
+        ${row('CEP', d.cep)}
+        ${row('Cidade/UF', d.cidade ? d.cidade+'/'+d.uf : '')}
+        ${row('Observações', d.obs)}
+      </div>`;
+  } catch(e) {
+    body.innerHTML = `<div style="color:#dc2626;text-align:center;padding:20px">❌ Erro: ${e.message}</div>`;
+  }
+}
 
 // ── Vincular cliente ao Bling ─────────────────────────────────────
 function abrirModalVincularBling() {
@@ -1292,7 +1360,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.15 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.16 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;

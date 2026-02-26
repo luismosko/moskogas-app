@@ -1,4 +1,4 @@
-// v2.42.0
+// v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
@@ -1805,7 +1805,18 @@ export default {
         const num = (end.numero || '').trim();
         const address_line = num ? `${rua}, ${num}` : rua;
         const phone = (c.celular || c.telefone || c.fone || '').replace(/\D/g, '');
-        const result = { name: c.nome, phone_digits: phone, address_line, bairro: end.bairro || '', complemento: end.complemento || '', referencia: '', bling_contact_id: c.id };
+        const result = {
+          name: c.nome, fantasia: c.fantasia || '', phone_digits: phone,
+          address_line, bairro: end.bairro || '', complemento: end.complemento || '',
+          cep: end.cep || '', cidade: end.municipio || '', uf: end.uf || '',
+          bling_contact_id: c.id, tipo: c.tipo || '',
+          numeroDocumento: c.numeroDocumento || c.cpfCnpj || '',
+          rg_ie: c.ie || c.rg || '',
+          email: c.email || '', emailNfe: c.emailNfe || '',
+          telefone: c.telefone || c.fone || '', celular: c.celular || '',
+          situacao: c.situacao || '', obs: c.obs || c.observacoes || '',
+          bling_url: `https://www.bling.com.br/contatos.php#edit/${c.id}`,
+        };
         if (phone || address_line) {
           await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch())`).bind(phone || null, result.name, address_line, result.bairro, result.complemento, c.id).run();
         }
