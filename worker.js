@@ -1,4 +1,5 @@
-// v2.41.5
+// v2.42.0
+// v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -1225,6 +1226,62 @@ async function ensureContractTables(env) {
   // v2.32.0: índices para busca de clientes (performance com 10k+ registros)
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers_cache(name)').run().catch(() => {});
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers_cache(phone_digits)').run().catch(() => {});
+}
+
+// ─── ESTOQUE: Schema (v2.42.0) ─────────────────────────────
+async function ensureStockTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS stock_daily (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    data TEXT NOT NULL, tipo TEXT NOT NULL,
+    cheios_manha INTEGER, vazios_manha INTEGER,
+    compras INTEGER DEFAULT 0, vendas_auto INTEGER DEFAULT 0,
+    cheios_tarde INTEGER, vazios_tarde INTEGER,
+    cascos_devolucao INTEGER DEFAULT 0, cascos_emprestimo INTEGER DEFAULT 0,
+    cascos_venda INTEGER DEFAULT 0, cascos_aquisicao INTEGER DEFAULT 0,
+    observacao TEXT, contagem_manha_por TEXT, contagem_manha_at TEXT,
+    contagem_tarde_por TEXT, contagem_tarde_at TEXT,
+    divergencia_notificada INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(data, tipo)
+  )`).run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_stock_data ON stock_daily(data)').run().catch(() => {});
+  for (const sql of [
+    "ALTER TABLE stock_daily ADD COLUMN cascos_devolucao INTEGER DEFAULT 0",
+    "ALTER TABLE stock_daily ADD COLUMN cascos_emprestimo INTEGER DEFAULT 0",
+    "ALTER TABLE stock_daily ADD COLUMN cascos_venda INTEGER DEFAULT 0",
+    "ALTER TABLE stock_daily ADD COLUMN cascos_aquisicao INTEGER DEFAULT 0",
+    "ALTER TABLE stock_daily ADD COLUMN observacao TEXT",
+  ]) await env.DB.prepare(sql).run().catch(() => {});
+}
+
+// ─── ESTOQUE: Vendas automáticas dos pedidos entregues ─────
+async function calcVendasAuto(env, data) {
+  const startEpoch = Math.floor(new Date(data + 'T00:00:00-04:00').getTime() / 1000);
+  const endEpoch = Math.floor(new Date(data + 'T23:59:59-04:00').getTime() / 1000);
+  const orders = await env.DB.prepare(
+    "SELECT items_json FROM orders WHERE status='entregue' AND delivered_at >= ? AND delivered_at <= ?"
+  ).bind(startEpoch, endEpoch).all().then(r => r.results || []);
+  const mapRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='estoque_mapeamento'").first().catch(() => null);
+  let mapeamento = {}; try { mapeamento = JSON.parse(mapRow?.value || '{}'); } catch {}
+  const vendas = { P13: 0, P20: 0, P45: 0, P05: 0 };
+  for (const order of orders) {
+    let items = []; try { items = JSON.parse(order.items_json || '[]'); } catch {}
+    for (const item of items) {
+      const blingId = String(item.bling_id || item.id || '');
+      const nome = (item.name || item.nome || '').toUpperCase();
+      const code = (item.code || item.codigo || '').toUpperCase();
+      const qty = parseFloat(item.qty || item.quantidade || 0);
+      let tipo = mapeamento[blingId] || null;
+      if (!tipo) {
+        if (nome.includes('P13') || code.includes('P13')) tipo = 'P13';
+        else if (nome.includes('P20') || code.includes('P20')) tipo = 'P20';
+        else if (nome.includes('P45') || code.includes('P45')) tipo = 'P45';
+        else if (nome.includes('P05') || nome.includes('P5') || code.includes('P05') || code.includes('P5')) tipo = 'P05';
+      }
+      if (tipo && vendas[tipo] !== undefined) vendas[tipo] += qty;
+    }
+  }
+  return vendas;
 }
 
 async function logContractEvent(env, contractId, evento, detalhes, user) {
@@ -5496,6 +5553,170 @@ export default {
         }
         return json({ ok: true });
       }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ─── ESTOQUE — Controle Diário de Gás (v2.42.0) ─────────
+    // ═══════════════════════════════════════════════════════════
+
+    if (path.startsWith('/api/estoque')) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      await ensureStockTables(env);
+      const userName = authCheck.nome || 'Sistema';
+
+      if (method === 'GET' && path === '/api/estoque/dia') {
+        const data = url.searchParams.get('data') || new Date().toISOString().slice(0, 10);
+        const tipos = ['P13', 'P20', 'P45', 'P05'];
+        const rows = await env.DB.prepare('SELECT * FROM stock_daily WHERE data = ?').bind(data).all().then(r => r.results || []);
+        const byTipo = {}; for (const r of rows) byTipo[r.tipo] = r;
+        const ontem = new Date(data + 'T12:00:00Z'); ontem.setDate(ontem.getDate() - 1);
+        const dataOntem = ontem.toISOString().slice(0, 10);
+        const rowsOntem = await env.DB.prepare('SELECT * FROM stock_daily WHERE data = ?').bind(dataOntem).all().then(r => r.results || []);
+        const ontemByTipo = {}; for (const r of rowsOntem) ontemByTipo[r.tipo] = r;
+        const vendasOntem = await calcVendasAuto(env, dataOntem);
+        const vendasHoje = await calcVendasAuto(env, data);
+        const resultado = tipos.map(tipo => {
+          const hoje = byTipo[tipo] || {}, ont = ontemByTipo[tipo] || {};
+          const cheios_manha = hoje.cheios_manha ?? null, vazios_manha = hoje.vazios_manha ?? null;
+          const ont_cheios = ont.cheios_manha ?? null, ont_vazios = ont.vazios_manha ?? null;
+          const ont_compras = ont.compras || 0, ont_vendas = vendasOntem[tipo] || 0;
+          const cheios_esperado = ont_cheios !== null ? ont_cheios + ont_compras - ont_vendas : null;
+          const vazios_esperado = ont_vazios !== null ? ont_vazios - ont_compras + ont_vendas : null;
+          let div_cheios = null, div_vazios = null;
+          if (cheios_manha !== null && cheios_esperado !== null) div_cheios = cheios_manha - cheios_esperado;
+          if (vazios_manha !== null && vazios_esperado !== null) div_vazios = vazios_manha - vazios_esperado;
+          const total_vasil_ontem = ont_cheios !== null ? ont_cheios + (ont_vazios || 0) : null;
+          const ont_cd = ont.cascos_devolucao||0, ont_ce = ont.cascos_emprestimo||0, ont_cv = ont.cascos_venda||0, ont_ca = ont.cascos_aquisicao||0;
+          const total_vasil_esperado = total_vasil_ontem !== null ? total_vasil_ontem + ont_cd + ont_ca - ont_ce - ont_cv : null;
+          const total_vasil_real = cheios_manha !== null ? cheios_manha + (vazios_manha || 0) : null;
+          let div_vasil = null;
+          if (total_vasil_esperado !== null && total_vasil_real !== null) div_vasil = total_vasil_real - total_vasil_esperado;
+          return { tipo, data, cheios_manha, vazios_manha, contagem_manha_por: hoje.contagem_manha_por||null, contagem_manha_at: hoje.contagem_manha_at||null,
+            compras_hoje: hoje.compras||0, vendas_hoje: vendasHoje[tipo]||0,
+            cascos_devolucao: hoje.cascos_devolucao||0, cascos_emprestimo: hoje.cascos_emprestimo||0, cascos_venda: hoje.cascos_venda||0, cascos_aquisicao: hoje.cascos_aquisicao||0,
+            observacao: hoje.observacao||'', ontem_cheios: ont_cheios, ontem_vazios: ont_vazios, ontem_compras: ont_compras, ontem_vendas: ont_vendas,
+            ontem_cascos_dev: ont_cd, ontem_cascos_emp: ont_ce, ontem_cascos_venda: ont_cv, ontem_cascos_aquis: ont_ca,
+            cheios_esperado, vazios_esperado, div_cheios, div_vazios, total_vasil_ontem, total_vasil_esperado, total_vasil_real, div_vasil, tem_ontem: ont_cheios !== null };
+        });
+        return json({ ok: true, data, resultado });
+      }
+
+      if (method === 'POST' && path === '/api/estoque/contagem') {
+        const body = await request.json();
+        const data = body.data || new Date().toISOString().slice(0, 10);
+        const contagens = body.contagens || {};
+        const tipos = ['P13', 'P20', 'P45', 'P05'];
+        const now = new Date().toISOString();
+        const divergencias = [];
+        const ontem = new Date(data + 'T12:00:00Z'); ontem.setDate(ontem.getDate() - 1);
+        const dataOntem = ontem.toISOString().slice(0, 10);
+        const rowsOntem = await env.DB.prepare('SELECT * FROM stock_daily WHERE data = ?').bind(dataOntem).all().then(r => r.results || []);
+        const ontemByTipo = {}; for (const r of rowsOntem) ontemByTipo[r.tipo] = r;
+        const vendasOntem = await calcVendasAuto(env, dataOntem);
+        for (const tipo of tipos) {
+          const c = contagens[tipo]; if (!c) continue;
+          const cheios = parseInt(c.cheios)||0, vazios = parseInt(c.vazios)||0;
+          await env.DB.prepare(`INSERT INTO stock_daily (data, tipo, cheios_manha, vazios_manha, contagem_manha_por, contagem_manha_at) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(data, tipo) DO UPDATE SET cheios_manha=excluded.cheios_manha, vazios_manha=excluded.vazios_manha, contagem_manha_por=excluded.contagem_manha_por, contagem_manha_at=excluded.contagem_manha_at, updated_at=datetime('now')
+          `).bind(data, tipo, cheios, vazios, userName, now).run();
+          const ont = ontemByTipo[tipo] || {};
+          if (ont.cheios_manha !== null && ont.cheios_manha !== undefined) {
+            const ont_compras = ont.compras||0, ont_vendas = vendasOntem[tipo]||0;
+            const esp_c = ont.cheios_manha + ont_compras - ont_vendas, esp_v = (ont.vazios_manha||0) - ont_compras + ont_vendas;
+            if (cheios - esp_c !== 0) divergencias.push({ tipo, campo: 'cheios', expected: esp_c, real: cheios, diff: cheios - esp_c });
+            if (vazios - esp_v !== 0) divergencias.push({ tipo, campo: 'vazios', expected: esp_v, real: vazios, diff: vazios - esp_v });
+            const tv_o = ont.cheios_manha + (ont.vazios_manha||0);
+            const tv_e = tv_o + (ont.cascos_devolucao||0) + (ont.cascos_aquisicao||0) - (ont.cascos_emprestimo||0) - (ont.cascos_venda||0);
+            if (cheios + vazios - tv_e !== 0) divergencias.push({ tipo, campo: 'vasilhames', expected: tv_e, real: cheios+vazios, diff: cheios+vazios-tv_e });
+          }
+        }
+        if (divergencias.length > 0) {
+          try {
+            let divMsg = `⚠️ *DIVERGÊNCIA ESTOQUE* — ${data}\n\n`;
+            for (const d of divergencias) divMsg += `${d.tipo} ${d.campo}: esperado ${d.expected}, contou ${d.real} (${d.diff>0?'+':''}${d.diff})\n`;
+            divMsg += `\nContagem por: ${userName}`;
+            const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND ativo=1 AND recebe_whatsapp=1 AND telefone IS NOT NULL AND telefone != ''").all().then(r => r.results || []);
+            for (const adm of admins) await sendWhatsApp(env, adm.telefone, divMsg, { category: 'admin_alerta', skipSafety: true });
+            for (const tipo of tipos) await env.DB.prepare('UPDATE stock_daily SET divergencia_notificada=1 WHERE data=? AND tipo=?').bind(data, tipo).run().catch(() => {});
+          } catch (e) { console.error('[estoque] WhatsApp erro:', e.message); }
+        }
+        return json({ ok: true, data, contagens_salvas: Object.keys(contagens).length, divergencias, total_divergencias: divergencias.length });
+      }
+
+      if (method === 'POST' && path === '/api/estoque/compras') {
+        const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const compras = body.compras || {}; let total = 0;
+        for (const tipo of ['P13','P20','P45','P05']) { const qty = parseInt(compras[tipo])||0; if (!qty) continue; total += qty;
+          await env.DB.prepare('INSERT INTO stock_daily (data,tipo,compras) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET compras=excluded.compras, updated_at=datetime(\'now\')').bind(data, tipo, qty).run(); }
+        return json({ ok: true, data, total_compras: total });
+      }
+
+      if (method === 'POST' && path === '/api/estoque/cascos') {
+        const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const cascos = body.cascos || {};
+        for (const tipo of ['P13','P20','P45','P05']) { const c = cascos[tipo]; if (!c) continue;
+          await env.DB.prepare(`INSERT INTO stock_daily (data,tipo,cascos_devolucao,cascos_emprestimo,cascos_venda,cascos_aquisicao) VALUES (?,?,?,?,?,?)
+            ON CONFLICT(data,tipo) DO UPDATE SET cascos_devolucao=excluded.cascos_devolucao, cascos_emprestimo=excluded.cascos_emprestimo, cascos_venda=excluded.cascos_venda, cascos_aquisicao=excluded.cascos_aquisicao, updated_at=datetime('now')
+          `).bind(data, tipo, parseInt(c.devolucao)||0, parseInt(c.emprestimo)||0, parseInt(c.venda)||0, parseInt(c.aquisicao)||0).run(); }
+        return json({ ok: true, data });
+      }
+
+      if (method === 'POST' && path === '/api/estoque/observacao') {
+        const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const obs = body.observacao || '';
+        for (const tipo of ['P13','P20','P45','P05']) await env.DB.prepare('INSERT INTO stock_daily (data,tipo,observacao) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET observacao=excluded.observacao, updated_at=datetime(\'now\')').bind(data, tipo, obs).run();
+        return json({ ok: true, data, observacao: obs });
+      }
+
+      if (method === 'GET' && path === '/api/estoque/historico') {
+        const dias = parseInt(url.searchParams.get('dias')||'7');
+        const rows = await env.DB.prepare(`SELECT * FROM stock_daily WHERE data >= date('now', '-${dias} days') ORDER BY data DESC, tipo ASC`).all().then(r => r.results || []);
+        return json({ ok: true, dias, registros: rows });
+      }
+
+      if (method === 'GET' && path === '/api/estoque/bling-compras') {
+        const data = url.searchParams.get('data') || new Date().toISOString().slice(0, 10);
+        const mapRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='estoque_mapeamento'").first().catch(() => null);
+        let mapeamento = {}; try { mapeamento = JSON.parse(mapRow?.value || '{}'); } catch {}
+        try {
+          const nfeResp = await blingFetch(`/nfe?tipo=0&situacao=5&dataEmissaoInicial=${data}&dataEmissaoFinal=${data}&pagina=1&limite=50`, {}, env);
+          if (!nfeResp.ok) { const t = await nfeResp.text().catch(()=>''); return json({ ok: false, error: `Bling NFe ${nfeResp.status}: ${t.substring(0,200)}` }); }
+          const notas = (await nfeResp.json()).data || [];
+          const compras = { P13:0, P20:0, P45:0, P05:0 }; const notasDet = []; let notasComGas = 0;
+          for (const nfe of notas) {
+            let items = []; try { const d = await blingFetch(`/nfe/${nfe.id}`, {}, env); if (d.ok) items = (await d.json()).data?.itens || []; } catch {}
+            const nc = { P13:0, P20:0, P45:0, P05:0 }; let temGas = false;
+            for (const item of items) {
+              const pId = String(item.produto?.id||''), pN = (item.produto?.nome||item.descricao||'').toUpperCase(), pC = (item.produto?.codigo||'').toUpperCase(), qty = parseFloat(item.quantidade)||0;
+              let tipo = mapeamento[pId] || null;
+              if (!tipo) { if (pN.includes('P13')||pC.includes('P13')) tipo='P13'; else if (pN.includes('P20')||pC.includes('P20')) tipo='P20'; else if (pN.includes('P45')||pC.includes('P45')) tipo='P45'; else if (pN.includes('P05')||pN.includes('P5')||pC.includes('P05')||pC.includes('P5')) tipo='P05'; }
+              if (tipo && compras[tipo] !== undefined) { compras[tipo] += qty; nc[tipo] += qty; temGas = true; }
+            }
+            if (temGas) notasComGas++;
+            notasDet.push({ id: nfe.id, numero: nfe.numero, fornecedor: nfe.contato?.nome||'Desconhecido', data_emissao: nfe.dataEmissao, compras: nc, total_itens: items.length });
+          }
+          return json({ ok: true, data, total_notas: notas.length, notas_com_gas: notasComGas, compras, notas: notasDet });
+        } catch (e) { return json({ ok: false, error: e.message }, 500); }
+      }
+
+      if (method === 'POST' && path === '/api/estoque/importar-bling') {
+        const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const compras = body.compras || {}; let total = 0;
+        for (const tipo of ['P13','P20','P45','P05']) { const qty = parseInt(compras[tipo])||0; if (!qty) continue; total += qty;
+          await env.DB.prepare('INSERT INTO stock_daily (data,tipo,compras) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET compras=excluded.compras, updated_at=datetime(\'now\')').bind(data, tipo, qty).run(); }
+        await logEvent(env, 0, 'estoque_bling_import', { data, compras, total, imported_by: userName });
+        return json({ ok: true, data, total_importado: total, compras });
+      }
+
+      if (method === 'GET' && path === '/api/estoque/config') {
+        const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='estoque_mapeamento'").first().catch(() => null);
+        let m = {}; try { m = JSON.parse(row?.value || '{}'); } catch {} return json({ ok: true, mapeamento: m });
+      }
+      if (method === 'POST' && path === '/api/estoque/config') {
+        const ac = await requireAuth(request, env, ['admin']); if (ac instanceof Response) return ac;
+        const body = await request.json();
+        if (body.mapeamento) await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('estoque_mapeamento', ?, datetime('now'))").bind(JSON.stringify(body.mapeamento)).run();
+        return json({ ok: true });
+      }
+
+      return err('Endpoint estoque não encontrado', 404);
     }
 
     return err('Not found', 404);

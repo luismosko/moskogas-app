@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estoque v1.2.1 — MoskoGás</title>
+<script src="shared.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f5}
+.page-header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:#fff;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;gap:12px}
+.page-header h1{font-size:20px;color:#1e293b}
+.page-header h1 small{font-size:12px;color:#94a3b8;margin-left:8px}
+.date-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.date-bar input[type="date"]{padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px}
+.btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{filter:brightness(.93)}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-success{background:#16a34a;color:#fff}
+.btn-warning{background:#f59e0b;color:#fff}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-outline{background:#fff;color:#475569;border:1px solid #cbd5e1}
+.btn-sm{padding:6px 10px;font-size:12px}
+.content{padding:16px 24px;max-width:1200px;margin:0 auto}
+
+/* Alert */
+.alert-box{padding:14px 18px;border-radius:10px;margin-bottom:16px;display:none;font-size:14px;font-weight:600;border:2px solid}
+.alert-danger{display:block;background:#fef2f2;border-color:#fca5a5;color:#991b1b}
+.alert-success{display:block;background:#f0fdf4;border-color:#86efac;color:#166534}
+.alert-detail{font-weight:400;font-size:13px;margin-top:6px;color:#374151}
+
+/* Status */
+.status-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.status-chip{padding:5px 12px;border-radius:16px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px}
+.chip-ok{background:#dcfce7;color:#166534}
+.chip-warn{background:#fef3c7;color:#92400e}
+.chip-err{background:#fee2e2;color:#991b1b}
+.chip-info{background:#dbeafe;color:#1e40af}
+
+/* Table */
+.folha{background:#fff;border-radius:12px;border:1px solid #e2e8f0;overflow-x:auto;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px}
+.folha table{width:100%;border-collapse:collapse;min-width:650px}
+.folha th,.folha td{padding:7px 10px;text-align:center;font-size:13px;border:1px solid #e2e8f0}
+.folha th{font-weight:700;background:#f8fafc;color:#475569;text-transform:uppercase;font-size:11px;letter-spacing:.3px}
+.col-label{text-align:left!important;font-weight:600;color:#334155;padding-left:14px!important;white-space:nowrap}
+.col-sub{text-align:left!important;padding-left:28px!important;color:#64748b}
+.th-P13{background:#2563eb!important;color:#fff!important}
+.th-P20{background:#059669!important;color:#fff!important}
+.th-P45{background:#d97706!important;color:#fff!important}
+.th-P05{background:#7c3aed!important;color:#fff!important}
+.sec-row td{background:#f1f5f9;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#1e293b;border-top:2px solid #cbd5e1}
+.sec-total td{font-weight:700;background:#f8fafc;border-top:1px solid #cbd5e1}
+.row-esp td{background:#eff6ff;color:#1e40af}
+.row-div td{font-weight:700}
+.div-ok{color:#16a34a}
+.div-err{color:#dc2626;background:#fef2f2!important}
+.editable{background:#fffbeb;cursor:pointer}
+.editable:hover{background:#fef3c7}
+.editable input{width:60px;padding:4px;border:2px solid #2563eb;border-radius:4px;font-size:14px;font-weight:600;text-align:center;background:#fff}
+.val{font-weight:600;font-size:14px}
+.val-empty{color:#cbd5e1;font-style:italic;font-weight:400}
+.val-auto{color:#6366f1}
+.val-pos{color:#16a34a}
+.val-neg{color:#dc2626}
+
+.obs-area{background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:16px;margin-bottom:16px}
+.obs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.obs-item label{font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px}
+.obs-item textarea{width:100%;height:50px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;resize:vertical;font-family:inherit}
+.actions-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+@media(max-width:700px){.page-header{padding:12px 16px}.content{padding:12px}.folha th,.folha td{padding:5px 6px;font-size:12px}}
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="page-header">
+  <h1>📦 Estoque Diário <small>v1.2.1</small></h1>
+  <div class="date-bar">
+    <input type="date" id="dataEstoque">
+    <button class="btn btn-outline btn-sm" onclick="navDate(-1)">◀</button>
+    <button class="btn btn-primary btn-sm" onclick="setHoje()">Hoje</button>
+    <button class="btn btn-outline btn-sm" onclick="navDate(1)">▶</button>
+  </div>
+</div>
+<div class="content">
+  <!-- ALERTA DIVERGÊNCIA -->
+  <div id="alertaDiv" class="alert-box"></div>
+
+  <div class="status-bar" id="statusBar"></div>
+
+  <div class="actions-bar">
+    <button class="btn btn-success" onclick="salvarContagem()">☀️ Salvar Contagem Manhã</button>
+    <button class="btn btn-primary" onclick="salvarMovimentacao()">🚚 Salvar Compras + Cascos</button>
+    <button class="btn btn-warning" onclick="puxarBling()" title="Puxa notas de entrada do Bling">🔄 Puxar Compras do Bling</button>
+    <button class="btn btn-outline btn-sm" onclick="salvarObservacoes()">📝 Salvar Obs</button>
+  </div>
+
+  <!-- FOLHA DO DIA -->
+  <div class="folha"><table><thead><tr>
+    <th style="width:220px;text-align:left">Folha do Dia</th>
+    <th class="th-P13">P13</th><th class="th-P20">P20</th><th class="th-P45">P45</th><th class="th-P05">P05</th>
+  </tr></thead><tbody id="folhaBody"></tbody></table></div>
+
+  <!-- OBSERVAÇÕES -->
+  <div class="obs-area">
+    <h3 style="margin-bottom:10px;font-size:14px;color:#1e293b">📝 Observações (divergências de vasilhames)</h3>
+    <div class="obs-grid" id="obsGrid"></div>
+  </div>
+</div>
+
+<script>
+const T=['P13','P20','P45','P05'];
+let dt=null, D={};
+
+function setHoje(){const h=new Date();h.setHours(h.getHours()-4);document.getElementById('dataEstoque').value=h.toISOString().slice(0,10);loadDia();}
+function navDate(d){const el=document.getElementById('dataEstoque');const x=new Date(el.value+'T12:00:00Z');x.setDate(x.getDate()+d);el.value=x.toISOString().slice(0,10);loadDia();}
+
+async function loadDia(){
+  dt=document.getElementById('dataEstoque').value;
+  if(!dt)return toast('Selecione data','warning');
+  showLoading();
+  try{
+    const r=await api('/api/estoque/dia?data='+dt);
+    D={};for(const t of r.tipos)D[t.tipo]=t;
+    render();renderStatus();renderObs();checkDivergencia();
+  }catch(e){toast('Erro: '+e.message,'error');}
+  finally{hideLoading();}
+}
+
+function checkDivergencia(){
+  const el=document.getElementById('alertaDiv');
+  const divs=[];
+  for(const t of T){
+    const d=D[t];if(!d||!d.tem_ontem||d.cheios_manha===null)continue;
+    const items=[];
+    if(d.div_cheios!==null&&d.div_cheios!==0) items.push(`Cheios: esperado ${d.cheios_esperado}, contou ${d.cheios_manha} (${d.div_cheios>0?'+':''}${d.div_cheios})`);
+    if(d.div_vazios!==null&&d.div_vazios!==0) items.push(`Vazios: esperado ${d.vazios_esperado}, contou ${d.vazios_manha} (${d.div_vazios>0?'+':''}${d.div_vazios})`);
+    if(d.div_vasil!==null&&d.div_vasil!==0) items.push(`Vasilhames: esperado ${d.total_vasil_esperado}, contou ${d.total_vasil_real} (${d.div_vasil>0?'+':''}${d.div_vasil})`);
+    if(items.length) divs.push({tipo:t, items});
+  }
+  if(divs.length>0){
+    el.className='alert-box alert-danger';
+    el.innerHTML='⚠️ DIVERGÊNCIA DETECTADA!<div class="alert-detail">'+divs.map(d=>'<strong>'+d.tipo+':</strong> '+d.items.join(' | ')).join('<br>')+'</div>';
+  }else if(T.some(t=>D[t]?.cheios_manha!==null&&D[t]?.tem_ontem)){
+    el.className='alert-box alert-success';
+    el.innerHTML='✅ Estoque batendo! Sem divergências.';
+  }else{el.className='alert-box';el.style.display='none';}
+}
+
+function renderStatus(){
+  const bar=document.getElementById('statusBar');
+  const temContagem=T.some(t=>D[t]?.cheios_manha!==null);
+  const temOntem=T.some(t=>D[t]?.tem_ontem);
+  const totalCompras=T.reduce((s,t)=>s+(D[t]?.compras_hoje||0),0);
+  const totalVendas=T.reduce((s,t)=>s+(D[t]?.vendas_hoje||0),0);
+  let h='';
+  h+=temContagem?'<span class="status-chip chip-ok">☀️ Contagem ✓</span>':'<span class="status-chip chip-warn">☀️ Contagem pendente</span>';
+  if(!temOntem)h+='<span class="status-chip chip-warn">📋 Sem dados ontem</span>';
+  h+='<span class="status-chip chip-info">🚚 Compras hoje: '+totalCompras+'</span>';
+  h+='<span class="status-chip chip-info">📦 Vendas hoje: '+totalVendas+'</span>';
+  bar.innerHTML=h;
+}
+
+function v(val,cls){if(val===null||val===undefined)return'<span class="val val-empty">—</span>';return'<span class="val '+(cls||'')+'">'+val+'</span>';}
+function vs(val){if(val===null||val===undefined)return'<span class="val val-empty">—</span>';const p=val>0?'+':'';const c=val===0?'div-ok':'div-err';return'<span class="val '+c+'">'+(val===0?'✅ 0':p+val)+'</span>';}
+
+function render(){
+  const fmt=dt.split('-').reverse().join('/');
+  let h='';
+
+  // ═══ CONTAGEM MANHÃ ═══
+  h+=sec('☀️ CONTAGEM MANHÃ — '+fmt);
+  h+=row('🟢 Cheio',T.map(t=>ed(D[t]?.cheios_manha,'contagem','cheios',t)));
+  h+=row('⚪ Vazio',T.map(t=>ed(D[t]?.vazios_manha,'contagem','vazios',t)));
+  h+=total('Total Vasilhames',T.map(t=>{const d=D[t];return d?.cheios_manha!==null?v(d.cheios_manha+(d.vazios_manha||0)):v(null);}));
+
+  // ═══ ESPERADO (baseado em ontem) ═══
+  h+=sec('📐 ESPERADO (ontem + compras − vendas)');
+  h+=espRow('🟢 Cheios esperado',T.map(t=>v(D[t]?.cheios_esperado)));
+  h+=espRow('⚪ Vazios esperado',T.map(t=>v(D[t]?.vazios_esperado)));
+
+  // ═══ DIVERGÊNCIA ═══
+  h+=sec('⚖️ DIVERGÊNCIA (contagem − esperado)');
+  h+=divRow('Cheios',T.map(t=>{const d=D[t];if(!d||d.div_cheios===null)return'<td>—</td>';return'<td class="'+(d.div_cheios!==0?'div-err':'')+'">'+vs(d.div_cheios)+'</td>';}));
+  h+=divRow('Vazios',T.map(t=>{const d=D[t];if(!d||d.div_vazios===null)return'<td>—</td>';return'<td class="'+(d.div_vazios!==0?'div-err':'')+'">'+vs(d.div_vazios)+'</td>';}));
+
+  // ═══ MOVIMENTAÇÃO HOJE ═══
+  h+=sec('🚚 MOVIMENTAÇÃO HOJE (compras + cascos)');
+  h+=row('Compra recarga',T.map(t=>ed(D[t]?.compras_hoje,'compras','compras',t,D[t]?.compras_hoje>0?'val-pos':'')));
+  h+=row('↩️ Devolução casco',T.map(t=>ed(D[t]?.cascos_devolucao,'cascos','devolucao',t,D[t]?.cascos_devolucao>0?'val-pos':'')));
+  h+=row('📤 Empréstimo casco',T.map(t=>ed(D[t]?.cascos_emprestimo,'cascos','emprestimo',t,D[t]?.cascos_emprestimo>0?'val-neg':'')));
+  h+=row('💰 Venda casco',T.map(t=>ed(D[t]?.cascos_venda,'cascos','venda',t,D[t]?.cascos_venda>0?'val-neg':'')));
+  h+=row('🛒 Aquisição casco',T.map(t=>ed(D[t]?.cascos_aquisicao,'cascos','aquisicao',t,D[t]?.cascos_aquisicao>0?'val-pos':'')));
+
+  // ═══ VENDAS AUTO ═══
+  h+=sec('📦 VENDAS HOJE (automático dos pedidos)');
+  h+='<tr><td class="col-sub">Vendas do dia</td>'+T.map(t=>'<td>'+v(D[t]?.vendas_hoje,'val-auto')+'</td>').join('')+'</tr>';
+
+  // ═══ BALANÇO VASILHAMES ═══
+  h+=sec('🏷️ BALANÇO VASILHAMES (ontem → hoje)');
+  h+='<tr><td class="col-sub">Ontem total</td>'+T.map(t=>'<td>'+v(D[t]?.total_vasil_ontem)+'</td>').join('')+'</tr>';
+  h+='<tr><td class="col-sub">+ Devolução / Aquisição</td>'+T.map(t=>'<td>'+v(D[t]?.tem_ontem?(D[t]?.ontem_cascos_dev||0)+(D[t]?.ontem_cascos_aquis||0):null,'val-pos')+'</td>').join('')+'</tr>';
+  h+='<tr><td class="col-sub">− Empréstimo / Venda</td>'+T.map(t=>'<td>'+v(D[t]?.tem_ontem?(D[t]?.ontem_cascos_emp||0)+(D[t]?.ontem_cascos_venda||0):null,'val-neg')+'</td>').join('')+'</tr>';
+  h+=espRow('= Esperado',T.map(t=>'<strong>'+v(D[t]?.total_vasil_esperado)+'</strong>'));
+  h+=total('Real (contagem)',T.map(t=>v(D[t]?.total_vasil_real)));
+  h+=divRow('Diferença',T.map(t=>{const d=D[t];if(!d||d.div_vasil===null)return'<td>—</td>';return'<td class="'+(d.div_vasil!==0?'div-err':'')+'">'+vs(d.div_vasil)+'</td>';}));
+
+  document.getElementById('folhaBody').innerHTML=h;
+}
+
+function sec(txt){return'<tr class="sec-row"><td class="col-label" colspan="5">'+txt+'</td></tr>';}
+function row(lbl,tds){return'<tr><td class="col-sub">'+lbl+'</td>'+tds.join('')+'</tr>';}
+function total(lbl,tds){return'<tr class="sec-total"><td class="col-label">'+lbl+'</td>'+tds.map(c=>'<td>'+c+'</td>').join('')+'</tr>';}
+function espRow(lbl,tds){return'<tr class="row-esp"><td class="col-sub">'+lbl+'</td>'+tds.map(c=>'<td>'+c+'</td>').join('')+'</tr>';}
+function divRow(lbl,tds){return'<tr class="row-div"><td class="col-sub">'+lbl+'</td>'+tds.join('')+'</tr>';}
+
+function ed(val,section,field,tipo,cls){
+  const display=v(val,cls);
+  return'<td class="editable" onclick="editCell(this,\''+section+'\',\''+field+'\',\''+tipo+'\')">'+display+'</td>';
+}
+
+function editCell(td,section,field,tipo){
+  if(td.querySelector('input'))return;
+  const d=D[tipo]||{};
+  let cv='';
+  if(section==='contagem')cv=field==='cheios'?(d.cheios_manha??''):(d.vazios_manha??'');
+  else if(section==='compras')cv=d.compras_hoje||'';
+  else if(section==='cascos')cv=d['cascos_'+field]||'';
+  const inp=document.createElement('input');
+  inp.type='number';inp.min='0';inp.value=cv;
+  td.innerHTML='';td.appendChild(inp);inp.focus();inp.select();
+  const save=()=>{
+    const val=parseInt(inp.value)||0;
+    if(!D[tipo])D[tipo]={tipo};
+    if(section==='contagem'){if(field==='cheios')D[tipo].cheios_manha=val;else D[tipo].vazios_manha=val;}
+    else if(section==='compras')D[tipo].compras_hoje=val;
+    else if(section==='cascos')D[tipo]['cascos_'+field]=val;
+    recalc();render();checkDivergencia();
+  };
+  inp.addEventListener('blur',save);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape')render();});
+}
+
+function recalc(){
+  for(const t of T){
+    const d=D[t];if(!d)continue;
+    if(d.cheios_manha!==null&&d.cheios_manha!==undefined){
+      d.total_vasil_real=d.cheios_manha+(d.vazios_manha||0);
+    }
+  }
+}
+
+function renderObs(){
+  document.getElementById('obsGrid').innerHTML=T.map(t=>'<div class="obs-item"><label>'+t+'</label><textarea id="obs_'+t+'" placeholder="Ex: Empréstimo 2 vasilhames cliente X">'+(D[t]?.observacao||'')+'</textarea></div>').join('');
+}
+
+async function salvarContagem(){
+  if(!dt)return toast('Selecione data','warning');
+  showLoading();
+  try{
+    const c=T.map(t=>({tipo:t,cheios:D[t]?.cheios_manha??0,vazios:D[t]?.vazios_manha??0}));
+    const res=await api('/api/estoque/contagem',{method:'POST',body:JSON.stringify({data:dt,contagens:c})});
+    if(res.total_divergencias>0)toast('⚠️ '+res.total_divergencias+' divergência(s) detectada(s)! WhatsApp enviado ao admin.','warning');
+    else toast('☀️ Contagem salva! Sem divergências.','success');
+    await loadDia();
+  }catch(e){toast('Erro: '+e.message,'error');}
+  finally{hideLoading();}
+}
+
+async function salvarMovimentacao(){
+  if(!dt)return toast('Selecione data','warning');
+  showLoading();
+  try{
+    const compras=T.map(t=>({tipo:t,quantidade:D[t]?.compras_hoje??0}));
+    await api('/api/estoque/compras',{method:'POST',body:JSON.stringify({data:dt,compras})});
+    const cascos=T.map(t=>({tipo:t,devolucao:D[t]?.cascos_devolucao??0,emprestimo:D[t]?.cascos_emprestimo??0,venda:D[t]?.cascos_venda??0,aquisicao:D[t]?.cascos_aquisicao??0}));
+    await api('/api/estoque/cascos',{method:'POST',body:JSON.stringify({data:dt,cascos})});
+    toast('🚚 Compras + Cascos salvos!','success');
+    await loadDia();
+  }catch(e){toast('Erro: '+e.message,'error');}
+  finally{hideLoading();}
+}
+
+async function puxarBling(){
+  if(!dt)return toast('Selecione data','warning');
+  showLoading();
+  try{
+    const res=await api('/api/estoque/bling-compras?data='+dt);
+    if(res.notas_com_gas===0){toast('Nenhuma nota de entrada com gás encontrada no Bling para '+dt,'warning');hideLoading();return;}
+    // Mostrar o que encontrou e importar
+    let msg=res.notas.map(n=>n.fornecedor+' (NF '+n.numero+'): '+n.itens.map(i=>i.qtd+'x '+i.tipo).join(', ')).join('\n');
+    const totais=T.filter(t=>res.compras[t]>0).map(t=>t+': '+res.compras[t]).join(', ');
+    if(confirm('Encontrado '+res.notas_com_gas+' nota(s) no Bling:\n\n'+msg+'\n\nTotais: '+totais+'\n\nImportar compras?')){
+      await api('/api/estoque/importar-bling',{method:'POST',body:JSON.stringify({data:dt,compras:res.compras})});
+      toast('✅ Compras importadas do Bling: '+totais,'success');
+      await loadDia();
+    }
+  }catch(e){toast('Erro: '+e.message,'error');}
+  finally{hideLoading();}
+}
+
+async function salvarObservacoes(){
+  if(!dt)return toast('Selecione data','warning');
+  showLoading();
+  try{
+    const obs=T.map(t=>({tipo:t,texto:document.getElementById('obs_'+t)?.value||''}));
+    await api('/api/estoque/observacao',{method:'POST',body:JSON.stringify({data:dt,observacoes:obs})});
+    toast('📝 Observações salvas!','success');
+  }catch(e){toast('Erro: '+e.message,'error');}
+  finally{hideLoading();}
+}
+
+document.getElementById('nav-placeholder').innerHTML=NAV_HTML;
+checkAuth(['admin','atendente']);
+setHoje();
+</script>
+</body>
+</html>

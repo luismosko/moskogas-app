@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.13.0
+// shared.js — Utilitários compartilhados MoskoGás v1.14.0
+// v1.14.0: 📦 Estoque adicionado à navbar
 // v1.13.0: Dropdown Financeiro (Pagamentos + Empenhos GOV) na navbar
 // v1.11.0: Contratos adicionado à navbar
 // v1.9.1: Consulta Pedidos adicionado ao dropdown Relatório
@@ -152,6 +153,7 @@ const NAV_ITEMS = [
   { href: 'pedido.html',     icon: '➕', label: 'Novo Pedido',  roles: ['admin', 'atendente'] },
   { href: 'gestao.html',     icon: '📋', label: 'Gestão',       roles: ['admin', 'atendente'] },
   { href: 'contratos.html',  icon: '📄', label: 'Contratos',    roles: ['admin', 'atendente'] },
+  { href: 'estoque.html',    icon: '📦', label: 'Estoque',      roles: ['admin', 'atendente'] },
 ];
 
 // Dropdowns — cada um com ID único para abrir/fechar independente
