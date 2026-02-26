@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Estoque v1.2.1 — MoskoGás</title>
+<title>Estoque v1.2.2 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -74,7 +74,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f5}
 <body>
 <div id="nav-placeholder"></div>
 <div class="page-header">
-  <h1>📦 Estoque Diário <small>v1.2.1</small></h1>
+  <h1>📦 Estoque Diário <small>v1.2.2</small></h1>
   <div class="date-bar">
     <input type="date" id="dataEstoque">
     <button class="btn btn-outline btn-sm" onclick="navDate(-1)">◀</button>
@@ -121,7 +121,7 @@ async function loadDia(){
   showLoading();
   try{
     const r=await api('/api/estoque/dia?data='+dt);
-    D={};for(const t of r.tipos)D[t.tipo]=t;
+    D={};for(const t of r.resultado)D[t.tipo]=t;
     render();renderStatus();renderObs();checkDivergencia();
   }catch(e){toast('Erro: '+e.message,'error');}
   finally{hideLoading();}
