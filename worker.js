@@ -1,4 +1,4 @@
-// v2.41.3
+// v2.41.4
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -5323,7 +5323,16 @@ export default {
         return json({ ok: true, id: empenhoId });
       }
 
-      // ── GET /api/empenhos/cliente/:phone — empenhos ativos do cliente ──
+    // ── DEBUG temporário empenhos ─────────────────────────────────
+    if (method === 'GET' && path === '/api/empenhos/debug') {
+      const phone = url.searchParams.get('phone') || '';
+      const digits = phone.replace(/\D/g, '');
+      const cc = await env.DB.prepare('SELECT phone_digits, bling_contact_id, name FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null);
+      const empenhos = await env.DB.prepare('SELECT id, numero, cliente_nome, cliente_phone, bling_contact_id, status FROM gov_empenhos WHERE status=\'ativo\'').all().then(r => r.results || []);
+      return json({ digits, cc, empenhos });
+    }
+
+    // ── GET /api/empenhos/cliente/:phone ──
       const clienteMatch = path.match(/^\/api\/empenhos\/cliente\/(.+)$/);
       if (method === 'GET' && clienteMatch) {
         const phone = clienteMatch[1].replace(/\D/g, '');
