@@ -1,4 +1,4 @@
-// v2.41.4
+// v2.41.5
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
 // v2.40.3: GET /api/pagamentos suporta ?incluir_pagos=1 (ver pagos no financeiro) + ultima_compra_glp
@@ -5332,7 +5332,22 @@ export default {
       return json({ digits, cc, empenhos });
     }
 
-    // ── GET /api/empenhos/cliente/:phone ──
+      // ── GET /api/empenhos/cliente/bling/:blingId — por bling_contact_id ──
+      const blingMatch = path.match(/^\/api\/empenhos\/cliente\/bling\/(.+)$/);
+      if (method === 'GET' && blingMatch) {
+        const blingId = blingMatch[1].trim();
+        const rows = await env.DB.prepare(
+          `SELECT e.* FROM gov_empenhos e WHERE e.status='ativo' AND e.bling_contact_id=? ORDER BY e.created_at DESC`
+        ).bind(blingId).all().then(r => r.results || []);
+        const result = [];
+        for (const e of rows) {
+          const itens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(e.id).all().then(r => r.results || []);
+          result.push({ ...e, itens });
+        }
+        return json(result);
+      }
+
+      // ── GET /api/empenhos/cliente/:phone ──
       const clienteMatch = path.match(/^\/api\/empenhos\/cliente\/(.+)$/);
       if (method === 'GET' && clienteMatch) {
         const phone = clienteMatch[1].replace(/\D/g, '');

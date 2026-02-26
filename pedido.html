@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.14</title>
+<title>Novo Pedido — MoskoGás v2.11.15</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.14 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.15 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.14</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.15</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -504,7 +504,10 @@ async function selectCustomer(i) {
   document.getElementById('empenho-selecionado-info').style.display = 'none';
   restaurarFavoritosOriginais();
   if (c.phone_digits && !nome.includes('CONSUMIDOR FINAL')) {
-    checkEmpenhosCliente(c.phone_digits);
+    checkEmpenhosCliente(c.phone_digits, window._lastBlingContactId);
+  } else if (window._lastBlingContactId && !nome.includes('CONSUMIDOR FINAL')) {
+    // Cliente sem telefone mas com Bling ID (ex: Tribunal de Contas)
+    checkEmpenhosCliente(null, window._lastBlingContactId);
   } else {
     document.getElementById('empenho-aviso').style.display = 'none';
   }
@@ -1184,7 +1187,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.14: Não redireciona — limpa form para novo pedido
+    // v2.11.15: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1205,7 +1208,7 @@ async function saveOrder() {
       btn.textContent = '✅ SALVAR PEDIDO';
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.14: Restaurar favoritos originais
+      // v2.11.15: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1289,7 +1292,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.14 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.15 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
@@ -1362,10 +1365,16 @@ function _aplicarProdutosEmpenho(empenho) {
   </div>`;
 }
 
-async function checkEmpenhosCliente(phone) {
+async function checkEmpenhosCliente(phone, blingId = null) {
   try {
-    const empenhos = await api(`/api/empenhos/cliente/${phone}`);
-    window._empenhosCliente = empenhos || [];
+    let empenhos = [];
+    if (phone) {
+      empenhos = await api(`/api/empenhos/cliente/${phone}`);
+    } else if (blingId) {
+      empenhos = await api(`/api/empenhos/cliente/bling/${blingId}`);
+    }
+    empenhos = empenhos || [];
+    window._empenhosCliente = empenhos;
     const aviso = document.getElementById('empenho-aviso');
 
     if (!empenhos || !empenhos.length) {
