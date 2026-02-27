@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Controle de Vales v1.0.0 — MoskoGás</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: #f1f5f9;
+        }
+
+        .toolbar {
+            background: #fff;
+            padding: 12px 16px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .toolbar input,
+        .toolbar select {
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f8fafc;
+        }
+
+        .toolbar input:focus,
+        .toolbar select:focus {
+            outline: none;
+            border-color: #f97316;
+        }
+
+        .btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .btn-orange {
+            background: #f97316;
+            color: #fff;
+        }
+
+        .btn-blue {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        .btn-green {
+            background: #16a34a;
+            color: #fff;
+        }
+
+        .btn-gray {
+            background: #94a3b8;
+            color: #fff;
+        }
+
+        .btn-red {
+            background: #dc2626;
+            color: #fff;
+        }
+
+        .btn:hover {
+            opacity: 0.85;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+        }
+
+        th {
+            background: #475569;
+            color: #fff;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+            position: sticky;
+            top: 58px;
+            z-index: 40;
+        }
+
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 13px;
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: #f0f4ff;
+        }
+
+        tbody tr {
+            cursor: pointer;
+            transition: background .1s;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 4px;
+            flex-wrap: nowrap;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: 14px;
+            padding: 24px;
+            width: min(560px, 95vw);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #1e293b;
+        }
+
+        .modal label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+
+        .modal select,
+        .modal textarea,
+        .modal input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .modal select:focus,
+        .modal input:focus {
+            outline: none;
+            border-color: #f97316;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .summary-bar {
+            background: #1e293b;
+            color: #fff;
+            padding: 12px 16px;
+            font-size: 14px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .summary-bar span strong {
+            color: #f97316;
+            font-size: 16px;
+        }
+
+        /* Vales sub-table */
+        .vales-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .vale-card {
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            text-align: center;
+        }
+
+        .vale-card.pendente {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+            color: #166534;
+        }
+
+        .vale-card.resgatado {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="nav-placeholder"></div>
+
+    <div class="toolbar">
+        <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de
+            Vales</button>
+        <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
+        <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
+
+        <div style="margin-left:auto; display:flex; gap:8px;">
+            <input type="number" id="baixaValeId" placeholder="ID do Vale para Baixar" style="width:180px;"
+                onkeydown="if(event.key==='Enter') darBaixa(this.value)">
+            <button class="btn btn-red" onclick="darBaixa(document.getElementById('baixaValeId').value)">🎯 Dar Baixa
+                Rápida</button>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th># N° Nota</th>
+                <th>Data/Hora</th>
+                <th>Cliente (Empresa)</th>
+                <th>Forma Pgto</th>
+                <th>Vales Emitidos</th>
+                <th>Status Resgates</th>
+                <th>Total R$</th>
+                <th>Bling</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
+
+    <!-- NOVA NOTA MODAL -->
+    <div class="modal-overlay" id="modal-nova">
+        <div class="modal">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <h2 style="margin:0">🎫 Emitir Nova Nota de Vales</h2>
+                <button onclick="closeNovaModal()"
+                    style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px"
+                    title="Fechar">&times;</button>
+            </div>
+
+            <label>Cliente / Empresa / Razão Social *</label>
+            <input type="text" id="n-cliente" placeholder="Ex: Restaurante do João LTDA" autocomplete="off">
+
+            <label>CNPJ ou CPF (Opcional)</label>
+            <input type="text" id="n-doc" placeholder="00.000.000/0001-00">
+
+            <div style="display:flex; gap:12px">
+                <div style="flex:1">
+                    <label>Quantidade de Vales *</label>
+                    <input type="number" id="n-qtd" value="10" min="1" max="500" oninput="calcTotal()">
+                </div>
+                <div style="flex:1">
+                    <label>Valor Unitário (R$) *</label>
+                    <input type="number" step="0.01" id="n-valor" value="115.00" oninput="calcTotal()">
+                </div>
+            </div>
+
+            <label>Forma de Pagamento * (Gera Venda no Bling)</label>
+            <select id="n-pgto">
+                <option value="dinheiro">💵 Dinheiro</option>
+                <option value="pix_vista">⚡ PIX à vista</option>
+                <option value="pix_receber">⏳ PIX a receber</option>
+                <option value="debito">💳 Cartão de Débito</option>
+                <option value="credito">💳 Cartão de Crédito</option>
+                <option value="mensalista">📅 Mensalista (Boleto/Fiado)</option>
+            </select>
+
+            <div
+                style="background:#f8fafc; padding:12px; border-radius:8px; margin-bottom:12px; font-weight:bold; font-size:16px; color:#1e293b; text-align:right">
+                TOTAL A COBRAR: R$ <span id="n-total">1150.00</span>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-gray" onclick="closeNovaModal()">Cancelar</button>
+                <button class="btn btn-green" onclick="salvarNota()" id="n-btn-save">✅ Confirmar Emissão</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DETALHES NOTA MODAL -->
+    <div class="modal-overlay" id="modal-view">
+        <div class="modal" style="width:min(700px,95vw);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <h2 style="margin:0" id="det-title">Nota #</h2>
+                <button onclick="closeViewModal()"
+                    style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px"
+                    title="Fechar">&times;</button>
+            </div>
+
+            <div class="summary-bar" style="border-radius:8px; margin-bottom: 20px;">
+                <span id="det-cli"></span>
+                <span id="det-qty"></span>
+                <span id="det-total"></span>
+                <span id="det-resgatados"></span>
+            </div>
+
+            <h3 style="font-size:15px; margin-bottom: 10px; color:#475569;">Vales Relacionados</h3>
+            <div class="vales-grid" id="det-vales-list"></div>
+
+            <div class="modal-footer" style="margin-top:20px;">
+                <button class="btn btn-gray" onclick="closeViewModal()">Fechar</button>
+                <button class="btn btn-blue" id="det-btn-print" onclick="imprimirAtual()">🖨️ Imprimir Vales Formato
+                    A4</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script>
+        document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+        requireAdminOrAtendente();
+
+        let notasData = [];
+        let currentViewId = null;
+
+        async function load() {
+            showLoading('Carregando notas...');
+            try {
+                const res = await api('/api/vales/notas');
+                notasData = res.notas || [];
+                renderTable();
+                document.getElementById('count-badge').textContent = `${notasData.length} notas recentes`;
+            } catch (e) {
+                toast('Erro ao carregar: ' + e.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tbody');
+            if (notasData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#94a3b8">Nenhuma emissão encontrada.</td></tr>';
+                return;
+            }
+
+            const pgtoLabels = { dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX Vista', pix_receber: '⏳ PIX Rec.', debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista' };
+
+            tbody.innerHTML = notasData.map(n => {
+                const d = new Date(n.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' });
+                const pco = n.resgatados === n.total_vales && n.total_vales > 0 ? '#16a34a' : (n.resgatados > 0 ? '#f59e0b' : '#64748b');
+                const badgeRes = `<span style="background:${pco}; color:#fff; border-radius:12px; padding:2px 8px; font-size:11px; font-weight:bold;">${n.resgatados} / ${n.total_vales} resgatados</span>`;
+                const bling = n.bling_pedido_id ? `<span style="color:#16a34a; font-weight:bold" title="Pedido ${n.bling_pedido_num || n.bling_pedido_id}">✅ #${n.bling_pedido_id}</span>` : '—';
+
+                return `<tr onclick="viewNota(${n.id})">
+            <td><strong style="color:#2563eb">#${n.id}</strong></td>
+            <td>${d}</td>
+            <td><strong>${n.cliente_nome}</strong>${n.cliente_doc ? '<br><small style="color:#94a3b8">' + n.cliente_doc + '</small>' : ''}</td>
+            <td>${pgtoLabels[n.forma_pagamento] || n.forma_pagamento}</td>
+            <td><strong>${n.quantidade}</strong> vales de R$ ${n.valor_unit.toFixed(2)}</td>
+            <td>${badgeRes}</td>
+            <td><strong style="color:#1e293b">R$ ${n.total.toFixed(2)}</strong></td>
+            <td>${bling}</td>
+            <td>
+                <button class="btn btn-blue" onclick="event.stopPropagation(); window.open('print-vales.html?id=${n.id}', '_blank')" style="padding:4px 8px; font-size:11px;">🖨️ Imprimir</button>
+            </td>
+        </tr>`;
+            }).join('');
+        }
+
+        function openNewModal() {
+            document.getElementById('n-cliente').value = '';
+            document.getElementById('n-doc').value = '';
+            document.getElementById('n-qtd').value = '10';
+            document.getElementById('n-valor').value = '115.00';
+            document.getElementById('n-pgto').value = 'dinheiro';
+            calcTotal();
+            document.getElementById('modal-nova').classList.add('open');
+            document.getElementById('n-cliente').focus();
+        }
+
+        function closeNovaModal() { document.getElementById('modal-nova').classList.remove('open'); }
+
+        function calcTotal() {
+            const q = parseFloat(document.getElementById('n-qtd').value) || 0;
+            const v = parseFloat(document.getElementById('n-valor').value) || 0;
+            document.getElementById('n-total').textContent = (q * v).toFixed(2);
+        }
+
+        async function salvarNota() {
+            const cli = document.getElementById('n-cliente').value.trim();
+            if (!cli) return toast('Insira o nome do cliente', 'error');
+            const b = document.getElementById('n-btn-save'); b.disabled = true; b.textContent = "Aguarde...";
+            try {
+                const payload = {
+                    cliente_nome: cli,
+                    cliente_doc: document.getElementById('n-doc').value.trim(),
+                    quantidade: document.getElementById('n-qtd').value,
+                    valor_unit: document.getElementById('n-valor').value,
+                    forma_pagamento: document.getElementById('n-pgto').value
+                };
+                const res = await api('/api/vales/notas', { method: 'POST', body: JSON.stringify(payload) });
+                toast(`✅ Nota #${res.nota_id} emitida com sucesso!`);
+                closeNovaModal();
+                load();
+                setTimeout(() => window.open(`print-vales.html?id=${res.nota_id}`, '_blank'), 500);
+            } catch (e) { toast(e.message, 'error'); }
+            finally { b.disabled = false; b.textContent = "✅ Confirmar Emissão"; }
+        }
+
+        async function viewNota(id) {
+            currentViewId = id;
+            showLoading('Buscando detalhes...');
+            try {
+                const res = await api(`/api/vales/notas/${id}`);
+                document.getElementById('det-title').textContent = `Nota de Vales #${res.nota.id}`;
+                document.getElementById('det-cli').innerHTML = `🏢 Cliente: <strong>${res.nota.cliente_nome}</strong>`;
+                document.getElementById('det-qty').innerHTML = `🎫 Emitidos: <strong>${res.nota.quantidade}</strong>`;
+                document.getElementById('det-total').innerHTML = `💰 Total: <strong>R$ ${res.nota.total.toFixed(2)}</strong>`;
+
+                let regs = 0;
+                const grid = res.vales.map(v => {
+                    if (v.status === 'resgatado') regs++;
+                    const cl = v.status === 'resgatado' ? 'resgatado' : 'pendente';
+                    const icon = v.status === 'resgatado' ? '❌' : '🎫';
+                    const sub = v.status === 'resgatado' ? `Uso: ${new Date(v.resgatado_em * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' })}` : '<button onclick="darBaixa(' + v.id + ')" style="margin-top:6px; cursor:pointer; background:#fff; border:1px solid #16a34a; color:#16a34a; border-radius:4px; font-size:10px; width:100%">Dar Baixa</button>';
+                    return `
+            <div class="vale-card ${cl}">
+                <div style="font-size:20px; font-weight:800; margin-bottom:4px;">${icon} ${v.numero}</div>
+                <div style="font-size:10px; color:#475569;">ID Sis: ${v.id}</div>
+                ${sub}
+            </div>`;
+                }).join('');
+
+                document.getElementById('det-resgatados').innerHTML = `🔄 Resgatados: <strong>${regs} / ${res.vales.length}</strong>`;
+                document.getElementById('det-vales-list').innerHTML = grid;
+                document.getElementById('modal-view').classList.add('open');
+            } catch (e) { toast(e.message, 'error'); }
+            finally { hideLoading(); }
+        }
+
+        function closeViewModal() { document.getElementById('modal-view').classList.remove('open'); currentViewId = null; }
+
+        function imprimirAtual() {
+            if (currentViewId) window.open(`print-vales.html?id=${currentViewId}`, '_blank');
+        }
+
+        async function darBaixa(valeId) {
+            if (!valeId) return;
+            if (!confirm(`Confirma a BAIXA do Vale ID ${valeId}?\n\nEsta ação não poderá ser desfeita.`)) return;
+            showLoading('Baixando vale...');
+            try {
+                await api(`/api/vales/${valeId}/baixa`, { method: 'PATCH' });
+                toast('✅ Vale BAIXADO com sucesso!');
+                await load();
+                if (currentViewId) await viewNota(currentViewId);
+                document.getElementById('baixaValeId').value = '';
+            } catch (e) { toast(e.message, 'error'); }
+            finally { hideLoading(); }
+        }
+
+        load();
+    </script>
+</body>
+
+</html>

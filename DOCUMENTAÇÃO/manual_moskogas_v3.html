@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MoskoGás — Manual Técnico v3.0</title>
+<style>
+  :root { --orange: #f97316; --dark: #1e293b; --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --gray: #64748b; --light: #f1f5f9; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+  .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+  
+  header { text-align: center; padding: 40px 0 30px; border-bottom: 3px solid var(--orange); margin-bottom: 30px; }
+  header h1 { font-size: 2.2em; color: var(--orange); margin-bottom: 8px; }
+  header .subtitle { color: var(--gray); font-size: 1.1em; }
+  header .meta { color: #475569; font-size: 0.85em; margin-top: 12px; }
+  
+  h2 { color: var(--orange); font-size: 1.5em; margin: 30px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #334155; }
+  h3 { color: var(--blue); font-size: 1.15em; margin: 20px 0 8px; }
+  h4 { color: var(--gray); font-size: 1em; margin: 14px 0 6px; }
+  
+  p { margin-bottom: 10px; color: #cbd5e1; }
+  
+  .warning { background: #451a03; border-left: 4px solid var(--red); padding: 10px 14px; border-radius: 4px; margin: 12px 0; color: #fca5a5; font-weight: 600; }
+  .note { background: #1e293b; border-left: 4px solid var(--blue); padding: 10px 14px; border-radius: 4px; margin: 12px 0; color: #93c5fd; }
+  .success { background: #052e16; border-left: 4px solid var(--green); padding: 10px 14px; border-radius: 4px; margin: 12px 0; color: #86efac; }
+  
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.9em; }
+  th { background: var(--dark); color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
+  td { padding: 8px 12px; border-bottom: 1px solid #334155; }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  
+  code { background: #1e293b; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; color: #fbbf24; }
+  pre { background: #1e293b; padding: 14px; border-radius: 6px; overflow-x: auto; margin: 10px 0 16px; border: 1px solid #334155; }
+  pre code { background: none; padding: 0; color: #e2e8f0; }
+  
+  .toc { background: #1e293b; padding: 20px; border-radius: 8px; margin: 20px 0; }
+  .toc a { display: block; padding: 4px 0; color: var(--blue); text-decoration: none; }
+  .toc a:hover { color: var(--orange); }
+  
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 700; }
+  .badge-green { background: #166534; color: #86efac; }
+  .badge-yellow { background: #713f12; color: #fde047; }
+  .badge-red { background: #7f1d1d; color: #fca5a5; }
+  .badge-blue { background: #1e3a5f; color: #93c5fd; }
+  .badge-gray { background: #334155; color: #94a3b8; }
+  
+  .update-banner { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid var(--orange); border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center; }
+  .update-banner .date { color: var(--orange); font-weight: 700; font-size: 1.1em; }
+  
+  footer { text-align: center; padding: 30px 0; color: #475569; font-size: 0.85em; border-top: 1px solid #334155; margin-top: 40px; }
+  
+  @media print { body { background: white; color: black; } th { background: #333; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>🔥 MoskoGás — Manual Técnico</h1>
+  <div class="subtitle">Sistema de Gestão de Pedidos de Gás e Água</div>
+  <div class="meta">Versão 3.0 · Atualizado em 17/02/2026 · Mosko Ltda · Campo Grande/MS</div>
+</header>
+
+<div class="update-banner">
+  <div class="date">📅 Última Atualização: 17/02/2026</div>
+  <p style="margin:6px 0 0;color:#94a3b8;">Quando este manual for atualizado, esta data refletirá a mudança.</p>
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="indice">📋 Índice</h2>
+<div class="toc">
+  <a href="#visao-geral">1. Visão Geral do Sistema</a>
+  <a href="#stack">2. Infraestrutura e Stack</a>
+  <a href="#auth">3. Autenticação e Segurança</a>
+  <a href="#arquivos">4. Arquivos e Versões</a>
+  <a href="#schema">5. Schema D1 (Banco de Dados)</a>
+  <a href="#endpoints">6. Endpoints da API</a>
+  <a href="#pagamentos">7. Sistema de Pagamentos</a>
+  <a href="#status">8. Status do Pedido</a>
+  <a href="#bling">9. Integração Bling ERP v3</a>
+  <a href="#izchat">10. Integração IzChat (WhatsApp)</a>
+  <a href="#telas">11. Telas do Sistema</a>
+  <a href="#ux">12. Regras de UX</a>
+  <a href="#deploy">13. Deploy e Versionamento</a>
+  <a href="#erros">14. Erros Conhecidos</a>
+  <a href="#proximos">15. Próximos Passos</a>
+  <a href="#changelog">16. Changelog</a>
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="visao-geral">1. Visão Geral do Sistema</h2>
+<p>O MoskoGás é um sistema web para gestão de pedidos de gás de cozinha e água mineral, desenvolvido para a <strong>Mosko Ltda</strong> em Campo Grande/MS. O sistema substitui parcialmente o GLP Master (desktop) e integra com Bling ERP para gestão fiscal e IzChat para envio de mensagens via WhatsApp aos entregadores.</p>
+
+<div class="success">
+  <strong>Prioridade absoluta:</strong> Velocidade operacional (15-30 segundos por pedido), poucos cliques, UX otimizada para atendente.
+</div>
+
+<h3>Funcionalidades Principais</h3>
+<p>Cadastro rápido de pedidos com busca por telefone. Integração automática com Bling ERP (vendas, contatos, NFCe em lote). Envio de notificação WhatsApp para entregadores via IzChat. Gestão de pagamentos com 5 tipos diferentes. Sistema de autenticação com 3 níveis de acesso. Gestão de usuários com ativação/desativação. Resumo de produtos vendidos no painel de gestão. Impressão de recibos A4 (2 vias). Relatórios de vendas por período. Configuração de ruas e bairros via OpenStreetMap.</p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="stack">2. Infraestrutura e Stack</h2>
+
+<table>
+  <tr><th>Componente</th><th>Tecnologia</th><th>Detalhes</th></tr>
+  <tr><td>Backend</td><td>Cloudflare Worker (ES Module)</td><td><code>api.moskogas.com.br</code></td></tr>
+  <tr><td>Banco de Dados</td><td>Cloudflare D1 (SQLite)</td><td><code>moskogas_ops</code> (binding DB)</td></tr>
+  <tr><td>Storage</td><td>Cloudflare R2</td><td><code>moskogas-comprovantes</code> (binding BUCKET)</td></tr>
+  <tr><td>Frontend</td><td>GitHub Pages + HTML/JS</td><td><code>moskogas-app.pages.dev</code></td></tr>
+  <tr><td>ERP</td><td>Bling v3 API</td><td>OAuth 2.0 + JWT</td></tr>
+  <tr><td>WhatsApp</td><td>IzChat API</td><td>Notificações para entregadores</td></tr>
+  <tr><td>Repositório</td><td>GitHub</td><td><code>github.com/luismosko/moskogas-app</code></td></tr>
+</table>
+
+<h3>Secrets Cloudflare</h3>
+<pre><code>BLING_CLIENT_ID, BLING_CLIENT_SECRET, IZCHAT_TOKEN, APP_API_KEY, JWT_SECRET</code></pre>
+
+<div class="warning">Cidade padrão: Campo Grande/MS (hardcoded). NÃO exibir campos cidade/UF na UI.</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="auth">3. Autenticação e Segurança</h2>
+<p>Sistema de autenticação baseado em JWT com 3 níveis de acesso. Todas as páginas (exceto login.html) verificam sessão e redirecionam para login se não autenticado.</p>
+
+<table>
+  <tr><th>Role</th><th>Acesso</th><th>Páginas</th></tr>
+  <tr><td>Admin</td><td>Acesso total</td><td>Todas + usuarios.html</td></tr>
+  <tr><td>Operador</td><td>Pedidos e gestão</td><td>pedido, gestao, pagamentos, relatorio, config</td></tr>
+  <tr><td>Entregador</td><td>Apenas entregas</td><td>entregador.html</td></tr>
+</table>
+
+<h3>Fluxo</h3>
+<p>1. Usuário acessa <code>index.html</code> → verifica token no localStorage. 2. Sem token → redireciona para <code>login.html</code>. 3. Login envia <code>POST /auth/login</code> (username+password). 4. Worker valida com bcrypt e retorna JWT (24h). 5. Token salvo em localStorage (<code>mg_session_token</code>, <code>mg_user</code>). 6. Cada página usa <code>shared.js</code> para auth. 7. Worker valida JWT em todos endpoints (exceto /auth/login, /health, /api/pub/*).</p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="arquivos">4. Arquivos e Versões Atuais</h2>
+<p><em>Estado em 17/02/2026:</em></p>
+
+<table>
+  <tr><th>Arquivo</th><th>Versão</th><th>Função</th></tr>
+  <tr><td>pedido.html</td><td><span class="badge badge-green">v2.7.4</span></td><td>Inserção de pedido (atendente)</td></tr>
+  <tr><td>gestao.html</td><td><span class="badge badge-green">v2.5</span></td><td>Gestão de pedidos + resumo produtos</td></tr>
+  <tr><td>pagamentos.html</td><td><span class="badge badge-green">v1.3.0</span></td><td>Gestão de pagamentos pendentes</td></tr>
+  <tr><td>config.html</td><td><span class="badge badge-green">v2.2.0</span></td><td>Configuração (ruas, bairros, produtos)</td></tr>
+  <tr><td>relatorio.html</td><td><span class="badge badge-green">v1.1.0</span></td><td>Relatórios de vendas</td></tr>
+  <tr><td>entregador.html</td><td><span class="badge badge-yellow">s/v</span></td><td>Painel do entregador</td></tr>
+  <tr><td>print.html</td><td><span class="badge badge-yellow">s/v</span></td><td>Recibo A4 (2 vias)</td></tr>
+  <tr><td>login.html</td><td><span class="badge badge-green">v1.0.0</span></td><td>Tela de login</td></tr>
+  <tr><td>index.html</td><td><span class="badge badge-gray">-</span></td><td>Redirect por role</td></tr>
+  <tr><td>usuarios.html</td><td><span class="badge badge-green">v1.2.0</span></td><td>Gestão de usuários (admin)</td></tr>
+  <tr><td>shared.js</td><td><span class="badge badge-blue">v1.3.0</span></td><td>Utilitários (auth, api, toast)</td></tr>
+  <tr><td>worker.js</td><td><span class="badge badge-blue">v2.8.0+</span></td><td>Backend (deploy via wrangler)</td></tr>
+</table>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="schema">5. Schema D1 (Banco de Dados)</h2>
+
+<h3>Tabela: orders</h3>
+<pre><code>id INTEGER PRIMARY KEY AUTOINCREMENT
+phone_digits TEXT, customer_name TEXT, address_line TEXT
+bairro TEXT, complemento TEXT, referencia TEXT
+items_json TEXT, total_value REAL, notes TEXT
+status TEXT DEFAULT 'novo'
+sync_status TEXT DEFAULT 'pending'
+driver_name_cache TEXT, created_at TEXT
+bling_pedido_id TEXT, bling_pedido_num TEXT
+tipo_pagamento TEXT DEFAULT 'dinheiro'
+pago INTEGER DEFAULT 0
+vendedor TEXT</code></pre>
+
+<h3>Tabela: customers_cache</h3>
+<pre><code>phone_digits TEXT PRIMARY KEY
+name TEXT, address_line TEXT, bairro TEXT
+complemento TEXT, referencia TEXT
+bling_contact_id TEXT</code></pre>
+
+<h3>Tabela: bling_tokens</h3>
+<pre><code>id INTEGER PRIMARY KEY (sempre 1)
+access_token TEXT, refresh_token TEXT
+expires_in INTEGER, obtained_at INTEGER</code></pre>
+
+<h3>Tabela: users</h3>
+<pre><code>id INTEGER PRIMARY KEY AUTOINCREMENT
+username TEXT UNIQUE NOT NULL
+password_hash TEXT NOT NULL
+display_name TEXT
+role TEXT DEFAULT 'operador'  -- admin | operador | entregador
+active INTEGER DEFAULT 1
+created_at TEXT DEFAULT (datetime('now'))</code></pre>
+
+<h4>Outras tabelas</h4>
+<p><code>streets_cache</code>, <code>neighborhoods_cache</code>, <code>drivers</code>, <code>products</code>, <code>config</code></p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="endpoints">6. Endpoints da API (Worker.js)</h2>
+<p>Base URL: <code>https://api.moskogas.com.br</code></p>
+
+<h3>Saúde e Diagnóstico</h3>
+<table>
+  <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+  <tr><td>GET</td><td><code>/health</code></td><td>Health check</td></tr>
+  <tr><td>GET</td><td><code>/bling/ping</code></td><td>Testa conexão Bling</td></tr>
+  <tr><td>GET</td><td><code>/api/bling/diagnostico</code></td><td>Lista depósitos e formas pgto</td></tr>
+  <tr><td>GET</td><td><code>/api/pub/*</code></td><td>Debug (sem auth)</td></tr>
+</table>
+
+<h3>Autenticação</h3>
+<table>
+  <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+  <tr><td>POST</td><td><code>/auth/login</code></td><td>Login → retorna JWT</td></tr>
+  <tr><td>POST</td><td><code>/auth/logout</code></td><td>Logout</td></tr>
+  <tr><td>GET</td><td><code>/auth/me</code></td><td>Dados do usuário logado</td></tr>
+  <tr><td>GET</td><td><code>/usuarios</code></td><td>Lista usuários (admin)</td></tr>
+  <tr><td>POST</td><td><code>/usuarios</code></td><td>Cria usuário (admin)</td></tr>
+  <tr><td>PATCH</td><td><code>/usuarios/:id</code></td><td>Edita usuário (admin)</td></tr>
+</table>
+
+<h3>Pedidos</h3>
+<table>
+  <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+  <tr><td>POST</td><td><code>/api/order/create</code></td><td>Cria pedido (lógica Bling condicional)</td></tr>
+  <tr><td>GET</td><td><code>/api/orders</code></td><td>Lista pedidos do dia</td></tr>
+  <tr><td>PATCH</td><td><code>/api/order/:id/update</code></td><td>Edita pedido</td></tr>
+  <tr><td>PATCH</td><td><code>/api/order/:id/status</code></td><td>Atualiza status</td></tr>
+  <tr><td>PATCH</td><td><code>/api/order/:id/select-driver</code></td><td>Atribui entregador</td></tr>
+  <tr><td>PATCH</td><td><code>/api/order/:id/cancel</code></td><td>Cancela pedido</td></tr>
+</table>
+
+<h3>Pagamentos</h3>
+<table>
+  <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+  <tr><td>GET</td><td><code>/api/pagamentos</code></td><td>Lista pedidos com pago=0</td></tr>
+  <tr><td>PATCH</td><td><code>/api/pagamentos/:id</code></td><td>Marca pago (cria Bling se necessário)</td></tr>
+  <tr><td>POST</td><td><code>/api/pagamentos/gerar-nfe</code></td><td>NFe agrupada (batch)</td></tr>
+</table>
+
+<h3>Bling OAuth</h3>
+<table>
+  <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+  <tr><td>GET</td><td><code>/bling/oauth/start</code></td><td>Inicia fluxo OAuth</td></tr>
+  <tr><td>GET</td><td><code>/bling/oauth/callback</code></td><td>Callback OAuth</td></tr>
+  <tr><td>CRON</td><td><code>0 */5 * * *</code></td><td>Refresh token automático</td></tr>
+</table>
+
+<h3>IzChat / WhatsApp</h3>
+<table>
+  <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+  <tr><td>POST</td><td><code>/izchat/notificar-entrega</code></td><td>WhatsApp ao entregador</td></tr>
+  <tr><td>GET</td><td><code>/izchat/teste</code></td><td>Testa conexão</td></tr>
+</table>
+
+<h3>Clientes e Config</h3>
+<table>
+  <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+  <tr><td>GET</td><td><code>/api/customers/search?phone=</code></td><td>Busca cliente</td></tr>
+  <tr><td>GET</td><td><code>/api/drivers</code></td><td>Lista entregadores</td></tr>
+  <tr><td>GET</td><td><code>/api/products</code></td><td>Lista produtos</td></tr>
+  <tr><td>GET</td><td><code>/api/streets</code></td><td>Lista ruas</td></tr>
+  <tr><td>POST</td><td><code>/api/streets/import</code></td><td>Importa ruas OSM</td></tr>
+</table>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="pagamentos">7. Sistema de Pagamentos</h2>
+
+<table>
+  <tr><th>Tipo</th><th>Cria Bling?</th><th>Marca Pago?</th><th>Em Pagamentos?</th></tr>
+  <tr><td>💵 Dinheiro</td><td>✅ SIM</td><td>✅ SIM</td><td>❌ NÃO</td></tr>
+  <tr><td>⚡ PIX à vista</td><td>✅ SIM</td><td>✅ SIM</td><td>❌ NÃO</td></tr>
+  <tr><td>⏳ PIX a receber</td><td>✅ SIM</td><td>❌ NÃO</td><td>✅ SIM</td></tr>
+  <tr><td>📅 Mensalista</td><td>❌ NÃO</td><td>❌ NÃO</td><td>✅ SIM</td></tr>
+  <tr><td>🧾 Boleto/Órgão</td><td>❌ NÃO</td><td>❌ NÃO</td><td>✅ SIM</td></tr>
+</table>
+
+<h3>Lógica no Worker</h3>
+<pre><code>const criarBling = ['dinheiro', 'pix_vista', 'pix_receber'].includes(tipo_pagamento);
+const pago = ['dinheiro', 'pix_vista'].includes(tipo_pagamento) ? 1 : 0;</code></pre>
+
+<p>Ao marcar como pago (PATCH /api/pagamentos/:id): se o pedido NÃO tem <code>bling_pedido_id</code>, o worker cria a venda no Bling automaticamente antes de marcar <code>pago=1</code>.</p>
+
+<div class="warning">
+  <strong>NFCe:</strong> NÃO tem endpoint direto na API Bling v3. Pedidos são emitidos em lote 1x/dia no painel Bling. NÃO implementar webhook de NFCe.
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="status">8. Status do Pedido</h2>
+
+<table>
+  <tr><th>Status</th><th>Cor</th><th>Significado</th></tr>
+  <tr><td>NOVO</td><td><span class="badge badge-red">🔴 Vermelho</span></td><td>Sem entregador</td></tr>
+  <tr><td>ENCAMINHADO</td><td><span class="badge badge-yellow">🟡 Amarelo</span></td><td>Entregador escolhido</td></tr>
+  <tr><td>WHATS ENVIADO</td><td><span class="badge badge-green">🟢 Verde</span></td><td>IzChat confirmou</td></tr>
+  <tr><td>ENTREGUE</td><td><span class="badge badge-blue">🔵 Azul</span></td><td>Finalizado</td></tr>
+  <tr><td>CANCELADO</td><td><span class="badge badge-gray">⚪ Cinza</span></td><td>Cancelado</td></tr>
+</table>
+
+<p>Pedidos entregues e cancelados podem ser editados. Entregador pode ser trocado após entrega.</p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="bling">9. Integração Bling ERP v3</h2>
+<p>Base: <code>https://www.bling.com.br/Api/v3</code> | Auth: OAuth 2.0 (PKCE) | Docs: <a href="https://developer.bling.com.br/home" style="color:var(--blue)">developer.bling.com.br</a></p>
+
+<h3>IDs Importantes</h3>
+<table>
+  <tr><th>Item</th><th>ID Bling</th></tr>
+  <tr><td>Consumidor Final (contato padrão)</td><td><code>726746364</code></td></tr>
+  <tr><td>Dinheiro</td><td><code>23368</code></td></tr>
+  <tr><td>PIX</td><td><code>23465</code></td></tr>
+  <tr><td>Débito</td><td><code>23369</code></td></tr>
+  <tr><td>Crédito</td><td><code>23370</code></td></tr>
+  <tr><td>Fiado</td><td><code>23373</code></td></tr>
+</table>
+
+<h3>Endpoints Utilizados</h3>
+<p><code>POST /pedidos/vendas</code> (criar venda), <code>GET /contatos</code> (buscar), <code>POST /contatos</code> (criar), <code>GET /depositos</code>, <code>GET /formas-pagamentos</code></p>
+
+<h3>Token</h3>
+<p>Refresh automático via cron (<code>0 */5 * * *</code>). Tabela <code>bling_tokens</code> (id=1). Expira em 6h, renova com 1.5h de margem. <code>pedido.html</code> faz check a cada 60s com auto-recovery invisível.</p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="izchat">10. Integração IzChat (WhatsApp)</h2>
+<p>Envia mensagens WhatsApp para entregadores com dados do pedido + link Google Maps.</p>
+<pre><code>POST /izchat/notificar-entrega
+{
+  "order_id": 123,
+  "driver_phone": "5567999999999",
+  "message": "texto",
+  "observacao": "obs"
+}</code></pre>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="telas">11. Telas do Sistema</h2>
+
+<table>
+  <tr><th>Tela</th><th>Arquivo</th><th>Função</th></tr>
+  <tr><td>Login</td><td>login.html</td><td>Autenticação</td></tr>
+  <tr><td>Entry Point</td><td>index.html</td><td>Redirect por role</td></tr>
+  <tr><td>Novo Pedido</td><td>pedido.html</td><td>Inserção rápida (atendente)</td></tr>
+  <tr><td>Gestão</td><td>gestao.html</td><td>Painel completo + resumo produtos</td></tr>
+  <tr><td>Pagamentos</td><td>pagamentos.html</td><td>Pagamentos pendentes</td></tr>
+  <tr><td>Entregador</td><td>entregador.html</td><td>Painel simplificado</td></tr>
+  <tr><td>Impressão</td><td>print.html</td><td>Recibo A4 (2 vias)</td></tr>
+  <tr><td>Relatório</td><td>relatorio.html</td><td>Vendas por período</td></tr>
+  <tr><td>Config</td><td>config.html</td><td>Ruas, bairros, produtos</td></tr>
+  <tr><td>Usuários</td><td>usuarios.html</td><td>Gestão (admin only)</td></tr>
+</table>
+
+<h3>shared.js</h3>
+<p>Biblioteca compartilhada: <code>api()</code> com auth, <code>getSessionToken()</code>, <code>getCurrentUser()</code>, <code>showToast()</code> com animação, verificação de sessão.</p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="ux">12. Regras de UX</h2>
+
+<div class="warning">Modais NUNCA fecham ao clicar fora. Só por botão X, Cancelar ou Salvar.</div>
+
+<p><strong>Toasts grandes e visíveis:</strong> Fundo colorido, texto grande, animação slide-in. Duração padrão 3s.</p>
+<p><strong>Tooltips em todos os botões:</strong> Atributo <code>title</code> descritivo. Ex: "Enviar WhatsApp para entregador".</p>
+<p><strong>Redirect após salvar pedido:</strong> Toast 1.2s → redireciona para gestao.html.</p>
+<p><strong>Consumidor Final sem endereço:</strong> Pula validação se nome contém 'CONSUMIDOR FINAL'.</p>
+<p><strong>Versão visível:</strong> Badge em todas as páginas (title + h1 + badge).</p>
+<p><strong>Check Bling silencioso:</strong> A cada 60s, auto-recovery invisível.</p>
+<p><strong>Cidade hardcoded:</strong> Campo Grande/MS. Sem campos cidade/UF.</p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="deploy">13. Deploy e Versionamento</h2>
+
+<div class="warning">
+  <strong>SEMPRE</strong> incrementar versão em TODO arquivo editado.<br>
+  HTML: badge + title + h1 (3 lugares!)<br>
+  JS: comentário <code>// vX.Y.Z</code> no topo<br>
+  NUNCA entregar sem versão atualizada.
+</div>
+
+<h3>Workflow</h3>
+<p>1. Incrementar versão. 2. Testar: <code>wrangler dev</code> (worker) / Live Server (HTML). 3. Deploy worker: <code>wrangler deploy</code>. 4. Git push HTMLs via HTTPS+token. 5. GitHub Pages deploya automaticamente. 6. Verificar badge de versão.</p>
+
+<div class="note">Worker.js é deployado via wrangler (NÃO vai no GitHub). HTMLs vão no repo <code>github.com/luismosko/moskogas-app</code>.</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="erros">14. Erros Conhecidos (NÃO REPETIR)</h2>
+
+<table>
+  <tr><th>Erro</th><th>Por quê</th></tr>
+  <tr><td>Usar <code>/nfce</code> ou <code>/nfces</code></td><td>NÃO EXISTE na API Bling v3</td></tr>
+  <tr><td>Esquecer de incrementar versão</td><td>Atualizar nos 3 lugares do HTML</td></tr>
+  <tr><td>Usar <code>pedido_numero</code> ao invés de <code>bling_pedido_id</code></td><td>ID interno ≠ número visível</td></tr>
+  <tr><td>Criar webhook de NFCe</td><td>Complexidade desnecessária</td></tr>
+  <tr><td>Form reset sem null check</td><td>Sempre: <code>if (el) el.value = ''</code></td></tr>
+  <tr><td>Modal fecha ao clicar fora</td><td>Viola regra UX — usar shared.js</td></tr>
+  <tr><td>Token Bling sem recovery</td><td>Implementar check com auto-refresh</td></tr>
+  <tr><td>Versão em 1 lugar só</td><td>Title + h1 + badge sincronizados</td></tr>
+  <tr><td>Sem parseInt/parseFloat</td><td>items_json pode ter strings</td></tr>
+</table>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="proximos">15. Próximos Passos</h2>
+
+<p><strong>Versionar arquivos sem versão:</strong> entregador.html, print.html e index.html precisam de badge.</p>
+<p><strong>AI para contas a pagar:</strong> App que interpreta fotos de recibos e lança no Bling automaticamente.</p>
+<p><strong>Melhorias no relatório:</strong> Gráficos, filtros por entregador, exportação Excel.</p>
+<p><strong>PWA / Offline:</strong> Service worker para funcionar offline.</p>
+<p><strong>Integração GLP Master:</strong> Bridge MySQL ↔ D1/Bling.</p>
+
+<!-- ════════════════════════════════════════════════ -->
+<h2 id="changelog">16. Changelog</h2>
+
+<h3>v3.0 — 17/02/2026</h3>
+<p>Sistema de autenticação (JWT, bcrypt, 3 roles). Gestão de usuários. shared.js v1.3.0 com utilitários. index.html como entry point. Resumo de produtos em gestao.html. Tooltips UX. Redirect após salvar pedido. Consumidor Final sem endereço obrigatório. Modal nunca fecha ao clicar fora. Toast melhorado.</p>
+
+<h3>v2.7.0 — 16/02/2026</h3>
+<p>Sistema de pagamentos com 5 tipos. Lógica Bling condicional. pagamentos.html. Check Bling silencioso com auto-recovery.</p>
+
+<h3>v2.0 — 15/02/2026</h3>
+<p>Versão inicial: pedidos, gestão, Bling, IzChat, config de ruas.</p>
+
+<footer>
+  <p>🔥 MoskoGás — Mosko Ltda — Campo Grande/MS</p>
+  <p>Gerado em 17/02/2026 por Claude AI</p>
+  <p><em>Para usar com ChatGPT: cole a URL deste HTML ou copie o conteúdo como contexto.</em></p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Impressão de Vales — MoskoGás</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, sans-serif;
+        }
+
+        body {
+            background: #f1f5f9;
+            padding: 20px;
+        }
+
+        .print-controls {
+            background: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 700;
+            background: #6366f1;
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        /* Grelha flexível para a impressão dos vales */
+        .vouchers-grid {
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 15px;
+            /* Espaço entre os vales */
+        }
+
+        /* Formato padrão do vale */
+        .voucher-box {
+            width: 200px;
+            /* Largura para caber uns 3-4 lado a lado no A4 (A4 tem ~210mm ~790px impressos) */
+            height: 100px;
+            background: #fff;
+            border: 2px dashed #000;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            page-break-inside: avoid;
+            /* Não quebrar o vale na metade da folha */
+        }
+
+        /* Conteúdo do vale */
+        .v-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 800;
+            font-size: 14px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 4px;
+            margin-bottom: 4px;
+        }
+
+        .v-title {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .v-desc {
+            font-size: 10px;
+            text-align: center;
+        }
+
+        .v-client {
+            font-size: 8px;
+            text-align: center;
+            color: #333;
+        }
+
+        .v-footer {
+            border-top: 1px solid #ccc;
+            padding-top: 4px;
+            font-size: 9px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .v-code {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        @media print {
+            @page {
+                margin: 10mm;
+                size: A4 portrait;
+            }
+
+            body {
+                background: transparent;
+                padding: 0;
+            }
+
+            .print-controls {
+                display: none !important;
+            }
+
+            .vouchers-grid {
+                gap: 10px;
+            }
+
+            .voucher-box {
+                border: 1px dashed #666;
+                width: calc(33.33% - 10px);
+                height: 110px;
+            }
+
+            /* 3 colunas perfeitas */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="print-controls">
+        <div>
+            <h1 style="font-size:18px; color:#1e293b; margin-bottom:4px;">Impressão de Vales</h1>
+            <div id="status-text" style="color:#64748b; font-size:13px;">Carregando dados...</div>
+        </div>
+        <div>
+            <button class="btn" onclick="window.print()" style="background:#22c55e;">🖨️ Imprimir Vales</button>
+            <button class="btn" onclick="window.close()" style="background:#94a3b8; margin-left:8px;">Fechar</button>
+        </div>
+    </div>
+
+    <div class="vouchers-grid" id="vouchers-container"></div>
+
+    <script src="shared.js"></script>
+    <script>
+        async function load() {
+            const params = new URLSearchParams(window.location.search);
+            const notaId = params.get('id');
+            if (!notaId) {
+                document.getElementById('status-text').textContent = "Nenhuma Nota ID informada.";
+                return;
+            }
+
+            try {
+                const res = await api(`/api/vales/notas/${notaId}`);
+
+                document.getElementById('status-text').textContent = `Nota #${res.nota.id} — Empresa: ${res.nota.cliente_nome} — Qtd Emitida: ${res.vales.length}`;
+
+                // Gerar grid de blocos de vales impressos
+                const html = res.vales.map(v => {
+                    // Cria a "imagem/bloco" do vale
+                    const emissaoDate = new Date(res.nota.created_at * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' });
+                    return `
+        <div class="voucher-box">
+          <div class="v-header">
+            <span>🔥 MoskoGás</span>
+            <span>Nº ${v.numero}</span>
+          </div>
+          
+          <div class="v-title" style="text-align:center;">VALE 1 CARGA DE GÁS</div>
+          <div class="v-client">${res.nota.cliente_nome.substring(0, 30)}</div>
+          
+          <div class="v-code">ID: ${String(v.id).padStart(5, '0')}</div>
+          
+          <div class="v-footer">
+            <span>Data: ${emissaoDate}</span>
+            <span>Assinatura: _______</span>
+          </div>
+        </div>
+      `;
+                }).join('');
+
+                document.getElementById('vouchers-container').innerHTML = html;
+
+                // Auto-disparar print depois de renderizar
+                setTimeout(() => { window.print(); }, 500);
+            } catch (err) {
+                document.getElementById('status-text').textContent = "Erro: " + err.message;
+                document.getElementById('status-text').style.color = 'red';
+            }
+        }
+
+        load();
+    </script>
+</body>
+
+</html>

@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.14.0
+// shared.js — Utilitários compartilhados MoskoGás v1.15.0
+// v1.15.0: 🎟️ Novo Módulo de Vales/Tickets (vales.html, print-vales.html) added to NavBar
 // v1.14.0: 📦 Estoque adicionado à navbar
 // v1.13.0: Dropdown Financeiro (Pagamentos + Empenhos GOV) na navbar
 // v1.11.0: Contratos adicionado à navbar
@@ -56,11 +57,11 @@ async function api(path, options = {}) {
 
 function statusBadge(status) {
   const map = {
-    novo:             ['#dc2626', 'NOVO'],
-    encaminhado:      ['#d97706', 'ENCAMINHADO'],
+    novo: ['#dc2626', 'NOVO'],
+    encaminhado: ['#d97706', 'ENCAMINHADO'],
     whatsapp_enviado: ['#16a34a', 'WHATS'],
-    entregue:         ['#2563eb', 'ENTREGUE'],
-    cancelado:        ['#6b7280', 'CANCELADO'],
+    entregue: ['#2563eb', 'ENTREGUE'],
+    cancelado: ['#6b7280', 'CANCELADO'],
   };
   const [color, label] = map[status] || ['#888', status];
   return `<span style="background:${color};color:#fff;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">${label}</span>`;
@@ -68,8 +69,8 @@ function statusBadge(status) {
 
 function payBadge(status) {
   const map = {
-    pendente:  ['#dc2626', 'PENDENTE'],
-    recebido:  ['#16a34a', 'RECEBIDO'],
+    pendente: ['#dc2626', 'PENDENTE'],
+    recebido: ['#16a34a', 'RECEBIDO'],
     estornado: ['#6b7280', 'ESTORNADO'],
   };
   const [color, label] = map[status] || ['#888', status];
@@ -92,7 +93,7 @@ function toast(msg, type = 'success') {
   const el = document.createElement('div');
   el.id = 'mg-toast';
   const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
-  const bgs   = { success: '#16a34a', error: '#dc2626', warning: '#d97706', info: '#2563eb' };
+  const bgs = { success: '#16a34a', error: '#dc2626', warning: '#d97706', info: '#2563eb' };
   const icon = icons[type] || '✅';
   const bg = bgs[type] || '#16a34a';
   el.innerHTML = `<span style="font-size:22px;margin-right:8px;">${icon}</span><span>${msg}</span>`;
@@ -144,16 +145,16 @@ function hideLoading() {
 
 // ── Navegação por Role ────────────────────────────────────────
 // Cores do tema
-const NAV_BG      = '#0B2A6F';
-const NAV_HOVER   = '#104BB8';
-const NAV_TEXT    = '#ffffffcc';
-const NAV_ACTIVE  = '#ffffff';
+const NAV_BG = '#0B2A6F';
+const NAV_HOVER = '#104BB8';
+const NAV_TEXT = '#ffffffcc';
+const NAV_ACTIVE = '#ffffff';
 
 const NAV_ITEMS = [
-  { href: 'pedido.html',     icon: '➕', label: 'Novo Pedido',  roles: ['admin', 'atendente'] },
-  { href: 'gestao.html',     icon: '📋', label: 'Gestão',       roles: ['admin', 'atendente'] },
-  { href: 'contratos.html',  icon: '📄', label: 'Contratos',    roles: ['admin', 'atendente'] },
-  { href: 'estoque.html',    icon: '📦', label: 'Estoque',      roles: ['admin', 'atendente'] },
+  { href: 'pedido.html', icon: '➕', label: 'Novo Pedido', roles: ['admin', 'atendente'] },
+  { href: 'gestao.html', icon: '📋', label: 'Gestão', roles: ['admin', 'atendente'] },
+  { href: 'contratos.html', icon: '📄', label: 'Contratos', roles: ['admin', 'atendente'] },
+  { href: 'estoque.html', icon: '📦', label: 'Estoque', roles: ['admin', 'atendente'] },
 ];
 
 // Dropdowns — cada um com ID único para abrir/fechar independente
@@ -162,23 +163,23 @@ const NAV_DROPDOWNS = [
     id: 'financeiro', icon: '💰', label: 'Financeiro', roles: ['admin', 'atendente'],
     children: [
       { href: 'pagamentos.html', icon: '💳', label: 'Pagamentos Pendentes' },
-      { href: 'empenhos.html',   icon: '🏛️', label: 'Empenhos GOV' },
+      { href: 'empenhos.html', icon: '🏛️', label: 'Empenhos GOV' },
     ]
   },
   {
     id: 'relatorio', icon: '📊', label: 'Relatório', roles: ['admin', 'atendente'],
     children: [
-      { href: 'relatorio.html',   icon: '📊', label: 'Relatório do Dia' },
-      { href: 'entregador.html',  icon: '🚚', label: 'Painel Entregador' },
-      { href: 'auditoria.html',   icon: '🔍', label: 'Auditoria' },
+      { href: 'relatorio.html', icon: '📊', label: 'Relatório do Dia' },
+      { href: 'entregador.html', icon: '🚚', label: 'Painel Entregador' },
+      { href: 'auditoria.html', icon: '🔍', label: 'Auditoria' },
       { href: 'consulta-pedidos.html', icon: '🔎', label: 'Consulta Pedidos' },
     ]
   },
   {
     id: 'config', icon: '⚙️', label: 'Config', roles: ['admin', 'atendente'],
     children: [
-      { href: 'config.html',     icon: '⚙️', label: 'Configurações' },
-      { href: 'usuarios.html',   icon: '👥', label: 'Usuários' },
+      { href: 'config.html', icon: '⚙️', label: 'Configurações' },
+      { href: 'usuarios.html', icon: '👥', label: 'Usuários' },
     ]
   },
 ];
@@ -571,7 +572,7 @@ function doLogout() {
     fetch(API_BASE + '/api/auth/logout', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token },
-    }).catch(() => {});
+    }).catch(() => { });
   }
   localStorage.removeItem('mg_session_token');
   localStorage.removeItem('mg_user');
@@ -992,7 +993,7 @@ async function checkBlingBeforeAction() {
     if (data.ok && data.connected && data.minutesLeft > 2) return true;
     // Needs recovery
     return await ensureBling();
-  } catch(e) {
+  } catch (e) {
     return await ensureBling();
   }
 }

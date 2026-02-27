@@ -1,4 +1,5 @@
-// v2.42.2
+// v2.43.0
+// v2.43.0: 🎟️ Módulo de Vales/Tickets (API, Controle e Baixas)
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
@@ -114,10 +115,10 @@ async function ensureAuthTables(env) {
     updated_at INTEGER DEFAULT (unixepoch())
   )`).run();
   // Migrate: add columns if missing
-  await env.DB.prepare("ALTER TABLE app_users ADD COLUMN pode_entregar INTEGER DEFAULT 0").run().catch(()=>{});
-  await env.DB.prepare("ALTER TABLE app_users ADD COLUMN recebe_whatsapp INTEGER DEFAULT 0").run().catch(()=>{});
+  await env.DB.prepare("ALTER TABLE app_users ADD COLUMN pode_entregar INTEGER DEFAULT 0").run().catch(() => { });
+  await env.DB.prepare("ALTER TABLE app_users ADD COLUMN recebe_whatsapp INTEGER DEFAULT 0").run().catch(() => { });
   // Set defaults: entregadores existentes ganham pode_entregar=1, recebe_whatsapp=1
-  await env.DB.prepare("UPDATE app_users SET pode_entregar=1, recebe_whatsapp=1 WHERE role='entregador' AND pode_entregar=0 AND recebe_whatsapp=0 AND ativo=1").run().catch(()=>{});
+  await env.DB.prepare("UPDATE app_users SET pode_entregar=1, recebe_whatsapp=1 WHERE role='entregador' AND pode_entregar=0 AND recebe_whatsapp=0 AND ativo=1").run().catch(() => { });
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS auth_sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -131,8 +132,8 @@ async function ensureAuthTables(env) {
     login_usado TEXT,
     sucesso INTEGER DEFAULT 0,
     created_at INTEGER DEFAULT (unixepoch())
-  )`).run().catch(()=>{});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_login_ip ON login_attempts(ip, created_at)').run().catch(()=>{});
+  )`).run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_login_ip ON login_attempts(ip, created_at)').run().catch(() => { });
 }
 
 // ── Rate Limiting (v2.21.0) ───────────────────────────────────
@@ -148,10 +149,10 @@ async function checkRateLimit(env, ip) {
 async function logLoginAttempt(env, ip, loginUsado, sucesso) {
   await env.DB.prepare(
     'INSERT INTO login_attempts (ip, login_usado, sucesso) VALUES (?, ?, ?)'
-  ).bind(ip, loginUsado || '', sucesso ? 1 : 0).run().catch(() => {});
+  ).bind(ip, loginUsado || '', sucesso ? 1 : 0).run().catch(() => { });
   // Limpar tentativas antigas (>24h)
   const ontem = Math.floor(Date.now() / 1000) - 86400;
-  await env.DB.prepare('DELETE FROM login_attempts WHERE created_at < ?').bind(ontem).run().catch(() => {});
+  await env.DB.prepare('DELETE FROM login_attempts WHERE created_at < ?').bind(ontem).run().catch(() => { });
 }
 
 async function getSessionUser(request, env) {
@@ -206,7 +207,7 @@ async function refreshBlingToken(env, refreshToken) {
   });
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => '');
-    throw new Error('bling_reauth_required:' + resp.status + ':' + errBody.substring(0,100));
+    throw new Error('bling_reauth_required:' + resp.status + ':' + errBody.substring(0, 100));
   }
   const data = await resp.json();
   await saveToken(env, data);
@@ -239,7 +240,7 @@ async function blingFetch(path, options = {}, env) {
   let token;
   try {
     token = await getValidAccessToken(env);
-  } catch(e) {
+  } catch (e) {
     if (e.message === 'no_token' || e.message?.includes('reauth')) {
       return new Response(JSON.stringify({ error: 'bling_reauth_required', message: 'Token Bling expirado. Reautorize em Config → Conectar Bling.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
@@ -253,7 +254,7 @@ async function blingFetch(path, options = {}, env) {
       const row = await getTokenRow(env);
       token = await refreshBlingToken(env, row.refresh_token);
       resp = await doRequest(token);
-    } catch(e) {
+    } catch (e) {
       return new Response(JSON.stringify({ error: 'bling_reauth_required', message: 'Sessão Bling expirada. Reautorize em Config → Conectar Bling.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
   }
@@ -263,13 +264,13 @@ async function blingFetch(path, options = {}, env) {
 
 // ── Formas de pagamento mapeadas (IDs do Bling da Mosko Gás) ──────
 const FORMAS_PAGAMENTO = {
-  dinheiro:      { id: 23368,   descricao: 'Dinheiro',           tipoPagamento: 1  },
-  pix:           { id: 3138153, descricao: 'PIX (Bradesco)',      tipoPagamento: 16 },
-  pix_itau:      { id: 9052024, descricao: 'ITAU PIX, TED',      tipoPagamento: 18 },
-  debito:        { id: 188552,  descricao: 'Cartão Débito',       tipoPagamento: 4  },
-  credito:       { id: 188555,  descricao: 'Cartão Crédito',      tipoPagamento: 3  },
-  fiado:         { id: 188534,  descricao: 'Duplicata Mercantil', tipoPagamento: 14 },
-  pix_aguardando:{ id: 9315924, descricao: 'PIX Aguardando (Bradesco)', tipoPagamento: 18 },
+  dinheiro: { id: 23368, descricao: 'Dinheiro', tipoPagamento: 1 },
+  pix: { id: 3138153, descricao: 'PIX (Bradesco)', tipoPagamento: 16 },
+  pix_itau: { id: 9052024, descricao: 'ITAU PIX, TED', tipoPagamento: 18 },
+  debito: { id: 188552, descricao: 'Cartão Débito', tipoPagamento: 4 },
+  credito: { id: 188555, descricao: 'Cartão Crédito', tipoPagamento: 3 },
+  fiado: { id: 188534, descricao: 'Duplicata Mercantil', tipoPagamento: 14 },
+  pix_aguardando: { id: 9315924, descricao: 'PIX Aguardando (Bradesco)', tipoPagamento: 18 },
 };
 
 const CONSUMIDOR_FINAL_ID = 726746364;
@@ -279,15 +280,15 @@ function getFormaPagamentoForTipo(tipoPg, formaKey, formaId) {
   if (formaId) return formaId;
   if (formaKey && FORMAS_PAGAMENTO[formaKey]) return FORMAS_PAGAMENTO[formaKey].id;
   switch (tipoPg) {
-    case 'dinheiro':    return FORMAS_PAGAMENTO.dinheiro.id;
-    case 'pix_vista':   return FORMAS_PAGAMENTO.pix.id;
+    case 'dinheiro': return FORMAS_PAGAMENTO.dinheiro.id;
+    case 'pix_vista': return FORMAS_PAGAMENTO.pix.id;
     case 'pix_receber': return FORMAS_PAGAMENTO.pix_aguardando.id;
-    case 'debito':      return FORMAS_PAGAMENTO.debito.id;
-    case 'credito':     return FORMAS_PAGAMENTO.credito.id;
-    case 'mensalista':  return FORMAS_PAGAMENTO.fiado.id;
-    case 'boleto':      return FORMAS_PAGAMENTO.fiado.id;
-    case 'nfe':         return FORMAS_PAGAMENTO.fiado.id;
-    default:            return FORMAS_PAGAMENTO.dinheiro.id;
+    case 'debito': return FORMAS_PAGAMENTO.debito.id;
+    case 'credito': return FORMAS_PAGAMENTO.credito.id;
+    case 'mensalista': return FORMAS_PAGAMENTO.fiado.id;
+    case 'boleto': return FORMAS_PAGAMENTO.fiado.id;
+    case 'nfe': return FORMAS_PAGAMENTO.fiado.id;
+    default: return FORMAS_PAGAMENTO.dinheiro.id;
   }
 }
 
@@ -331,13 +332,13 @@ async function criarPedidoBling(env, orderId, orderData) {
   const usarContatoReal = bling_contact_id && cpf_cnpj && cpf_cnpj.replace(/\D/g, '').length >= 11;
 
   const pedidoBody = {
-    contato:  usarContatoReal ? { id: bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-    data:     today,
+    contato: usarContatoReal ? { id: bling_contact_id } : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+    data: today,
     dataSaida: today,
-    itens:    itensBling,
+    itens: itensBling,
     parcelas: [{
       formaPagamento: { id: fpId },
-      valor:          total,
+      valor: total,
       dataVencimento: today,
     }],
     observacoes: `MoskoGás #${orderId}${obsVendedor}${obsTipo} - ${name}`,
@@ -347,7 +348,7 @@ async function criarPedidoBling(env, orderId, orderData) {
     pedidoBody.vendedor = { id: bling_vendedor_id };
   }
 
-  await logEvent(env, orderId, 'bling_payload', { itens: itensBling, contato: pedidoBody.contato }).catch(() => {});
+  await logEvent(env, orderId, 'bling_payload', { itens: itensBling, contato: pedidoBody.contato }).catch(() => { });
 
   const pedidoResp = await blingFetch('/pedidos/vendas', {
     method: 'POST',
@@ -357,7 +358,7 @@ async function criarPedidoBling(env, orderId, orderData) {
   if (!pedidoResp.ok) {
     const errText = await pedidoResp.text();
     console.error('[Bling] Pedido venda erro:', pedidoResp.status, errText);
-    await logEvent(env, orderId, 'bling_error_detail', { status: pedidoResp.status, body: errText.substring(0, 500) }).catch(() => {});
+    await logEvent(env, orderId, 'bling_error_detail', { status: pedidoResp.status, body: errText.substring(0, 500) }).catch(() => { });
     await logBlingAudit(env, orderId, 'criar_venda', 'error', {
       request_payload: pedidoBody,
       error_message: `HTTP ${pedidoResp.status}: ${errText.substring(0, 300)}`
@@ -366,7 +367,7 @@ async function criarPedidoBling(env, orderId, orderData) {
   }
 
   const pedidoData = await pedidoResp.json();
-  const bling_pedido_id  = pedidoData.data?.id  ?? null;
+  const bling_pedido_id = pedidoData.data?.id ?? null;
   const bling_pedido_num = pedidoData.data?.numero ?? null;
 
   await logBlingAudit(env, orderId, 'criar_venda', 'success', {
@@ -383,7 +384,7 @@ async function criarPedidoBling(env, orderId, orderData) {
 // ── Deletar venda no Bling ──────────────────────────────────────
 async function deletarVendaBling(env, orderId, blingPedidoId) {
   if (!blingPedidoId) return { ok: false, reason: 'no_bling_id' };
-  
+
   const resp = await blingFetch(`/pedidos/vendas/${blingPedidoId}`, {
     method: 'DELETE',
   }, env);
@@ -482,7 +483,7 @@ async function ensurePixColumns(env) {
     { name: 'cora_paid_at', def: 'INTEGER' },
   ];
   for (const col of cols) {
-    await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col.name} ${col.def}`).run().catch(() => {});
+    await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col.name} ${col.def}`).run().catch(() => { });
   }
 }
 
@@ -500,9 +501,9 @@ async function ensureWhatsAppTables(env) {
     wa_ok INTEGER DEFAULT 0,
     blocked INTEGER DEFAULT 0,
     created_at INTEGER DEFAULT (unixepoch())
-  )`).run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_wsl_created ON whatsapp_send_log(created_at)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_wsl_phone ON whatsapp_send_log(phone)').run().catch(() => {});
+  )`).run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_wsl_created ON whatsapp_send_log(created_at)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_wsl_phone ON whatsapp_send_log(phone)').run().catch(() => { });
 }
 
 async function getWhatsAppSafetyConfig(env) {
@@ -521,7 +522,7 @@ async function getWhatsAppSafetyConfig(env) {
   try {
     const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='whatsapp_safety'").first();
     if (row?.value) return { ...defaults, ...JSON.parse(row.value) };
-  } catch(_) {}
+  } catch (_) { }
   return defaults;
 }
 
@@ -533,7 +534,7 @@ async function isCircuitBroken(env, config) {
       'SELECT COUNT(*) as c FROM whatsapp_send_log WHERE blocked=1 AND created_at > ?'
     ).bind(cutoff).first();
     return (row?.c || 0) > 0;
-  } catch(_) { return false; }
+  } catch (_) { return false; }
 }
 
 // Rate limit checks
@@ -700,7 +701,7 @@ async function sendWhatsApp(env, to, message, opts = {}) {
     await env.DB.prepare(
       'INSERT INTO whatsapp_send_log (phone, category, status_code, wa_ok, blocked) VALUES (?, ?, ?, ?, ?)'
     ).bind(to, category, resp.status, resp.ok ? 1 : 0, isBlocked ? 1 : 0).run();
-  } catch(_) {}
+  } catch (_) { }
 
   // ── CIRCUIT BREAKER: se 429, logar e parar ──
   if (isBlocked) {
@@ -710,7 +711,7 @@ async function sendWhatsApp(env, to, message, opts = {}) {
       await env.DB.prepare(
         "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('whatsapp_last_block', ?, datetime('now'))"
       ).bind(JSON.stringify({ at: new Date().toISOString(), phone: to, status: resp.status, data })).run();
-    } catch(_) {}
+    } catch (_) { }
   }
 
   return { ok: resp.ok, status: resp.status, data, blocked: isBlocked };
@@ -738,7 +739,7 @@ async function sendWhatsAppImage(env, to, imageUrl, caption = '') {
     });
     const data = await resp.json().catch(() => ({}));
     return { ok: resp.ok, status: resp.status, data };
-  } catch(e) {
+  } catch (e) {
     return { ok: false, error: e.message };
   }
 }
@@ -767,7 +768,7 @@ async function getLembreteConfig(env) {
   try {
     const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='lembrete_pix'").first();
     if (row?.value) return { ...defaults, ...JSON.parse(row.value) };
-  } catch(_) {}
+  } catch (_) { }
   return defaults;
 }
 
@@ -783,7 +784,7 @@ const SAUDACOES_LEMBRETE = [
 ];
 
 function buildLembreteMessage(template, order, config) {
-  const items = (() => { try { return JSON.parse(order.items_json || '[]'); } catch(_) { return []; } })();
+  const items = (() => { try { return JSON.parse(order.items_json || '[]'); } catch (_) { return []; } })();
   const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || 'Gás';
 
   // Data de entrega formatada
@@ -959,7 +960,7 @@ async function processarLembretesCron(env) {
     }
 
     console.log(`[lembrete-cron] Total: ${rows.length} pendentes, ${enviados} enviados, ${pulados} pulados, ${erros} erros`);
-  } catch(e) {
+  } catch (e) {
     console.error('[lembrete-cron] Erro:', e.message);
   }
 }
@@ -985,7 +986,7 @@ async function logEvent(env, orderId, event, payload = null) {
     event TEXT,
     payload_json TEXT,
     created_at TEXT DEFAULT (datetime('now'))
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
   await env.DB.prepare(
     'INSERT INTO order_events (order_id, event, payload_json) VALUES (?, ?, ?)'
   ).bind(orderId, event, payload ? JSON.stringify(payload) : null).run();
@@ -1004,13 +1005,13 @@ async function ensureAuditTable(env) {
     response_data TEXT,
     error_message TEXT,
     created_at TEXT DEFAULT (datetime('now'))
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS audit_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_date TEXT NOT NULL,
     data_json TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS order_status_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     order_id INTEGER NOT NULL,
@@ -1020,21 +1021,21 @@ async function ensureAuditTable(env) {
     usuario_id INTEGER,
     usuario_nome TEXT,
     created_at TEXT DEFAULT (datetime('now'))
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
   // Migração: coluna cancel_motivo em orders
-  await env.DB.prepare(`ALTER TABLE orders ADD COLUMN cancel_motivo TEXT`).run().catch(() => {});
+  await env.DB.prepare(`ALTER TABLE orders ADD COLUMN cancel_motivo TEXT`).run().catch(() => { });
   // Tabela config (key-value)
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT (datetime('now'))
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
   // Índices para consulta de pedidos (performance)
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_name)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_digits)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_driver ON orders(driver_name_cache)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_pago ON orders(pago)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bling ON orders(bling_pedido_id)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_name)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone_digits)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_driver ON orders(driver_name_cache)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_pago ON orders(pago)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bling ON orders(bling_pedido_id)').run().catch(() => { });
   // Produtos favoritos (v2.23.0)
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS product_favorites (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1044,8 +1045,8 @@ async function ensureAuditTable(env) {
     price REAL DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
-  )`).run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bairro ON orders(bairro)').run().catch(() => {});
+  )`).run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_orders_bairro ON orders(bairro)').run().catch(() => { });
   // Lembretes PIX (v2.26.0)
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS payment_reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1057,8 +1058,8 @@ async function ensureAuditTable(env) {
     sent_by_nome TEXT,
     whatsapp_ok INTEGER DEFAULT 0,
     whatsapp_detail TEXT
-  )`).run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pr_order ON payment_reminders(order_id)').run().catch(() => {});
+  )`).run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pr_order ON payment_reminders(order_id)').run().catch(() => { });
 }
 
 // ── Contratos (Comodato) — Tabelas e Helpers ─────────────────
@@ -1080,7 +1081,7 @@ async function ensureEmpenhoTables(env) {
     created_by_nome TEXT,
     created_at INTEGER DEFAULT (unixepoch()),
     updated_at INTEGER DEFAULT (unixepoch())
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gov_empenho_arquivos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1090,7 +1091,7 @@ async function ensureEmpenhoTables(env) {
     bytes INTEGER,
     created_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY (empenho_id) REFERENCES gov_empenhos(id)
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gov_empenho_itens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1101,7 +1102,7 @@ async function ensureEmpenhoTables(env) {
     quantidade_usada INTEGER NOT NULL DEFAULT 0,
     preco_unitario REAL DEFAULT 0,
     FOREIGN KEY (empenho_id) REFERENCES gov_empenhos(id)
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gov_empenho_vendas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1110,7 +1111,7 @@ async function ensureEmpenhoTables(env) {
     quantidade_json TEXT DEFAULT '{}',
     created_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY (empenho_id) REFERENCES gov_empenhos(id)
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 }
 
 async function alertarSaldoBaixo(env, empenho, item) {
@@ -1120,7 +1121,7 @@ async function alertarSaldoBaixo(env, empenho, item) {
   const msg = `⚠️ ALERTA EMPENHO GOV\nEmpenho: ${empenho.numero}\nCliente: ${empenho.cliente_nome}\nProduto: ${item.produto_nome}\nSaldo restante: ${saldo} unidades (${pct}% do total)\n\nAcesse o sistema para verificar.`;
   const admins = await env.DB.prepare(`SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1`).all().then(r => r.results || []);
   for (const adm of admins) {
-    if (adm.telefone) await sendWhatsApp(env, adm.telefone, msg, { category: 'admin_alerta' }).catch(() => {});
+    if (adm.telefone) await sendWhatsApp(env, adm.telefone, msg, { category: 'admin_alerta' }).catch(() => { });
   }
   try {
     const emailCfg = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_email'").first();
@@ -1139,11 +1140,11 @@ async function alertarSaldoBaixo(env, empenho, item) {
               subject: `⚠️ Alerta Empenho ${empenho.numero} — Saldo Baixo`,
               html: `<h2>⚠️ Saldo Baixo — Empenho ${empenho.numero}</h2><p><b>Cliente:</b> ${empenho.cliente_nome}</p><p><b>Produto:</b> ${item.produto_nome}</p><p><b>Saldo:</b> ${saldo} unidades (${pct}% do total)</p>`
             })
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
     }
-  } catch(_) {}
+  } catch (_) { }
 }
 
 
@@ -1177,7 +1178,7 @@ async function ensureContractTables(env) {
     signed_at INTEGER,
     canceled_at INTEGER,
     cancel_motivo TEXT
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contract_signers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1194,7 +1195,7 @@ async function ensureContractTables(env) {
     whatsapp_sent_at INTEGER,
     reject_reason TEXT,
     FOREIGN KEY (contract_id) REFERENCES contracts(id)
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contract_attachments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1206,7 +1207,7 @@ async function ensureContractTables(env) {
     bytes INTEGER,
     created_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY (contract_id) REFERENCES contracts(id)
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS contract_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1216,16 +1217,16 @@ async function ensureContractTables(env) {
     usuario_id INTEGER,
     usuario_nome TEXT,
     created_at INTEGER DEFAULT (unixepoch())
-  )`).run().catch(() => {});
+  )`).run().catch(() => { });
 
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_contracts_numero ON contracts(numero)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_csigners_contract ON contract_signers(contract_id)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cattach_contract ON contract_attachments(contract_id)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cevents_contract ON contract_events(contract_id)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_contracts_numero ON contracts(numero)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_csigners_contract ON contract_signers(contract_id)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cattach_contract ON contract_attachments(contract_id)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cevents_contract ON contract_events(contract_id)').run().catch(() => { });
   // v2.32.0: índices para busca de clientes (performance com 10k+ registros)
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers_cache(name)').run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers_cache(phone_digits)').run().catch(() => {});
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers_cache(name)').run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers_cache(phone_digits)').run().catch(() => { });
 }
 
 // ─── ESTOQUE: Schema (v2.42.0) ─────────────────────────────
@@ -1243,15 +1244,15 @@ async function ensureStockTables(env) {
     divergencia_notificada INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
     UNIQUE(data, tipo)
-  )`).run().catch(() => {});
-  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_stock_data ON stock_daily(data)').run().catch(() => {});
+  )`).run().catch(() => { });
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_stock_data ON stock_daily(data)').run().catch(() => { });
   for (const sql of [
     "ALTER TABLE stock_daily ADD COLUMN cascos_devolucao INTEGER DEFAULT 0",
     "ALTER TABLE stock_daily ADD COLUMN cascos_emprestimo INTEGER DEFAULT 0",
     "ALTER TABLE stock_daily ADD COLUMN cascos_venda INTEGER DEFAULT 0",
     "ALTER TABLE stock_daily ADD COLUMN cascos_aquisicao INTEGER DEFAULT 0",
     "ALTER TABLE stock_daily ADD COLUMN observacao TEXT",
-  ]) await env.DB.prepare(sql).run().catch(() => {});
+  ]) await env.DB.prepare(sql).run().catch(() => { });
 }
 
 // ─── ESTOQUE: Vendas automáticas dos pedidos entregues ─────
@@ -1262,10 +1263,10 @@ async function calcVendasAuto(env, data) {
     "SELECT items_json FROM orders WHERE status='entregue' AND delivered_at >= ? AND delivered_at <= ?"
   ).bind(startEpoch, endEpoch).all().then(r => r.results || []);
   const mapRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='estoque_mapeamento'").first().catch(() => null);
-  let mapeamento = {}; try { mapeamento = JSON.parse(mapRow?.value || '{}'); } catch {}
+  let mapeamento = {}; try { mapeamento = JSON.parse(mapRow?.value || '{}'); } catch { }
   const vendas = { P13: 0, P20: 0, P45: 0, P05: 0 };
   for (const order of orders) {
-    let items = []; try { items = JSON.parse(order.items_json || '[]'); } catch {}
+    let items = []; try { items = JSON.parse(order.items_json || '[]'); } catch { }
     for (const item of items) {
       const blingId = String(item.bling_id || item.id || '');
       const nome = (item.name || item.nome || '').toUpperCase();
@@ -1501,7 +1502,7 @@ async function importStreetsByLetter(env, letter) {
       const data = await resp.json();
       elements = data?.elements || [];
       break;
-    } catch(e) { lastError = e.message; }
+    } catch (e) { lastError = e.message; }
   }
 
   if (elements === null) throw new Error(lastError || 'Todos os servidores falharam');
@@ -1518,7 +1519,7 @@ async function importStreetsByLetter(env, letter) {
 
   for (let i = 0; i < streets.length; i += 30) {
     const batch = streets.slice(i, i + 30);
-    const ph   = batch.map(() => '(?,?,?)').join(',');
+    const ph = batch.map(() => '(?,?,?)').join(',');
     const vals = batch.flatMap(s => [s.name, s.norm, '']);
     await env.DB.prepare(`INSERT OR IGNORE INTO streets_cg (name, name_norm, bairro) VALUES ${ph}`).bind(...vals).run();
   }
@@ -1555,7 +1556,7 @@ function mapContatos(lista) {
 async function saveContactsCache(result, env) {
   // Ensure columns exist
   for (const col of ['cpf_cnpj TEXT', 'email TEXT', 'email_nfe TEXT', 'tipo_pessoa TEXT', 'ultima_compra_glp TEXT DEFAULT \'\'', 'origem TEXT DEFAULT \'manual\'']) {
-    await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => {});
+    await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => { });
   }
   for (const r of result) {
     if (r.phone_digits || r.bling_contact_id) {
@@ -1563,10 +1564,37 @@ async function saveContactsCache(result, env) {
         await env.DB.prepare(`
           INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, tipo_pessoa, email, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-        `).bind(r.phone_digits||null, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id||null, r.cpf_cnpj||null, r.tipo_pessoa||null, r.email||null).run();
-      } catch(_) {}
+        `).bind(r.phone_digits || null, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id || null, r.cpf_cnpj || null, r.tipo_pessoa || null, r.email || null).run();
+      } catch (_) { }
     }
   }
+}
+
+async function ensureValesTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notas_vales (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_nome TEXT NOT NULL,
+    cliente_doc TEXT,
+    quantidade INTEGER NOT NULL,
+    valor_unit REAL NOT NULL,
+    total REAL NOT NULL,
+    forma_pagamento TEXT,
+    bling_pedido_id TEXT,
+    bling_pedido_num TEXT,
+    created_by INTEGER,
+    created_by_nome TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(() => { });
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS vales (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nota_id INTEGER NOT NULL,
+    numero TEXT NOT NULL,
+    status TEXT DEFAULT 'pendente',
+    resgatado_em INTEGER,
+    resgatado_por TEXT,
+    FOREIGN KEY(nota_id) REFERENCES notas_vales(id)
+  )`).run().catch(() => { });
 }
 
 export default {
@@ -1599,7 +1627,7 @@ export default {
           )
         `).run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_st_norm ON streets_cg(name_norm)').run();
-      } catch(_) {}
+      } catch (_) { }
     }
 
     if (method === 'OPTIONS') {
@@ -1622,7 +1650,7 @@ export default {
         const minutesLeft = Math.floor((expiresAt - now) / 60);
         const connected = minutesLeft > 0;
         return json({ ok: true, connected, minutesLeft, message: connected ? `Token válido (${minutesLeft}min)` : 'Token expirado' });
-      } catch(e) {
+      } catch (e) {
         return json({ ok: false, connected: false, error: e.message });
       }
     }
@@ -1638,7 +1666,7 @@ export default {
 
         if (testResp.ok) {
           const now = Math.floor(Date.now() / 1000);
-          const minutesLeft = Math.floor(((row.obtained_at||0) + (row.expires_in||3600) - now) / 60);
+          const minutesLeft = Math.floor(((row.obtained_at || 0) + (row.expires_in || 3600) - now) / 60);
           return json({ ok: true, connected: true, minutesLeft, message: `Token válido e testado (${minutesLeft}min)` });
         }
 
@@ -1648,13 +1676,13 @@ export default {
           console.log('[keep-alive] Token renovado com sucesso!');
           const newRow = await getTokenRow(env);
           const now2 = Math.floor(Date.now() / 1000);
-          const ml2 = Math.floor(((newRow.obtained_at||0) + (newRow.expires_in||3600) - now2) / 60);
+          const ml2 = Math.floor(((newRow.obtained_at || 0) + (newRow.expires_in || 3600) - now2) / 60);
           return json({ ok: true, connected: true, minutesLeft: ml2, refreshed: true, message: `Token renovado! (${ml2}min)` });
-        } catch(refreshErr) {
+        } catch (refreshErr) {
           console.error('[keep-alive] Refresh falhou:', refreshErr.message);
           return json({ ok: false, connected: false, error: 'refresh_failed: ' + refreshErr.message, message: 'Token expirado e refresh falhou. Reautorize em Config.' });
         }
-      } catch(e) {
+      } catch (e) {
         return json({ ok: false, connected: false, error: e.message });
       }
     }
@@ -1666,9 +1694,9 @@ export default {
           blingFetch('/formas-pagamentos?pagina=1&limite=50', {}, env),
         ]);
         const depositos = depResp.ok ? (await depResp.json()).data : { error: depResp.status };
-        const formasPgto = fpResp.ok  ? (await fpResp.json()).data : { error: fpResp.status };
+        const formasPgto = fpResp.ok ? (await fpResp.json()).data : { error: fpResp.status };
         return json({ depositos, formasPgto });
-      } catch(e) {
+      } catch (e) {
         return json({ error: e.message });
       }
     }
@@ -1696,7 +1724,7 @@ export default {
           streets.push({ name: road, bairro: addr.suburb || addr.neighbourhood || addr.quarter || '' });
         }
         return json(streets);
-      } catch(_) { return json([]); }
+      } catch (_) { return json([]); }
     }
 
     if (method === 'POST' && path === '/api/streets/import-letter') {
@@ -1709,7 +1737,7 @@ export default {
         const count = await importStreetsByLetter(env, letter);
         const total = await env.DB.prepare('SELECT COUNT(*) AS c FROM streets_cg').first().then(r => r?.c || 0);
         return json({ ok: true, letter, added: count, total });
-      } catch(e) { return json({ ok: false, letter, error: e.message }, 500); }
+      } catch (e) { return json({ ok: false, letter, error: e.message }, 500); }
     }
 
     if (method === 'POST' && path === '/api/streets/import') {
@@ -1736,7 +1764,7 @@ export default {
           if (b && !seen.has(b)) { seen.add(b); bairros.push(b); }
         }
         return json({ bairros });
-      } catch(_) { return json({ bairros: [] }); }
+      } catch (_) { return json({ bairros: [] }); }
     }
 
     // ── ENDEREÇOS MÚLTIPLOS ─────────────────────────────────
@@ -1800,7 +1828,7 @@ export default {
         if (!resp.ok) {
           const errText = await resp.text().catch(() => '');
           // Tenta buscar por pesquisa se ID não funcionar (ID pode ser de outro sistema)
-          return json({ error: 'bling_id_invalido', status: resp.status, detail: errText.substring(0,200) }, 404);
+          return json({ error: 'bling_id_invalido', status: resp.status, detail: errText.substring(0, 200) }, 404);
         }
         const data = await resp.json();
         const c = data.data || data;
@@ -1825,7 +1853,7 @@ export default {
           await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch())`).bind(phone || null, result.name, address_line, result.bairro, result.complemento, c.id).run();
         }
         return json(result);
-      } catch(e) { return json({ error: e.message }, 500); }
+      } catch (e) { return json({ error: e.message }, 500); }
     }
 
     if (method === 'GET' && path.startsWith('/bling/debug-contato-id/')) {
@@ -1902,7 +1930,7 @@ export default {
         const pingResp = await blingFetch('/situacoes/modulos', {}, env);
         const pingOk = pingResp.status < 400;
         return json({ ok: pingOk, bling_status: pingResp.status, token_minutes_left: minutesLeft });
-      } catch(e) { return json({ ok: false, error: e.message }); }
+      } catch (e) { return json({ ok: false, error: e.message }); }
     }
 
     if (method === 'GET' && path === '/api/pub/debug-items') {
@@ -1929,7 +1957,7 @@ export default {
         const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
         if (!order) return json({ error: 'Pedido não encontrado' });
         const items = JSON.parse(order.items_json || '[]');
-        const today = new Date().toISOString().slice(0,10);
+        const today = new Date().toISOString().slice(0, 10);
         const fpKey = order.forma_pagamento_key || 'dinheiro';
         const fpId = FORMAS_PAGAMENTO[fpKey]?.id || 23368;
         const itensBling = items.map(it => buildItemBling(it));
@@ -1950,7 +1978,7 @@ export default {
           error_message: resp.ok ? null : `HTTP ${resp.status}`
         });
         return json({ order_id: orderId, payload_sent: payload, bling_status: resp.status, bling_response: parsed });
-      } catch(e) { return json({ ok: false, error: e.message }); }
+      } catch (e) { return json({ ok: false, error: e.message }); }
     }
 
     // [REMOVIDO v2.12.0] test-nfce — NFCe não existe na API Bling v3
@@ -2032,7 +2060,7 @@ export default {
 
       await logLoginAttempt(env, clientIp, login, true);
       const now = Math.floor(Date.now() / 1000);
-      await env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').bind(now).run().catch(() => {});
+      await env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').bind(now).run().catch(() => { });
       const token = generateToken();
       const expiresAt = now + 86400;
       await env.DB.prepare('INSERT INTO auth_sessions (token, user_id, expires_at) VALUES (?, ?, ?)').bind(token, user.id, expiresAt).run();
@@ -2049,7 +2077,7 @@ export default {
     if (method === 'POST' && path === '/api/auth/logout') {
       const authHeader = request.headers.get('Authorization') || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-      if (token) await env.DB.prepare('DELETE FROM auth_sessions WHERE token = ?').bind(token).run().catch(() => {});
+      if (token) await env.DB.prepare('DELETE FROM auth_sessions WHERE token = ?').bind(token).run().catch(() => { });
       return json({ ok: true });
     }
 
@@ -2145,13 +2173,13 @@ export default {
           const salt = crypto.randomUUID();
           const hash = await hashPassword(senha, salt);
           await env.DB.prepare('UPDATE app_users SET nome=?, login=?, senha_hash=?, senha_salt=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
-            .bind(nome, login.toLowerCase().trim(), hash, salt, role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, pode_entregar?1:0, recebe_whatsapp?1:0, ativo !== undefined ? (ativo?1:0) : 1, id).run();
+            .bind(nome, login.toLowerCase().trim(), hash, salt, role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1, id).run();
         } else {
           await env.DB.prepare('UPDATE app_users SET nome=?, login=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
-            .bind(nome, login.toLowerCase().trim(), role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, pode_entregar?1:0, recebe_whatsapp?1:0, ativo !== undefined ? (ativo?1:0) : 1, id).run();
+            .bind(nome, login.toLowerCase().trim(), role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1, id).run();
         }
         if (ativo !== undefined && !ativo) {
-          await env.DB.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(id).run().catch(() => {});
+          await env.DB.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(id).run().catch(() => { });
         }
         return json({ ok: true, id });
       } else {
@@ -2161,7 +2189,7 @@ export default {
         const salt = crypto.randomUUID();
         const hash = await hashPassword(senha, salt);
         const result = await env.DB.prepare('INSERT INTO app_users (nome, login, senha_hash, senha_salt, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(nome, login.toLowerCase().trim(), hash, salt, role||'entregador', bling_vendedor_id||null, bling_vendedor_nome||null, telefone||null, pode_entregar?1:0, recebe_whatsapp?1:0, ativo !== undefined ? (ativo?1:0) : 1).run();
+          .bind(nome, login.toLowerCase().trim(), hash, salt, role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1).run();
         return json({ ok: true, id: result.meta?.last_row_id });
       }
     }
@@ -2199,7 +2227,7 @@ export default {
                 const cData = await cResp.json();
                 name = cData.data?.nome || cData.data?.fantasia || '';
               }
-            } catch(_) {}
+            } catch (_) { }
           }
           return {
             id: v.id,
@@ -2209,7 +2237,7 @@ export default {
           };
         }));
         return json(result);
-      } catch(e) { return json([]); }
+      } catch (e) { return json([]); }
     }
 
     if (method === 'GET' && path === '/api/products/search') {
@@ -2217,13 +2245,13 @@ export default {
       try {
         const blingUrl = q.length >= 2 ? `/produtos?pagina=1&limite=50&criterio=1&pesquisa=${encodeURIComponent(q)}` : `/produtos?pagina=1&limite=50&criterio=1`;
         const resp = await blingFetch(blingUrl, {}, env);
-        if (!resp.ok) { const errText = await resp.text().catch(() => ''); return json({ error: `Bling ${resp.status}: ${errText.substring(0,200)}` }, 502); }
+        if (!resp.ok) { const errText = await resp.text().catch(() => ''); return json({ error: `Bling ${resp.status}: ${errText.substring(0, 200)}` }, 502); }
         const data = await resp.json();
         const all = (data.data || []);
-        const filtered = q ? all.filter(p => { const nome = (p.descricao||p.nome||'').toLowerCase(); return nome.includes(q); }) : all;
-        const produtos = (filtered.length ? filtered : all).map(p => ({ id: p.id, name: p.descricao||p.nome||'', code: p.codigo||'', price: parseFloat(p.preco)||0, unit: p.unidade||'un' }));
+        const filtered = q ? all.filter(p => { const nome = (p.descricao || p.nome || '').toLowerCase(); return nome.includes(q); }) : all;
+        const produtos = (filtered.length ? filtered : all).map(p => ({ id: p.id, name: p.descricao || p.nome || '', code: p.codigo || '', price: parseFloat(p.preco) || 0, unit: p.unidade || 'un' }));
         return json(produtos.slice(0, 15));
-      } catch(e) { return json({ error: e.message }, 500); }
+      } catch (e) { return json({ error: e.message }, 500); }
     }
 
     // ── PRODUTOS FAVORITOS ────────────────────────────────────
@@ -2277,16 +2305,17 @@ export default {
     // ── BUSCA COMBINADA ──────────────────────────────────────
     if (method === 'GET' && path === '/api/customer/search-multi') {
       const qPhone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
-      const qName  = (url.searchParams.get('name')  || '').trim();
-      const qAddr  = (url.searchParams.get('addr')  || '').trim();
+      const qName = (url.searchParams.get('name') || '').trim();
+      const qAddr = (url.searchParams.get('addr') || '').trim();
       const results = []; const seenPhone = new Set(); const seenBling = new Set();
 
       // v2.28.0: busca multi-palavra — cada palavra vira um AND LIKE separado
       const nameWords = qName ? qName.split(/\s+/).filter(Boolean) : [];
-      { let sql = 'SELECT * FROM customers_cache WHERE 1=1'; const p = [];
+      {
+        let sql = 'SELECT * FROM customers_cache WHERE 1=1'; const p = [];
         if (qPhone) { sql += ' AND phone_digits LIKE ?'; p.push(`%${qPhone}%`); }
         for (const w of nameWords) { sql += ' AND name LIKE ?'; p.push(`%${w}%`); }
-        if (qAddr)  { sql += ' AND (address_line LIKE ? OR bairro LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`); }
+        if (qAddr) { sql += ' AND (address_line LIKE ? OR bairro LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`); }
         sql += ' ORDER BY name ASC LIMIT 15';
         const rows = await env.DB.prepare(sql).bind(...p).all().then(r => r.results || []);
         for (const r of rows) {
@@ -2311,7 +2340,7 @@ export default {
         sql2 += ' ORDER BY cc.name ASC LIMIT 15';
         const extraRows = await env.DB.prepare(sql2).bind(...p2).all().then(r => r.results || []);
         for (const r of extraRows) {
-          const enriched = { ...r, address_line: r.ca_addr||r.address_line, bairro: r.ca_bairro||r.bairro, complemento: r.ca_comp||r.complemento, referencia: r.ca_ref||r.referencia, _extra_obs: r.ca_obs };
+          const enriched = { ...r, address_line: r.ca_addr || r.address_line, bairro: r.ca_bairro || r.bairro, complemento: r.ca_comp || r.complemento, referencia: r.ca_ref || r.referencia, _extra_obs: r.ca_obs };
           if (!seenPhone.has(r.phone_digits)) {
             if (enriched.bling_contact_id && seenBling.has(enriched.bling_contact_id)) continue;
             seenPhone.add(r.phone_digits);
@@ -2330,20 +2359,20 @@ export default {
               const data = await resp.json();
               const ql_addr = qAddr.toLowerCase();
               const filtrados = (data.data || []).filter(cont => {
-                const nome = (cont.nome||'').toLowerCase();
+                const nome = (cont.nome || '').toLowerCase();
                 const end = cont.endereco || {};
-                const rua = ((end.geral?.endereco||end.endereco||'')+' '+(end.geral?.bairro||end.bairro||'')).toLowerCase();
-                const fone = (cont.celular||cont.telefone||'').replace(/\D/g,'');
+                const rua = ((end.geral?.endereco || end.endereco || '') + ' ' + (end.geral?.bairro || end.bairro || '')).toLowerCase();
+                const fone = (cont.celular || cont.telefone || '').replace(/\D/g, '');
                 // multi-palavra: todas as palavras devem estar no nome
                 const nameMatch = nameWords.length === 0 || nameWords.every(w => nome.includes(w.toLowerCase()));
-                return nameMatch && (!qAddr||rua.includes(ql_addr)) && (!qPhone||fone.includes(qPhone));
+                return nameMatch && (!qAddr || rua.includes(ql_addr)) && (!qPhone || fone.includes(qPhone));
               });
               const blingRows = mapContatos(filtrados);
               if (blingRows.length) await saveContactsCache(blingRows, env);
               for (const r of blingRows) { if (!seenPhone.has(r.phone_digits)) { seenPhone.add(r.phone_digits); results.push(r); } }
             }
           }
-        } catch(_) {}
+        } catch (_) { }
       }
       return json(results.slice(0, 12));
     }
@@ -2365,7 +2394,7 @@ export default {
         try {
           const resp = await blingFetch(`/contatos?pagina=1&limite=10&telefone=${digits}`, {}, env);
           if (resp.ok) { const data = await resp.json(); const result = mapContatos(data.data || []); await saveContactsCache(result, env); return json(result); }
-        } catch(_) {}
+        } catch (_) { }
         return json([]);
       }
 
@@ -2374,20 +2403,20 @@ export default {
         let multiRows = [];
         try {
           const mr = await env.DB.prepare(`SELECT ca.phone_digits, ca.address_line, ca.bairro, ca.complemento, ca.referencia, ca.obs, cc.name FROM customer_addresses ca LEFT JOIN customers_cache cc ON cc.phone_digits = ca.phone_digits WHERE ca.obs LIKE ? OR ca.address_line LIKE ? OR ca.bairro LIKE ? LIMIT 10`).bind(`%${q}%`, `%${q}%`, `%${q}%`).all().then(r => r.results);
-          multiRows = mr.map(r => ({ name: r.name||r.phone_digits, phone_digits: r.phone_digits, address_line: r.address_line, bairro: r.bairro, complemento: r.complemento, referencia: r.referencia, obs: r.obs }));
-        } catch(_) {}
+          multiRows = mr.map(r => ({ name: r.name || r.phone_digits, phone_digits: r.phone_digits, address_line: r.address_line, bairro: r.bairro, complemento: r.complemento, referencia: r.referencia, obs: r.obs }));
+        } catch (_) { }
         const orderRows = await env.DB.prepare(`SELECT DISTINCT customer_name AS name, phone_digits, address_line, bairro, complemento, referencia FROM orders WHERE address_line LIKE ? OR bairro LIKE ? ORDER BY created_at DESC LIMIT 10`).bind(`%${q}%`, `%${q}%`).all().then(r => r.results);
         let blingRows = [];
         try {
           const resp = await blingFetch(`/contatos?pagina=1&limite=20&pesquisa=${encodeURIComponent(q)}`, {}, env);
           if (resp.ok) {
             const data = await resp.json(); const ql = q.toLowerCase();
-            const filtrados = (data.data||[]).filter(c => { const end = ((c.endereco?.geral?.endereco||c.endereco?.endereco||'')+' '+(c.endereco?.geral?.bairro||c.endereco?.bairro||'')).toLowerCase(); return end.includes(ql); });
+            const filtrados = (data.data || []).filter(c => { const end = ((c.endereco?.geral?.endereco || c.endereco?.endereco || '') + ' ' + (c.endereco?.geral?.bairro || c.endereco?.bairro || '')).toLowerCase(); return end.includes(ql); });
             blingRows = mapContatos(filtrados); if (blingRows.length > 0) await saveContactsCache(blingRows, env);
           }
-        } catch(_) {}
+        } catch (_) { }
         const seen = new Set();
-        const merged = [...multiRows, ...blingRows, ...cacheRows, ...orderRows].filter(r => { const key = r.phone_digits||r.name||Math.random(); if (seen.has(key)) return false; seen.add(key); return true; });
+        const merged = [...multiRows, ...blingRows, ...cacheRows, ...orderRows].filter(r => { const key = r.phone_digits || r.name || Math.random(); if (seen.has(key)) return false; seen.add(key); return true; });
         return json(merged.slice(0, 12));
       }
 
@@ -2397,16 +2426,16 @@ export default {
         const resp = await blingFetch(`/contatos?pagina=1&limite=30&pesquisa=${encodeURIComponent(q)}`, {}, env);
         if (resp.ok) {
           const data = await resp.json(); const ql = q.toLowerCase();
-          const filtrados = (data.data||[]).filter(c => (c.nome||'').toLowerCase().includes(ql)||(c.fantasia||'').toLowerCase().includes(ql));
+          const filtrados = (data.data || []).filter(c => (c.nome || '').toLowerCase().includes(ql) || (c.fantasia || '').toLowerCase().includes(ql));
           blingByName = mapContatos(filtrados); if (blingByName.length > 0) await saveContactsCache(blingByName, env);
         }
-      } catch(_) {}
+      } catch (_) { }
       const cacheByName = await env.DB.prepare("SELECT * FROM customers_cache WHERE name LIKE ? ORDER BY name LIMIT 20").bind(`%${q}%`).all().then(r => r.results || []);
       const orderByName = await env.DB.prepare(`SELECT DISTINCT customer_name AS name, phone_digits, address_line, bairro, complemento, referencia FROM orders WHERE customer_name LIKE ? ORDER BY created_at DESC LIMIT 10`).bind(`%${q}%`).all().then(r => r.results || []);
       const seenId = new Set(); const seenName = new Set(); const merged = [];
       for (const r of [...blingByName, ...cacheByName, ...orderByName]) {
         const bid = r.bling_contact_id ? String(r.bling_contact_id) : null;
-        const nome = (r.name||'').trim().toLowerCase();
+        const nome = (r.name || '').trim().toLowerCase();
         if (bid && seenId.has(bid)) continue; if (seenName.has(nome)) continue;
         if (bid) seenId.add(bid); seenName.add(nome); merged.push(r);
       }
@@ -2421,7 +2450,7 @@ export default {
       if (!nome) return json({ error: 'Nome obrigatório' }, 400);
 
       const extraCols = ['cpf_cnpj TEXT', 'email TEXT', 'email_nfe TEXT', 'tipo_pessoa TEXT'];
-      for (const col of extraCols) { await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => {}); }
+      for (const col of extraCols) { await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => { }); }
 
       const blingBody = {
         nome: nome,
@@ -2476,7 +2505,7 @@ export default {
         }
 
         return json({ ok: true, bling_contact_id: blingId, nome, numeroDocumento });
-      } catch(e) {
+      } catch (e) {
         return json({ ok: false, error: e.message });
       }
     }
@@ -2507,9 +2536,9 @@ export default {
         ativo INTEGER DEFAULT 1,
         icon_key TEXT,
         created_at TEXT DEFAULT (datetime('now'))
-      )`).run().catch(()=>{});
+      )`).run().catch(() => { });
       // Ensure icon_key column exists (migration)
-      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN icon_key TEXT").run().catch(()=>{});
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN icon_key TEXT").run().catch(() => { });
     }
 
     // Serve product icon from R2 (public)
@@ -2571,7 +2600,7 @@ export default {
 
       // Delete old icon if exists
       if (prod.icon_key) {
-        await env.BUCKET.delete(prod.icon_key).catch(() => {});
+        await env.BUCKET.delete(prod.icon_key).catch(() => { });
       }
 
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -2591,7 +2620,7 @@ export default {
       const prodId = path.split('/')[3];
       const prod = await env.DB.prepare('SELECT icon_key FROM app_products WHERE id=?').bind(prodId).first();
       if (prod?.icon_key) {
-        await env.BUCKET.delete(prod.icon_key).catch(() => {});
+        await env.BUCKET.delete(prod.icon_key).catch(() => { });
       }
       await env.DB.prepare('UPDATE app_products SET icon_key=NULL WHERE id=?').bind(prodId).run();
       return json({ ok: true });
@@ -2608,14 +2637,14 @@ export default {
         // Update
         await env.DB.prepare(
           `UPDATE app_products SET bling_id=?, name=?, code=?, price=?, is_favorite=?, sort_order=?, ativo=? WHERE id=?`
-        ).bind(bling_id||null, name, code||'', parseFloat(price)||0, is_favorite?1:0, sort_order||0, ativo!==undefined?(ativo?1:0):1, id).run();
+        ).bind(bling_id || null, name, code || '', parseFloat(price) || 0, is_favorite ? 1 : 0, sort_order || 0, ativo !== undefined ? (ativo ? 1 : 0) : 1, id).run();
         return json({ ok: true, id });
       } else {
         // Insert
         const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
         const result = await env.DB.prepare(
           `INSERT INTO app_products (bling_id, name, code, price, is_favorite, sort_order, ativo) VALUES (?,?,?,?,?,?,?)`
-        ).bind(bling_id||null, name, code||'', parseFloat(price)||0, is_favorite?1:0, (maxSort?.mx||0)+1, 1).run();
+        ).bind(bling_id || null, name, code || '', parseFloat(price) || 0, is_favorite ? 1 : 0, (maxSort?.mx || 0) + 1, 1).run();
         return json({ ok: true, id: result.meta?.last_row_id });
       }
     }
@@ -2643,7 +2672,7 @@ export default {
       const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
       const result = await env.DB.prepare(
         `INSERT INTO app_products (bling_id, name, code, price, is_favorite, sort_order) VALUES (?,?,?,?,?,?)`
-      ).bind(String(bling_id||''), name, code||'', parseFloat(price)||0, is_favorite?1:0, (maxSort?.mx||0)+1).run();
+      ).bind(String(bling_id || ''), name, code || '', parseFloat(price) || 0, is_favorite ? 1 : 0, (maxSort?.mx || 0) + 1).run();
       return json({ ok: true, id: result.meta?.last_row_id });
     }
 
@@ -2664,7 +2693,7 @@ export default {
           email: c.email || '',
         }));
         return json(results);
-      } catch(e) { return json([]); }
+      } catch (e) { return json([]); }
     }
 
     // ── Vincular cliente local ao Bling contact ──
@@ -2692,19 +2721,19 @@ export default {
           email: c.email, ie: c.ie,
         }));
         return json({ results });
-      } catch(e) { return json({ results: [], error: e.message }); }
+      } catch (e) { return json({ results: [], error: e.message }); }
     }
 
     if (method === 'POST' && path === '/api/customer/upsert') {
       const body = await request.json();
       const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj } = body;
       const digits = (phone || '').replace(/\D/g, '');
-      
+
       // v2.28.8: Preservar bling_contact_id existente se não fornecido
       const existing = digits ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null) : null;
       const finalBlingId = bling_contact_id || existing?.bling_contact_id || null;
       const finalCpf = cpf_cnpj || existing?.cpf_cnpj || null;
-      
+
       await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`).bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf).run();
       return json({ ok: true, bling_contact_id: finalBlingId });
     }
@@ -2716,8 +2745,8 @@ export default {
       const { phone, name, address_line, bairro, complemento, referencia, items, total_value, notes, emitir_nfce, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, empenho_id } = body;
       const digits = (phone || '').replace(/\D/g, '');
 
-      const cols = ['forma_pagamento_id INTEGER','forma_pagamento_key TEXT','emitir_nfce INTEGER','nfce_gerada INTEGER','nfce_numero TEXT','nfce_chave TEXT','bling_pedido_id INTEGER','bling_pedido_num INTEGER','pago INTEGER DEFAULT 0','tipo_pagamento TEXT','vendedor_id INTEGER','vendedor_nome TEXT','foto_comprovante TEXT','observacao_entregador TEXT','tipo_pagamento_original TEXT','delivered_at TEXT'];
-      for (const col of cols) { await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col}`).run().catch(() => {}); }
+      const cols = ['forma_pagamento_id INTEGER', 'forma_pagamento_key TEXT', 'emitir_nfce INTEGER', 'nfce_gerada INTEGER', 'nfce_numero TEXT', 'nfce_chave TEXT', 'bling_pedido_id INTEGER', 'bling_pedido_num INTEGER', 'pago INTEGER DEFAULT 0', 'tipo_pagamento TEXT', 'vendedor_id INTEGER', 'vendedor_nome TEXT', 'foto_comprovante TEXT', 'observacao_entregador TEXT', 'tipo_pagamento_original TEXT', 'delivered_at TEXT'];
+      for (const col of cols) { await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col}`).run().catch(() => { }); }
 
       let vendedorId = body.vendedor_id || null;
       let vendedorNome = body.vendedor_nome || null;
@@ -2738,10 +2767,10 @@ export default {
       const result = await env.DB.prepare(`
         INSERT INTO orders (phone_digits, customer_name, address_line, bairro, complemento, referencia, items_json, total_value, notes, status, sync_status, forma_pagamento_key, forma_pagamento_id, emitir_nfce, tipo_pagamento, pago, vendedor_id, vendedor_nome)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', 'pending', ?, ?, ?, ?, ?, ?, ?)
-      `).bind(digits||'', name||'', address_line||'', bairro||'', complemento||'', referencia||'', JSON.stringify(items||[]), total_value!=null?total_value:null, notes||null, forma_pagamento_key||null, forma_pagamento_id!=null?Number(forma_pagamento_id):null, emitir_nfce?1:0, tipoPg, pago, vendedorId, vendedorNome).run();
+      `).bind(digits || '', name || '', address_line || '', bairro || '', complemento || '', referencia || '', JSON.stringify(items || []), total_value != null ? total_value : null, notes || null, forma_pagamento_key || null, forma_pagamento_id != null ? Number(forma_pagamento_id) : null, emitir_nfce ? 1 : 0, tipoPg, pago, vendedorId, vendedorNome).run();
 
       const orderId = result.meta?.last_row_id;
-      try { await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, 'pendente', forma_pagamento_key||null).run(); } catch(_) {}
+      try { await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, 'pendente', forma_pagamento_key || null).run(); } catch (_) { }
       await logEvent(env, orderId, 'created', { name, address_line, tipo_pagamento: tipoPg, pago, vendedor: vendedorNome });
       await logBlingAudit(env, orderId, 'criar_venda', 'skipped', { error_message: `Bling será criado ao marcar entregue` });
 
@@ -2760,7 +2789,7 @@ export default {
                 await env.DB.prepare(`UPDATE gov_empenho_itens SET quantidade_usada=quantidade_usada+? WHERE id=?`).bind(iv.qty, item.id).run();
                 qtdJson[iv.produto_nome] = iv.qty;
                 const itemAtualizado = { ...item, quantidade_usada: item.quantidade_usada + iv.qty };
-                await alertarSaldoBaixo(env, empenho, itemAtualizado).catch(() => {});
+                await alertarSaldoBaixo(env, empenho, itemAtualizado).catch(() => { });
               }
             }
             await env.DB.prepare(`INSERT INTO gov_empenho_vendas (empenho_id, order_id, quantidade_json) VALUES (?, ?, ?)`)
@@ -2772,7 +2801,7 @@ export default {
             }
             await logEvent(env, orderId, 'empenho_vinculado', { empenho_id, empenho_numero: empenho.numero });
           }
-        } catch(e) { console.error('[empenho] vincular error:', e.message); }
+        } catch (e) { console.error('[empenho] vincular error:', e.message); }
       }
 
       return json({ ok: true, id: orderId, bling_pedido_id: null, pago, vendedor: vendedorNome });
@@ -2862,7 +2891,7 @@ export default {
         }
       }
 
-      await logEvent(env, orderId, 'venda_externa', { 
+      await logEvent(env, orderId, 'venda_externa', {
         driver: user.nome, tipo_pagamento: tipoPagamento, total: totalValue,
         items_count: items.length, foto: photoKey
       });
@@ -2870,7 +2899,7 @@ export default {
       // 4) Upsert cache cliente
       if (phone && customerName) {
         await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, updated_at)
-          VALUES (?, ?, ?, ?, datetime('now'))`).bind(phone, customerName, addressLine, bairro).run().catch(() => {});
+          VALUES (?, ?, ?, ?, datetime('now'))`).bind(phone, customerName, addressLine, bairro).run().catch(() => { });
       }
 
       // 5) PushInPay PIX para venda externa pix_receber
@@ -2901,13 +2930,13 @@ export default {
         const { items, total_value, forma_pagamento_key, forma_pagamento_id } = body;
         const today = new Date().toISOString().slice(0, 10);
         const fpId = forma_pagamento_id || FORMAS_PAGAMENTO[forma_pagamento_key]?.id || 23368;
-        const total = total_value || (items||[]).reduce((s,i) => s + (i.price||0)*(i.qty||1), 0);
-        const itensBling = (items||[]).map(it => buildItemBling(it));
+        const total = total_value || (items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0);
+        const itensBling = (items || []).map(it => buildItemBling(it));
         const payload = { contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' }, data: today, dataSaida: today, itens: itensBling, parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: today }] };
         const resp = await blingFetch('/pedidos/vendas', { method: 'POST', body: JSON.stringify(payload) }, env);
         const result = await resp.json();
         return json({ payload_sent: payload, bling_status: resp.status, bling_response: result });
-      } catch(e) { return json({ error: e.message }); }
+      } catch (e) { return json({ error: e.message }); }
     }
 
     // [REMOVIDO v2.12.0] GET /api/bling/debug-nfce — NFCe não existe na API Bling v3
@@ -2954,7 +2983,7 @@ export default {
         if (editUser && editUser.role !== 'admin') {
           const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
           let perms = { atendente_editar_entregue: false };
-          try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch {}
+          try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch { }
           if (!perms.atendente_editar_entregue) return err('Sem permissão para editar pedido entregue. Peça ao admin.', 403);
         }
       }
@@ -2996,7 +3025,7 @@ export default {
 
       // ── Montar UPDATE SQL ──
       let sql = `UPDATE orders SET customer_name=?, phone_digits=?, address_line=?, bairro=?, complemento=?, referencia=?, items_json=?, total_value=?, notes=?, updated_at=datetime('now')`;
-      const params = [customer_name, phone_digits||'', address_line||'', bairro||'', complemento||'', referencia||'', JSON.stringify(items||[]), total_value||0, notes||''];
+      const params = [customer_name, phone_digits || '', address_line || '', bairro || '', complemento || '', referencia || '', JSON.stringify(items || []), total_value || 0, notes || ''];
       if (tipo_pagamento !== undefined) { sql += `, tipo_pagamento=?`; params.push(tipo_pagamento); }
       if (forma_pagamento_key !== undefined) { sql += `, forma_pagamento_key=?`; params.push(forma_pagamento_key); }
       if (driver_id !== undefined && driver_id !== null && driver_id !== '') {
@@ -3009,13 +3038,13 @@ export default {
 
       // ── Executar ação Bling ──
       let blingResult = null;
-      
+
       if (blingAction === 'create') {
         // Buscar dados do cliente para Bling (incluindo cpf_cnpj para decidir contato)
         const custData = phone_digits
           ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(phone_digits).first()
           : null;
-        
+
         // Buscar vendedor
         const vendedorRow = currentOrder.vendedor_id
           ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(currentOrder.vendedor_id).first()
@@ -3106,8 +3135,8 @@ export default {
       const isSwap = oldDriverId && oldDriverId !== driver_id;
 
       await env.DB.prepare(`UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=?, status='encaminhado', updated_at=unixepoch() WHERE id=?`).bind(driver_id, driver.nome, driver.telefone || '', id).run();
-      await logEvent(env, id, isSwap ? 'driver_swapped' : 'driver_selected', { 
-        driver_id, driver_name: driver.nome, 
+      await logEvent(env, id, isSwap ? 'driver_swapped' : 'driver_selected', {
+        driver_id, driver_name: driver.nome,
         ...(isSwap ? { old_driver_id: oldDriverId, old_driver_name: oldDriverName } : {})
       });
       await logStatusChange(env, id, currentOrder?.status || 'novo', 'encaminhado', `Entregador: ${driver.nome}${isSwap ? ` (antes: ${oldDriverName})` : ''}`, user);
@@ -3238,7 +3267,7 @@ export default {
           },
         });
 
-        console.log(`[R2] Foto salva: ${photoKey} (${(photoFile.size/1024).toFixed(1)}KB)`);
+        console.log(`[R2] Foto salva: ${photoKey} (${(photoFile.size / 1024).toFixed(1)}KB)`);
       } else if (ct.includes('application/json')) {
         // Fallback JSON (sem foto — só admin pode)
         const body = await request.json();
@@ -3370,7 +3399,7 @@ export default {
       if (!isAdmin) {
         const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
         let perms = { atendente_cancelar: true };
-        try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch {}
+        try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch { }
         if (!perms.atendente_cancelar) return err('Sem permissão para cancelar pedido. Peça ao admin.', 403);
       }
 
@@ -3379,7 +3408,7 @@ export default {
       try {
         const body = await request.json();
         motivo = (body.motivo || '').trim();
-      } catch (e) {}
+      } catch (e) { }
       if (!motivo) return err('Motivo é obrigatório para cancelar', 400);
 
       const statusAnterior = order.status;
@@ -3443,7 +3472,7 @@ export default {
       if (!order) return err('Pedido não encontrado', 404);
 
       let body = {};
-      try { body = await request.json(); } catch (e) {}
+      try { body = await request.json(); } catch (e) { }
       const novoStatus = (body.novo_status || '').trim().toLowerCase();
       const motivo = (body.motivo || '').trim();
 
@@ -3458,7 +3487,7 @@ export default {
       // Carregar permissões dinâmicas
       const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
       let perms = { atendente_reabrir_entregue: true, atendente_reabrir_cancelado: false };
-      try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch {}
+      try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch { }
 
       const isAdmin = user.role === 'admin';
 
@@ -3502,7 +3531,7 @@ export default {
               await sendWhatsApp(env, adm.telefone, `⚠️ ${user.nome} reverteu pedido #${id}: ${statusAnterior.toUpperCase()} → ${novoStatus.toUpperCase()}\nMotivo: ${motivo}`, { category: 'admin_alerta', skipSafety: true });
             }
           }
-        } catch (_) {} // não bloqueia se WhatsApp falhar
+        } catch (_) { } // não bloqueia se WhatsApp falhar
       }
 
       return json({
@@ -3539,8 +3568,8 @@ export default {
       let sql = `SELECT p.*, o.customer_name, o.phone_digits, o.address_line, o.items_json, o.total_value, o.driver_name_cache, o.created_at AS order_created_at FROM payments p JOIN orders o ON o.id = p.order_id WHERE 1=1`;
       const params = [];
       if (status) { sql += ' AND p.status = ?'; params.push(status); }
-      if (dateFrom) { sql += ' AND o.created_at >= ?'; params.push(Math.floor(new Date(dateFrom+'T00:00:00-04:00').getTime()/1000)); }
-      if (dateTo) { sql += ' AND o.created_at <= ?'; params.push(Math.floor(new Date(dateTo+'T23:59:59-04:00').getTime()/1000)); }
+      if (dateFrom) { sql += ' AND o.created_at >= ?'; params.push(Math.floor(new Date(dateFrom + 'T00:00:00-04:00').getTime() / 1000)); }
+      if (dateTo) { sql += ' AND o.created_at <= ?'; params.push(Math.floor(new Date(dateTo + 'T23:59:59-04:00').getTime() / 1000)); }
       sql += ' ORDER BY o.created_at DESC LIMIT 500';
       const rows = await env.DB.prepare(sql).bind(...params).all();
       return json(rows.results || []);
@@ -3548,15 +3577,15 @@ export default {
 
     if (method === 'POST' && path === '/api/payment/set') {
       const { order_id, status, method: payMethod, notes } = await request.json();
-      const received_at = status === 'recebido' ? Math.floor(Date.now()/1000) : null;
-      await env.DB.prepare(`INSERT INTO payments (order_id, status, method, notes, received_at, updated_at) VALUES (?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(order_id) DO UPDATE SET status=excluded.status, method=excluded.method, notes=excluded.notes, received_at=excluded.received_at, updated_at=excluded.updated_at`).bind(order_id, status, payMethod||null, notes||null, received_at).run();
+      const received_at = status === 'recebido' ? Math.floor(Date.now() / 1000) : null;
+      await env.DB.prepare(`INSERT INTO payments (order_id, status, method, notes, received_at, updated_at) VALUES (?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(order_id) DO UPDATE SET status=excluded.status, method=excluded.method, notes=excluded.notes, received_at=excluded.received_at, updated_at=excluded.updated_at`).bind(order_id, status, payMethod || null, notes || null, received_at).run();
       return json({ ok: true });
     }
 
     // ══════════════════════════════════════════════════════════
     // GESTÃO DE PAGAMENTOS — MoskoGás v2.8.0
     // ══════════════════════════════════════════════════════════
-    
+
     if (method === 'GET' && path === '/api/pagamentos') {
       await ensureAuditTable(env);
       await ensurePixColumns(env);
@@ -3626,7 +3655,7 @@ export default {
             bling_pedido_id: blingResult.bling_pedido_id,
             bling_pedido_num: blingResult.bling_pedido_num,
           });
-        } catch(e) {
+        } catch (e) {
           await logEvent(env, orderId, 'bling_error_on_pay', { error: e.message });
           return json({ ok: false, error: 'Falha ao criar venda no Bling: ' + e.message }, 500);
         }
@@ -3704,7 +3733,7 @@ export default {
 
       const invalidos = orders.filter(o => !['mensalista', 'boleto'].includes(o.tipo_pagamento));
       if (invalidos.length > 0) {
-        return err(`Pedidos ${invalidos.map(o => '#'+o.id).join(', ')} não são mensalista/boleto`);
+        return err(`Pedidos ${invalidos.map(o => '#' + o.id).join(', ')} não são mensalista/boleto`);
       }
 
       const grupos = {};
@@ -3732,7 +3761,7 @@ export default {
             }
             grupos[key].produtos[prodKey].qty += parseInt(item.qty) || 1;
           }
-        } catch(_) {}
+        } catch (_) { }
       }
 
       const resultados = [];
@@ -3758,7 +3787,7 @@ export default {
           dataSaida: today,
           itens: itensBling,
           parcelas: [{ formaPagamento: { id: FORMAS_PAGAMENTO.fiado.id }, valor: totalItens, dataVencimento: today }],
-          observacoes: `MoskoGás Venda Agrupada — ${grupo.cliente} — Pedidos: ${pedidoIds.map(i => '#'+i).join(', ')}`,
+          observacoes: `MoskoGás Venda Agrupada — ${grupo.cliente} — Pedidos: ${pedidoIds.map(i => '#' + i).join(', ')}`,
         };
 
         try {
@@ -3767,24 +3796,24 @@ export default {
           if (!resp.ok) {
             const errText = await resp.text();
             for (const oid of pedidoIds) {
-              await logBlingAudit(env, oid, 'criar_venda_lote', 'error', { request_payload: pedidoBody, error_message: `HTTP ${resp.status}: ${errText.substring(0,500)}` });
+              await logBlingAudit(env, oid, 'criar_venda_lote', 'error', { request_payload: pedidoBody, error_message: `HTTP ${resp.status}: ${errText.substring(0, 500)}` });
             }
             resultados.push({ cliente: grupo.cliente, ok: false, error: `Bling ${resp.status}: ${errText.substring(0, 500)}`, pedidos: pedidoIds });
             continue;
           }
 
           const pedidoData = await resp.json();
-          const blingId  = pedidoData.data?.id ?? null;
+          const blingId = pedidoData.data?.id ?? null;
           const blingNum = pedidoData.data?.numero ?? null;
 
           for (const orderId of pedidoIds) {
             await env.DB.prepare('UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, pago=1, sync_status=? WHERE id=?').bind(blingId, blingNum, 'synced_nfe', orderId).run();
             await logEvent(env, orderId, 'venda_agrupada', { bling_pedido_id: blingId, bling_pedido_num: blingNum, grupo_pedidos: pedidoIds });
-            await logBlingAudit(env, orderId, 'criar_venda_lote', 'success', { bling_pedido_id: String(blingId||''), request_payload: pedidoBody, response_data: pedidoData });
+            await logBlingAudit(env, orderId, 'criar_venda_lote', 'success', { bling_pedido_id: String(blingId || ''), request_payload: pedidoBody, response_data: pedidoData });
           }
 
           resultados.push({ cliente: grupo.cliente, ok: true, bling_pedido_id: blingId, bling_pedido_num: blingNum, pedidos: pedidoIds, total: grupo.total, itens_count: itensBling.length });
-        } catch(e) {
+        } catch (e) {
           for (const oid of pedidoIds) {
             await logBlingAudit(env, oid, 'criar_venda_lote', 'error', { request_payload: pedidoBody, error_message: e.message });
           }
@@ -3819,7 +3848,7 @@ export default {
       const body = await request.json();
       // v2.32.9: reset do circuit breaker — limpa o bloqueio imediatamente
       if (body.circuit_breaker_reset) {
-        await env.DB.prepare("DELETE FROM app_config WHERE key='whatsapp_last_block'").run().catch(() => {});
+        await env.DB.prepare("DELETE FROM app_config WHERE key='whatsapp_last_block'").run().catch(() => { });
         return json({ ok: true, message: 'Circuit breaker resetado' });
       }
       const current = await getWhatsAppSafetyConfig(env);
@@ -3883,7 +3912,7 @@ export default {
       if (authCheck instanceof Response) return authCheck;
       const user = await getSessionUser(request, env);
       const orderId = parseInt(lembreteMatch[1]);
-      let body = {}; try { body = await request.json(); } catch(_) {}
+      let body = {}; try { body = await request.json(); } catch (_) { }
       const force = body.force === true;
       const order = await env.DB.prepare(
         "SELECT * FROM orders WHERE id=? AND tipo_pagamento='pix_receber' AND pago=0 AND status='entregue'"
@@ -4193,7 +4222,7 @@ export default {
             porProduto[k].qtd += parseInt(it.qty) || 1;
             porProduto[k].valor += (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1);
           }
-        } catch(_) {}
+        } catch (_) { }
       }
 
       // Ticket médio
@@ -4325,7 +4354,7 @@ export default {
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
       const epochStart = Math.floor(new Date(date + 'T00:00:00-04:00').getTime() / 1000);
-      const epochEnd   = Math.floor(new Date(date + 'T23:59:59-04:00').getTime() / 1000);
+      const epochEnd = Math.floor(new Date(date + 'T23:59:59-04:00').getTime() / 1000);
 
       // Pedidos do dia
       const orders = await env.DB.prepare(
@@ -4369,7 +4398,7 @@ export default {
             porProduto[k].qtd += parseInt(it.qty) || 1;
             porProduto[k].valor += (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1);
           }
-        } catch(_) {}
+        } catch (_) { }
       }
 
       // Erros de integração do dia (com dados do pedido)
@@ -4405,7 +4434,7 @@ export default {
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
       const epochStart = Math.floor(new Date(date + 'T00:00:00-04:00').getTime() / 1000);
-      const epochEnd   = Math.floor(new Date(date + 'T23:59:59-04:00').getTime() / 1000);
+      const epochEnd = Math.floor(new Date(date + 'T23:59:59-04:00').getTime() / 1000);
 
       const orders = await env.DB.prepare(
         `SELECT id, customer_name, total_value, bling_pedido_id, bling_pedido_num, tipo_pagamento FROM orders WHERE created_at >= ? AND created_at <= ? AND bling_pedido_id IS NOT NULL AND bling_pedido_id != '' ORDER BY id`
@@ -4431,7 +4460,7 @@ export default {
           } else {
             erros.push({ order_id: o.id, bling_id: o.bling_pedido_id, erro: `HTTP ${resp.status}` });
           }
-        } catch(e) {
+        } catch (e) {
           erros.push({ order_id: o.id, bling_id: o.bling_pedido_id, erro: e.message });
         }
       }
@@ -4496,7 +4525,7 @@ export default {
       ).bind(txId).first();
       if (!order) return json({ ok: false, error: 'Nenhum pedido com esse pix_tx_id', tx_id: txId });
       if (order.pago === 1) return json({ ok: true, message: 'Já estava pago', order_id: order.id });
-      
+
       // Marcar como pago (simula webhook)
       await env.DB.prepare('UPDATE orders SET pago=1, pix_paid_at=unixepoch() WHERE id=?').bind(order.id).run();
       await logEvent(env, order.id, 'pushinpay_pix_simulated', { tx_id: txId });
@@ -4517,15 +4546,15 @@ export default {
         const rawBody = await request.text().catch(() => '');
         let bodyData;
         try { bodyData = JSON.parse(rawBody); } catch { bodyData = null; }
-        
+
         // Log TUDO que chega (debug)
         console.log(`[pushinpay-webhook] RAW BODY: ${rawBody.substring(0, 1000)}`);
-        
+
         // Salvar webhook recebido no order_events pra debug
         await env.DB.prepare(
           "INSERT INTO order_events (order_id, evento, detalhes, created_at) VALUES (0, 'pushinpay_webhook_received', ?, unixepoch())"
-        ).bind(rawBody.substring(0, 2000)).run().catch(() => {});
-        
+        ).bind(rawBody.substring(0, 2000)).run().catch(() => { });
+
         if (!bodyData) return json({ ok: true, ignored: 'empty/invalid body' });
 
         const txId = bodyData.id;
@@ -4645,7 +4674,7 @@ export default {
             const t = await r.text().catch(() => '');
             api_error = `HTTP ${r.status}: ${t.substring(0, 200)}`;
           }
-        } catch(e) {
+        } catch (e) {
           api_error = e.message;
         }
       }
@@ -4676,7 +4705,7 @@ export default {
       try {
         const data = await pushInPayCreateCharge(env, 0, 1.01);
         return json({ ok: true, tx_id: data.tx_id || data.id, qr_code: data.qr_code, status: data.status });
-      } catch(e) {
+      } catch (e) {
         return json({ ok: false, error: e.message });
       }
     }
@@ -4691,7 +4720,7 @@ export default {
       try {
         const data = await pushInPayCheckStatus(env, txId);
         return json({ ok: true, status: data.status, value: data.value, end_to_end_id: data.end_to_end_id });
-      } catch(e) {
+      } catch (e) {
         return json({ ok: false, error: e.message });
       }
     }
@@ -4710,9 +4739,9 @@ export default {
       if (!order) return err('Pedido não encontrado', 404);
       if (order.pago === 1) return json({ ok: true, message: 'Já está pago', order_id: orderId });
       if (!order.pix_tx_id) return json({ ok: false, error: 'Pedido sem pix_tx_id — QR não foi gerado via PushInPay' });
-      
+
       if (!isPixConfigured(env)) return err('PushInPay não configurada', 400);
-      
+
       try {
         const txData = await pushInPayCheckStatus(env, order.pix_tx_id);
         if (txData.status === 'paid') {
@@ -5066,7 +5095,7 @@ export default {
       const att = await env.DB.prepare('SELECT r2_key FROM contract_attachments WHERE id=? AND contract_id=?').bind(attachId, contractId).first();
       if (!att) return err('Anexo não encontrado', 404);
 
-      await env.BUCKET.delete(att.r2_key).catch(() => {});
+      await env.BUCKET.delete(att.r2_key).catch(() => { });
       await env.DB.prepare('DELETE FROM contract_attachments WHERE id=?').bind(attachId).run();
       await logContractEvent(env, contractId, 'attachment_removed', `Anexo removido`, authCheck);
       return json({ ok: true });
@@ -5100,7 +5129,7 @@ export default {
         "UPDATE contracts SET generated_pdf_key=?, comodante_snapshot=?, testemunhas_snapshot=?, status='ready', updated_at=unixepoch() WHERE id=?"
       ).bind(r2Key, comodanteRow?.value || '{}', testemunhasRow?.value || '[]', id).run();
 
-      await logContractEvent(env, id, 'pdf_generated', `PDF gerado (${Math.round(pdfBytes.byteLength/1024)}KB)`, authCheck);
+      await logContractEvent(env, id, 'pdf_generated', `PDF gerado (${Math.round(pdfBytes.byteLength / 1024)}KB)`, authCheck);
       return json({ ok: true, r2_key: r2Key, size: pdfBytes.byteLength });
     }
 
@@ -5235,7 +5264,7 @@ export default {
 
         // Also resend via Assinafy email
         if (signer.assinafy_signer_id && contract.assinafy_doc_id && contract.assinafy_assignment_id) {
-          await assinaryResendToSigner(env, contract.assinafy_doc_id, contract.assinafy_assignment_id, signer.assinafy_signer_id).catch(() => {});
+          await assinaryResendToSigner(env, contract.assinafy_doc_id, contract.assinafy_assignment_id, signer.assinafy_signer_id).catch(() => { });
         }
 
         try {
@@ -5395,14 +5424,14 @@ export default {
         return json({ ok: true, id: empenhoId });
       }
 
-    // ── DEBUG temporário empenhos ─────────────────────────────────
-    if (method === 'GET' && path === '/api/empenhos/debug') {
-      const phone = url.searchParams.get('phone') || '';
-      const digits = phone.replace(/\D/g, '');
-      const cc = await env.DB.prepare('SELECT phone_digits, bling_contact_id, name FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null);
-      const empenhos = await env.DB.prepare('SELECT id, numero, cliente_nome, cliente_phone, bling_contact_id, status FROM gov_empenhos WHERE status=\'ativo\'').all().then(r => r.results || []);
-      return json({ digits, cc, empenhos });
-    }
+      // ── DEBUG temporário empenhos ─────────────────────────────────
+      if (method === 'GET' && path === '/api/empenhos/debug') {
+        const phone = url.searchParams.get('phone') || '';
+        const digits = phone.replace(/\D/g, '');
+        const cc = await env.DB.prepare('SELECT phone_digits, bling_contact_id, name FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null);
+        const empenhos = await env.DB.prepare('SELECT id, numero, cliente_nome, cliente_phone, bling_contact_id, status FROM gov_empenhos WHERE status=\'ativo\'').all().then(r => r.results || []);
+        return json({ digits, cc, empenhos });
+      }
 
       // ── GET /api/empenhos/cliente/bling/:blingId — por bling_contact_id ──
       const blingMatch = path.match(/^\/api\/empenhos\/cliente\/bling\/(.+)$/);
@@ -5458,8 +5487,8 @@ export default {
            bling_contact_id=COALESCE(?,bling_contact_id), data_emissao=COALESCE(?,data_emissao), data_validade=COALESCE(?,data_validade),
            valor_total=COALESCE(?,valor_total), observacoes=COALESCE(?,observacoes), status=COALESCE(?,status), updated_at=unixepoch()
            WHERE id=?`
-        ).bind(numero||null, cliente_nome||null, cliente_phone||null, bling_contact_id||null, data_emissao||null, data_validade||null,
-               valor_total != null ? parseFloat(valor_total) : null, observacoes||null, status||null, id).run();
+        ).bind(numero || null, cliente_nome || null, cliente_phone || null, bling_contact_id || null, data_emissao || null, data_validade || null,
+          valor_total != null ? parseFloat(valor_total) : null, observacoes || null, status || null, id).run();
         return json({ ok: true });
       }
 
@@ -5482,7 +5511,7 @@ export default {
       if (method === 'DELETE' && delArqMatch) {
         const [, empId, fid] = delArqMatch;
         const arq = await env.DB.prepare('SELECT r2_key FROM gov_empenho_arquivos WHERE id=? AND empenho_id=?').bind(parseInt(fid), parseInt(empId)).first();
-        if (arq?.r2_key) await env.BUCKET.delete(arq.r2_key).catch(() => {});
+        if (arq?.r2_key) await env.BUCKET.delete(arq.r2_key).catch(() => { });
         await env.DB.prepare('DELETE FROM gov_empenho_arquivos WHERE id=?').bind(parseInt(fid)).run();
         return json({ ok: true });
       }
@@ -5520,7 +5549,7 @@ export default {
           qtdJson[iv.produto_nome] = iv.qty;
           // Verificar alerta após abate
           const itemAtualizado = { ...item, quantidade_usada: item.quantidade_usada + iv.qty };
-          await alertarSaldoBaixo(env, empenho, itemAtualizado).catch(() => {});
+          await alertarSaldoBaixo(env, empenho, itemAtualizado).catch(() => { });
         }
 
         // Registrar venda
@@ -5529,7 +5558,7 @@ export default {
 
         // Salvar empenho_id no pedido
         await env.DB.prepare(`UPDATE orders SET notes=CASE WHEN notes IS NULL OR notes='' THEN ? ELSE notes||' | '||? END WHERE id=?`)
-          .bind(`[Empenho: ${empenho.numero}]`, `[Empenho: ${empenho.numero}]`, order_id).run().catch(() => {});
+          .bind(`[Empenho: ${empenho.numero}]`, `[Empenho: ${empenho.numero}]`, order_id).run().catch(() => { });
 
         // Verificar se todos itens esgotados → fechar empenho
         const todosItens = await env.DB.prepare('SELECT * FROM gov_empenho_itens WHERE empenho_id=?').bind(id).all().then(r => r.results || []);
@@ -5560,10 +5589,10 @@ export default {
         for (const it of (itens || [])) {
           const exists = await env.DB.prepare('SELECT id FROM gov_empenho_itens WHERE empenho_id=? AND produto_nome=?').bind(id, it.produto_nome).first();
           if (exists) {
-            await env.DB.prepare('UPDATE gov_empenho_itens SET quantidade_total=?, preco_unitario=? WHERE id=?').bind(parseInt(it.quantidade_total)||0, parseFloat(it.preco_unitario)||0, exists.id).run();
+            await env.DB.prepare('UPDATE gov_empenho_itens SET quantidade_total=?, preco_unitario=? WHERE id=?').bind(parseInt(it.quantidade_total) || 0, parseFloat(it.preco_unitario) || 0, exists.id).run();
           } else {
             await env.DB.prepare('INSERT INTO gov_empenho_itens (empenho_id, produto_nome, produto_bling_id, quantidade_total, preco_unitario) VALUES (?,?,?,?,?)')
-              .bind(id, it.produto_nome, it.produto_bling_id||null, parseInt(it.quantidade_total)||0, parseFloat(it.preco_unitario)||0).run();
+              .bind(id, it.produto_nome, it.produto_bling_id || null, parseInt(it.quantidade_total) || 0, parseFloat(it.preco_unitario) || 0).run();
           }
         }
         return json({ ok: true });
@@ -5602,17 +5631,19 @@ export default {
           if (cheios_manha !== null && cheios_esperado !== null) div_cheios = cheios_manha - cheios_esperado;
           if (vazios_manha !== null && vazios_esperado !== null) div_vazios = vazios_manha - vazios_esperado;
           const total_vasil_ontem = ont_cheios !== null ? ont_cheios + (ont_vazios || 0) : null;
-          const ont_cd = ont.cascos_devolucao||0, ont_ce = ont.cascos_emprestimo||0, ont_cv = ont.cascos_venda||0, ont_ca = ont.cascos_aquisicao||0;
+          const ont_cd = ont.cascos_devolucao || 0, ont_ce = ont.cascos_emprestimo || 0, ont_cv = ont.cascos_venda || 0, ont_ca = ont.cascos_aquisicao || 0;
           const total_vasil_esperado = total_vasil_ontem !== null ? total_vasil_ontem + ont_cd + ont_ca - ont_ce - ont_cv : null;
           const total_vasil_real = cheios_manha !== null ? cheios_manha + (vazios_manha || 0) : null;
           let div_vasil = null;
           if (total_vasil_esperado !== null && total_vasil_real !== null) div_vasil = total_vasil_real - total_vasil_esperado;
-          return { tipo, data, cheios_manha, vazios_manha, contagem_manha_por: hoje.contagem_manha_por||null, contagem_manha_at: hoje.contagem_manha_at||null,
-            compras_hoje: hoje.compras||0, vendas_hoje: vendasHoje[tipo]||0,
-            cascos_devolucao: hoje.cascos_devolucao||0, cascos_emprestimo: hoje.cascos_emprestimo||0, cascos_venda: hoje.cascos_venda||0, cascos_aquisicao: hoje.cascos_aquisicao||0,
-            observacao: hoje.observacao||'', ontem_cheios: ont_cheios, ontem_vazios: ont_vazios, ontem_compras: ont_compras, ontem_vendas: ont_vendas,
+          return {
+            tipo, data, cheios_manha, vazios_manha, contagem_manha_por: hoje.contagem_manha_por || null, contagem_manha_at: hoje.contagem_manha_at || null,
+            compras_hoje: hoje.compras || 0, vendas_hoje: vendasHoje[tipo] || 0,
+            cascos_devolucao: hoje.cascos_devolucao || 0, cascos_emprestimo: hoje.cascos_emprestimo || 0, cascos_venda: hoje.cascos_venda || 0, cascos_aquisicao: hoje.cascos_aquisicao || 0,
+            observacao: hoje.observacao || '', ontem_cheios: ont_cheios, ontem_vazios: ont_vazios, ontem_compras: ont_compras, ontem_vendas: ont_vendas,
             ontem_cascos_dev: ont_cd, ontem_cascos_emp: ont_ce, ontem_cascos_venda: ont_cv, ontem_cascos_aquis: ont_ca,
-            cheios_esperado, vazios_esperado, div_cheios, div_vazios, total_vasil_ontem, total_vasil_esperado, total_vasil_real, div_vasil, tem_ontem: ont_cheios !== null };
+            cheios_esperado, vazios_esperado, div_cheios, div_vazios, total_vasil_ontem, total_vasil_esperado, total_vasil_real, div_vasil, tem_ontem: ont_cheios !== null
+          };
         });
         return json({ ok: true, data, resultado });
       }
@@ -5631,29 +5662,29 @@ export default {
         const vendasOntem = await calcVendasAuto(env, dataOntem);
         for (const tipo of tipos) {
           const c = contagens[tipo]; if (!c) continue;
-          const cheios = parseInt(c.cheios)||0, vazios = parseInt(c.vazios)||0;
+          const cheios = parseInt(c.cheios) || 0, vazios = parseInt(c.vazios) || 0;
           await env.DB.prepare(`INSERT INTO stock_daily (data, tipo, cheios_manha, vazios_manha, contagem_manha_por, contagem_manha_at) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(data, tipo) DO UPDATE SET cheios_manha=excluded.cheios_manha, vazios_manha=excluded.vazios_manha, contagem_manha_por=excluded.contagem_manha_por, contagem_manha_at=excluded.contagem_manha_at, updated_at=datetime('now')
           `).bind(data, tipo, cheios, vazios, userName, now).run();
           const ont = ontemByTipo[tipo] || {};
           if (ont.cheios_manha !== null && ont.cheios_manha !== undefined) {
-            const ont_compras = ont.compras||0, ont_vendas = vendasOntem[tipo]||0;
-            const esp_c = ont.cheios_manha + ont_compras - ont_vendas, esp_v = (ont.vazios_manha||0) - ont_compras + ont_vendas;
+            const ont_compras = ont.compras || 0, ont_vendas = vendasOntem[tipo] || 0;
+            const esp_c = ont.cheios_manha + ont_compras - ont_vendas, esp_v = (ont.vazios_manha || 0) - ont_compras + ont_vendas;
             if (cheios - esp_c !== 0) divergencias.push({ tipo, campo: 'cheios', expected: esp_c, real: cheios, diff: cheios - esp_c });
             if (vazios - esp_v !== 0) divergencias.push({ tipo, campo: 'vazios', expected: esp_v, real: vazios, diff: vazios - esp_v });
-            const tv_o = ont.cheios_manha + (ont.vazios_manha||0);
-            const tv_e = tv_o + (ont.cascos_devolucao||0) + (ont.cascos_aquisicao||0) - (ont.cascos_emprestimo||0) - (ont.cascos_venda||0);
-            if (cheios + vazios - tv_e !== 0) divergencias.push({ tipo, campo: 'vasilhames', expected: tv_e, real: cheios+vazios, diff: cheios+vazios-tv_e });
+            const tv_o = ont.cheios_manha + (ont.vazios_manha || 0);
+            const tv_e = tv_o + (ont.cascos_devolucao || 0) + (ont.cascos_aquisicao || 0) - (ont.cascos_emprestimo || 0) - (ont.cascos_venda || 0);
+            if (cheios + vazios - tv_e !== 0) divergencias.push({ tipo, campo: 'vasilhames', expected: tv_e, real: cheios + vazios, diff: cheios + vazios - tv_e });
           }
         }
         if (divergencias.length > 0) {
           try {
             let divMsg = `⚠️ *DIVERGÊNCIA ESTOQUE* — ${data}\n\n`;
-            for (const d of divergencias) divMsg += `${d.tipo} ${d.campo}: esperado ${d.expected}, contou ${d.real} (${d.diff>0?'+':''}${d.diff})\n`;
+            for (const d of divergencias) divMsg += `${d.tipo} ${d.campo}: esperado ${d.expected}, contou ${d.real} (${d.diff > 0 ? '+' : ''}${d.diff})\n`;
             divMsg += `\nContagem por: ${userName}`;
             const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND ativo=1 AND recebe_whatsapp=1 AND telefone IS NOT NULL AND telefone != ''").all().then(r => r.results || []);
             for (const adm of admins) await sendWhatsApp(env, adm.telefone, divMsg, { category: 'admin_alerta', skipSafety: true });
-            for (const tipo of tipos) await env.DB.prepare('UPDATE stock_daily SET divergencia_notificada=1 WHERE data=? AND tipo=?').bind(data, tipo).run().catch(() => {});
+            for (const tipo of tipos) await env.DB.prepare('UPDATE stock_daily SET divergencia_notificada=1 WHERE data=? AND tipo=?').bind(data, tipo).run().catch(() => { });
           } catch (e) { console.error('[estoque] WhatsApp erro:', e.message); }
         }
         return json({ ok: true, data, contagens_salvas: Object.keys(contagens).length, divergencias, total_divergencias: divergencias.length });
@@ -5661,28 +5692,32 @@ export default {
 
       if (method === 'POST' && path === '/api/estoque/compras') {
         const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const compras = body.compras || {}; let total = 0;
-        for (const tipo of ['P13','P20','P45','P05']) { const qty = parseInt(compras[tipo])||0; if (!qty) continue; total += qty;
-          await env.DB.prepare('INSERT INTO stock_daily (data,tipo,compras) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET compras=excluded.compras, updated_at=datetime(\'now\')').bind(data, tipo, qty).run(); }
+        for (const tipo of ['P13', 'P20', 'P45', 'P05']) {
+          const qty = parseInt(compras[tipo]) || 0; if (!qty) continue; total += qty;
+          await env.DB.prepare('INSERT INTO stock_daily (data,tipo,compras) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET compras=excluded.compras, updated_at=datetime(\'now\')').bind(data, tipo, qty).run();
+        }
         return json({ ok: true, data, total_compras: total });
       }
 
       if (method === 'POST' && path === '/api/estoque/cascos') {
         const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const cascos = body.cascos || {};
-        for (const tipo of ['P13','P20','P45','P05']) { const c = cascos[tipo]; if (!c) continue;
+        for (const tipo of ['P13', 'P20', 'P45', 'P05']) {
+          const c = cascos[tipo]; if (!c) continue;
           await env.DB.prepare(`INSERT INTO stock_daily (data,tipo,cascos_devolucao,cascos_emprestimo,cascos_venda,cascos_aquisicao) VALUES (?,?,?,?,?,?)
             ON CONFLICT(data,tipo) DO UPDATE SET cascos_devolucao=excluded.cascos_devolucao, cascos_emprestimo=excluded.cascos_emprestimo, cascos_venda=excluded.cascos_venda, cascos_aquisicao=excluded.cascos_aquisicao, updated_at=datetime('now')
-          `).bind(data, tipo, parseInt(c.devolucao)||0, parseInt(c.emprestimo)||0, parseInt(c.venda)||0, parseInt(c.aquisicao)||0).run(); }
+          `).bind(data, tipo, parseInt(c.devolucao) || 0, parseInt(c.emprestimo) || 0, parseInt(c.venda) || 0, parseInt(c.aquisicao) || 0).run();
+        }
         return json({ ok: true, data });
       }
 
       if (method === 'POST' && path === '/api/estoque/observacao') {
         const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const obs = body.observacao || '';
-        for (const tipo of ['P13','P20','P45','P05']) await env.DB.prepare('INSERT INTO stock_daily (data,tipo,observacao) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET observacao=excluded.observacao, updated_at=datetime(\'now\')').bind(data, tipo, obs).run();
+        for (const tipo of ['P13', 'P20', 'P45', 'P05']) await env.DB.prepare('INSERT INTO stock_daily (data,tipo,observacao) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET observacao=excluded.observacao, updated_at=datetime(\'now\')').bind(data, tipo, obs).run();
         return json({ ok: true, data, observacao: obs });
       }
 
       if (method === 'GET' && path === '/api/estoque/historico') {
-        const dias = parseInt(url.searchParams.get('dias')||'7');
+        const dias = parseInt(url.searchParams.get('dias') || '7');
         const rows = await env.DB.prepare(`SELECT * FROM stock_daily WHERE data >= date('now', '-${dias} days') ORDER BY data DESC, tipo ASC`).all().then(r => r.results || []);
         return json({ ok: true, dias, registros: rows });
       }
@@ -5690,23 +5725,23 @@ export default {
       if (method === 'GET' && path === '/api/estoque/bling-compras') {
         const data = url.searchParams.get('data') || new Date().toISOString().slice(0, 10);
         const mapRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='estoque_mapeamento'").first().catch(() => null);
-        let mapeamento = {}; try { mapeamento = JSON.parse(mapRow?.value || '{}'); } catch {}
+        let mapeamento = {}; try { mapeamento = JSON.parse(mapRow?.value || '{}'); } catch { }
         try {
           const nfeResp = await blingFetch(`/nfe?tipo=0&situacao=5&dataEmissaoInicial=${data}&dataEmissaoFinal=${data}&pagina=1&limite=50`, {}, env);
-          if (!nfeResp.ok) { const t = await nfeResp.text().catch(()=>''); return json({ ok: false, error: `Bling NFe ${nfeResp.status}: ${t.substring(0,200)}` }); }
+          if (!nfeResp.ok) { const t = await nfeResp.text().catch(() => ''); return json({ ok: false, error: `Bling NFe ${nfeResp.status}: ${t.substring(0, 200)}` }); }
           const notas = (await nfeResp.json()).data || [];
-          const compras = { P13:0, P20:0, P45:0, P05:0 }; const notasDet = []; let notasComGas = 0;
+          const compras = { P13: 0, P20: 0, P45: 0, P05: 0 }; const notasDet = []; let notasComGas = 0;
           for (const nfe of notas) {
-            let items = []; try { const d = await blingFetch(`/nfe/${nfe.id}`, {}, env); if (d.ok) items = (await d.json()).data?.itens || []; } catch {}
-            const nc = { P13:0, P20:0, P45:0, P05:0 }; let temGas = false;
+            let items = []; try { const d = await blingFetch(`/nfe/${nfe.id}`, {}, env); if (d.ok) items = (await d.json()).data?.itens || []; } catch { }
+            const nc = { P13: 0, P20: 0, P45: 0, P05: 0 }; let temGas = false;
             for (const item of items) {
-              const pId = String(item.produto?.id||''), pN = (item.produto?.nome||item.descricao||'').toUpperCase(), pC = (item.produto?.codigo||'').toUpperCase(), qty = parseFloat(item.quantidade)||0;
+              const pId = String(item.produto?.id || ''), pN = (item.produto?.nome || item.descricao || '').toUpperCase(), pC = (item.produto?.codigo || '').toUpperCase(), qty = parseFloat(item.quantidade) || 0;
               let tipo = mapeamento[pId] || null;
-              if (!tipo) { if (pN.includes('P13')||pC.includes('P13')) tipo='P13'; else if (pN.includes('P20')||pC.includes('P20')) tipo='P20'; else if (pN.includes('P45')||pC.includes('P45')) tipo='P45'; else if (pN.includes('P05')||pN.includes('P5')||pC.includes('P05')||pC.includes('P5')) tipo='P05'; }
+              if (!tipo) { if (pN.includes('P13') || pC.includes('P13')) tipo = 'P13'; else if (pN.includes('P20') || pC.includes('P20')) tipo = 'P20'; else if (pN.includes('P45') || pC.includes('P45')) tipo = 'P45'; else if (pN.includes('P05') || pN.includes('P5') || pC.includes('P05') || pC.includes('P5')) tipo = 'P05'; }
               if (tipo && compras[tipo] !== undefined) { compras[tipo] += qty; nc[tipo] += qty; temGas = true; }
             }
             if (temGas) notasComGas++;
-            notasDet.push({ id: nfe.id, numero: nfe.numero, fornecedor: nfe.contato?.nome||'Desconhecido', data_emissao: nfe.dataEmissao, compras: nc, total_itens: items.length });
+            notasDet.push({ id: nfe.id, numero: nfe.numero, fornecedor: nfe.contato?.nome || 'Desconhecido', data_emissao: nfe.dataEmissao, compras: nc, total_itens: items.length });
           }
           return json({ ok: true, data, total_notas: notas.length, notas_com_gas: notasComGas, compras, notas: notasDet });
         } catch (e) { return json({ ok: false, error: e.message }, 500); }
@@ -5714,15 +5749,17 @@ export default {
 
       if (method === 'POST' && path === '/api/estoque/importar-bling') {
         const body = await request.json(); const data = body.data || new Date().toISOString().slice(0, 10); const compras = body.compras || {}; let total = 0;
-        for (const tipo of ['P13','P20','P45','P05']) { const qty = parseInt(compras[tipo])||0; if (!qty) continue; total += qty;
-          await env.DB.prepare('INSERT INTO stock_daily (data,tipo,compras) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET compras=excluded.compras, updated_at=datetime(\'now\')').bind(data, tipo, qty).run(); }
+        for (const tipo of ['P13', 'P20', 'P45', 'P05']) {
+          const qty = parseInt(compras[tipo]) || 0; if (!qty) continue; total += qty;
+          await env.DB.prepare('INSERT INTO stock_daily (data,tipo,compras) VALUES (?,?,?) ON CONFLICT(data,tipo) DO UPDATE SET compras=excluded.compras, updated_at=datetime(\'now\')').bind(data, tipo, qty).run();
+        }
         await logEvent(env, 0, 'estoque_bling_import', { data, compras, total, imported_by: userName });
         return json({ ok: true, data, total_importado: total, compras });
       }
 
       if (method === 'GET' && path === '/api/estoque/config') {
         const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='estoque_mapeamento'").first().catch(() => null);
-        let m = {}; try { m = JSON.parse(row?.value || '{}'); } catch {} return json({ ok: true, mapeamento: m });
+        let m = {}; try { m = JSON.parse(row?.value || '{}'); } catch { } return json({ ok: true, mapeamento: m });
       }
       if (method === 'POST' && path === '/api/estoque/config') {
         const ac = await requireAuth(request, env, ['admin']); if (ac instanceof Response) return ac;
@@ -5732,6 +5769,86 @@ export default {
       }
 
       return err('Endpoint estoque não encontrado', 404);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ── MÓDULO VALES/TICKETS ──────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════
+    if (path.startsWith('/api/vales')) {
+      await ensureValesTables(env);
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      // GET /api/vales/notas - Listar Notas criadas
+      if (method === 'GET' && path === '/api/vales/notas') {
+        const rows = await env.DB.prepare('SELECT * FROM notas_vales ORDER BY id DESC LIMIT 50').all().then(r => r.results || []);
+        for (const n of rows) {
+          const vales = await env.DB.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status="resgatado" THEN 1 ELSE 0 END) as resgatados FROM vales WHERE nota_id=?').bind(n.id).first();
+          n.resgatados = vales?.resgatados || 0;
+          n.total_vales = vales?.total || n.quantidade;
+        }
+        return json({ ok: true, notas: rows });
+      }
+
+      // GET /api/vales/notas/:id - Ver vales de uma nota
+      const notaDetailMatch = path.match(/^\/api\/vales\/notas\/(\d+)$/);
+      if (method === 'GET' && notaDetailMatch) {
+        const notaId = parseInt(notaDetailMatch[1]);
+        const nota = await env.DB.prepare('SELECT * FROM notas_vales WHERE id=?').bind(notaId).first();
+        if (!nota) return err('Nota não encontrada', 404);
+        const vales = await env.DB.prepare('SELECT * FROM vales WHERE nota_id=? ORDER BY id ASC').bind(notaId).all().then(r => r.results || []);
+        return json({ ok: true, nota, vales });
+      }
+
+      // POST /api/vales/notas - Criar Nota e Vales
+      if (method === 'POST' && path === '/api/vales/notas') {
+        const body = await request.json();
+        const { cliente_nome, cliente_doc, quantidade, valor_unit, forma_pagamento } = body;
+        if (!cliente_nome || !quantidade || !valor_unit) return err('Dados incompletos');
+        const total = parseFloat(quantidade) * parseFloat(valor_unit);
+
+        const notaResult = await env.DB.prepare(
+          'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, created_by, created_by_nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(cliente_nome, cliente_doc || '', parseInt(quantidade), parseFloat(valor_unit), total, forma_pagamento || 'dinheiro', authCheck.id, authCheck.nome).run();
+        const notaId = notaResult.meta?.last_row_id;
+
+        for (let i = 1; i <= parseInt(quantidade); i++) {
+          const num = String(i).padStart(3, '0');
+          await env.DB.prepare('INSERT INTO vales (nota_id, numero, status) VALUES (?, ?, "pendente")').bind(notaId, num).run();
+        }
+
+        let blingResultId = null, blingResultNum = null;
+        try {
+          const blingData = await criarPedidoBling(env, `VALE-${notaId}`, {
+            name: cliente_nome,
+            items: [{ name: `Vale GÁS - Emissão Ref: Nota Vales #${notaId}`, qty: parseInt(quantidade), price: parseFloat(valor_unit) }],
+            total_value: total,
+            tipo_pagamento: forma_pagamento || 'dinheiro',
+            cpf_cnpj: cliente_doc,
+          });
+          await env.DB.prepare('UPDATE notas_vales SET bling_pedido_id=?, bling_pedido_num=? WHERE id=?').bind(blingData.bling_pedido_id, blingData.bling_pedido_num, notaId).run();
+          blingResultId = blingData.bling_pedido_id;
+          blingResultNum = blingData.bling_pedido_num;
+        } catch (e) {
+          console.error('Erro Bling Vales:', e.message);
+        }
+
+        return json({ ok: true, nota_id: notaId, bling_id: blingResultId, bling_num: blingResultNum });
+      }
+
+      // PATCH /api/vales/:id/baixa - Dar baixa
+      const baixaValeMatch = path.match(/^\/api\/vales\/(\d+)\/baixa$/);
+      if (method === 'PATCH' && baixaValeMatch) {
+        const valeId = parseInt(baixaValeMatch[1]);
+        const vale = await env.DB.prepare('SELECT * FROM vales WHERE id=?').bind(valeId).first();
+        if (!vale) return err('Vale não existe', 404);
+        if (vale.status === 'resgatado') return err(`Este vale já foi Resgatado em ${new Date(vale.resgatado_em * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })} por ${vale.resgatado_por}!`, 400);
+
+        await env.DB.prepare('UPDATE vales SET status="resgatado", resgatado_em=unixepoch(), resgatado_por=? WHERE id=?').bind(authCheck.nome, valeId).run();
+        return json({ ok: true, message: 'Baixa efetuada com sucesso!' });
+      }
+
+      return err('Endpoint vales não encontrado', 404);
     }
 
     return err('Not found', 404);
@@ -5758,14 +5875,14 @@ export default {
           console.log(`[relatorio-cron] Já enviado para ${yesterday}, pulando.`);
         }
       }
-    } catch(e) { console.error('[relatorio-cron] Erro:', e.message); }
+    } catch (e) { console.error('[relatorio-cron] Erro:', e.message); }
     // Lembretes PIX automáticos — verificar config para hora
     try {
       const config = await getLembreteConfig(env);
       if (config.cron_ativo && hour === (config.cron_hora_utc || 14)) {
         ctx.waitUntil(processarLembretesCron(env));
       }
-    } catch(e) { console.error('[lembrete-cron] Config error:', e.message); }
+    } catch (e) { console.error('[lembrete-cron] Config error:', e.message); }
     // PIX auto-check: verificar pagamentos pendentes na PushInPay a cada execução do cron
     if (isPixConfigured(env)) {
       ctx.waitUntil(checkPendingPixPayments(env));
@@ -5785,10 +5902,10 @@ async function checkPendingPixPayments(env) {
     ).all();
     const rows = pending.results || [];
     if (!rows.length) { console.log('[pix-autocheck] Nenhum PIX pendente'); return; }
-    
+
     console.log(`[pix-autocheck] Verificando ${rows.length} PIX pendente(s)...`);
     let confirmed = 0;
-    
+
     for (const order of rows) {
       try {
         const txData = await pushInPayCheckStatus(env, order.pix_tx_id);
@@ -5797,7 +5914,7 @@ async function checkPendingPixPayments(env) {
           await logEvent(env, order.id, 'pix_autocheck_confirmed', { tx_id: order.pix_tx_id });
           confirmed++;
           console.log(`[pix-autocheck] ✅ Pedido #${order.id} confirmado como pago!`);
-          
+
           // WhatsApp admin
           try {
             const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1").all();
@@ -5808,7 +5925,7 @@ async function checkPendingPixPayments(env) {
               await sendWhatsApp(env, ph, msg, { category: 'admin_alerta' });
             }
           } catch (we) { console.error('[pix-autocheck] WhatsApp error:', we.message); }
-          
+
           // Criar Bling se necessário
           try {
             const fullOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(order.id).first();
@@ -5862,7 +5979,7 @@ async function getReportConfig(env) {
     incluir_csv: true,
     incluir_cancelados: true,
   };
-  try { if (row?.value) return { ...defaults, ...JSON.parse(row.value) }; } catch {}
+  try { if (row?.value) return { ...defaults, ...JSON.parse(row.value) }; } catch { }
   return defaults;
 }
 
@@ -5872,7 +5989,7 @@ async function getResendKey(env, bodyKey) {
   try {
     const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='resend_api_key'").first();
     if (row?.value) return row.value;
-  } catch {}
+  } catch { }
   if (bodyKey) return bodyKey;
   return null;
 }
@@ -5940,7 +6057,7 @@ async function generateDailyReport(env, dateStr) {
         produtosTotal[nome].qtd += parseInt(it.qty) || 1;
         produtosTotal[nome].valor += (parseInt(it.qty) || 1) * (parseFloat(it.price) || 0);
       }
-    } catch {}
+    } catch { }
   }
 
   return {
@@ -6017,7 +6134,7 @@ function buildReportHTML(report) {
       <th style="padding:8px;text-align:right">Total</th>
     </tr></thead><tbody>`;
 
-  for (const [nome, p] of Object.entries(report.produtosTotal).sort((a,b) => b[1].valor - a[1].valor)) {
+  for (const [nome, p] of Object.entries(report.produtosTotal).sort((a, b) => b[1].valor - a[1].valor)) {
     html += `<tr><td style="padding:6px 8px">${nome}</td><td style="padding:6px 8px;text-align:center;font-weight:700">${p.qtd}</td><td style="padding:6px 8px;text-align:right">${fmtBRL(p.valor)}</td></tr>`;
   }
   html += `</tbody></table>`;
@@ -6027,7 +6144,7 @@ function buildReportHTML(report) {
   <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:#f1f5f9"><th style="padding:8px;text-align:left">Tipo</th><th style="padding:8px;text-align:center">Qtd</th><th style="padding:8px;text-align:right">Total</th></tr></thead><tbody>`;
   for (const [tipo, d] of Object.entries(report.porTipo)) {
-    html += `<tr><td style="padding:6px 8px">${pgtoLabel[tipo]||tipo}</td><td style="padding:6px 8px;text-align:center;font-weight:700">${d.qtd}</td><td style="padding:6px 8px;text-align:right">${fmtBRL(d.valor)}</td></tr>`;
+    html += `<tr><td style="padding:6px 8px">${pgtoLabel[tipo] || tipo}</td><td style="padding:6px 8px;text-align:center;font-weight:700">${d.qtd}</td><td style="padding:6px 8px;text-align:right">${fmtBRL(d.valor)}</td></tr>`;
   }
   html += `</tbody></table>`;
 
@@ -6036,7 +6153,7 @@ function buildReportHTML(report) {
     html += `<h3 style="margin:20px 0 8px;font-size:15px;color:#1e40af">👤 Por Vendedor</h3>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#f1f5f9"><th style="padding:8px;text-align:left">Vendedor</th><th style="padding:8px;text-align:center">Qtd</th><th style="padding:8px;text-align:right">Total</th></tr></thead><tbody>`;
-    for (const [v, d] of Object.entries(report.porVendedor).sort((a,b) => b[1].valor - a[1].valor)) {
+    for (const [v, d] of Object.entries(report.porVendedor).sort((a, b) => b[1].valor - a[1].valor)) {
       html += `<tr><td style="padding:6px 8px">${v}</td><td style="padding:6px 8px;text-align:center;font-weight:700">${d.qtd}</td><td style="padding:6px 8px;text-align:right">${fmtBRL(d.valor)}</td></tr>`;
     }
     html += `</tbody></table>`;
@@ -6066,21 +6183,21 @@ function buildReportHTML(report) {
     try {
       const items = JSON.parse(o.items_json || '[]');
       itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
-    } catch {}
+    } catch { }
     const bg = o.status === 'cancelado' ? '#fef2f2' : (o.status === 'entregue' ? '#f0fdf4' : '#fff');
     html += `<tr style="background:${bg};border-bottom:1px solid #e2e8f0">
       <td style="padding:4px;font-weight:700">${o.id}</td>
-      <td style="padding:4px;font-size:10px">${statusLabel[o.status]||o.status}</td>
-      <td style="padding:4px">${o.customer_name||'—'}</td>
+      <td style="padding:4px;font-size:10px">${statusLabel[o.status] || o.status}</td>
+      <td style="padding:4px">${o.customer_name || '—'}</td>
       <td style="padding:4px;font-size:10px">${fmtFone(o.phone_digits)}</td>
-      <td style="padding:4px;font-size:10px">${o.address_line||''} ${o.bairro?'('+o.bairro+')':''}</td>
+      <td style="padding:4px;font-size:10px">${o.address_line || ''} ${o.bairro ? '(' + o.bairro + ')' : ''}</td>
       <td style="padding:4px;font-size:10px">${itensStr}</td>
-      <td style="padding:4px;text-align:right;font-weight:700">${fmtBRL(parseFloat(o.total_value)||0)}</td>
-      <td style="padding:4px;font-size:10px">${pgtoLabel[o.tipo_pagamento]||o.tipo_pagamento||'—'}</td>
-      <td style="padding:4px;text-align:center">${o.pago?'✅':'❌'}</td>
-      <td style="padding:4px;font-size:10px">${o.bling_pedido_id||'—'}</td>
-      <td style="padding:4px;font-size:10px">${o.vendedor_nome||'—'}</td>
-      <td style="padding:4px;font-size:10px">${o.driver_name_cache||'—'}</td>
+      <td style="padding:4px;text-align:right;font-weight:700">${fmtBRL(parseFloat(o.total_value) || 0)}</td>
+      <td style="padding:4px;font-size:10px">${pgtoLabel[o.tipo_pagamento] || o.tipo_pagamento || '—'}</td>
+      <td style="padding:4px;text-align:center">${o.pago ? '✅' : '❌'}</td>
+      <td style="padding:4px;font-size:10px">${o.bling_pedido_id || '—'}</td>
+      <td style="padding:4px;font-size:10px">${o.vendedor_nome || '—'}</td>
+      <td style="padding:4px;font-size:10px">${o.driver_name_cache || '—'}</td>
       <td style="padding:4px;font-size:10px">${fmtEpoch(o.created_at)}</td>
     </tr>`;
   }
@@ -6099,7 +6216,7 @@ function buildReportHTML(report) {
 
 function buildReportCSV(report) {
   const BOM = '\uFEFF'; // UTF-8 BOM para Excel abrir corretamente
-  const headers = ['ID','Status','Cliente','Telefone','Email','CPF_CNPJ','Endereco','Bairro','Complemento','Referencia','Itens','Quantidade_Total','Valor','Tipo_Pagamento','Pago','Bling_ID','Bling_Num','Vendedor','Entregador','Observacoes','Obs_Entregador','Criado_Em','Entregue_Em'];
+  const headers = ['ID', 'Status', 'Cliente', 'Telefone', 'Email', 'CPF_CNPJ', 'Endereco', 'Bairro', 'Complemento', 'Referencia', 'Itens', 'Quantidade_Total', 'Valor', 'Tipo_Pagamento', 'Pago', 'Bling_ID', 'Bling_Num', 'Vendedor', 'Entregador', 'Observacoes', 'Obs_Entregador', 'Criado_Em', 'Entregue_Em'];
 
   const escape = v => {
     if (v == null) return '';
@@ -6120,7 +6237,7 @@ function buildReportCSV(report) {
       const items = JSON.parse(o.items_json || '[]');
       itensStr = items.map(i => `${i.qty}x ${i.name}`).join(' | ');
       qtdTotal = items.reduce((s, i) => s + (parseInt(i.qty) || 1), 0);
-    } catch {}
+    } catch { }
 
     csv += [
       o.id, o.status, o.customer_name || '', o.phone_digits || '', o.email || '', o.cpf_cnpj || '',
@@ -6204,11 +6321,11 @@ async function keepBlingTokenFresh(env) {
     console.log(`[cron] Token Bling expira em ${minutesLeft} minutos.`);
     if (minutesLeft < 120) {
       const newToken = await refreshBlingToken(env, row.refresh_token);
-      console.log(`[cron] Token renovado com sucesso. Novo: ${newToken.substring(0,10)}...`);
+      console.log(`[cron] Token renovado com sucesso. Novo: ${newToken.substring(0, 10)}...`);
     } else {
       console.log('[cron] Token ainda válido.');
     }
-  } catch(e) { console.error('[cron] Erro:', e.message); }
+  } catch (e) { console.error('[cron] Erro:', e.message); }
 }
 
 async function dailyAuditSnapshot(env) {
@@ -6243,5 +6360,5 @@ async function dailyAuditSnapshot(env) {
 
     await env.DB.prepare('INSERT INTO audit_snapshots (snapshot_date, data_json) VALUES (?, ?)').bind(yesterday, JSON.stringify(snapshot)).run();
     console.log(`[audit] Snapshot ${yesterday} salvo: ${totalPedidos} pedidos, R$${snapshot.totalValor}`);
-  } catch(e) { console.error('[audit] Snapshot error:', e.message); }
+  } catch (e) { console.error('[audit] Snapshot error:', e.message); }
 }

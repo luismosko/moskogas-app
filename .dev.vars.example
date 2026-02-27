@@ -1,0 +1,19 @@
+# Configurações do App MoskoGás
+APP_API_KEY=""
+JWT_SECRET=""
+
+# Credenciais Bling ERP
+BLING_CLIENT_ID=""
+BLING_CLIENT_SECRET=""
+
+# Credenciais IzChat (WhatsApp)
+IZCHAT_TOKEN=""
+
+# PushInPay (PIX)
+PUSHINPAY_TOKEN=""
+
+# Resend (E-mail API)
+RESEND_API_KEY=""
+
+# Google Cloud Service Account (opcional)
+GOOGLE_APPLICATION_CREDENTIALS=""

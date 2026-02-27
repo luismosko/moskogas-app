@@ -1,0 +1,4 @@
+*.json
+.wrangler/
+.dev.vars
+DOCUMENTAÇÃO/BKP - GoogleDrive API/
