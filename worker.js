@@ -1,4 +1,4 @@
-// v2.42.1
+// v2.42.2
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
@@ -1797,7 +1797,11 @@ export default {
       const blingId = path.split('/').pop();
       try {
         const resp = await blingFetch(`/contatos/${blingId}`, {}, env);
-        if (!resp.ok) return json({ error: 'not_found' }, 404);
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => '');
+          // Tenta buscar por pesquisa se ID não funcionar (ID pode ser de outro sistema)
+          return json({ error: 'bling_id_invalido', status: resp.status, detail: errText.substring(0,200) }, 404);
+        }
         const data = await resp.json();
         const c = data.data || data;
         const end = (c.endereco && c.endereco.geral) ? c.endereco.geral : (c.endereco || {});

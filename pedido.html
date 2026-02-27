@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.17</title>
+<title>Novo Pedido — MoskoGás v2.11.18</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.17 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.18 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.17</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.18</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -1207,7 +1207,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.17: Não redireciona — limpa form para novo pedido
+    // v2.11.18: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1228,7 +1228,7 @@ async function saveOrder() {
       btn.textContent = '✅ SALVAR PEDIDO';
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.17: Restaurar favoritos originais
+      // v2.11.18: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1290,8 +1290,14 @@ async function abrirModalDadosBling() {
         ${row('Observações', d.obs)}
       </div>`;
   } catch(e) {
-    body.innerHTML = `<div style="color:#dc2626;text-align:center;padding:20px">❌ Erro: ${e.message}<br><small style="color:#94a3b8">ID Bling usado: ${blingId}</small><br><br>
-      <a href="https://www.bling.com.br/contatos.php" target="_blank" style="color:#6366f1;font-size:12px">🔗 Abrir Contatos no Bling</a></div>`;
+    const isNotFound = e.message.includes('bling_id_invalido') || e.message.includes('not_found') || e.message.includes('404');
+    const msgHtml = isNotFound
+      ? `<div style="font-size:14px;font-weight:700;color:#dc2626;margin-bottom:8px">❌ Contato não encontrado no Bling</div>
+         <div style="color:#64748b;font-size:12px;margin-bottom:16px">ID: <code>${blingId}</code> — este ID pode ser de outra conta Bling.<br>Clique abaixo para reconectar com o contato correto.</div>
+         <button onclick="document.getElementById('modal-dados-bling').style.display='none';abrirModalVincularBling()" style="background:#f59e0b;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer">🔗 Reconectar ao Bling</button>`
+      : `<div style="color:#dc2626">❌ Erro: ${e.message}<br><small style="color:#94a3b8">ID: ${blingId}</small></div>`;
+    body.innerHTML = `<div style="text-align:center;padding:24px;line-height:1.8">${msgHtml}<br><br>
+      <a href="https://www.bling.com.br/contatos.php" target="_blank" style="color:#6366f1;font-size:12px">🔗 Ver contatos no Bling</a></div>`;
   }
 }
 
@@ -1361,7 +1367,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.17 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.18 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
