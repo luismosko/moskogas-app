@@ -1579,12 +1579,21 @@ async function ensureValesTables(env) {
     valor_unit REAL NOT NULL,
     total REAL NOT NULL,
     forma_pagamento TEXT,
+    nota_fiscal TEXT,
+    empenho TEXT,
     bling_pedido_id TEXT,
     bling_pedido_num TEXT,
     created_by INTEGER,
     created_by_nome TEXT,
     created_at INTEGER DEFAULT (unixepoch())
   )`).run().catch(() => { });
+
+  try {
+    await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN nota_fiscal TEXT;").run();
+  } catch (e) { }
+  try {
+    await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN empenho TEXT;").run();
+  } catch (e) { }
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS vales (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5803,13 +5812,13 @@ export default {
       // POST /api/vales/notas - Criar Nota e Vales
       if (method === 'POST' && path === '/api/vales/notas') {
         const body = await request.json();
-        const { cliente_nome, cliente_doc, quantidade, valor_unit, forma_pagamento } = body;
+        const { cliente_nome, cliente_doc, quantidade, valor_unit, forma_pagamento, nota_fiscal, empenho } = body;
         if (!cliente_nome || !quantidade || !valor_unit) return err('Dados incompletos');
         const total = parseFloat(quantidade) * parseFloat(valor_unit);
 
         const notaResult = await env.DB.prepare(
-          'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, created_by, created_by_nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(cliente_nome, cliente_doc || '', parseInt(quantidade), parseFloat(valor_unit), total, forma_pagamento || 'dinheiro', authCheck.id, authCheck.nome).run();
+          'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, created_by, created_by_nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(cliente_nome, cliente_doc || '', parseInt(quantidade), parseFloat(valor_unit), total, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', authCheck.id, authCheck.nome).run();
         const notaId = notaResult.meta?.last_row_id;
 
         for (let i = 1; i <= parseInt(quantidade); i++) {
@@ -5817,23 +5826,7 @@ export default {
           await env.DB.prepare('INSERT INTO vales (nota_id, numero, status) VALUES (?, ?, "pendente")').bind(notaId, num).run();
         }
 
-        let blingResultId = null, blingResultNum = null;
-        try {
-          const blingData = await criarPedidoBling(env, `VALE-${notaId}`, {
-            name: cliente_nome,
-            items: [{ name: `Vale GÁS - Emissão Ref: Nota Vales #${notaId}`, qty: parseInt(quantidade), price: parseFloat(valor_unit) }],
-            total_value: total,
-            tipo_pagamento: forma_pagamento || 'dinheiro',
-            cpf_cnpj: cliente_doc,
-          });
-          await env.DB.prepare('UPDATE notas_vales SET bling_pedido_id=?, bling_pedido_num=? WHERE id=?').bind(blingData.bling_pedido_id, blingData.bling_pedido_num, notaId).run();
-          blingResultId = blingData.bling_pedido_id;
-          blingResultNum = blingData.bling_pedido_num;
-        } catch (e) {
-          console.error('Erro Bling Vales:', e.message);
-        }
-
-        return json({ ok: true, nota_id: notaId, bling_id: blingResultId, bling_num: blingResultNum });
+        return json({ ok: true, nota_id: notaId });
       }
 
       // PATCH /api/vales/:id/baixa - Dar baixa
