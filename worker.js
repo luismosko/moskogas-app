@@ -5816,9 +5816,14 @@ export default {
         if (!cliente_nome || !quantidade || !valor_unit) return err('Dados incompletos');
         const total = parseFloat(quantidade) * parseFloat(valor_unit);
 
-        const notaResult = await env.DB.prepare(
-          'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, created_by, created_by_nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(cliente_nome, cliente_doc || '', parseInt(quantidade), parseFloat(valor_unit), total, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', authCheck.id, authCheck.nome).run();
+        let notaResult;
+        try {
+          notaResult = await env.DB.prepare(
+            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, created_by, created_by_nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(cliente_nome, cliente_doc || '', parseInt(quantidade), parseFloat(valor_unit.toString().replace(',', '.')), total, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', authCheck.id, authCheck.nome).run();
+        } catch (dbErr) {
+          return err('Erro ao salvar nota no banco de dados: ' + dbErr.message, 500);
+        }
         const notaId = notaResult.meta?.last_row_id;
 
         for (let i = 1; i <= parseInt(quantidade); i++) {
@@ -5841,10 +5846,10 @@ export default {
         return json({ ok: true, message: 'Baixa efetuada com sucesso!' });
       }
 
-      return err('Endpoint vales não encontrado', 404);
+      return err(`Endpoint vales não encontrado (${method} ${path})`, 404);
     }
 
-    return err('Not found', 404);
+    return err(`Not found (${method} ${path})`, 404);
   },
 
   async scheduled(event, env, ctx) {
