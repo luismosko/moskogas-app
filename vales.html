@@ -461,10 +461,17 @@
     <script src="shared.js"></script>
     <script>
         document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
-        requireAdminOrAtendente();
+
+        // Evitar erro de carregamento assíncrono do shared.js
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof requireAdminOrAtendente === 'function') {
+                requireAdminOrAtendente();
+            }
+        });
 
         let notasData = [];
         let currentViewId = null;
+        let searchTimer = null;
 
         async function load() {
             showLoading('Carregando notas...');
@@ -531,7 +538,6 @@
             document.getElementById('searchName').focus();
         }
 
-        let searchTimer;
         function buscaCliente() {
             clearTimeout(searchTimer);
             const phone = document.getElementById('searchPhone').value.trim();
