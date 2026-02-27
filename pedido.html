@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.20</title>
+<title>Novo Pedido — MoskoGás v2.11.21</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.20 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.21 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.20</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.21</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -510,8 +510,40 @@ async function selectCustomer(i) {
   const _isConsumFinal = nome.includes('CONSUMIDOR FINAL');
   if (_btnVincular) _btnVincular.style.display = (!c.bling_contact_id && !_isConsumFinal) ? 'inline-flex' : 'none';
   if (_blingBadge) {
-    _blingBadge.style.display = (c.bling_contact_id && !_isConsumFinal) ? 'inline-flex' : 'none';
-    if (c.bling_contact_id) _blingBadge.title = `Bling ID: ${c.bling_contact_id}`;
+    if (c.bling_contact_id && !_isConsumFinal) {
+      _blingBadge.style.display = 'inline-flex';
+      // Badge começa cinza "verificando" e muda após checar se ID é válido
+      _blingBadge.style.background = '#f1f5f9';
+      _blingBadge.style.color = '#64748b';
+      _blingBadge.style.borderColor = '#cbd5e1';
+      _blingBadge.innerHTML = '⏳ Verificando Bling...';
+      _blingBadge.title = 'Verificando ID no Bling...';
+      // Verifica silenciosamente se o ID é válido
+      api('/api/customer/bling-detail/' + c.bling_contact_id).then(d => {
+        if (d && !d.error) {
+          _blingBadge.style.background = '#dcfce7';
+          _blingBadge.style.color = '#166534';
+          _blingBadge.style.borderColor = '#86efac';
+          _blingBadge.innerHTML = '✅ Vinculado ao Bling 🔍';
+          _blingBadge.title = `${d.name} — ID ${c.bling_contact_id} — clique para ver cadastro`;
+        } else {
+          _blingBadge.style.background = '#fef3c7';
+          _blingBadge.style.color = '#92400e';
+          _blingBadge.style.borderColor = '#fcd34d';
+          _blingBadge.innerHTML = '⚠️ ID Bling inválido — clique para reconectar';
+          _blingBadge.title = 'ID salvo não existe no Bling V3. Clique para reconectar.';
+          _blingBadge.onclick = function() { abrirModalVincularBling(); };
+        }
+      }).catch(() => {
+        _blingBadge.style.background = '#fef3c7';
+        _blingBadge.style.color = '#92400e';
+        _blingBadge.style.borderColor = '#fcd34d';
+        _blingBadge.innerHTML = '⚠️ ID Bling inválido — clique para reconectar';
+        _blingBadge.onclick = function() { abrirModalVincularBling(); };
+      });
+    } else {
+      _blingBadge.style.display = 'none';
+    }
   }
   if (c.phone_digits && !nome.includes('CONSUMIDOR FINAL')) {
     loadLastOrder(c.phone_digits);
@@ -1207,7 +1239,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.20: Não redireciona — limpa form para novo pedido
+    // v2.11.21: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1228,7 +1260,7 @@ async function saveOrder() {
       btn.textContent = '✅ SALVAR PEDIDO';
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.20: Restaurar favoritos originais
+      // v2.11.21: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1392,7 +1424,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.20 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.21 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
