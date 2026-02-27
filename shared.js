@@ -155,7 +155,7 @@ const NAV_ITEMS = [
   { href: 'gestao.html', icon: '📋', label: 'Gestão', roles: ['admin', 'atendente'] },
   { href: 'contratos.html', icon: '📄', label: 'Contratos', roles: ['admin', 'atendente'] },
   { href: 'estoque.html', icon: '📦', label: 'Estoque', roles: ['admin', 'atendente'] },
-  { href: 'vales.html', icon: '🎟️', label: 'Vales', roles: ['admin', 'atendente'] },
+  { href: 'vales.html', icon: '🎟️', label: 'Vale Gás', roles: ['admin', 'atendente'] },
 ];
 
 // Dropdowns — cada um com ID único para abrir/fechar independente

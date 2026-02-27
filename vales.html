@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vales v1.0.0 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.0.0 — MoskoGás</title>
     <style>
         * {
             box-sizing: border-box;
@@ -247,7 +247,7 @@
 
     <div class="toolbar">
         <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de
-            Vales</button>
+            Vale Gás</button>
         <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
         <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
 
@@ -266,7 +266,7 @@
                 <th>Data/Hora</th>
                 <th>Cliente (Empresa)</th>
                 <th>Forma Pgto</th>
-                <th>Vales Emitidos</th>
+                <th>Tickets / Vale Gás</th>
                 <th>Status Resgates</th>
                 <th>Total R$</th>
                 <th>Bling</th>
@@ -280,7 +280,7 @@
     <div class="modal-overlay" id="modal-nova">
         <div class="modal">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                <h2 style="margin:0">🎫 Emitir Nova Nota de Vales</h2>
+                <h2 style="margin:0">🎫 Emitir Nova Nota de Vale Gás</h2>
                 <button onclick="closeNovaModal()"
                     style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px"
                     title="Fechar">&times;</button>
@@ -294,7 +294,7 @@
 
             <div style="display:flex; gap:12px">
                 <div style="flex:1">
-                    <label>Quantidade de Vales *</label>
+                    <label>Quantidade de Vale Gás *</label>
                     <input type="number" id="n-qtd" value="10" min="1" max="500" oninput="calcTotal()">
                 </div>
                 <div style="flex:1">
@@ -342,12 +342,12 @@
                 <span id="det-resgatados"></span>
             </div>
 
-            <h3 style="font-size:15px; margin-bottom: 10px; color:#475569;">Vales Relacionados</h3>
+            <h3 style="font-size:15px; margin-bottom: 10px; color:#475569;">Vale Gás Relacionados</h3>
             <div class="vales-grid" id="det-vales-list"></div>
 
             <div class="modal-footer" style="margin-top:20px;">
                 <button class="btn btn-gray" onclick="closeViewModal()">Fechar</button>
-                <button class="btn btn-blue" id="det-btn-print" onclick="imprimirAtual()">🖨️ Imprimir Vales Formato
+                <button class="btn btn-blue" id="det-btn-print" onclick="imprimirAtual()">🖨️ Imprimir Tickets Formato
                     A4</button>
             </div>
         </div>
@@ -451,7 +451,7 @@
             showLoading('Buscando detalhes...');
             try {
                 const res = await api(`/api/vales/notas/${id}`);
-                document.getElementById('det-title').textContent = `Nota de Vales #${res.nota.id}`;
+                document.getElementById('det-title').textContent = `Nota de Vale Gás #${res.nota.id}`;
                 document.getElementById('det-cli').innerHTML = `🏢 Cliente: <strong>${res.nota.cliente_nome}</strong>`;
                 document.getElementById('det-qty').innerHTML = `🎫 Emitidos: <strong>${res.nota.quantidade}</strong>`;
                 document.getElementById('det-total').innerHTML = `💰 Total: <strong>R$ ${res.nota.total.toFixed(2)}</strong>`;
