@@ -1,5 +1,6 @@
 // v2.43.0
 // v2.43.0: 🎟️ Módulo de Vales/Tickets (API, Controle e Baixas)
+// v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
 // MOSKOGAS BACKEND v2 — Cloudflare Worker (ES Module)
@@ -38,6 +39,26 @@
 // v2.16.2: Fix comprovante foto 401 — endpoint movido antes do auth gate
 // v2.16.1: Fix ReferenceError: user não declarado em cancel/revert/deliver/select-driver
 // v2.16.0: Reabrir/cancelar pedido com motivo + auditoria status + alerta WhatsApp admin
+// v2.15.0: Entrega com foto obrigatória (R2) + trocar pgto + observação
+// v2.14.0: Troca tipo pagamento → auto-cria/deleta venda Bling + confirmação
+// v2.13.1: Audit logs com JOIN orders (nome cliente, valor, tipo, bling_num)
+// v2.13.0: Sistema de Auditoria Bling — integration_audit table,
+//          logBlingAudit em toda operação Bling, observação enriquecida,
+//          GET /api/auditoria/diaria, /conciliacao-bling, /log-detalhado
+//          Cron snapshot diário audit_snapshots
+// v2.12.3: Flags pode_entregar + recebe_whatsapp em app_users
+//          /api/drivers filtra por pode_entregar=1 (atendentes podem entregar)
+//          WhatsApp skipped se recebe_whatsapp=0
+// v2.12.2: Entregadores unificados: /api/drivers agora puxa de app_users
+//          Removido POST/PATCH /api/drivers (gerenciar via Usuários)
+// v2.12.1: Novas formas pgto: débito, crédito, NFe
+//          Editar pedido aceita driver_id (troca entregador)
+// v2.12.0: Segurança: endpoints users protegidos por requireAuth admin
+//          Rename: gerar-nfe → criar-vendas-bling
+//          Limpeza: removido código morto NFCe (não existe na API Bling v3)
+//          Fix vendedores: busca contato.nome individual via API
+//          Login por usuário/senha, roles (admin/atendente/entregador)
+//          Vinculação vendedor Bling em pedidos
 // v2.15.0: Entrega com foto obrigatória (R2) + trocar pgto + observação
 // v2.14.0: Troca tipo pagamento → auto-cria/deleta venda Bling + confirmação
 // v2.13.1: Audit logs com JOIN orders (nome cliente, valor, tipo, bling_num)
