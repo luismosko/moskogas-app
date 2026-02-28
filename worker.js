@@ -1,4 +1,5 @@
-// v2.43.4
+// v2.44.0
+// v2.44.0: Módulo Avaliação Pós-Compra — NPS WhatsApp, webhook IzChat, cron 2h, flag sem_avaliacao
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
@@ -4802,6 +4803,169 @@ export default {
     }
 
     // ══════════════════════════════════════════════════════════════
+    // ── Webhook IzChat — mensagens recebidas (PÚBLICO — sem auth) ──
+    if (method === 'POST' && path === '/api/webhooks/izchat') {
+      try {
+        const payload = await request.json().catch(() => ({}));
+        console.log('[izchat-webhook] Payload recebido:', JSON.stringify(payload).slice(0, 300));
+        // IzChat envia: { type, data: { message: { body, fromMe, contact: { number } } } }
+        // ou variações — tentar diferentes formatos
+        const fromMe = payload?.data?.message?.fromMe ?? payload?.fromMe ?? false;
+        if (fromMe) return json({ ok: true, ignored: 'fromMe' });
+
+        const body = payload?.data?.message?.body || payload?.body || payload?.text || '';
+        const number = payload?.data?.message?.contact?.number || payload?.data?.contact?.number || payload?.number || '';
+
+        if (body && number) {
+          const phoneDigits = number.replace(/\D/g, '');
+          const respondeu = await processarRespostaAvaliacao(env, phoneDigits, body);
+          console.log(`[izchat-webhook] ${phoneDigits} "${body}" → avaliacao: ${respondeu}`);
+        }
+        return json({ ok: true });
+      } catch (e) {
+        console.error('[izchat-webhook] Erro:', e.message);
+        return json({ ok: true }); // sempre 200 para webhook
+      }
+    }
+
+    // ── AVALIAÇÕES — Endpoints (requer auth JWT) ─────────────────
+    if (path.startsWith('/api/avaliacoes')) {
+      await ensureAvaliacaoTables(env);
+
+      // Config GET/POST
+      if (path === '/api/avaliacoes/config') {
+        if (method === 'GET') {
+          const authErr = requireAuth(request, env, ['admin', 'atendente']);
+          if (authErr) return authErr;
+          return json(await getAvaliacaoConfig(env));
+        }
+        if (method === 'POST') {
+          const authErr = requireAuth(request, env, ['admin']);
+          if (authErr) return authErr;
+          const body = await request.json();
+          await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('avaliacao_config', ?, datetime('now'))").bind(JSON.stringify(body)).run();
+          return json({ ok: true });
+        }
+      }
+
+      // Listar avaliações com filtros
+      if (method === 'GET' && path === '/api/avaliacoes') {
+        const authErr = requireAuth(request, env, ['admin', 'atendente']);
+        if (authErr) return authErr;
+        const qp = new URL(request.url).searchParams;
+        const status = qp.get('status') || '';
+        const desde = qp.get('desde') || '';
+        const ate = qp.get('ate') || '';
+        const page = parseInt(qp.get('page') || '1');
+        const pageSize = 50;
+
+        let where = [];
+        let binds = [];
+        if (status) { where.push("ss.status = ?"); binds.push(status); }
+        if (desde) { where.push("ss.sent_at >= ?"); binds.push(Math.floor(new Date(desde).getTime()/1000)); }
+        if (ate) { where.push("ss.sent_at <= ?"); binds.push(Math.floor(new Date(ate).getTime()/1000) + 86399); }
+        const whereStr = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+        const countRow = await env.DB.prepare(`SELECT COUNT(*) as c FROM satisfaction_surveys ss ${whereStr}`).bind(...binds).first();
+        const total = countRow?.c || 0;
+
+        const rows = await env.DB.prepare(`
+          SELECT ss.*, o.total_value, o.tipo_pagamento, o.driver_name_cache
+          FROM satisfaction_surveys ss
+          LEFT JOIN orders o ON o.id = ss.order_id
+          ${whereStr}
+          ORDER BY ss.sent_at DESC
+          LIMIT ? OFFSET ?
+        `).bind(...binds, pageSize, (page - 1) * pageSize).all();
+
+        // Stats
+        const stats = await env.DB.prepare(`
+          SELECT
+            COUNT(*) as total_enviadas,
+            SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as respondidas,
+            ROUND(AVG(CASE WHEN score IS NOT NULL THEN score END), 2) as media,
+            SUM(CASE WHEN score = 5 THEN 1 ELSE 0 END) as nota5,
+            SUM(CASE WHEN score = 4 THEN 1 ELSE 0 END) as nota4,
+            SUM(CASE WHEN score = 3 THEN 1 ELSE 0 END) as nota3,
+            SUM(CASE WHEN score <= 2 THEN 1 ELSE 0 END) as nota12
+          FROM satisfaction_surveys
+        `).first();
+
+        // Série temporal (últimos 30 dias)
+        const serie = await env.DB.prepare(`
+          SELECT date(sent_at, 'unixepoch', '-3 hours') as dia,
+            COUNT(*) as enviadas,
+            SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as respondidas,
+            ROUND(AVG(score), 2) as media_dia
+          FROM satisfaction_surveys
+          WHERE sent_at >= unixepoch() - 2592000
+          GROUP BY dia ORDER BY dia DESC
+        `).all();
+
+        return json({
+          surveys: rows.results || [],
+          total,
+          page,
+          pages: Math.ceil(total / pageSize),
+          stats,
+          serie: (serie.results || []).reverse(),
+        });
+      }
+
+      // Enviar avaliação manual para um pedido específico
+      if (method === 'POST' && path === '/api/avaliacoes/enviar') {
+        const authErr = requireAuth(request, env, ['admin', 'atendente']);
+        if (authErr) return authErr;
+        const { order_id } = await request.json();
+        if (!order_id) return json({ error: 'order_id obrigatório' }, 400);
+
+        const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(order_id).first();
+        if (!order) return json({ error: 'Pedido não encontrado' }, 404);
+        if (!order.phone_digits) return json({ error: 'Pedido sem telefone' }, 400);
+        if (order.phone_digits === '00000000000') return json({ error: 'Consumidor Final — sem WhatsApp' }, 400);
+
+        // Verificar flag sem_avaliacao
+        const cc = await env.DB.prepare('SELECT sem_avaliacao FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first();
+        if (cc?.sem_avaliacao) return json({ error: 'Cliente com avaliação desativada' }, 400);
+
+        const config = await getAvaliacaoConfig(env);
+        const phoneIntl = order.phone_digits.startsWith('55') ? order.phone_digits : `55${order.phone_digits}`;
+        const mensagem = montarMensagemAvaliacao(config.mensagem_pesquisa, {
+          nome: (order.customer_name || 'Cliente').split(' ')[0],
+        });
+
+        const result = await sendWhatsApp(env, phoneIntl, mensagem, { category: 'avaliacao' });
+        if (result?.blocked) return json({ error: 'WhatsApp bloqueado no momento' }, 503);
+
+        await env.DB.prepare('UPDATE orders SET survey_sent=1 WHERE id=?').bind(order_id).run();
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO satisfaction_surveys (order_id, phone_digits, customer_name, status)
+          VALUES (?, ?, ?, 'sent')
+        `).bind(order_id, order.phone_digits, order.customer_name || '').run();
+
+        return json({ ok: true, message: 'Avaliação enviada!' });
+      }
+
+      // Toggle sem_avaliacao por telefone
+      if (method === 'PATCH' && path.match(/^\/api\/avaliacoes\/cliente\/(.+)\/toggle$/)) {
+        const authErr = requireAuth(request, env, ['admin', 'atendente']);
+        if (authErr) return authErr;
+        const phone = path.split('/')[4];
+        const cc = await env.DB.prepare('SELECT sem_avaliacao FROM customers_cache WHERE phone_digits=?').bind(phone).first();
+        const novoValor = cc?.sem_avaliacao ? 0 : 1;
+        await env.DB.prepare('UPDATE customers_cache SET sem_avaliacao=? WHERE phone_digits=?').bind(novoValor, phone).run();
+        return json({ ok: true, sem_avaliacao: novoValor });
+      }
+
+      // Enviar bulk (reenviar para respondidas/não respondidas em lote)
+      if (method === 'POST' && path === '/api/avaliacoes/enviar-cron') {
+        const authErr = requireAuth(request, env, ['admin']);
+        if (authErr) return authErr;
+        await processarAvaliacoesCron(env);
+        return json({ ok: true, message: 'Cron de avaliações executado' });
+      }
+    }
+
     // ── CONTRATOS (Comodato) ─────────────────────────────────────
     // ══════════════════════════════════════════════════════════════
 
@@ -5926,11 +6090,218 @@ export default {
     if (isPixConfigured(env)) {
       ctx.waitUntil(checkPendingPixPayments(env));
     }
+    // Avaliações pós-compra: cron a cada execução (filtra por horário internamente)
+    ctx.waitUntil(processarAvaliacoesCron(env));
   },
 };
 
 // ══════════════════════════════════════════════════════════════
-// PIX AUTO-CHECK — Verifica pagamentos pendentes na PushInPay
+// MÓDULO AVALIAÇÃO PÓS-COMPRA (v2.44.0)
+// NPS 1-5 via WhatsApp + webhook IzChat + cron automático
+// ══════════════════════════════════════════════════════════════
+
+async function ensureAvaliacaoTables(env) {
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS satisfaction_surveys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL UNIQUE,
+      phone_digits TEXT NOT NULL,
+      customer_name TEXT DEFAULT '',
+      sent_at INTEGER DEFAULT (unixepoch()),
+      answered_at INTEGER,
+      score INTEGER,
+      follow_up_sent INTEGER DEFAULT 0,
+      google_link_sent INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'sent',
+      FOREIGN KEY(order_id) REFERENCES orders(id)
+    )`).run();
+    // Adicionar coluna sem_avaliacao em customers_cache se não existir
+    await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN sem_avaliacao INTEGER DEFAULT 0`).run().catch(() => {});
+    // Adicionar coluna survey_sent em orders se não existir
+    await env.DB.prepare(`ALTER TABLE orders ADD COLUMN survey_sent INTEGER DEFAULT 0`).run().catch(() => {});
+  } catch (e) { /* table já existe */ }
+}
+
+async function getAvaliacaoConfig(env) {
+  const defaults = {
+    ativo: true,
+    delay_horas: 2,
+    cron_ativo: true,
+    mensagem_pesquisa: 'Olá {nome}! 😊 Seu pedido foi entregue. *De 1 a 5, como foi seu atendimento conosco hoje?*\n\n5️⃣ Ótimo  4️⃣ Bom  3️⃣ Regular  2️⃣ Ruim  1️⃣ Péssimo\n\nResponda com o número! 👇',
+    mensagem_positiva: 'Que ótimo, {nome}! 🎉 Ficamos felizes que gostou! Que tal deixar uma avaliação no Google? Sua opinião nos ajuda muito!\n\n👉 {google_url}',
+    mensagem_negativa: 'Obrigado pelo retorno, {nome}. Sentimos muito que sua experiência não foi como esperado. 😔 Pode nos contar o que aconteceu? Assim podemos melhorar!',
+    mensagem_admin: '⚠️ *Avaliação baixa recebida!*\n\nCliente: {nome}\nTelefone: {telefone}\nNota: {score}/5\nPedido: #{pedido_id}',
+    google_url: '',
+    horario_inicio: 8,
+    horario_fim: 20,
+  };
+  try {
+    const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='avaliacao_config'").first();
+    if (row?.value) return { ...defaults, ...JSON.parse(row.value) };
+  } catch (_) {}
+  return defaults;
+}
+
+function montarMensagemAvaliacao(template, vars) {
+  return template
+    .replace(/{nome}/g, vars.nome || 'Cliente')
+    .replace(/{telefone}/g, vars.telefone || '')
+    .replace(/{score}/g, vars.score || '')
+    .replace(/{pedido_id}/g, vars.pedido_id || '')
+    .replace(/{google_url}/g, vars.google_url || '');
+}
+
+async function processarAvaliacoesCron(env) {
+  console.log('[avaliacao-cron] Iniciando processamento...');
+  try {
+    await ensureAvaliacaoTables(env);
+    const config = await getAvaliacaoConfig(env);
+    if (!config.ativo || !config.cron_ativo) {
+      console.log('[avaliacao-cron] Desativado nas configs');
+      return;
+    }
+
+    const hourBRT = new Date(Date.now() - 3*3600000).getUTCHours();
+    if (hourBRT < config.horario_inicio || hourBRT >= config.horario_fim) {
+      console.log(`[avaliacao-cron] Fora do horário permitido (${hourBRT}h BRT)`);
+      return;
+    }
+
+    const delayEpoch = Math.floor(Date.now() / 1000) - (config.delay_horas * 3600);
+    // Buscar pedidos entregues há >= delay_horas, sem survey enviada, sem flag sem_avaliacao
+    const { results: orders } = await env.DB.prepare(`
+      SELECT o.id, o.phone_digits, o.customer_name, o.delivered_at
+      FROM orders o
+      LEFT JOIN customers_cache cc ON cc.phone_digits = o.phone_digits
+      WHERE o.status = 'entregue'
+        AND o.survey_sent = 0
+        AND o.delivered_at IS NOT NULL
+        AND o.delivered_at <= ?
+        AND o.phone_digits IS NOT NULL
+        AND o.phone_digits != ''
+        AND o.phone_digits != '00000000000'
+        AND (cc.sem_avaliacao IS NULL OR cc.sem_avaliacao = 0)
+      ORDER BY o.delivered_at ASC
+      LIMIT 10
+    `).bind(delayEpoch).all();
+
+    if (!orders?.length) {
+      console.log('[avaliacao-cron] Nenhum pedido pendente de avaliação');
+      return;
+    }
+
+    console.log(`[avaliacao-cron] ${orders.length} pedido(s) para avaliar`);
+    let enviados = 0, erros = 0;
+
+    for (const order of orders) {
+      try {
+        const phone = order.phone_digits.replace(/\D/g, '');
+        const phoneIntl = phone.startsWith('55') ? phone : `55${phone}`;
+        const mensagem = montarMensagemAvaliacao(config.mensagem_pesquisa, {
+          nome: (order.customer_name || 'Cliente').split(' ')[0],
+        });
+
+        const result = await sendWhatsApp(env, phoneIntl, mensagem, { category: 'avaliacao' });
+
+        if (result?.blocked) {
+          console.log('[avaliacao-cron] ⚠️ WhatsApp bloqueado — parando envios!');
+          break;
+        }
+
+        // Marcar no orders
+        await env.DB.prepare('UPDATE orders SET survey_sent=1 WHERE id=?').bind(order.id).run();
+        // Registrar no satisfaction_surveys
+        await env.DB.prepare(`
+          INSERT OR IGNORE INTO satisfaction_surveys (order_id, phone_digits, customer_name, status)
+          VALUES (?, ?, ?, 'sent')
+        `).bind(order.id, order.phone_digits, order.customer_name || '').run();
+
+        enviados++;
+        console.log(`[avaliacao-cron] ✅ Enviado para pedido #${order.id} (${phone})`);
+        await new Promise(r => setTimeout(r, 3000));
+      } catch (e) {
+        erros++;
+        console.error(`[avaliacao-cron] ❌ Erro pedido #${order.id}:`, e.message);
+      }
+    }
+    console.log(`[avaliacao-cron] Concluído: ${enviados} enviados, ${erros} erros`);
+  } catch (e) {
+    console.error('[avaliacao-cron] Erro fatal:', e.message);
+  }
+}
+
+async function processarRespostaAvaliacao(env, phoneDigits, mensagemTexto) {
+  try {
+    const config = await getAvaliacaoConfig(env);
+    const score = parseInt((mensagemTexto || '').trim());
+    if (isNaN(score) || score < 1 || score > 5) return false; // não é uma resposta de avaliação
+
+    // Buscar survey pendente para este telefone (mais recente)
+    const survey = await env.DB.prepare(`
+      SELECT ss.*, o.id as oid
+      FROM satisfaction_surveys ss
+      JOIN orders o ON o.id = ss.order_id
+      WHERE ss.phone_digits = ? AND ss.status = 'sent'
+      ORDER BY ss.sent_at DESC LIMIT 1
+    `).bind(phoneDigits).first();
+
+    if (!survey) return false; // sem pesquisa pendente para este número
+
+    // Registrar resposta
+    await env.DB.prepare(`
+      UPDATE satisfaction_surveys SET score=?, answered_at=unixepoch(), status='answered'
+      WHERE id=?
+    `).bind(score, survey.id).run();
+
+    const nomeCliente = (survey.customer_name || 'Cliente').split(' ')[0];
+    const phoneIntl = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
+
+    if (score >= 5) {
+      // Enviar link Google Review
+      const googleUrl = config.google_url || 'https://g.page/r/moskogas';
+      const msg = montarMensagemAvaliacao(config.mensagem_positiva, {
+        nome: nomeCliente,
+        google_url: googleUrl,
+      });
+      await sendWhatsApp(env, phoneIntl, msg, { category: 'avaliacao' });
+      await env.DB.prepare('UPDATE satisfaction_surveys SET google_link_sent=1 WHERE id=?').bind(survey.id).run();
+      console.log(`[avaliacao-webhook] ⭐ Score 5 para pedido #${survey.order_id} — link Google enviado`);
+    } else {
+      // Enviar mensagem de follow-up ao cliente
+      const msgCliente = montarMensagemAvaliacao(config.mensagem_negativa, { nome: nomeCliente });
+      await sendWhatsApp(env, phoneIntl, msgCliente, { category: 'avaliacao' });
+      await env.DB.prepare('UPDATE satisfaction_surveys SET follow_up_sent=1 WHERE id=?').bind(survey.id).run();
+
+      // Alertar admins
+      try {
+        const { results: admins } = await env.DB.prepare(
+          "SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1 AND telefone IS NOT NULL"
+        ).all();
+        const msgAdmin = montarMensagemAvaliacao(config.mensagem_admin, {
+          nome: survey.customer_name || 'Desconhecido',
+          telefone: phoneDigits,
+          score: score,
+          pedido_id: survey.order_id,
+        });
+        for (const admin of (admins || [])) {
+          const adminPhone = admin.telefone.replace(/\D/g, '');
+          const adminIntl = adminPhone.startsWith('55') ? adminPhone : `55${adminPhone}`;
+          await sendWhatsApp(env, adminIntl, msgAdmin, { category: 'admin_alerta' });
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      } catch (e) { console.error('[avaliacao] Erro alertar admins:', e.message); }
+      console.log(`[avaliacao-webhook] ⚠️ Score ${score} para pedido #${survey.order_id} — follow-up enviado + admins alertados`);
+    }
+    return true;
+  } catch (e) {
+    console.error('[avaliacao] Erro processarResposta:', e.message);
+    return false;
+  }
+}
+// ══════════════════════════════════════════════════════════════
+// FIM MÓDULO AVALIAÇÃO
+// ══════════════════════════════════════════════════════════════
+
 // Roda a cada execução do cron (5 min default)
 // ══════════════════════════════════════════════════════════════
 async function checkPendingPixPayments(env) {

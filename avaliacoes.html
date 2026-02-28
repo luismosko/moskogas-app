@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MoskoGás — Avaliações v1.0.0</title>
+  <script src="shared.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; color: #1a202c; min-height: 100vh; }
+
+    .topbar { background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%); color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+    .topbar-back { background: rgba(255,255,255,.15); border: none; color: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 14px; transition: background .2s; }
+    .topbar-back:hover { background: rgba(255,255,255,.25); }
+    .topbar-title { font-size: 18px; font-weight: 700; flex: 1; }
+    .version-badge { background: rgba(255,255,255,.2); border-radius: 12px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+    /* STATS CARDS */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat-card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); border-left: 4px solid #ddd; }
+    .stat-card.blue { border-color: #3b82f6; }
+    .stat-card.green { border-color: #10b981; }
+    .stat-card.yellow { border-color: #f59e0b; }
+    .stat-card.red { border-color: #ef4444; }
+    .stat-card.purple { border-color: #8b5cf6; }
+    .stat-label { font-size: 11px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+    .stat-value { font-size: 28px; font-weight: 800; line-height: 1; }
+    .stat-sub { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+
+    /* CHART */
+    .chart-card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 24px; }
+    .chart-title { font-size: 15px; font-weight: 700; color: #374151; margin-bottom: 16px; }
+    .chart-bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding-top: 8px; }
+    .chart-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .chart-bar { width: 100%; border-radius: 4px 4px 0 0; background: #3b82f6; min-height: 4px; transition: all .3s; cursor: pointer; position: relative; }
+    .chart-bar:hover { opacity: .8; }
+    .chart-bar .tooltip { position: absolute; bottom: 105%; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 4px 8px; border-radius: 6px; font-size: 11px; white-space: nowrap; display: none; z-index: 10; }
+    .chart-bar:hover .tooltip { display: block; }
+    .chart-label { font-size: 9px; color: #9ca3af; text-align: center; }
+    .chart-nota-bars { display: flex; gap: 8px; margin-top: 16px; }
+    .nota-bar-item { flex: 1; text-align: center; }
+    .nota-bar-bg { background: #f3f4f6; border-radius: 4px; height: 8px; overflow: hidden; margin-bottom: 4px; }
+    .nota-bar-fill { height: 100%; border-radius: 4px; transition: width .5s; }
+    .fill-5 { background: #10b981; }
+    .fill-4 { background: #34d399; }
+    .fill-3 { background: #f59e0b; }
+    .fill-2 { background: #f97316; }
+    .fill-1 { background: #ef4444; }
+    .nota-bar-label { font-size: 10px; color: #6b7280; }
+    .nota-bar-count { font-size: 13px; font-weight: 700; }
+
+    /* TABS / FILTERS */
+    .filters-bar { background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .filter-tabs { display: flex; background: #f3f4f6; border-radius: 8px; padding: 3px; gap: 2px; }
+    .filter-tab { border: none; background: none; padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; color: #6b7280; font-weight: 500; transition: all .2s; }
+    .filter-tab.active { background: #fff; color: #1d4ed8; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .filter-date { display: flex; gap: 6px; align-items: center; }
+    .filter-date input { border: 1px solid #d1d5db; border-radius: 7px; padding: 6px 10px; font-size: 13px; }
+    .btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: #1d4ed8; color: #fff; }
+    .btn-primary:hover { background: #1e40af; }
+    .btn-success { background: #059669; color: #fff; }
+    .btn-success:hover { background: #047857; }
+    .btn-warning { background: #d97706; color: #fff; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .spacer { flex: 1; }
+
+    /* TABLE */
+    .table-card { background: #fff; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
+    .table-header { padding: 16px 20px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 10px; }
+    .table-title { font-size: 15px; font-weight: 700; color: #374151; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f9fafb; padding: 10px 14px; text-align: left; font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+    td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; font-size: 13px; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f9fafb; }
+
+    .score-badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 20px; padding: 3px 10px; font-weight: 700; font-size: 13px; }
+    .score-5 { background: #d1fae5; color: #065f46; }
+    .score-4 { background: #dcfce7; color: #166534; }
+    .score-3 { background: #fef3c7; color: #92400e; }
+    .score-2 { background: #fee2e2; color: #991b1b; }
+    .score-1 { background: #fecaca; color: #7f1d1d; }
+    .score-none { background: #f3f4f6; color: #6b7280; }
+
+    .status-badge { display: inline-block; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+    .status-sent { background: #dbeafe; color: #1d4ed8; }
+    .status-answered { background: #d1fae5; color: #065f46; }
+    .status-expired { background: #f3f4f6; color: #6b7280; }
+
+    .alert-badge { display: inline-flex; align-items: center; gap: 4px; background: #fee2e2; color: #b91c1c; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+
+    /* MODAL */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: #fff; border-radius: 16px; padding: 28px; max-width: 580px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+    .modal-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .modal-title { font-size: 18px; font-weight: 700; flex: 1; }
+    .modal-close { background: #f3f4f6; border: none; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 16px; }
+    .modal-close:hover { background: #e5e7eb; }
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+    .form-input { width: 100%; border: 1.5px solid #d1d5db; border-radius: 8px; padding: 9px 12px; font-size: 14px; transition: border .2s; }
+    .form-input:focus { outline: none; border-color: #1d4ed8; }
+    textarea.form-input { resize: vertical; min-height: 80px; font-family: inherit; }
+    .form-hint { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+    .btn-cancel { background: #f3f4f6; color: #374151; }
+    .btn-cancel:hover { background: #e5e7eb; }
+    .toggle-switch { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+    .toggle-switch input { display: none; }
+    .toggle-track { width: 40px; height: 22px; background: #d1d5db; border-radius: 11px; transition: background .2s; position: relative; }
+    .toggle-track::after { content: ''; position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+    .toggle-switch input:checked + .toggle-track { background: #059669; }
+    .toggle-switch input:checked + .toggle-track::after { left: 20px; }
+    .toggle-label { font-size: 14px; font-weight: 500; }
+
+    /* EMPTY STATE */
+    .empty-state { text-align: center; padding: 60px 20px; color: #9ca3af; }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state p { font-size: 15px; }
+
+    /* LOADING */
+    .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: #6b7280; gap: 10px; }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* PAGINATION */
+    .pagination { display: flex; justify-content: center; gap: 6px; padding: 16px; }
+    .page-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 7px; padding: 6px 12px; font-size: 13px; cursor: pointer; transition: all .2s; }
+    .page-btn:hover { background: #f3f4f6; }
+    .page-btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+
+    /* WEBHOOK INFO BOX */
+    .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+    .info-box-title { font-size: 13px; font-weight: 700; color: #1d4ed8; margin-bottom: 6px; }
+    .info-box-body { font-size: 12px; color: #1e40af; line-height: 1.6; }
+    .info-box code { background: #dbeafe; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+
+    @media (max-width: 640px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .filters-bar { flex-direction: column; align-items: stretch; }
+      table { font-size: 12px; }
+      td, th { padding: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="topbar-back" onclick="window.location.href='gestao.html'" title="Voltar">← Voltar</button>
+    <div class="topbar-title">⭐ Avaliações Pós-Compra</div>
+    <div class="version-badge">v1.0.0</div>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:none" onclick="abrirConfig()" title="Configurações">⚙️ Config</button>
+    <button class="btn btn-success btn-sm" onclick="executarCron()" title="Executar cron agora">▶ Rodar Cron</button>
+  </div>
+
+  <div class="container">
+    <!-- WEBHOOK INFO -->
+    <div class="info-box" id="webhookInfo">
+      <div class="info-box-title">📡 Configuração do Webhook IzChat</div>
+      <div class="info-box-body">
+        Configure no painel IzChat o webhook para mensagens recebidas apontando para:<br>
+        <code>https://api.moskogas.com.br/api/webhooks/izchat</code><br>
+        Assim o sistema captura automaticamente as respostas dos clientes (1-5). <a href="#" onclick="document.getElementById('webhookInfo').style.display='none';return false" style="color:#1d4ed8;font-weight:700">OK, entendi ×</a>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card blue"><div class="stat-label">Total Enviadas</div><div class="stat-value" id="statTotal">—</div><div class="stat-sub">pesquisas</div></div>
+      <div class="stat-card green"><div class="stat-label">Respondidas</div><div class="stat-value" id="statResp">—</div><div class="stat-sub" id="statRespPct">—</div></div>
+      <div class="stat-card purple"><div class="stat-label">Nota Média</div><div class="stat-value" id="statMedia">—</div><div class="stat-sub">de 5.0</div></div>
+      <div class="stat-card green"><div class="stat-label">Nota 5 ⭐</div><div class="stat-value" id="statN5">—</div><div class="stat-sub">Google Review enviado</div></div>
+      <div class="stat-card red"><div class="stat-label">Notas &lt; 5 ⚠️</div><div class="stat-value" id="statNeg">—</div><div class="stat-sub">follow-up enviado</div></div>
+    </div>
+
+    <!-- CHART NOTAS -->
+    <div class="chart-card">
+      <div class="chart-title">📊 Distribuição de Notas</div>
+      <div class="chart-nota-bars" id="notaBars">
+        <!-- JS preenchido -->
+      </div>
+    </div>
+
+    <!-- CHART TENDÊNCIA -->
+    <div class="chart-card">
+      <div class="chart-title">📈 Tendência — Últimos 30 Dias</div>
+      <div class="chart-bars" id="tendenciaChart"></div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="filters-bar">
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="setTab('all', this)">Todas</button>
+        <button class="filter-tab" onclick="setTab('sent', this)">Aguardando</button>
+        <button class="filter-tab" onclick="setTab('answered', this)">Respondidas</button>
+        <button class="filter-tab" onclick="setTab('answered_low', this)">⚠️ Notas Baixas</button>
+      </div>
+      <div class="filter-date">
+        <input type="date" id="filtroDesde" title="De">
+        <span style="color:#9ca3af">–</span>
+        <input type="date" id="filtroAte" title="Até">
+        <button class="btn btn-primary btn-sm" onclick="carregarAvaliacoes(1)">Filtrar</button>
+      </div>
+      <div class="spacer"></div>
+      <span style="font-size:12px;color:#9ca3af" id="totalLabel"></span>
+    </div>
+
+    <!-- TABLE -->
+    <div class="table-card">
+      <div id="tableContent">
+        <div class="loading"><span class="spin">⏳</span> Carregando avaliações...</div>
+      </div>
+      <div class="pagination" id="paginacao"></div>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIG -->
+  <div class="modal-overlay" id="modalConfig">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">⚙️ Configurações de Avaliação</div>
+        <button class="modal-close" onclick="fecharModal('modalConfig')">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="toggle-switch">
+          <input type="checkbox" id="cfgAtivo">
+          <div class="toggle-track"></div>
+          <span class="toggle-label">Módulo de Avaliação Ativo</span>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Delay após entrega (horas)</label>
+        <input type="number" class="form-input" id="cfgDelay" min="1" max="24" value="2">
+        <div class="form-hint">Tempo entre a entrega e o envio da pesquisa</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Horário de Envio (BRT)</label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="number" class="form-input" id="cfgHoraInicio" min="6" max="20" value="8" style="width:80px"> h
+          <span>até</span>
+          <input type="number" class="form-input" id="cfgHoraFim" min="12" max="22" value="20" style="width:80px"> h
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">URL do Google Review</label>
+        <input type="text" class="form-input" id="cfgGoogleUrl" placeholder="https://g.page/r/...">
+        <div class="form-hint">Enviado apenas para clientes que deram nota 5</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Mensagem da Pesquisa</label>
+        <textarea class="form-input" id="cfgMsgPesquisa" rows="5"></textarea>
+        <div class="form-hint">Use {nome} para o nome do cliente</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Mensagem para Nota 5 (Google Review)</label>
+        <textarea class="form-input" id="cfgMsgPositiva" rows="4"></textarea>
+        <div class="form-hint">Use {nome} e {google_url}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Mensagem para Notas 1-4 (Follow-up)</label>
+        <textarea class="form-input" id="cfgMsgNegativa" rows="4"></textarea>
+        <div class="form-hint">Use {nome}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Alerta para Admin (WhatsApp)</label>
+        <textarea class="form-input" id="cfgMsgAdmin" rows="4"></textarea>
+        <div class="form-hint">Use {nome}, {telefone}, {score}, {pedido_id}</div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-cancel" onclick="fecharModal('modalConfig')">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarConfig()">💾 Salvar Configurações</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ENVIO MANUAL -->
+  <div class="modal-overlay" id="modalEnvio">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <div class="modal-title">📤 Enviar Avaliação Manual</div>
+        <button class="modal-close" onclick="fecharModal('modalEnvio')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nº do Pedido</label>
+        <input type="number" class="form-input" id="envioOrderId" placeholder="Ex: 1234" min="1">
+      </div>
+      <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:16px">
+        ⚠️ O pedido precisa ter um telefone cadastrado e o cliente não pode ter a avaliação desativada.
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-cancel" onclick="fecharModal('modalEnvio')">Cancelar</button>
+        <button class="btn btn-primary" onclick="enviarManual()">📤 Enviar Pesquisa</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ─── GLOBALS ───────────────────────────────────────────────
+    let currentTab = 'all';
+    let currentPage = 1;
+    let configData = {};
+
+    // ─── INIT ──────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', async () => {
+      await checkAuth();
+      carregarAvaliacoes(1);
+    });
+
+    async function checkAuth() {
+      const token = localStorage.getItem('mg_session_token');
+      if (!token) { window.location.href = 'login.html'; return; }
+    }
+
+    // ─── TABS ──────────────────────────────────────────────────
+    function setTab(tab, el) {
+      currentTab = tab;
+      document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      carregarAvaliacoes(1);
+    }
+
+    // ─── CARREGAR AVALIAÇÕES ───────────────────────────────────
+    async function carregarAvaliacoes(page = 1) {
+      currentPage = page;
+      document.getElementById('tableContent').innerHTML = '<div class="loading"><span class="spin">⏳</span> Carregando...</div>';
+
+      const params = new URLSearchParams({ page });
+      if (currentTab === 'sent') params.set('status', 'sent');
+      else if (currentTab === 'answered' || currentTab === 'answered_low') params.set('status', 'answered');
+
+      const desde = document.getElementById('filtroDesde').value;
+      const ate = document.getElementById('filtroAte').value;
+      if (desde) params.set('desde', desde);
+      if (ate) params.set('ate', ate);
+
+      const token = localStorage.getItem('mg_session_token');
+      try {
+        const res = await fetch(`https://api.moskogas.com.br/api/avaliacoes?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        // Filtro local para notas baixas
+        let rows = data.surveys || [];
+        if (currentTab === 'answered_low') rows = rows.filter(r => r.score !== null && r.score < 5);
+
+        renderStats(data.stats);
+        renderNPS(data.stats);
+        renderTendencia(data.serie);
+        renderTabela(rows, data.total, data.pages);
+
+        document.getElementById('totalLabel').textContent = `${data.total} registros`;
+      } catch (e) {
+        document.getElementById('tableContent').innerHTML = '<div class="empty-state"><div class="icon">❌</div><p>Erro ao carregar: ' + e.message + '</p></div>';
+      }
+    }
+
+    // ─── RENDER STATS ──────────────────────────────────────────
+    function renderStats(s) {
+      if (!s) return;
+      const resp = s.respondidas || 0;
+      const total = s.total_enviadas || 0;
+      const pct = total ? Math.round(resp / total * 100) : 0;
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statResp').textContent = resp;
+      document.getElementById('statRespPct').textContent = `${pct}% taxa de resposta`;
+      document.getElementById('statMedia').textContent = s.media ? parseFloat(s.media).toFixed(1) : '—';
+      document.getElementById('statN5').textContent = s.nota5 || 0;
+      document.getElementById('statNeg').textContent = (s.nota4 || 0) + (s.nota3 || 0) + (s.nota12 || 0);
+    }
+
+    function renderNPS(s) {
+      if (!s) return;
+      const total = s.respondidas || 1;
+      const notas = [
+        { label: '⭐ 5', count: s.nota5 || 0, cls: 'fill-5' },
+        { label: '4', count: s.nota4 || 0, cls: 'fill-4' },
+        { label: '3', count: s.nota3 || 0, cls: 'fill-3' },
+        { label: '1-2', count: s.nota12 || 0, cls: 'fill-2' },
+      ];
+      document.getElementById('notaBars').innerHTML = notas.map(n => `
+        <div class="nota-bar-item">
+          <div class="nota-bar-count">${n.count}</div>
+          <div class="nota-bar-bg"><div class="nota-bar-fill ${n.cls}" style="width:${Math.round(n.count/total*100)}%"></div></div>
+          <div class="nota-bar-label">${n.label}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderTendencia(serie) {
+      const el = document.getElementById('tendenciaChart');
+      if (!serie || !serie.length) { el.innerHTML = '<div style="color:#9ca3af;font-size:13px;padding:20px">Sem dados suficientes</div>'; return; }
+      const maxEnv = Math.max(...serie.map(d => d.enviadas), 1);
+      el.innerHTML = serie.slice(-20).map(d => {
+        const h = Math.max(8, Math.round(d.enviadas / maxEnv * 110));
+        const dia = d.dia?.slice(5); // MM-DD
+        return `
+          <div class="chart-bar-wrap">
+            <div class="chart-bar" style="height:${h}px;background:${d.media_dia >= 4.5 ? '#10b981' : d.media_dia >= 3.5 ? '#f59e0b' : '#ef4444'}">
+              <div class="tooltip">${d.dia}: ${d.enviadas} env. / ${d.respondidas} resp. / ★${d.media_dia || '?'}</div>
+            </div>
+            <div class="chart-label">${dia}</div>
+          </div>`;
+      }).join('');
+    }
+
+    // ─── RENDER TABELA ─────────────────────────────────────────
+    function renderTabela(rows, total, pages) {
+      if (!rows.length) {
+        document.getElementById('tableContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Nenhuma avaliação encontrada</p></div>';
+        document.getElementById('paginacao').innerHTML = '';
+        return;
+      }
+
+      const html = `
+        <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Cliente</th>
+              <th>Enviada</th>
+              <th>Respondida</th>
+              <th>Nota</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => renderLinha(r)).join('')}
+          </tbody>
+        </table>
+        </div>`;
+
+      document.getElementById('tableContent').innerHTML = html;
+
+      // Paginação
+      const pags = [];
+      for (let i = 1; i <= Math.min(pages, 10); i++) {
+        pags.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="carregarAvaliacoes(${i})">${i}</button>`);
+      }
+      document.getElementById('paginacao').innerHTML = pags.join('');
+    }
+
+    function renderLinha(r) {
+      const scoreClass = r.score ? `score-${Math.min(r.score, 5)}` : 'score-none';
+      const scoreEmoji = r.score ? ['', '😤', '😞', '😐', '🙂', '😍'][r.score] : '';
+      const scoreText = r.score ? `${scoreEmoji} ${r.score}/5` : '—';
+      const statusClass = `status-${r.status}`;
+      const statusLabel = { sent: '⏳ Aguardando', answered: '✅ Respondida', expired: '⌛ Expirada' }[r.status] || r.status;
+      const datEnv = r.sent_at ? new Date(r.sent_at * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+      const datResp = r.answered_at ? new Date(r.answered_at * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+
+      const alertaBadge = (r.score !== null && r.score < 5 && r.status === 'answered')
+        ? '<span class="alert-badge">⚠️ Baixa</span>' : '';
+      const googleBadge = r.google_link_sent ? '<span style="font-size:11px;color:#059669">🔗 Google</span>' : '';
+
+      return `<tr>
+        <td><a href="gestao.html" style="color:#1d4ed8;font-weight:600">#${r.order_id}</a></td>
+        <td>
+          <div style="font-weight:600">${escHtml(r.customer_name || 'Desconhecido')}</div>
+          <div style="font-size:11px;color:#6b7280">${formatPhone(r.phone_digits)}</div>
+        </td>
+        <td style="font-size:12px">${datEnv}</td>
+        <td style="font-size:12px">${datResp}</td>
+        <td>
+          <span class="score-badge ${scoreClass}">${scoreText}</span><br>
+          ${alertaBadge} ${googleBadge}
+        </td>
+        <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+        <td>
+          <button class="btn btn-sm btn-warning" onclick="enviarPedido(${r.order_id})" title="Reenviar pesquisa">📤</button>
+          <button class="btn btn-sm" style="background:#f3f4f6" onclick="toggleSemAvaliacao('${r.phone_digits}', this)" title="Desativar avaliação para este cliente">🚫</button>
+        </td>
+      </tr>`;
+    }
+
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function formatPhone(p) { if (!p) return ''; const d = p.replace(/\D/g,''); if (d.length >= 12) return `(${d.slice(2,4)}) ${d.slice(4,9)}-${d.slice(9)}`; return p; }
+
+    // ─── AÇÕES ─────────────────────────────────────────────────
+    function enviarPedido(orderId) {
+      document.getElementById('envioOrderId').value = orderId;
+      document.getElementById('modalEnvio').classList.add('active');
+    }
+
+    async function enviarManual() {
+      const orderId = document.getElementById('envioOrderId').value;
+      if (!orderId) { showToast('Informe o número do pedido', 'warning'); return; }
+      const token = localStorage.getItem('mg_session_token');
+      try {
+        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/enviar', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: parseInt(orderId) })
+        });
+        const d = await res.json();
+        if (d.ok) { showToast('✅ Avaliação enviada!', 'success'); fecharModal('modalEnvio'); carregarAvaliacoes(currentPage); }
+        else showToast('❌ ' + (d.error || 'Erro'), 'error');
+      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+    }
+
+    async function toggleSemAvaliacao(phone, btn) {
+      if (!confirm('Desativar/ativar avaliação automática para este cliente?')) return;
+      const token = localStorage.getItem('mg_session_token');
+      try {
+        const res = await fetch(`https://api.moskogas.com.br/api/avaliacoes/cliente/${phone}/toggle`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const d = await res.json();
+        if (d.ok) {
+          showToast(d.sem_avaliacao ? '🚫 Avaliação desativada para este cliente' : '✅ Avaliação reativada', 'success');
+          carregarAvaliacoes(currentPage);
+        } else showToast('❌ ' + (d.error || 'Erro'), 'error');
+      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+    }
+
+    async function executarCron() {
+      const token = localStorage.getItem('mg_session_token');
+      try {
+        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/enviar-cron', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const d = await res.json();
+        if (d.ok) { showToast('▶ Cron executado!', 'success'); setTimeout(() => carregarAvaliacoes(currentPage), 1500); }
+        else showToast('❌ ' + (d.error || 'Sem permissão'), 'error');
+      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+    }
+
+    // ─── CONFIG ────────────────────────────────────────────────
+    async function abrirConfig() {
+      const token = localStorage.getItem('mg_session_token');
+      try {
+        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/config', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        configData = await res.json();
+        document.getElementById('cfgAtivo').checked = configData.ativo !== false;
+        document.getElementById('cfgDelay').value = configData.delay_horas || 2;
+        document.getElementById('cfgHoraInicio').value = configData.horario_inicio ?? 8;
+        document.getElementById('cfgHoraFim').value = configData.horario_fim ?? 20;
+        document.getElementById('cfgGoogleUrl').value = configData.google_url || '';
+        document.getElementById('cfgMsgPesquisa').value = configData.mensagem_pesquisa || '';
+        document.getElementById('cfgMsgPositiva').value = configData.mensagem_positiva || '';
+        document.getElementById('cfgMsgNegativa').value = configData.mensagem_negativa || '';
+        document.getElementById('cfgMsgAdmin').value = configData.mensagem_admin || '';
+        document.getElementById('modalConfig').classList.add('active');
+      } catch (e) { showToast('❌ Erro ao carregar config: ' + e.message, 'error'); }
+    }
+
+    async function salvarConfig() {
+      const token = localStorage.getItem('mg_session_token');
+      const cfg = {
+        ativo: document.getElementById('cfgAtivo').checked,
+        cron_ativo: true,
+        delay_horas: parseInt(document.getElementById('cfgDelay').value) || 2,
+        horario_inicio: parseInt(document.getElementById('cfgHoraInicio').value) || 8,
+        horario_fim: parseInt(document.getElementById('cfgHoraFim').value) || 20,
+        google_url: document.getElementById('cfgGoogleUrl').value.trim(),
+        mensagem_pesquisa: document.getElementById('cfgMsgPesquisa').value.trim(),
+        mensagem_positiva: document.getElementById('cfgMsgPositiva').value.trim(),
+        mensagem_negativa: document.getElementById('cfgMsgNegativa').value.trim(),
+        mensagem_admin: document.getElementById('cfgMsgAdmin').value.trim(),
+      };
+      try {
+        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/config', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfg)
+        });
+        const d = await res.json();
+        if (d.ok) { showToast('✅ Configurações salvas!', 'success'); fecharModal('modalConfig'); }
+        else showToast('❌ ' + (d.error || 'Erro'), 'error');
+      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+    }
+
+    // ─── MODAIS ────────────────────────────────────────────────
+    function fecharModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    // ─── TOAST ────────────────────────────────────────────────
+    function showToast(msg, type = 'info') {
+      const colors = { success: '#059669', error: '#dc2626', warning: '#d97706', info: '#1d4ed8' };
+      const t = document.createElement('div');
+      t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;background:${colors[type]||colors.info};color:#fff;padding:14px 20px;border-radius:12px;font-size:15px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.25);animation:slideIn .3s ease;max-width:380px`;
+      t.textContent = msg;
+      const style = document.createElement('style');
+      style.textContent = '@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}';
+      document.head.appendChild(style);
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+  </script>
+</body>
+</html>
