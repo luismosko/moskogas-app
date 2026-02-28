@@ -14,21 +14,15 @@
         }
         .btn { padding: 9px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 13px; color: #fff; }
 
-        /* Grade A4 — 2 colunas, grudadas, 5 linhas = 10 por página */
         .page-a4 {
-            width: 210mm;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0;
-            background: #fff;
-            padding: 8mm;
+            width: 210mm; margin: 0 auto;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+            background: #fff; padding: 8mm;
         }
 
         .vale {
             border: 1px solid #bbb;
-            width: 97mm;
-            height: 51mm;
+            width: 97mm; height: 51mm;
             display: grid;
             grid-template-rows: auto 1fr auto;
             overflow: hidden;
@@ -38,8 +32,7 @@
         /* Cabeçalho */
         .vale-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 2.5mm 3mm 2mm;
-            border-bottom: 1px solid #ccc;
+            padding: 2.5mm 3mm 2mm; border-bottom: 1px solid #ccc;
         }
         .logo-wrap img { height: 10.5mm; display: block; }
         .telefones { text-align: right; font-size: 9pt; font-weight: 900; line-height: 1.4; }
@@ -54,7 +47,6 @@
         .produto-titulo { font-size: 13pt; font-weight: 900; color: #111; line-height: 1.1; }
         .cliente-info { margin-top: 1mm; font-size: 6.5pt; color: #222; line-height: 1.5; }
         .cliente-info strong { font-size: 7pt; }
-        .validade-info { font-size: 6.5pt; color: #555; font-weight: 700; margin-top: 1mm; }
         .botijao-img { width: 17mm; opacity: 0.75; flex-shrink: 0; }
 
         /* Rodapé */
@@ -63,6 +55,8 @@
             padding: 1.5mm 3mm;
             display: flex; align-items: center; justify-content: space-between;
         }
+        .footer-left { display: flex; flex-direction: column; gap: 0.3mm; }
+        .validade-line { font-size: 6pt; font-weight: 700; color: #333; }
         .endereco { font-size: 6pt; font-weight: 700; line-height: 1.5; color: #333; }
         .nums-wrap { text-align: right; flex-shrink: 0; }
         .num-seq { font-size: 18pt; font-weight: 900; line-height: 1; }
@@ -73,7 +67,7 @@
             @page { size: A4 portrait; margin: 0; }
             body { background: transparent; padding: 0; }
             .print-controls { display: none !important; }
-            .page-a4 { width: 210mm; padding: 8mm; gap: 0; box-shadow: none; margin: 0; }
+            .page-a4 { width: 210mm; padding: 8mm; gap: 0; margin: 0; }
         }
     </style>
 </head>
@@ -100,14 +94,12 @@ const BOTIJAO_SRC = 'data:image/png;base64,/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCAIUA
 const CNPJ     = '12.977.901/0001-17';
 const TEL1     = '99333-0303';
 const TEL2     = '3026-5454';
-const ENDERECO = 'Retirar na<br>AV PANAMERICANA 295';
+const ENDERECO = 'Retirar na AV PANAMERICANA 295';
 
 const prodNome = { P13:'Gás P13', P20:'Gás P20', P45:'Gás P45', 'Água 20L':'Água 20L' };
 
-// Gera número de série único: ano (4) + nota_id (5) + vale_id (10) zero-padded
 function gerarSerie(notaId, valeId) {
-    const ano = new Date().getFullYear();
-    return ano + String(notaId).padStart(5,'0') + String(valeId).padStart(10,'0');
+    return new Date().getFullYear() + String(notaId).padStart(5,'0') + String(valeId).padStart(10,'0');
 }
 
 async function load() {
@@ -119,15 +111,17 @@ async function load() {
         document.getElementById('status-text').textContent =
             'Nota #' + nota.id + ' — ' + nota.cliente_nome + ' — ' + res.vales.length + ' vales';
 
-        const validadeHtml = nota.validade
-            ? '<div class="validade-info">Validade: ' + nota.validade + '</div>' : '';
-
         const html = res.vales.map((v, idx) => {
-            const produto  = prodNome[v.produto] || (v.produto || 'Gás P13');
-            const nf       = nota.nota_fiscal ? '<br>NF ' + nota.nota_fiscal : '';
-            const emp      = nota.empenho     ? '<br>' + nota.empenho : '';
-            const numSeq   = String(idx + 1).padStart(2, '0');   // 01, 02...
-            const serie    = gerarSerie(nota.id, v.id);           // 2026000010000000042
+            const produto = prodNome[v.produto] || (v.produto || 'Gás P13');
+            const nf      = nota.nota_fiscal ? 'NF ' + nota.nota_fiscal + '<br>' : '';
+            const emp     = nota.empenho     ? nota.empenho                      : '';
+            const numSeq  = String(idx + 1).padStart(2, '0');
+            const serie   = gerarSerie(nota.id, v.id);
+
+            // Validade — só aparece se preenchida
+            const validadeLine = nota.validade
+                ? '<div class="validade-line">Validade: ' + nota.validade + '</div>'
+                : '';
 
             return `<div class="vale">
                 <div class="vale-header">
@@ -141,14 +135,17 @@ async function load() {
                     <div class="produto-info">
                         <div class="produto-titulo">Vale 1 ${produto}</div>
                         <div class="cliente-info">
-                            <strong>${nota.cliente_nome}</strong>${nf}${emp}
+                            <strong>${nota.cliente_nome}</strong><br>
+                            ${nf}${emp}
                         </div>
-                        ${validadeHtml}
                     </div>
                     <img src="${BOTIJAO_SRC}" class="botijao-img" alt="botijao">
                 </div>
                 <div class="vale-footer">
-                    <div class="endereco">${ENDERECO}</div>
+                    <div class="footer-left">
+                        ${validadeLine}
+                        <div class="endereco">${ENDERECO}</div>
+                    </div>
                     <div class="nums-wrap">
                         <div class="num-seq"><small>Nº </small>${numSeq}</div>
                         <div class="num-serie">Série: ${serie}</div>
