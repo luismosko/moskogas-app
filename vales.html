@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.1.0 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.1.1 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.0</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.1</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
     <div style="margin-left:auto; display:flex; gap:8px;">
@@ -108,6 +108,9 @@
         <div style="display:flex;gap:12px">
             <div style="flex:1"><label>Nº Nota Fiscal (Opc.)</label><input type="text" id="n-nf" placeholder="Ex: 54321"></div>
             <div style="flex:1"><label>Nº Empenho (Opc.)</label><input type="text" id="n-empenho" placeholder="Ex: 2025NE00012"></div>
+        </div>
+        <div style="display:flex;gap:12px">
+            <div style="flex:1"><label>Validade (Opc.)</label><input type="text" id="n-validade" placeholder="Ex: 31/12/2025 ou Dez/2025"></div>
         </div>
 
         <div class="itens-wrap">
@@ -227,7 +230,7 @@ function renderTable() {
 
 function openNewModal() {
     itens = [];
-    ['n-cliente','n-nf','n-empenho'].forEach(id => document.getElementById(id).value = '');
+    ['n-cliente','n-nf','n-empenho','n-validade'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('searchName').value = '';
     document.getElementById('add-qtd').value = '10';
     document.getElementById('add-produto').value = 'P13';
@@ -311,7 +314,8 @@ async function salvarNota() {
             cliente_nome: cli, itens,
             forma_pagamento: document.getElementById('n-pgto').value,
             nota_fiscal: document.getElementById('n-nf').value.trim(),
-            empenho: document.getElementById('n-empenho').value.trim()
+            empenho: document.getElementById('n-empenho').value.trim(),
+            validade: document.getElementById('n-validade').value.trim()
         })});
         toast('✅ Nota #' + res.nota_id + ' emitida com sucesso!');
         closeNovaModal(); load();

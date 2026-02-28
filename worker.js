@@ -1,5 +1,5 @@
-// v2.43.2
-// v2.43.2: Vales — suporte multi-produto (P13/P20/P45/Água 20L) com itens_json + coluna produto nos vales
+// v2.43.3
+// v2.43.3: Vales — campo validade (opcional) na tabela notas_vales
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
@@ -1613,6 +1613,7 @@ async function ensureValesTables(env) {
   try { await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN nota_fiscal TEXT;").run(); } catch (e) { }
   try { await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN empenho TEXT;").run(); } catch (e) { }
   try { await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN itens_json TEXT DEFAULT '[]';").run(); } catch (e) { }
+  try { await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN validade TEXT DEFAULT '';").run(); } catch (e) { }
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS vales (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5834,19 +5835,16 @@ export default {
       // POST /api/vales/notas - Criar Nota e Vales
       if (method === 'POST' && path === '/api/vales/notas') {
         const body = await request.json();
-        const { cliente_nome, itens, forma_pagamento, nota_fiscal, empenho } = body;
+        const { cliente_nome, itens, forma_pagamento, nota_fiscal, empenho, validade } = body;
         if (!cliente_nome) return err('Nome do cliente obrigatório');
         if (!itens || !Array.isArray(itens) || itens.length === 0) return err('Adicione pelo menos um produto');
-
-        // Calcular quantidade total
         const quantidade = itens.reduce((s, it) => s + parseInt(it.quantidade || 0), 0);
         if (quantidade < 1) return err('Quantidade total deve ser maior que zero');
-
         let notaResult;
         try {
           notaResult = await env.DB.prepare(
-            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, itens_json, created_by, created_by_nome) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)'
-          ).bind(cliente_nome, '', quantidade, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', JSON.stringify(itens), authCheck.id, authCheck.nome).run();
+            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, itens_json, validade, created_by, created_by_nome) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(cliente_nome, '', quantidade, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', JSON.stringify(itens), validade || '', authCheck.id, authCheck.nome).run();
         } catch (dbErr) {
           return err('Erro ao salvar nota: ' + dbErr.message, 500);
         }
