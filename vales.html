@@ -1,685 +1,367 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.0.1 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.1.0 — MoskoGás</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: system-ui, sans-serif;
-            background: #f1f5f9;
-        }
-
-        .toolbar {
-            background: #fff;
-            padding: 12px 16px;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            align-items: center;
-            border-bottom: 2px solid #e2e8f0;
-            position: sticky;
-            top: 0;
-            z-index: 50;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        }
-
-        .toolbar input,
-        .toolbar select {
-            padding: 8px 12px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-            background: #f8fafc;
-        }
-
-        .toolbar input:focus,
-        .toolbar select:focus {
-            outline: none;
-            border-color: #f97316;
-        }
-
-        .btn {
-            padding: 8px 14px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 700;
-            font-size: 13px;
-        }
-
-        .btn-orange {
-            background: #f97316;
-            color: #fff;
-        }
-
-        .btn-blue {
-            background: #2563eb;
-            color: #fff;
-        }
-
-        .btn-green {
-            background: #16a34a;
-            color: #fff;
-        }
-
-        .btn-gray {
-            background: #94a3b8;
-            color: #fff;
-        }
-
-        .btn-red {
-            background: #dc2626;
-            color: #fff;
-        }
-
-        .btn:hover {
-            opacity: 0.85;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: #fff;
-        }
-
-        th {
-            background: #475569;
-            color: #fff;
-            padding: 8px 10px;
-            text-align: left;
-            font-size: 12px;
-            font-weight: 700;
-            white-space: nowrap;
-            position: sticky;
-            top: 58px;
-            z-index: 40;
-        }
-
-        td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 13px;
-            vertical-align: middle;
-        }
-
-        tr:hover td {
-            background: #f0f4ff;
-        }
-
-        tbody tr {
-            cursor: pointer;
-            transition: background .1s;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 700;
-            color: #fff;
-        }
-
-        .action-btns {
-            display: flex;
-            gap: 4px;
-            flex-wrap: nowrap;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: #f1f5f9; }
+        .toolbar { background:#fff; padding:12px 16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; border-bottom:2px solid #e2e8f0; position:sticky; top:0; z-index:50; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+        .btn { padding:8px 14px; border:none; border-radius:8px; cursor:pointer; font-weight:700; font-size:13px; }
+        .btn-orange { background:#f97316; color:#fff; }
+        .btn-blue   { background:#2563eb; color:#fff; }
+        .btn-green  { background:#16a34a; color:#fff; }
+        .btn-gray   { background:#94a3b8; color:#fff; }
+        .btn-red    { background:#dc2626; color:#fff; }
+        .btn:hover  { opacity:.85; }
+        table { width:100%; border-collapse:collapse; background:#fff; }
+        th { background:#475569; color:#fff; padding:8px 10px; text-align:left; font-size:12px; font-weight:700; white-space:nowrap; position:sticky; top:58px; z-index:40; }
+        td { padding:8px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; vertical-align:middle; }
+        tr:hover td { background:#f0f4ff; }
+        tbody tr { cursor:pointer; transition:background .1s; }
+        .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; color:#fff; }
         /* Modal */
-        .autocomplete-box {
-            position: relative;
-        }
-
-        #suggestions {
-            position: absolute;
-            top: calc(100% + 4px);
-            left: 0;
-            right: 0;
-            background: #fff;
-            border: 2px solid #f97316;
-            border-radius: 8px;
-            z-index: 100;
-            max-height: 250px;
-            overflow-y: auto;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        .suggestion-item {
-            padding: 10px 12px;
-            cursor: pointer;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 14px;
-        }
-
-        .suggestion-item:hover {
-            background: #fff7ed;
-        }
-
-        .suggestion-item strong {
-            color: #1e293b;
-        }
-
-        .suggestion-item small {
-            color: #64748b;
-        }
-
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.6);
-            z-index: 200;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-overlay.open {
-            display: flex;
-        }
-
-        .modal {
-            background: #fff;
-            border-radius: 14px;
-            padding: 24px;
-            width: min(560px, 95vw);
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal h2 {
-            font-size: 18px;
-            margin-bottom: 16px;
-            color: #1e293b;
-        }
-
-        .modal label {
-            display: block;
-            font-size: 12px;
-            font-weight: 700;
-            color: #64748b;
-            margin-bottom: 4px;
-            text-transform: uppercase;
-        }
-
-        .modal select,
-        .modal textarea,
-        .modal input {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-bottom: 12px;
-        }
-
-        .modal select:focus,
-        .modal input:focus {
-            outline: none;
-            border-color: #f97316;
-        }
-
-        .modal-footer {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-            margin-top: 8px;
-            flex-wrap: wrap;
-        }
-
-        .summary-bar {
-            background: #1e293b;
-            color: #fff;
-            padding: 12px 16px;
-            font-size: 14px;
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-
-        .summary-bar span strong {
-            color: #f97316;
-            font-size: 16px;
-        }
-
-        /* Vales sub-table */
-        .vales-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .vale-card {
-            padding: 10px;
-            border-radius: 8px;
-            border: 2px solid #e2e8f0;
-            text-align: center;
-        }
-
-        .vale-card.pendente {
-            background: #f0fdf4;
-            border-color: #bbf7d0;
-            color: #166534;
-        }
-
-        .vale-card.resgatado {
-            background: #fef2f2;
-            border-color: #fecaca;
-            color: #991b1b;
-        }
-
-        .autocomplete-box {
-            position: relative;
-        }
-
-        #suggestions {
-            position: absolute;
-            top: calc(100% - 10px);
-            left: 0;
-            right: 0;
-            background: #fff;
-            border: 2px solid #f97316;
-            border-top: none;
-            border-radius: 0 0 8px 8px;
-            z-index: 100;
-            max-height: 250px;
-            overflow-y: auto;
-            display: none;
-        }
-
-        .suggestion-item {
-            padding: 10px 12px;
-            cursor: pointer;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 14px;
-            text-align: left;
-            line-height: 1.3;
-        }
-
-        .suggestion-item:hover {
-            background: #fff7ed;
-        }
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:200; align-items:center; justify-content:center; }
+        .modal-overlay.open { display:flex; }
+        .modal { background:#fff; border-radius:14px; padding:24px; width:min(560px,95vw); max-height:90vh; overflow-y:auto; }
+        .modal label { display:block; font-size:11px; font-weight:700; color:#64748b; margin-bottom:4px; text-transform:uppercase; letter-spacing:.5px; }
+        .modal select, .modal input[type=text], .modal input[type=number] { width:100%; padding:10px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; margin-bottom:12px; }
+        .modal select:focus, .modal input:focus { outline:none; border-color:#f97316; }
+        .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+        /* Autocomplete */
+        .search-wrap { position:relative; margin-bottom:12px; }
+        .search-wrap input { margin-bottom:0; }
+        #suggestions { position:absolute; top:100%; left:0; right:0; background:#fff; border:2px solid #f97316; border-top:none; border-radius:0 0 8px 8px; z-index:300; max-height:220px; overflow-y:auto; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12); }
+        .sug-item { padding:10px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:14px; }
+        .sug-item:hover { background:#fff7ed; }
+        .sug-item strong { color:#1e293b; display:block; }
+        .sug-item small { color:#64748b; font-size:11px; }
+        /* Itens */
+        .itens-wrap { background:#f8fafc; border:2px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:12px; }
+        .itens-wrap h3 { font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:10px; }
+        .add-item-row { display:flex; gap:8px; align-items:flex-end; margin-bottom:10px; }
+        .add-item-row > div { flex:1; }
+        .add-item-row label { margin-bottom:3px; }
+        .add-item-row select, .add-item-row input { margin-bottom:0; }
+        .add-item-row .btn { flex-shrink:0; height:42px; }
+        .item-list { display:flex; flex-direction:column; gap:6px; }
+        .item-row { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; font-size:14px; }
+        .item-qtd { background:#f97316; color:#fff; border-radius:20px; padding:2px 10px; font-size:12px; font-weight:700; }
+        .item-name { font-weight:700; color:#1e293b; margin-left:10px; }
+        .rm-btn { background:none; border:none; color:#dc2626; cursor:pointer; font-size:20px; line-height:1; padding:0 4px; }
+        .rm-btn:hover { color:#991b1b; }
+        .empty-items { color:#94a3b8; font-size:13px; text-align:center; padding:12px 0; }
+        .total-bar { background:#1e293b; color:#fff; padding:10px 14px; border-radius:8px; font-size:15px; font-weight:700; margin-bottom:12px; display:flex; justify-content:space-between; }
+        .total-bar span { color:#f97316; }
+        /* View modal */
+        .summary-bar { background:#1e293b; color:#fff; padding:12px 16px; font-size:14px; display:flex; gap:20px; flex-wrap:wrap; border-radius:8px; margin-bottom:16px; }
+        .summary-bar strong { color:#f97316; }
+        .vales-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:6px; }
+        .vale-card { padding:8px; border-radius:8px; border:2px solid #e2e8f0; text-align:center; }
+        .vale-card.pendente  { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
+        .vale-card.resgatado { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+        .v-num { font-size:14px; font-weight:800; }
+        .v-sub { font-size:10px; color:#475569; margin-top:2px; }
+        .baixa-btn { margin-top:4px; cursor:pointer; background:#fff; border:1px solid #16a34a; color:#16a34a; border-radius:4px; font-size:10px; width:100%; padding:3px 0; }
     </style>
 </head>
-
 <body>
-    <div id="nav-placeholder"></div>
+<div id="nav-placeholder"></div>
 
-    <div class="toolbar">
-        <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de
-            Vale Gás</button>
-        <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.0.1</span>
-        <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
-        <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
-
-        <div style="margin-left:auto; display:flex; gap:8px;">
-            <input type="number" id="baixaValeId" placeholder="ID do Vale para Baixar" style="width:180px;"
-                onkeydown="if(event.key==='Enter') darBaixa(this.value)">
-            <button class="btn btn-red" onclick="darBaixa(document.getElementById('baixaValeId').value)">🎯 Dar Baixa
-                Rápida</button>
-        </div>
+<div class="toolbar">
+    <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.0</span>
+    <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
+    <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+        <input type="number" id="baixaValeId" placeholder="ID do Vale para Baixar" style="width:180px; padding:8px 12px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px;" onkeydown="if(event.key==='Enter') darBaixa(this.value)">
+        <button class="btn btn-red" onclick="darBaixa(document.getElementById('baixaValeId').value)">🎯 Dar Baixa Rápida</button>
     </div>
+</div>
 
-    <table>
-        <thead>
-            <tr>
-                <th># N° Nota</th>
-                <th>Data/Hora</th>
-                <th>Cliente (Empresa)</th>
-                <th>Forma Pgto</th>
-                <th>Tickets / Vale Gás</th>
-                <th>Status Resgates</th>
-                <th>Total R$</th>
-                <th>NF / Empenho</th>
-                <th>Ações</th>
-            </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-    </table>
+<table>
+    <thead>
+        <tr>
+            <th>#</th><th>Data/Hora</th><th>Cliente</th><th>Produtos</th>
+            <th>Pgto</th><th>Resgates</th><th>NF / Empenho</th><th>Ações</th>
+        </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+</table>
 
-    <!-- NOVA NOTA MODAL -->
-    <div class="modal-overlay" id="modal-nova">
-        <div class="modal">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                <h2 style="margin:0">🎫 Emitir Nova Nota de Vale Gás</h2>
-                <button onclick="closeNovaModal()"
-                    style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px"
-                    title="Fechar">&times;</button>
+<!-- MODAL NOVA NOTA -->
+<div class="modal-overlay" id="modal-nova">
+    <div class="modal">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h2 style="font-size:18px;color:#1e293b">🎫 Emitir Nova Nota de Vale Gás</h2>
+            <button onclick="closeNovaModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8" title="Fechar">&times;</button>
+        </div>
+
+        <label>🔍 Cliente / Empresa / Razão Social *</label>
+        <div class="search-wrap">
+            <input type="text" id="searchName" placeholder="Digite o nome para buscar..." autocomplete="off" oninput="buscaCliente()">
+            <input type="hidden" id="n-cliente">
+            <div id="suggestions"></div>
+        </div>
+
+        <div style="display:flex;gap:12px">
+            <div style="flex:1"><label>Nº Nota Fiscal (Opc.)</label><input type="text" id="n-nf" placeholder="Ex: 54321"></div>
+            <div style="flex:1"><label>Nº Empenho (Opc.)</label><input type="text" id="n-empenho" placeholder="Ex: 2025NE00012"></div>
+        </div>
+
+        <div class="itens-wrap">
+            <h3>📦 Produtos / Itens</h3>
+            <div class="add-item-row">
+                <div>
+                    <label>Produto</label>
+                    <select id="add-produto">
+                        <option value="P13">🔴 P13 — Botijão 13kg</option>
+                        <option value="P20">🟠 P20 — Botijão 20kg</option>
+                        <option value="P45">🟡 P45 — Botijão 45kg</option>
+                        <option value="Água 20L">💧 Água Mineral 20L</option>
+                    </select>
+                </div>
+                <div style="flex:0 0 90px"><label>Quantidade</label><input type="number" id="add-qtd" value="10" min="1" max="500"></div>
+                <button class="btn btn-orange" onclick="addItem()" style="padding:0 14px">+ Adicionar</button>
             </div>
-
-            <label>🔍 Buscar Cliente / Empresa / Razão Social *</label>
-            <div class="autocomplete-box search-fields"
-                style="background:#f8fafc; padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid #e2e8f0; position:relative;">
-                <div style="display:flex; gap:8px;">
-                    <div style="flex:1">
-                        <label>Nome / Razão</label>
-                        <input type="text" id="searchName" placeholder="Nome..." autocomplete="off"
-                            oninput="buscaCliente()">
-                    </div>
-                    <div style="flex:1">
-                        <label>Telefone</label>
-                        <input type="text" id="searchPhone" placeholder="Telefone..." autocomplete="off"
-                            oninput="buscaCliente()">
-                    </div>
-                </div>
-                <div style="display:flex; gap:8px;">
-                    <div style="flex:2">
-                        <label>Endereço</label>
-                        <input type="text" id="searchAddr" placeholder="Rua..." autocomplete="off"
-                            oninput="buscaCliente()">
-                    </div>
-                    <div style="flex:1">
-                        <label>CNPJ / CPF</label>
-                        <input type="text" id="n-doc" placeholder="00.000.000/0001-00">
-                    </div>
-                </div>
-                <input type="hidden" id="n-cliente">
-                <div id="suggestions" style="top:calc(100% + 4px); width:100%;"></div>
-            </div>
-
-            <div style="display:flex; gap:12px">
-                <div style="flex:1">
-                    <label>Nº da Nota Fiscal (Opc.)</label>
-                    <input type="text" id="n-nf" placeholder="Ex: 54321">
-                </div>
-                <div style="flex:1">
-                    <label>Nº do Empenho (Opc.)</label>
-                    <input type="text" id="n-empenho" placeholder="Ex: 2023NE00012">
-                </div>
-            </div>
-
-            <div style="display:flex; gap:12px">
-                <div style="flex:1">
-                    <label>Quantidade de Vale Gás *</label>
-                    <input type="number" id="n-qtd" value="10" min="1" max="500" oninput="calcTotal()">
-                </div>
-                <div style="flex:1">
-                    <label>Valor Unitário (R$) *</label>
-                    <input type="number" step="0.01" id="n-valor" value="115.00" oninput="calcTotal()">
-                </div>
-            </div>
-
-            <label>Forma de Pagamento *</label>
-            <select id="n-pgto">
-                <option value="dinheiro">💵 Dinheiro</option>
-                <option value="pix_vista">⚡ PIX à vista</option>
-                <option value="pix_receber">⏳ PIX a receber</option>
-                <option value="debito">💳 Cartão de Débito</option>
-                <option value="credito">💳 Cartão de Crédito</option>
-                <option value="mensalista">📅 Mensalista (Boleto/Fiado)</option>
-            </select>
-
-            <div
-                style="background:#f8fafc; padding:12px; border-radius:8px; margin-bottom:12px; font-weight:bold; font-size:16px; color:#1e293b; text-align:right">
-                TOTAL A COBRAR: R$ <span id="n-total">1150.00</span>
-            </div>
-
-            <div class="modal-footer">
-                <button class="btn btn-gray" onclick="closeNovaModal()">Cancelar</button>
-                <button class="btn btn-green" onclick="salvarNota()" id="n-btn-save">✅ Confirmar Emissão</button>
+            <div class="item-list" id="item-list">
+                <div class="empty-items">Nenhum produto adicionado ainda.</div>
             </div>
         </div>
-    </div>
 
-    <!-- DETALHES NOTA MODAL -->
-    <div class="modal-overlay" id="modal-view">
-        <div class="modal" style="width:min(700px,95vw);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                <h2 style="margin:0" id="det-title">Nota #</h2>
-                <button onclick="closeViewModal()"
-                    style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px"
-                    title="Fechar">&times;</button>
-            </div>
+        <label>Forma de Pagamento *</label>
+        <select id="n-pgto">
+            <option value="dinheiro">💵 Dinheiro</option>
+            <option value="pix_vista">⚡ PIX à vista</option>
+            <option value="pix_receber">⏳ PIX a receber</option>
+            <option value="debito">💳 Cartão de Débito</option>
+            <option value="credito">💳 Cartão de Crédito</option>
+            <option value="mensalista">📅 Mensalista (Boleto/Fiado)</option>
+        </select>
 
-            <div class="summary-bar" style="border-radius:8px; margin-bottom: 20px;">
-                <span id="det-cli"></span>
-                <span id="det-qty"></span>
-                <span id="det-total"></span>
-                <span id="det-resgatados"></span>
-            </div>
+        <div class="total-bar">
+            <span style="color:#fff">Total de Vales:</span>
+            <span id="n-total-vales">0 vales</span>
+        </div>
 
-            <h3 style="font-size:15px; margin-bottom: 10px; color:#475569;">Vale Gás Relacionados</h3>
-            <div class="vales-grid" id="det-vales-list"></div>
-
-            <div class="modal-footer" style="margin-top:20px;">
-                <button class="btn btn-gray" onclick="closeViewModal()">Fechar</button>
-                <button class="btn btn-blue" id="det-btn-print" onclick="imprimirAtual()">🖨️ Imprimir Tickets Formato
-                    A4</button>
-            </div>
+        <div class="modal-footer">
+            <button class="btn btn-gray" onclick="closeNovaModal()">Cancelar</button>
+            <button class="btn btn-green" onclick="salvarNota()" id="n-btn-save">✅ Confirmar Emissão</button>
         </div>
     </div>
+</div>
 
-    <script src="shared.js"></script>
-    <script>
-        document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+<!-- MODAL DETALHES -->
+<div class="modal-overlay" id="modal-view">
+    <div class="modal" style="width:min(700px,95vw);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h2 style="margin:0;font-size:18px;color:#1e293b" id="det-title">Nota #</h2>
+            <button onclick="closeViewModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8" title="Fechar">&times;</button>
+        </div>
+        <div class="summary-bar">
+            <span id="det-cli"></span>
+            <span id="det-qty"></span>
+            <span id="det-resgatados"></span>
+        </div>
+        <h3 style="font-size:14px;margin-bottom:10px;color:#475569">🎫 Vales Emitidos</h3>
+        <div class="vales-grid" id="det-vales-list"></div>
+        <div class="modal-footer" style="margin-top:20px;">
+            <button class="btn btn-gray" onclick="closeViewModal()">Fechar</button>
+            <button class="btn btn-blue" onclick="imprimirAtual()">🖨️ Imprimir A4</button>
+        </div>
+    </div>
+</div>
 
-        // Evitar erro de carregamento assíncrono do shared.js
-        window.addEventListener('DOMContentLoaded', () => {
-            if (typeof requireAdminOrAtendente === 'function') {
-                requireAdminOrAtendente();
-            }
-        });
+<script src="shared.js"></script>
+<script>
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+window.addEventListener('DOMContentLoaded', () => {
+    if (typeof requireAdminOrAtendente === 'function') requireAdminOrAtendente();
+});
 
-        let notasData = [];
-        let currentViewId = null;
-        let searchTimer = null;
+let notasData = [], currentViewId = null, searchTimer = null, itens = [];
 
-        async function load() {
-            showLoading('Carregando notas...');
-            try {
-                const res = await api('/api/vales/notas');
-                notasData = res.notas || [];
-                renderTable();
-                document.getElementById('count-badge').textContent = `${notasData.length} notas recentes`;
-            } catch (e) {
-                toast('Erro ao carregar: ' + e.message, 'error');
-            } finally {
-                hideLoading();
-            }
-        }
+async function load() {
+    showLoading('Carregando notas...');
+    try {
+        const res = await api('/api/vales/notas');
+        notasData = res.notas || [];
+        renderTable();
+        document.getElementById('count-badge').textContent = notasData.length + ' notas recentes';
+    } catch (e) { toast('Erro ao carregar: ' + e.message, 'error'); }
+    finally { hideLoading(); }
+}
 
-        function renderTable() {
-            const tbody = document.getElementById('tbody');
-            if (notasData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#94a3b8">Nenhuma emissão encontrada.</td></tr>';
-                return;
-            }
+function renderTable() {
+    const tbody = document.getElementById('tbody');
+    if (!notasData.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8">Nenhuma emissão encontrada.</td></tr>';
+        return;
+    }
+    const PL = { dinheiro:'💵 Dinheiro', pix_vista:'⚡ PIX Vista', pix_receber:'⏳ PIX Rec.', debito:'💳 Débito', credito:'💳 Crédito', mensalista:'📅 Mensalista' };
+    tbody.innerHTML = notasData.map(n => {
+        const d = new Date(n.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' });
+        const pco = n.resgatados === n.total_vales && n.total_vales > 0 ? '#16a34a' : (n.resgatados > 0 ? '#f59e0b' : '#64748b');
+        const badge = '<span class="badge" style="background:' + pco + '">' + n.resgatados + ' / ' + n.total_vales + ' resgatados</span>';
+        let itensHtml = '';
+        try {
+            const its = JSON.parse(n.itens_json || '[]');
+            itensHtml = its.map(it => '<span style="font-size:11px;background:#f1f5f9;padding:1px 6px;border-radius:8px;margin-right:3px">' + it.produto + ': ' + it.quantidade + '</span>').join('');
+        } catch(_) { itensHtml = '<span style="font-size:12px;color:#64748b">' + n.quantidade + ' vales</span>'; }
+        const docs = [];
+        if (n.nota_fiscal) docs.push('<strong>NF:</strong> ' + n.nota_fiscal);
+        if (n.empenho) docs.push('<strong>Emp:</strong> ' + n.empenho);
+        return '<tr onclick="viewNota(' + n.id + ')">' +
+            '<td><strong style="color:#2563eb">#' + n.id + '</strong></td>' +
+            '<td style="font-size:12px">' + d + '</td>' +
+            '<td><strong>' + n.cliente_nome + '</strong></td>' +
+            '<td>' + itensHtml + '</td>' +
+            '<td>' + (PL[n.forma_pagamento] || n.forma_pagamento) + '</td>' +
+            '<td>' + badge + '</td>' +
+            '<td style="font-size:11px;color:#475569">' + (docs.join('<br>') || '—') + '</td>' +
+            '<td><button class="btn btn-blue" onclick="event.stopPropagation(); window.open(\'print-vales.html?id=' + n.id + '\', \'_blank\')" style="padding:4px 8px;font-size:11px">🖨️ Imprimir</button></td>' +
+            '</tr>';
+    }).join('');
+}
 
-            const pgtoLabels = { dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX Vista', pix_receber: '⏳ PIX Rec.', debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista' };
+function openNewModal() {
+    itens = [];
+    ['n-cliente','n-nf','n-empenho'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('searchName').value = '';
+    document.getElementById('add-qtd').value = '10';
+    document.getElementById('add-produto').value = 'P13';
+    document.getElementById('n-pgto').value = 'dinheiro';
+    document.getElementById('suggestions').style.display = 'none';
+    renderItens();
+    document.getElementById('modal-nova').classList.add('open');
+    setTimeout(() => document.getElementById('searchName').focus(), 100);
+}
 
-            tbody.innerHTML = notasData.map(n => {
-                const d = new Date(n.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' });
-                const pco = n.resgatados === n.total_vales && n.total_vales > 0 ? '#16a34a' : (n.resgatados > 0 ? '#f59e0b' : '#64748b');
-                const badgeRes = `<span style="background:${pco}; color:#fff; border-radius:12px; padding:2px 8px; font-size:11px; font-weight:bold;">${n.resgatados} / ${n.total_vales} resgatados</span>`;
-                const docs = [];
-                if (n.nota_fiscal) docs.push('<strong>NF:</strong> ' + n.nota_fiscal);
-                if (n.empenho) docs.push('<strong>Emp:</strong> ' + n.empenho);
-                const exdocs = docs.length ? `<span style="font-size:11px;color:#475569">${docs.join('<br>')}</span>` : '—';
+function closeNovaModal() { document.getElementById('modal-nova').classList.remove('open'); }
 
-                return `<tr onclick="viewNota(${n.id})">
-            <td><strong style="color:#2563eb">#${n.id}</strong></td>
-            <td>${d}</td>
-            <td><strong>${n.cliente_nome}</strong>${n.cliente_doc ? '<br><small style="color:#94a3b8">' + n.cliente_doc + '</small>' : ''}</td>
-            <td>${pgtoLabels[n.forma_pagamento] || n.forma_pagamento}</td>
-            <td><strong>${n.quantidade}</strong> vales de R$ ${n.valor_unit.toFixed(2)}</td>
-            <td>${badgeRes}</td>
-            <td><strong style="color:#1e293b">R$ ${n.total.toFixed(2)}</strong></td>
-            <td>${exdocs}</td>
-            <td>
-                <button class="btn btn-blue" onclick="event.stopPropagation(); window.open('print-vales.html?id=${n.id}', '_blank')" style="padding:4px 8px; font-size:11px;">🖨️ Imprimir</button>
-            </td>
-        </tr>`;
+function buscaCliente() {
+    const name = document.getElementById('searchName').value.trim();
+    document.getElementById('n-cliente').value = name;
+    clearTimeout(searchTimer);
+    if (name.length < 2) { document.getElementById('suggestions').style.display = 'none'; return; }
+    searchTimer = setTimeout(async () => {
+        try {
+            const res = await api('/api/customer/search-multi?' + new URLSearchParams({ name }));
+            const box = document.getElementById('suggestions');
+            if (!res.length) { box.style.display = 'none'; return; }
+            box.innerHTML = res.map((c, i) => {
+                const bling = c.bling_contact_id ? '<span style="background:#16a34a;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;margin-left:6px">B</span>' : '';
+                return '<div class="sug-item" onclick="selecionaCliente(' + i + ')"><strong>' + (c.name || c.customer_name) + bling + '</strong><small>' + (c.address_line || '') + (c.bairro ? ' — ' + c.bairro : '') + '</small></div>';
             }).join('');
-        }
+            box._data = res;
+            box.style.display = 'block';
+        } catch(e) { console.error(e); }
+    }, 280);
+}
 
-        function openNewModal() {
-            document.getElementById('n-cliente').value = '';
-            document.getElementById('searchName').value = '';
-            document.getElementById('searchPhone').value = '';
-            document.getElementById('searchAddr').value = '';
-            document.getElementById('n-doc').value = '';
-            document.getElementById('n-nf').value = '';
-            document.getElementById('n-empenho').value = '';
-            document.getElementById('n-qtd').value = '10';
-            document.getElementById('n-valor').value = '115.00';
-            document.getElementById('n-pgto').value = 'dinheiro';
-            document.getElementById('suggestions').style.display = 'none';
-            calcTotal();
-            document.getElementById('modal-nova').classList.add('open');
-            document.getElementById('searchName').focus();
-        }
+function selecionaCliente(i) {
+    const c = document.getElementById('suggestions')._data[i];
+    const nome = c.name || c.customer_name || '';
+    document.getElementById('n-cliente').value = nome;
+    document.getElementById('searchName').value = nome;
+    document.getElementById('suggestions').style.display = 'none';
+}
 
-        function buscaCliente() {
-            clearTimeout(searchTimer);
-            const phone = document.getElementById('searchPhone').value.trim();
-            const name = document.getElementById('searchName').value.trim();
-            const addr = document.getElementById('searchAddr').value.trim();
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) {
+        const s = document.getElementById('suggestions');
+        if (s) s.style.display = 'none';
+    }
+});
 
-            if (Math.max(phone.length, name.length, addr.length) < 2) {
-                document.getElementById('suggestions').style.display = 'none';
-                return;
-            }
+function addItem() {
+    const produto = document.getElementById('add-produto').value;
+    const qtd = parseInt(document.getElementById('add-qtd').value) || 0;
+    if (qtd < 1) return toast('Quantidade deve ser maior que zero', 'error');
+    const existing = itens.find(it => it.produto === produto);
+    if (existing) { existing.quantidade += qtd; } else { itens.push({ produto, quantidade: qtd }); }
+    renderItens();
+    document.getElementById('add-qtd').value = '10';
+}
 
-            searchTimer = setTimeout(async () => {
-                try {
-                    const params = new URLSearchParams();
-                    if (phone.length >= 2) params.set('phone', phone);
-                    if (name.length >= 2) params.set('name', name);
-                    if (addr.length >= 2) params.set('addr', addr);
+function removeItem(idx) { itens.splice(idx, 1); renderItens(); }
 
-                    // Add protection to avoid empty queries from firing accidentally
-                    if ([...params.keys()].length === 0) {
-                        document.getElementById('suggestions').style.display = 'none';
-                        return;
-                    }
+function renderItens() {
+    const list = document.getElementById('item-list');
+    const total = itens.reduce((s, it) => s + it.quantidade, 0);
+    document.getElementById('n-total-vales').textContent = total + ' vales';
+    if (!itens.length) { list.innerHTML = '<div class="empty-items">Nenhum produto adicionado ainda.</div>'; return; }
+    const icons = { P13:'🔴', P20:'🟠', P45:'🟡', 'Água 20L':'💧' };
+    list.innerHTML = itens.map((it, i) =>
+        '<div class="item-row"><div style="display:flex;align-items:center"><span class="item-qtd">' + it.quantidade + 'x</span>' +
+        '<span class="item-name">' + (icons[it.produto] || '📦') + ' ' + it.produto + '</span></div>' +
+        '<button class="rm-btn" onclick="removeItem(' + i + ')" title="Remover">&times;</button></div>'
+    ).join('');
+}
 
-                    const res = await api('/api/customer/search-multi?' + params.toString());
-                    const box = document.getElementById('suggestions');
-                    if (!res.length) { box.style.display = 'none'; return; }
+async function salvarNota() {
+    const cli = document.getElementById('n-cliente').value.trim() || document.getElementById('searchName').value.trim();
+    if (!cli) return toast('Insira o nome do cliente', 'error');
+    if (!itens.length) return toast('Adicione pelo menos um produto', 'error');
+    const btn = document.getElementById('n-btn-save');
+    btn.disabled = true; btn.textContent = 'Aguarde...';
+    try {
+        const res = await api('/api/vales/notas', { method: 'POST', body: JSON.stringify({
+            cliente_nome: cli, itens,
+            forma_pagamento: document.getElementById('n-pgto').value,
+            nota_fiscal: document.getElementById('n-nf').value.trim(),
+            empenho: document.getElementById('n-empenho').value.trim()
+        })});
+        toast('✅ Nota #' + res.nota_id + ' emitida com sucesso!');
+        closeNovaModal(); load();
+        setTimeout(() => window.open('print-vales.html?id=' + res.nota_id, '_blank'), 500);
+    } catch(e) { toast(e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = '✅ Confirmar Emissão'; }
+}
 
-                    box.innerHTML = res.map((c, i) => {
-                        const bgLabel = c.bling_contact_id ? `<span style="background:#16a34a;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;margin-left:6px" title="Bling Cadastrado">B</span>` : '';
-                        return `<div class="suggestion-item" onclick="selecionaCliente(${i})">
-                            <strong>${c.name || c.customer_name}</strong>${bgLabel}<br>
-                            <small>${c.address_line || ''} ${c.bairro ? '- ' + c.bairro : ''}</small>
-                        </div>`;
-                    }).join('');
-                    box._data = res;
-                    box.style.display = 'block';
-                } catch (e) { console.error('Busca error:', e); }
-            }, 300);
-        }
+async function viewNota(id) {
+    currentViewId = id;
+    showLoading('Buscando detalhes...');
+    try {
+        const res = await api('/api/vales/notas/' + id);
+        document.getElementById('det-title').textContent = 'Nota de Vale Gás #' + res.nota.id;
+        document.getElementById('det-cli').innerHTML = '🏢 <strong>' + res.nota.cliente_nome + '</strong>';
+        document.getElementById('det-qty').innerHTML = '🎫 Emitidos: <strong>' + res.nota.quantidade + '</strong>';
+        let regs = 0;
+        const grid = res.vales.map(v => {
+            if (v.status === 'resgatado') regs++;
+            const cl = v.status === 'resgatado' ? 'resgatado' : 'pendente';
+            const sub = v.status === 'resgatado'
+                ? '<div class="v-sub">Resgatado ' + new Date(v.resgatado_em * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' }) + '</div>'
+                : '<button class="baixa-btn" onclick="darBaixa(' + v.id + ')">✅ Dar Baixa</button>';
+            return '<div class="vale-card ' + cl + '"><div class="v-num">' + (v.status==='resgatado'?'❌':'🎫') + ' ' + v.numero + '</div><div class="v-sub">ID: ' + v.id + '</div>' + sub + '</div>';
+        }).join('');
+        document.getElementById('det-resgatados').innerHTML = '🔄 Resgatados: <strong>' + regs + ' / ' + res.vales.length + '</strong>';
+        document.getElementById('det-vales-list').innerHTML = grid;
+        document.getElementById('modal-view').classList.add('open');
+    } catch(e) { toast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
 
-        function selecionaCliente(i) {
-            const c = document.getElementById('suggestions')._data[i];
-            document.getElementById('n-cliente').value = c.name || c.customer_name || '';
-            document.getElementById('searchName').value = c.name || c.customer_name || '';
-            document.getElementById('searchPhone').value = c.phone_digits || '';
-            document.getElementById('n-doc').value = c.cpf_cnpj || '';
-            document.getElementById('suggestions').style.display = 'none';
-        }
+function closeViewModal() { document.getElementById('modal-view').classList.remove('open'); currentViewId = null; }
+function imprimirAtual() { if (currentViewId) window.open('print-vales.html?id=' + currentViewId, '_blank'); }
 
-        document.addEventListener('click', e => {
-            if (!e.target.closest('.autocomplete-box')) {
-                const s = document.getElementById('suggestions');
-                if (s) s.style.display = 'none';
-            }
-        });
+async function darBaixa(valeId) {
+    if (!valeId) return;
+    if (!confirm('Confirma a BAIXA do Vale ID ' + valeId + '?\n\nEsta ação não poderá ser desfeita.')) return;
+    showLoading('Baixando vale...');
+    try {
+        await api('/api/vales/' + valeId + '/baixa', { method: 'PATCH' });
+        toast('✅ Vale baixado com sucesso!');
+        await load();
+        if (currentViewId) await viewNota(currentViewId);
+        document.getElementById('baixaValeId').value = '';
+    } catch(e) { toast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
 
-        function closeNovaModal() { document.getElementById('modal-nova').classList.remove('open'); }
-
-        function calcTotal() {
-            const q = parseFloat(document.getElementById('n-qtd').value) || 0;
-            const v = parseFloat(document.getElementById('n-valor').value) || 0;
-            document.getElementById('n-total').textContent = (q * v).toFixed(2);
-        }
-
-        async function salvarNota() {
-            const cli = document.getElementById('n-cliente').value.trim() || document.getElementById('searchName').value.trim();
-            document.getElementById('n-cliente').value = cli; // Sincroniza o hidden
-            if (!cli) return toast('Insira o nome do cliente', 'error');
-            const b = document.getElementById('n-btn-save'); b.disabled = true; b.textContent = "Aguarde...";
-            try {
-                const payload = {
-                    cliente_nome: cli,
-                    cliente_doc: document.getElementById('n-doc').value.trim(),
-                    quantidade: document.getElementById('n-qtd').value,
-                    valor_unit: document.getElementById('n-valor').value,
-                    forma_pagamento: document.getElementById('n-pgto').value,
-                    nota_fiscal: document.getElementById('n-nf').value.trim(),
-                    empenho: document.getElementById('n-empenho').value.trim()
-                };
-                const res = await api('/api/vales/notas', { method: 'POST', body: JSON.stringify(payload) });
-                toast(`✅ Nota #${res.nota_id} emitida com sucesso!`);
-                closeNovaModal();
-                load();
-                setTimeout(() => window.open(`print-vales.html?id=${res.nota_id}`, '_blank'), 500);
-            } catch (e) { toast(e.message, 'error'); }
-            finally { b.disabled = false; b.textContent = "✅ Confirmar Emissão"; }
-        }
-
-        async function viewNota(id) {
-            currentViewId = id;
-            showLoading('Buscando detalhes...');
-            try {
-                const res = await api(`/api/vales/notas/${id}`);
-                document.getElementById('det-title').textContent = `Nota de Vale Gás #${res.nota.id}`;
-                document.getElementById('det-cli').innerHTML = `🏢 Cliente: <strong>${res.nota.cliente_nome}</strong>`;
-                document.getElementById('det-qty').innerHTML = `🎫 Emitidos: <strong>${res.nota.quantidade}</strong>`;
-                document.getElementById('det-total').innerHTML = `💰 Total: <strong>R$ ${res.nota.total.toFixed(2)}</strong>`;
-
-                let regs = 0;
-                const grid = res.vales.map(v => {
-                    if (v.status === 'resgatado') regs++;
-                    const cl = v.status === 'resgatado' ? 'resgatado' : 'pendente';
-                    const icon = v.status === 'resgatado' ? '❌' : '🎫';
-                    const sub = v.status === 'resgatado' ? `Uso: ${new Date(v.resgatado_em * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande' })}` : '<button onclick="darBaixa(' + v.id + ')" style="margin-top:6px; cursor:pointer; background:#fff; border:1px solid #16a34a; color:#16a34a; border-radius:4px; font-size:10px; width:100%">Dar Baixa</button>';
-                    return `
-            <div class="vale-card ${cl}">
-                <div style="font-size:20px; font-weight:800; margin-bottom:4px;">${icon} ${v.numero}</div>
-                <div style="font-size:10px; color:#475569;">ID Sis: ${v.id}</div>
-                ${sub}
-            </div>`;
-                }).join('');
-
-                document.getElementById('det-resgatados').innerHTML = `🔄 Resgatados: <strong>${regs} / ${res.vales.length}</strong>`;
-                document.getElementById('det-vales-list').innerHTML = grid;
-                document.getElementById('modal-view').classList.add('open');
-            } catch (e) { toast(e.message, 'error'); }
-            finally { hideLoading(); }
-        }
-
-        function closeViewModal() { document.getElementById('modal-view').classList.remove('open'); currentViewId = null; }
-
-        function imprimirAtual() {
-            if (currentViewId) window.open(`print-vales.html?id=${currentViewId}`, '_blank');
-        }
-
-        async function darBaixa(valeId) {
-            if (!valeId) return;
-            if (!confirm(`Confirma a BAIXA do Vale ID ${valeId}?\n\nEsta ação não poderá ser desfeita.`)) return;
-            showLoading('Baixando vale...');
-            try {
-                await api(`/api/vales/${valeId}/baixa`, { method: 'PATCH' });
-                toast('✅ Vale BAIXADO com sucesso!');
-                await load();
-                if (currentViewId) await viewNota(currentViewId);
-                document.getElementById('baixaValeId').value = '';
-            } catch (e) { toast(e.message, 'error'); }
-            finally { hideLoading(); }
-        }
-
-        load();
-    </script>
+load();
+</script>
 </body>
-
 </html>

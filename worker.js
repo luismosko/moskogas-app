@@ -1,5 +1,5 @@
-// v2.43.0
-// v2.43.0: 🎟️ Módulo de Vales/Tickets (API, Controle e Baixas)
+// v2.43.2
+// v2.43.2: Vales — suporte multi-produto (P13/P20/P45/Água 20L) com itens_json + coluna produto nos vales
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
@@ -1597,11 +1597,12 @@ async function ensureValesTables(env) {
     cliente_nome TEXT NOT NULL,
     cliente_doc TEXT,
     quantidade INTEGER NOT NULL,
-    valor_unit REAL NOT NULL,
-    total REAL NOT NULL,
+    valor_unit REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
     forma_pagamento TEXT,
     nota_fiscal TEXT,
     empenho TEXT,
+    itens_json TEXT DEFAULT '[]',
     bling_pedido_id TEXT,
     bling_pedido_num TEXT,
     created_by INTEGER,
@@ -1609,22 +1610,22 @@ async function ensureValesTables(env) {
     created_at INTEGER DEFAULT (unixepoch())
   )`).run().catch(() => { });
 
-  try {
-    await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN nota_fiscal TEXT;").run();
-  } catch (e) { }
-  try {
-    await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN empenho TEXT;").run();
-  } catch (e) { }
+  try { await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN nota_fiscal TEXT;").run(); } catch (e) { }
+  try { await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN empenho TEXT;").run(); } catch (e) { }
+  try { await env.DB.prepare("ALTER TABLE notas_vales ADD COLUMN itens_json TEXT DEFAULT '[]';").run(); } catch (e) { }
 
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS vales (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nota_id INTEGER NOT NULL,
     numero TEXT NOT NULL,
+    produto TEXT DEFAULT 'P13',
     status TEXT DEFAULT 'pendente',
     resgatado_em INTEGER,
     resgatado_por TEXT,
     FOREIGN KEY(nota_id) REFERENCES notas_vales(id)
   )`).run().catch(() => { });
+
+  try { await env.DB.prepare("ALTER TABLE vales ADD COLUMN produto TEXT DEFAULT 'P13';").run(); } catch (e) { }
 }
 
 export default {
@@ -5833,23 +5834,33 @@ export default {
       // POST /api/vales/notas - Criar Nota e Vales
       if (method === 'POST' && path === '/api/vales/notas') {
         const body = await request.json();
-        const { cliente_nome, cliente_doc, quantidade, valor_unit, forma_pagamento, nota_fiscal, empenho } = body;
-        if (!cliente_nome || !quantidade || !valor_unit) return err('Dados incompletos');
-        const total = parseFloat(quantidade) * parseFloat(valor_unit);
+        const { cliente_nome, itens, forma_pagamento, nota_fiscal, empenho } = body;
+        if (!cliente_nome) return err('Nome do cliente obrigatório');
+        if (!itens || !Array.isArray(itens) || itens.length === 0) return err('Adicione pelo menos um produto');
+
+        // Calcular quantidade total
+        const quantidade = itens.reduce((s, it) => s + parseInt(it.quantidade || 0), 0);
+        if (quantidade < 1) return err('Quantidade total deve ser maior que zero');
 
         let notaResult;
         try {
           notaResult = await env.DB.prepare(
-            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, created_by, created_by_nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-          ).bind(cliente_nome, cliente_doc || '', parseInt(quantidade), parseFloat(valor_unit.toString().replace(',', '.')), total, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', authCheck.id, authCheck.nome).run();
+            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, itens_json, created_by, created_by_nome) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)'
+          ).bind(cliente_nome, '', quantidade, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', JSON.stringify(itens), authCheck.id, authCheck.nome).run();
         } catch (dbErr) {
-          return err('Erro ao salvar nota no banco de dados: ' + dbErr.message, 500);
+          return err('Erro ao salvar nota: ' + dbErr.message, 500);
         }
         const notaId = notaResult.meta?.last_row_id;
 
-        for (let i = 1; i <= parseInt(quantidade); i++) {
-          const num = String(i).padStart(3, '0');
-          await env.DB.prepare('INSERT INTO vales (nota_id, numero, status) VALUES (?, ?, "pendente")').bind(notaId, num).run();
+        // Gerar vales por produto com prefixo (P13-001, P45-001, A20-001)
+        const prefixMap = { 'P13': 'P13', 'P20': 'P20', 'P45': 'P45', 'Água 20L': 'A20' };
+        for (const item of itens) {
+          const prefix = prefixMap[item.produto] || item.produto.replace(/\s+/g, '').toUpperCase().slice(0, 3);
+          const qtd = parseInt(item.quantidade || 0);
+          for (let i = 1; i <= qtd; i++) {
+            const num = `${prefix}-${String(i).padStart(3, '0')}`;
+            await env.DB.prepare('INSERT INTO vales (nota_id, numero, produto, status) VALUES (?, ?, ?, "pendente")').bind(notaId, num, item.produto).run();
+          }
         }
 
         return json({ ok: true, nota_id: notaId });
