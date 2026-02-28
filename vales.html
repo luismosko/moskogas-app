@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.1.3 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.1.4 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,9 +71,16 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.3</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.4</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
+
+    <!-- Filtros -->
+    <div style="display:flex;gap:4px;margin-left:8px;background:#f1f5f9;border-radius:8px;padding:3px;">
+        <button id="filt-todos"    onclick="setFiltro('todos')"      style="padding:5px 12px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#2563eb;color:#fff;">Todos</button>
+        <button id="filt-ativos"   onclick="setFiltro('ativos')"     style="padding:5px 12px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">🟢 Ativos</button>
+        <button id="filt-completos" onclick="setFiltro('completos')" style="padding:5px 12px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">✅ Resgatados</button>
+    </div>
     <div style="margin-left:auto; display:flex; gap:8px;">
         <input type="number" id="baixaValeId" placeholder="ID do Vale para Baixar" style="width:180px; padding:8px 12px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px;" onkeydown="if(event.key==='Enter') darBaixa(this.value)">
         <button class="btn btn-red" onclick="darBaixa(document.getElementById('baixaValeId').value)">🎯 Dar Baixa Rápida</button>
@@ -190,7 +197,17 @@ window.addEventListener('DOMContentLoaded', () => {
     if (typeof requireAdminOrAtendente === 'function') requireAdminOrAtendente();
 });
 
-let notasData = [], currentViewId = null, searchTimer = null, itens = [];
+let notasData = [], currentViewId = null, searchTimer = null, itens = [], filtroAtual = 'todos';
+
+function setFiltro(f) {
+    filtroAtual = f;
+    ['todos','ativos','completos'].forEach(id => {
+        const btn = document.getElementById('filt-' + id);
+        btn.style.background = id === f ? '#2563eb' : 'transparent';
+        btn.style.color      = id === f ? '#fff'    : '#64748b';
+    });
+    renderTable();
+}
 
 async function load() {
     showLoading('Carregando notas...');
@@ -205,12 +222,18 @@ async function load() {
 
 function renderTable() {
     const tbody = document.getElementById('tbody');
-    if (!notasData.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8">Nenhuma emissão encontrada.</td></tr>';
+    let dados = notasData;
+    if (filtroAtual === 'ativos')    dados = notasData.filter(n => n.resgatados < n.total_vales);
+    if (filtroAtual === 'completos') dados = notasData.filter(n => n.resgatados >= n.total_vales && n.total_vales > 0);
+    if (!dados.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8">' +
+            (filtroAtual === 'ativos' ? 'Nenhuma nota com vales em aberto.' :
+             filtroAtual === 'completos' ? 'Nenhuma nota totalmente resgatada.' :
+             'Nenhuma emissão encontrada.') + '</td></tr>';
         return;
     }
     const PL = { dinheiro:'💵 Dinheiro', pix_vista:'⚡ PIX Vista', pix_receber:'⏳ PIX Rec.', debito:'💳 Débito', credito:'💳 Crédito', mensalista:'📅 Mensalista' };
-    tbody.innerHTML = notasData.map(n => {
+    tbody.innerHTML = dados.map(n => {
         const d = new Date(n.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' });
         const pco = n.resgatados === n.total_vales && n.total_vales > 0 ? '#16a34a' : (n.resgatados > 0 ? '#f59e0b' : '#64748b');
         const badge = '<span class="badge" style="background:' + pco + '">' + n.resgatados + ' / ' + n.total_vales + ' resgatados</span>';
