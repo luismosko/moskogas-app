@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.1.1 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.1.2 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.1</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.2</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
     <div style="margin-left:auto; display:flex; gap:8px;">
@@ -167,7 +167,13 @@
             <span id="det-qty"></span>
             <span id="det-resgatados"></span>
         </div>
-        <h3 style="font-size:14px;margin-bottom:10px;color:#475569">🎫 Vales Emitidos</h3>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <h3 style="font-size:14px;color:#475569;flex:1">🎫 Vales Emitidos</h3>
+            <input type="text" id="busca-vale" placeholder="🔍 Buscar Nº ou ID do ticket..." autocomplete="off"
+                oninput="filtrarVales(this.value)"
+                style="padding:7px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:13px;width:220px;outline:none;"
+                onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'">
+        </div>
         <div class="vales-grid" id="det-vales-list"></div>
         <div class="modal-footer" style="margin-top:20px;">
             <button class="btn btn-gray" onclick="closeViewModal()">Fechar</button>
@@ -343,6 +349,8 @@ async function viewNota(id) {
         }).join('');
         document.getElementById('det-resgatados').innerHTML = '🔄 Resgatados: <strong>' + regs + ' / ' + res.vales.length + '</strong>';
         document.getElementById('det-vales-list').innerHTML = grid;
+        document.getElementById('busca-vale').value = '';
+        document.getElementById('det-vales-list').innerHTML = '';
         document.getElementById('modal-view').classList.add('open');
     } catch(e) { toast(e.message, 'error'); }
     finally { hideLoading(); }
@@ -350,6 +358,21 @@ async function viewNota(id) {
 
 function closeViewModal() { document.getElementById('modal-view').classList.remove('open'); currentViewId = null; }
 function imprimirAtual() { if (currentViewId) window.open('print-vales.html?id=' + currentViewId, '_blank'); }
+
+function filtrarVales(q) {
+    const termo = q.trim().toLowerCase();
+    const cards = document.querySelectorAll('#det-vales-list .vale-card');
+    cards.forEach(card => {
+        const txt = card.textContent.toLowerCase();
+        if (!termo || txt.includes(termo)) {
+            card.style.display = '';
+            card.style.outline = termo ? '2px solid #f97316' : '';
+        } else {
+            card.style.display = 'none';
+            card.style.outline = '';
+        }
+    });
+}
 
 async function darBaixa(valeId) {
     if (!valeId) return;
