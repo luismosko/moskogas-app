@@ -1,5 +1,5 @@
-// v2.43.3
-// v2.43.3: Vales — campo validade (opcional) na tabela notas_vales
+// v2.43.4
+// v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
 // v2.40.5: Fix requireAuth param order nos endpoints PIX (diagnostico, teste-cobranca, teste-consultar) + endpoint webhook-logs
@@ -5862,6 +5862,17 @@ export default {
         }
 
         return json({ ok: true, nota_id: notaId });
+      }
+
+      // DELETE /api/vales/notas/:id — apagar nota e seus vales (admin only)
+      const delNotaMatch = path.match(/^\/api\/vales\/notas\/(\d+)$/);
+      if (method === 'DELETE' && delNotaMatch) {
+        const adminCheck = await requireAuth(request, env, ['admin']);
+        if (adminCheck instanceof Response) return adminCheck;
+        const notaId = parseInt(delNotaMatch[1]);
+        await env.DB.prepare('DELETE FROM vales WHERE nota_id=?').bind(notaId).run();
+        await env.DB.prepare('DELETE FROM notas_vales WHERE id=?').bind(notaId).run();
+        return json({ ok: true, message: 'Nota e vales apagados com sucesso.' });
       }
 
       // PATCH /api/vales/:id/baixa - Dar baixa

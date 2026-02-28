@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.1.2 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.1.3 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.2</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.3</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
     <div style="margin-left:auto; display:flex; gap:8px;">
@@ -177,6 +177,7 @@
         <div class="vales-grid" id="det-vales-list"></div>
         <div class="modal-footer" style="margin-top:20px;">
             <button class="btn btn-gray" onclick="closeViewModal()">Fechar</button>
+            <span id="det-btn-apagar"></span>
             <button class="btn btn-blue" onclick="imprimirAtual()">🖨️ Imprimir A4</button>
         </div>
     </div>
@@ -229,7 +230,9 @@ function renderTable() {
             '<td>' + (PL[n.forma_pagamento] || n.forma_pagamento) + '</td>' +
             '<td>' + badge + '</td>' +
             '<td style="font-size:11px;color:#475569">' + (docs.join('<br>') || '—') + '</td>' +
-            '<td><button class="btn btn-blue" onclick="event.stopPropagation(); window.open(\'print-vales.html?id=' + n.id + '\', \'_blank\')" style="padding:4px 8px;font-size:11px">🖨️ Imprimir</button></td>' +
+            '<td><button class="btn btn-blue" onclick="event.stopPropagation(); window.open(\'print-vales.html?id=' + n.id + '\', \'_blank\')" style="padding:4px 8px;font-size:11px">🖨️ Imprimir</button>' +
+            (isAdmin() ? ' <button class="btn btn-red" onclick="event.stopPropagation(); apagarNota(' + n.id + ')" style="padding:4px 8px;font-size:11px" title="Apagar nota (admin)">🗑️</button>' : '') +
+            '</td>' +
             '</tr>';
     }).join('');
 }
@@ -349,8 +352,10 @@ async function viewNota(id) {
         }).join('');
         document.getElementById('det-resgatados').innerHTML = '🔄 Resgatados: <strong>' + regs + ' / ' + res.vales.length + '</strong>';
         document.getElementById('det-vales-list').innerHTML = grid;
-        document.getElementById('busca-vale').value = '';
-        document.getElementById('det-vales-list').innerHTML = '';
+        // Botão apagar só para admin
+        document.getElementById('det-btn-apagar').innerHTML = isAdmin()
+            ? '<button class="btn btn-red" onclick="apagarNota(' + id + ')" style="margin-right:auto">🗑️ Apagar Nota</button>'
+            : '';
         document.getElementById('modal-view').classList.add('open');
     } catch(e) { toast(e.message, 'error'); }
     finally { hideLoading(); }
@@ -372,6 +377,22 @@ function filtrarVales(q) {
             card.style.outline = '';
         }
     });
+}
+
+function isAdmin() {
+    try { const u = JSON.parse(localStorage.getItem('mg_user') || '{}'); return u.role === 'admin'; } catch(_) { return false; }
+}
+
+async function apagarNota(id) {
+    if (!confirm('⚠️ Apagar a Nota #' + id + ' e TODOS os seus vales?\n\nEsta ação não pode ser desfeita!')) return;
+    showLoading('Apagando...');
+    try {
+        await api('/api/vales/notas/' + id, { method: 'DELETE' });
+        toast('🗑️ Nota #' + id + ' apagada!');
+        closeViewModal();
+        load();
+    } catch(e) { toast(e.message, 'error'); }
+    finally { hideLoading(); }
 }
 
 async function darBaixa(valeId) {
