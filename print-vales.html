@@ -54,12 +54,12 @@
             display: flex; align-items: center; justify-content: space-between;
         }
         .footer-left { display: flex; flex-direction: column; gap: 0.5mm; }
-        .validade-line { font-size: 6pt; font-weight: 700; color: #333; }
+        .validade-line { font-size: 7pt; font-weight: 700; color: #000; }
         .endereco { font-size: 6pt; font-weight: 700; line-height: 1.5; color: #333; }
         .nums-wrap { text-align: right; flex-shrink: 0; }
-        .num-seq { font-size: 20pt; font-weight: 900; line-height: 1; }
+        .num-seq { font-size: 16pt; font-weight: 900; line-height: 1; }
         .num-seq small { font-size: 7pt; font-weight: 700; display: block; }
-        .num-serie { font-size: 6pt; color: #888; font-family: monospace; margin-top: 1px; }
+        .num-serie { font-size: 8pt; font-weight: 700; color: #000; font-family: monospace; margin-top: 1.5px; }
 
         @media print {
             @page { size: A4 portrait; margin: 0; }
@@ -106,7 +106,7 @@ async function load() {
             const produto = prodNome[v.produto] || (v.produto || 'Gás P13');
             const nf      = nota.nota_fiscal ? 'NF ' + nota.nota_fiscal + '<br>' : '';
             const emp     = nota.empenho     ? nota.empenho + '<br>'             : '';
-            const numSeq  = String(idx + 1).padStart(3, '0');   // 001, 002... sequencial da nota
+            const numSeq  = String(idx + 1).padStart(2, '0');   // 01, 02... sequencial da nota
             const serie   = String(v.id);                       // ID único curto ex: 4231
 
             const validadeLine = nota.validade
