@@ -1,6 +1,6 @@
-// v2.46.5
+// v2.46.6
+// v2.46.6: Marketing — endpoint diagnóstico para verificar secrets
 // v2.46.5: force redeploy — worker precisa ler MARKETING_GOOGLE_CLIENT_ID
-// v2.46.4: Marketing — try/catch para expor erro real do 500
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6145,6 +6145,15 @@ export default {
       }
 
       return err(`Endpoint vales não encontrado (${method} ${path})`, 404);
+    }
+
+    if (path === '/api/marketing/diag' && method === 'GET') {
+      return json({
+        has_client_id: !!env.MARKETING_GOOGLE_CLIENT_ID,
+        has_client_secret: !!env.MARKETING_GOOGLE_CLIENT_SECRET,
+        client_id_len: (env.MARKETING_GOOGLE_CLIENT_ID || '').length,
+        client_id_preview: (env.MARKETING_GOOGLE_CLIENT_ID || '').substring(0, 20) + '...',
+      });
     }
 
     // ===== MARKETING MODULE — OAuth callback (sem auth — chamado pelo Google) =====
