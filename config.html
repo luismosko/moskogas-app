@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.3 — MoskoGás</title>
+<title>Config v2.13.4 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -33,8 +33,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.3 — config</div>
-  <h1>⚙️ Configurações v2.13.3</h1>
+  <div class="version-badge">v2.13.4 — config</div>
+  <h1>⚙️ Configurações v2.13.4</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -1442,19 +1442,19 @@ function mktConnectGoogle(btn) {
     } else {
       btn.disabled = false;
       btn.innerHTML = '<img src="https://www.google.com/favicon.ico" style="width:16px;vertical-align:middle;margin-right:6px"> Conectar com Google';
-      showToast('Erro ao gerar URL de autorização', 'error');
+      toast('Erro ao gerar URL de autorização', 'error');
     }
   }).catch(() => {
     btn.disabled = false;
     btn.innerHTML = '<img src="https://www.google.com/favicon.ico" style="width:16px;vertical-align:middle;margin-right:6px"> Conectar com Google';
-    showToast('Erro ao conectar', 'error');
+    toast('Erro ao conectar', 'error');
   });
 }
 
 function mktDisconnectGoogle() {
   if (!confirm('Desconectar do Google?')) return;
   api('/api/marketing/google/disconnect', 'POST').then(() => {
-    showToast('Desconectado do Google', 'success');
+    toast('Desconectado do Google', 'success');
     initMarketing();
   });
 }
@@ -1464,8 +1464,8 @@ function mktConnectMeta() {
   api('/api/marketing/meta/auth-url').then(r => {
     hideLoading();
     if (r && r.url) window.location.href = r.url;
-    else showToast('Erro ao gerar URL de autorização', 'error');
-  }).catch(() => { hideLoading(); showToast('Endpoint não disponível ainda', 'error'); });
+    else toast('Erro ao gerar URL de autorização', 'error');
+  }).catch(() => { hideLoading(); toast('Endpoint não disponível ainda', 'error'); });
 }
 
 async function mktSuggestPost(context) {
@@ -1476,40 +1476,40 @@ async function mktSuggestPost(context) {
   try {
     const r = await api('/api/marketing/suggest-post', 'POST', { context: hint, platform: context });
     hideLoading();
-    if (r && r.text) { textarea.value = r.text; showToast('Texto gerado com IA!', 'success'); }
-  } catch(e) { hideLoading(); showToast('Erro ao gerar texto', 'error'); }
+    if (r && r.text) { textarea.value = r.text; toast('Texto gerado com IA!', 'success'); }
+  } catch(e) { hideLoading(); toast('Erro ao gerar texto', 'error'); }
 }
 
 async function mktPublishGmb() {
   const text = document.getElementById('mktGmbPostText').value.trim();
-  if (!text) { showToast('Digite o texto do post', 'error'); return; }
+  if (!text) { toast('Digite o texto do post', 'error'); return; }
   showLoading('Publicando no Google Meu Negócio...');
   try {
     const r = await api('/api/marketing/gmb/post', 'POST', { text });
     hideLoading();
-    if (r && r.ok) { showToast('Post publicado no GMB!', 'success'); document.getElementById('mktGmbPostText').value = ''; }
-    else showToast(r?.error || 'Erro ao publicar', 'error');
-  } catch(e) { hideLoading(); showToast('Endpoint em desenvolvimento', 'error'); }
+    if (r && r.ok) { toast('Post publicado no GMB!', 'success'); document.getElementById('mktGmbPostText').value = ''; }
+    else toast(r?.error || 'Erro ao publicar', 'error');
+  } catch(e) { hideLoading(); toast('Endpoint em desenvolvimento', 'error'); }
 }
 
 async function mktPublishSocial() {
   const text = document.getElementById('mktSocialPostText').value.trim();
-  if (!text) { showToast('Digite o texto do post', 'error'); return; }
+  if (!text) { toast('Digite o texto do post', 'error'); return; }
   const fb = document.getElementById('mktChkFb').checked;
   const ig = document.getElementById('mktChkIg').checked;
   const gmb = document.getElementById('mktChkGmb').checked;
-  if (!fb && !ig && !gmb) { showToast('Selecione ao menos uma plataforma', 'error'); return; }
+  if (!fb && !ig && !gmb) { toast('Selecione ao menos uma plataforma', 'error'); return; }
   showLoading('Publicando...');
   try {
     const r = await api('/api/marketing/social/post', 'POST', { text, facebook: fb, instagram: ig, gmb });
     hideLoading();
-    if (r && r.ok) { showToast('Post publicado!', 'success'); document.getElementById('mktSocialPostText').value = ''; }
-    else showToast(r?.error || 'Erro ao publicar', 'error');
-  } catch(e) { hideLoading(); showToast('Endpoint em desenvolvimento', 'error'); }
+    if (r && r.ok) { toast('Post publicado!', 'success'); document.getElementById('mktSocialPostText').value = ''; }
+    else toast(r?.error || 'Erro ao publicar', 'error');
+  } catch(e) { hideLoading(); toast('Endpoint em desenvolvimento', 'error'); }
 }
 
 function mktScheduleSocial() {
-  showToast('Agendamento em breve!', 'info');
+  toast('Agendamento em breve!', 'info');
 }
 
 async function mktLoadReviews() {
@@ -1538,8 +1538,8 @@ function mktReplyReview(reviewId) {
   const text = prompt('Digite sua resposta:');
   if (!text) return;
   api('/api/marketing/gmb/reviews/' + reviewId + '/reply', 'POST', { text }).then(r => {
-    if (r && r.ok) { showToast('Resposta enviada!', 'success'); mktLoadReviews(); }
-    else showToast('Erro ao responder', 'error');
+    if (r && r.ok) { toast('Resposta enviada!', 'success'); mktLoadReviews(); }
+    else toast('Erro ao responder', 'error');
   });
 }
 </script>
