@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Banco de Posts v1.0.0 — MoskoGás Admin</title>
+<title>Banco de Posts v1.0.1 — MoskoGás Admin</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -204,15 +204,15 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
         </div>
       </div>
       <div class="form-row">
-        <label>Imagem do post</label>
+        <label>Imagem do post <span style="font-weight:400;color:#059669">📁 Upload manual — sem geração por IA</span></label>
         <div id="editImgPreview" style="margin-bottom:8px;display:none">
-          <img id="editImgEl" style="max-height:180px;border-radius:8px;border:1px solid #334155">
+          <img id="editImgEl" style="max-height:180px;border-radius:8px;border:1px solid #334155;display:block">
           <button onclick="clearImg()" class="btn btn-sm btn-red" style="margin-top:6px">🗑️ Remover imagem</button>
         </div>
         <div class="img-dropzone" onclick="document.getElementById('editImgFile').click()" ondragover="imgDragOver(event)" ondrop="imgDrop(event)">
           <input type="file" id="editImgFile" accept="image/*" style="display:none" onchange="previewImg(this)">
-          <div style="font-size:20px;margin-bottom:4px">🖼️</div>
-          <div style="font-size:12px;color:#64748b">Clique ou arraste a imagem do post</div>
+          <div style="font-size:20px;margin-bottom:4px">📁</div>
+          <div style="font-size:12px;color:#64748b">Clique ou arraste para fazer upload da imagem</div>
           <div style="font-size:11px;color:#475569;margin-top:2px">PNG, JPG, WEBP • Max 5MB</div>
         </div>
         <input id="editImgUrl" placeholder="ou cole a URL da imagem..." style="margin-top:8px" oninput="urlToPreview(this.value)">
@@ -246,7 +246,7 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
   </div>
 </div>
 
-<div class="version-badge">Banco de Posts v1.0.0</div>
+<div class="version-badge">Banco de Posts v1.0.1</div>
 <div id="nav-placeholder-bottom"></div>
 
 <script>
@@ -371,13 +371,17 @@ function renderPosts(posts) {
     const [ano, mm] = (p.mes_ano || '_').split('_');
     const mesLabel = mm ? `${mNames[parseInt(mm)-1]}/${ano}` : '—';
     const imgHtml = p.imagem_url
-      ? `<img class="post-img" src="${p.imagem_url}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      ? `<div style="position:relative">
+          <img class="post-img" src="${p.imagem_url}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <button onclick="quickReplaceImg(${p.id},event)" style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.7);color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer">📷 Trocar</button>
+         </div>`
       : '';
     const placeholderHtml = `<div class="post-img-placeholder" style="${p.imagem_url?'display:none':''}">
-        <div style="font-size:28px">🖼️</div>
-        <div>Sem imagem</div>
-        <button onclick="openImgUpload(${p.id},event)" class="btn btn-sm btn-orange" style="margin-top:4px;font-size:11px">📤 Adicionar foto</button>
+        <div style="font-size:32px">🖼️</div>
+        <div style="font-size:12px;color:#64748b">Sem imagem</div>
+        <button onclick="quickUploadImg(${p.id},'${p.brand_id}',event)" class="btn btn-sm btn-orange" style="margin-top:6px;font-size:11px">📤 Upload foto</button>
       </div>`;
+    <!-- hidden file inputs are added dynamically -->
 
     return `<div class="post-card" id="pcard-${p.id}">
       ${imgHtml}${placeholderHtml}
@@ -650,13 +654,45 @@ function imgDrop(e) {
 }
 
 // ──────────────────────────────────────────
-// QUICK IMAGE UPLOAD (from card "Adicionar foto")
+// QUICK IMAGE UPLOAD — direto do card, sem abrir modal
 // ──────────────────────────────────────────
-function openImgUpload(postId, event) {
+function quickUploadImg(postId, brandId, event) {
+  event.stopPropagation();
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
+  inp.onchange = () => doQuickUpload(postId, brandId, inp.files[0]);
+  document.body.appendChild(inp);
+  inp.click();
+  setTimeout(() => inp.remove(), 30000);
+}
+
+function quickReplaceImg(postId, event) {
   event.stopPropagation();
   const p = allPosts.find(x => x.id === postId);
   if (!p) return;
-  editPost(postId); // open edit modal, user can add image there
+  quickUploadImg(postId, p.brand_id, event);
+}
+
+async function doQuickUpload(postId, brandId, file) {
+  if (!file) return;
+  const p = allPosts.find(x => x.id === postId);
+  if (!p) return;
+  const card = document.getElementById(`pcard-${postId}`);
+  if (card) card.style.opacity = '0.5';
+  toast('📤 Enviando imagem...', 'info');
+  try {
+    const r = await api(`/api/post-templates/${postId}/image`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      body: file
+    });
+    p.imagem_url = r.url;
+    toast('✅ Imagem salva!', 'success');
+    await loadPosts();
+  } catch(e) {
+    toast('Erro: ' + e.message, 'error');
+    if (card) card.style.opacity = '1';
+  }
 }
 
 // ──────────────────────────────────────────

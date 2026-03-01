@@ -1,4 +1,7 @@
-// v2.49.0
+// v2.49.3
+// v2.49.3: post_templates image upload direto R2, card com trocar foto inline
+// v2.49.2: fix requireAuth sem await em todos endpoints /api/avaliacoes
+// v2.49.1: avaliacoes/enviar-cron — ensureAvaliacaoTables antes de rodar
 // v2.49.0: Banco de Posts (post_templates) — CRUD admin, bulk-generate IA, endpoint /use
 // v2.48.8: avaliação cron — 1 msg/cliente/semana, marca todos pedidos do cliente
 // v2.48.7: brand_assets.descricao — edição inline, PATCH endpoint, migration automática
@@ -4934,12 +4937,12 @@ export default {
       // Config GET/POST
       if (path === '/api/avaliacoes/config') {
         if (method === 'GET') {
-          const authErr = requireAuth(request, env, ['admin', 'atendente']);
+          const authErr = await requireAuth(request, env, ['admin', 'atendente']);
           if (authErr) return authErr;
           return json(await getAvaliacaoConfig(env));
         }
         if (method === 'POST') {
-          const authErr = requireAuth(request, env, ['admin']);
+          const authErr = await requireAuth(request, env, ['admin']);
           if (authErr) return authErr;
           const body = await request.json();
           await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('avaliacao_config', ?, datetime('now'))").bind(JSON.stringify(body)).run();
@@ -4949,7 +4952,7 @@ export default {
 
       // Listar avaliações com filtros
       if (method === 'GET' && path === '/api/avaliacoes') {
-        const authErr = requireAuth(request, env, ['admin', 'atendente']);
+        const authErr = await requireAuth(request, env, ['admin', 'atendente']);
         if (authErr) return authErr;
         const qp = new URL(request.url).searchParams;
         const status = qp.get('status') || '';
@@ -5013,7 +5016,7 @@ export default {
 
       // Enviar avaliação manual para um pedido específico
       if (method === 'POST' && path === '/api/avaliacoes/enviar') {
-        const authErr = requireAuth(request, env, ['admin', 'atendente']);
+        const authErr = await requireAuth(request, env, ['admin', 'atendente']);
         if (authErr) return authErr;
         const { order_id } = await request.json();
         if (!order_id) return json({ error: 'order_id obrigatório' }, 400);
@@ -5047,7 +5050,7 @@ export default {
 
       // Toggle sem_avaliacao por telefone
       if (method === 'PATCH' && path.match(/^\/api\/avaliacoes\/cliente\/(.+)\/toggle$/)) {
-        const authErr = requireAuth(request, env, ['admin', 'atendente']);
+        const authErr = await requireAuth(request, env, ['admin', 'atendente']);
         if (authErr) return authErr;
         const phone = path.split('/')[4];
         const cc = await env.DB.prepare('SELECT sem_avaliacao FROM customers_cache WHERE phone_digits=?').bind(phone).first();
@@ -5058,8 +5061,9 @@ export default {
 
       // Enviar bulk (reenviar para respondidas/não respondidas em lote)
       if (method === 'POST' && path === '/api/avaliacoes/enviar-cron') {
-        const authErr = requireAuth(request, env, ['admin']);
+        const authErr = await requireAuth(request, env, ['admin']);
         if (authErr) return authErr;
+        await ensureAvaliacaoTables(env);
         await processarAvaliacoesCron(env);
         return json({ ok: true, message: 'Cron de avaliações executado' });
       }
@@ -6839,6 +6843,21 @@ REGRAS:
         q += ` ORDER BY ordem ASC, id ASC`;
         const rows = await env.DB.prepare(q).bind(...params).all().then(r => r.results);
         return json(rows);
+      }
+
+      // POST /api/post-templates/:id/image — upload direto de imagem para o post
+      if (path.match(/\/api\/post-templates\/\d+\/image$/) && method === 'POST') {
+        if (!isAdmin) return err('Apenas admin', 403);
+        const id = path.split('/')[3];
+        const contentType = request.headers.get('content-type') || 'image/jpeg';
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+        const r2Key = `post-templates/${id}_${Math.floor(Date.now()/1000)}.${ext}`;
+        const bodyBuf = await request.arrayBuffer();
+        await env.BUCKET.put(r2Key, bodyBuf, { httpMetadata: { contentType } });
+        const imgUrl = `https://api.moskogas.com.br/api/pub/brand-asset/${r2Key.replace(/\//g,'~')}`;
+        await env.DB.prepare(`UPDATE post_templates SET imagem_url=?, imagem_source='manual', updated_at=? WHERE id=?`)
+          .bind(imgUrl, Math.floor(Date.now()/1000), id).run();
+        return json({ ok: true, url: imgUrl });
       }
 
       // GET /api/post-templates/meses — lista meses disponíveis por marca
