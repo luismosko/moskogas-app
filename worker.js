@@ -1,6 +1,6 @@
-// v2.48.0
+// v2.48.1
+// v2.48.1: Geração de imagem 3 camadas — foto real brand kit (grátis) > DALL-E+visão > DALL-E puro
 // v2.48.0: Brand Kits admin — tabelas brand_kits+brand_assets, CRUD, upload R2, API pública
-// v2.47.1: Brand Kit — geração de posts usa tom e img_prompt da marca selecionada
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6522,9 +6522,85 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
       if (path.startsWith('/api/marketing/posts/') && path.endsWith('/generate-image') && method === 'POST') {
         await ensureMarketingTables(env);
         const postId = path.split('/')[4];
+        const body = await request.json().catch(() => ({}));
+        const strategy = body.strategy || 'auto'; // auto | brand_asset | dalle_vision | dalle_pure
         const row = await env.DB.prepare(`SELECT * FROM marketing_posts WHERE id=?`).bind(postId).first();
         if (!row) return err('Post não encontrado', 404);
-        const promptImg = row.imagem_prompt || 'Brazilian gas cylinder delivery, realistic photo, warm colors';
+
+        // Buscar brand_id do perfil da revenda
+        const cfgRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
+        const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
+        const brandId = cfg.brand_id || '';
+
+        // ─── ESTRATÉGIA 1: Foto real do Brand Kit ───────────────────
+        if (strategy === 'brand_asset' || strategy === 'auto') {
+          if (brandId) {
+            // Prioridade: lifestyle > botijao > uniforme > veiculo > qualquer asset
+            const tipoPrefs = ['lifestyle', 'botijao', 'uniforme', 'veiculo', 'outro'];
+            let chosenAsset = null;
+            for (const tipo of tipoPrefs) {
+              const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? AND tipo=? ORDER BY RANDOM() LIMIT 1`).bind(brandId, tipo).all().then(r => r.results);
+              if (assets.length) { chosenAsset = assets[0]; break; }
+            }
+            if (chosenAsset) {
+              await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, imagem_source='brand_asset', updated_at=? WHERE id=?`).bind(chosenAsset.url, Math.floor(Date.now()/1000), postId).run();
+              return json({ ok: true, imagem_url: chosenAsset.url, strategy: 'brand_asset', asset_tipo: chosenAsset.tipo });
+            }
+          }
+          if (strategy === 'brand_asset') return err('Nenhuma foto no Brand Kit. Faça upload em Admin → Brand Kits.', 400);
+          // Se auto e não tem asset → cai para dalle_vision
+        }
+
+        // ─── ESTRATÉGIA 2: DALL-E com visão da foto real (GPT-4o) ──
+        if (strategy === 'dalle_vision' || strategy === 'auto') {
+          let referencePhotoUrl = null;
+          if (brandId) {
+            // Pegar foto do botijão da marca como referência visual
+            const botijaoAsset = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? AND tipo='botijao' ORDER BY created_at DESC LIMIT 1`).bind(brandId).first();
+            if (botijaoAsset) referencePhotoUrl = botijaoAsset.url;
+          }
+          if (referencePhotoUrl) {
+            // Usar GPT-4o Vision para descrever o botijão real em detalhes
+            const visionRes = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                max_tokens: 300,
+                messages: [{
+                  role: 'user',
+                  content: [
+                    { type: 'image_url', image_url: { url: referencePhotoUrl } },
+                    { type: 'text', text: `Describe this LPG gas cylinder in extreme visual detail for a DALL-E image generation prompt: exact colors, shape, markings, logo position, any text visible, material finish. Be very specific. Respond in English only, one paragraph, no preamble.` }
+                  ]
+                }]
+              })
+            });
+            const visionData = await visionRes.json();
+            const bottleDesc = visionData.choices?.[0]?.message?.content || '';
+            if (bottleDesc) {
+              const tema = row.tema || 'gas delivery';
+              const enhancedPrompt = `${bottleDesc}. Context: ${tema}, Brazilian residential delivery, happy family, warm natural lighting, photorealistic, professional photography, 4k`;
+              const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'dall-e-3', prompt: enhancedPrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
+              });
+              const imgData = await imgRes.json();
+              const imgUrl = imgData.data?.[0]?.url;
+              if (imgUrl) {
+                await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, imagem_source='dalle_vision', updated_at=? WHERE id=?`).bind(imgUrl, Math.floor(Date.now()/1000), postId).run();
+                return json({ ok: true, imagem_url: imgUrl, strategy: 'dalle_vision' });
+              }
+            }
+          }
+          if (strategy === 'dalle_vision') return err('Sem foto de botijão no Brand Kit para usar como referência.', 400);
+        }
+
+        // ─── ESTRATÉGIA 3: DALL-E puro (fallback) ───────────────────
+        const brandKit = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
+        const brandBasePrompt = brandKit?.img_prompt_base || 'LPG gas cylinder Brazil, delivery service, realistic photo';
+        const promptImg = `${brandBasePrompt}. Theme: ${row.tema || 'delivery'}. ${row.imagem_prompt || ''}. Photorealistic, professional photography, bright natural lighting, no text overlay`;
         const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
@@ -6533,8 +6609,8 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
         const imgData = await imgRes.json();
         const imgUrl = imgData.data?.[0]?.url;
         if (!imgUrl) return err('Erro ao gerar imagem: ' + JSON.stringify(imgData.error), 500);
-        await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, updated_at=? WHERE id=?`).bind(imgUrl, Math.floor(Date.now()/1000), postId).run();
-        return json({ ok: true, imagem_url: imgUrl });
+        await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, imagem_source='dalle_pure', updated_at=? WHERE id=?`).bind(imgUrl, Math.floor(Date.now()/1000), postId).run();
+        return json({ ok: true, imagem_url: imgUrl, strategy: 'dalle_pure' });
       }
 
       if (path.startsWith('/api/marketing/posts/') && !path.endsWith('/generate-image') && method === 'DELETE') {
@@ -6693,6 +6769,7 @@ async function ensureMarketingTables(env) {
   // Garantir colunas extras caso tabela já exista
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN likes INTEGER DEFAULT 0`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN gmb_result TEXT DEFAULT ''`).run().catch(()=>{});
+  await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN imagem_source TEXT DEFAULT ''`).run().catch(()=>{});
 }
 
 async function publishScheduledPosts(env) {

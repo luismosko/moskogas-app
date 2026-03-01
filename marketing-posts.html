@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Posts Marketing v1.2.0 — MoskoGás</title>
+<title>Posts Marketing v1.3.0 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -116,7 +116,7 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.2.0 — marketing-posts</div>
+<div class="version-badge">v1.3.0 — marketing-posts</div>
 
 <div class="container">
 
@@ -219,14 +219,26 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
           <input type="hidden" id="genFreq" value="diario">
         </div>
         <div>
-          <label>Incluir imagem IA (DALL-E 3)</label>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400">
-              <input type="checkbox" id="genImages" style="width:auto">
-              Gerar imagens automático
+          <label>Estratégia de imagem</label>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;cursor:pointer">
+              <input type="radio" name="imgStrat" id="stratNone" value="none" style="width:auto" checked>
+              <div><strong>✍️ Só texto por agora</strong><div style="font-size:11px;color:#64748b">Gero as imagens depois, uma a uma</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:8px;cursor:pointer">
+              <input type="radio" name="imgStrat" id="stratAsset" value="brand_asset" style="width:auto">
+              <div><strong>📸 Foto real do Brand Kit (grátis!)</strong><div style="font-size:11px;color:#64748b">Usa as fotos que você enviou — sem custo</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:8px;cursor:pointer">
+              <input type="radio" name="imgStrat" id="stratDalleVision" value="dalle_vision" style="width:auto">
+              <div><strong>🤖 DALL-E usando foto do botijão real (~R$0,20/img)</strong><div style="font-size:11px;color:#64748b">IA analisa o botijão real e recria</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px;cursor:pointer">
+              <input type="radio" name="imgStrat" id="stratDallePure" value="dalle_pure" style="width:auto">
+              <div><strong>🎨 DALL-E criativo (~R$0,20/img)</strong><div style="font-size:11px;color:#64748b">Cria imagem nova baseada no tema</div></div>
             </label>
           </div>
-          <div class="cost-badge" style="margin-top:8px" id="costBadge">💰 Custo estimado: R$ 0,20 (só texto)</div>
+          <div class="cost-badge" style="margin-top:8px" id="costBadge">💰 Custo estimado: R$ 0,00 (só texto)</div>
         </div>
       </div>
 
@@ -408,7 +420,18 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
         <div id="editImagePreview" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;margin-bottom:8px">
           <span style="color:#94a3b8;font-size:13px">Sem imagem</span>
         </div>
-        <button onclick="generatePostImage()" id="btnGenImage" class="btn btn-sm btn-primary">🖼️ Gerar com DALL-E 3 (~R$0,20)</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="imageStrategy" style="flex:1;font-size:12px;padding:6px 10px">
+            <option value="auto">🔄 Automático (foto real → DALL-E+visão → DALL-E)</option>
+            <option value="brand_asset">📸 Foto real do Brand Kit (grátis)</option>
+            <option value="dalle_vision">🤖 DALL-E analisando foto real (~R$0,20)</option>
+            <option value="dalle_pure">🎨 DALL-E puro (~R$0,20)</option>
+          </select>
+          <button onclick="generatePostImage()" id="btnGenImage" class="btn btn-sm btn-primary">🖼️ Gerar imagem</button>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px">
+          💡 "Foto real" usa as imagens enviadas em Admin → Brand Kits (grátis e 100% correto)
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -620,20 +643,33 @@ async function savePost() {
   toast('✅ Post salvo!', 'success');
 }
 
-async function generatePostImage(id) {
+async function generatePostImage(id, strategyOverride) {
   const postId = id || document.getElementById('editPostId').value;
+  const strategy = strategyOverride || document.getElementById('imageStrategy')?.value || 'auto';
   const btn = document.getElementById('btnGenImage');
-  btn.disabled = true; btn.textContent = '⏳ Gerando imagem (~30s)...';
+  const strategyLabels = {
+    auto: '🔄 Buscando melhor imagem...',
+    brand_asset: '🖼️ Buscando foto da marca...',
+    dalle_vision: '🤖 Analisando botijão real + DALL-E...',
+    dalle_pure: '🎨 Gerando com DALL-E 3...'
+  };
+  btn.disabled = true; btn.textContent = strategyLabels[strategy] || '⏳ Gerando...';
   try {
-    const r = await api(`/api/marketing/posts/${postId}/generate-image`, { method: 'POST' });
+    const r = await api(`/api/marketing/posts/${postId}/generate-image`, {
+      method: 'POST',
+      body: JSON.stringify({ strategy })
+    });
     if (r.imagem_url) {
-      document.getElementById('editImagePreview').innerHTML = `<img src="${r.imagem_url}" style="max-height:160px;border-radius:8px;max-width:100%">`;
+      const sourceLabel = { brand_asset:'✅ Foto real da marca', dalle_vision:'🤖 DALL-E + foto real', dalle_pure:'🎨 DALL-E puro' };
+      document.getElementById('editImagePreview').innerHTML = `
+        <img src="${r.imagem_url}" style="max-height:160px;border-radius:8px;max-width:100%;display:block;margin:0 auto">
+        <div style="text-align:center;margin-top:6px;font-size:11px;color:#64748b">${sourceLabel[r.strategy]||r.strategy}</div>`;
       const p = allPosts.find(p => p.id == postId);
       if (p) p.imagem_url = r.imagem_url;
-      toast('🖼️ Imagem gerada!', 'success');
+      toast('🖼️ Imagem definida! (' + (sourceLabel[r.strategy]||r.strategy) + ')', 'success');
     }
-  } catch(e) { toast('Erro ao gerar imagem: ' + e.message, 'error'); }
-  btn.disabled = false; btn.innerHTML = '🖼️ Gerar com DALL-E 3 (~R$0,20)';
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  btn.disabled = false; btn.innerHTML = '🖼️ Gerar imagem';
 }
 
 function closeModal() { document.getElementById('modalPost').classList.remove('open'); }
@@ -650,16 +686,22 @@ function setFreq(btn, val) {
 }
 
 function updateCostBadge() {
-  const qty = parseInt(document.getElementById('genQty').value);
-  const withImages = document.getElementById('genImages').checked;
-  const textCost = (qty * 0.0001 * 5).toFixed(2); // gpt-4o-mini
-  const imgCost = withImages ? (qty * 0.04 * 5.6).toFixed(2) : 0; // DALL-E 3 + BRL
-  const total = (parseFloat(textCost) + parseFloat(imgCost)).toFixed(2);
-  document.getElementById('costBadge').innerHTML = `💰 Custo estimado: R$ ${total} ${withImages ? `(texto + ${qty} imagens DALL-E)` : '(só texto — imagens podem ser geradas individualmente)'}`;
+  const qty = parseInt(document.getElementById('genQty').value || 10);
+  const strat = document.querySelector('input[name="imgStrat"]:checked')?.value || 'none';
+  const textCost = (qty * 0.0001 * 5).toFixed(2);
+  let imgInfo = '';
+  if (strat === 'none') imgInfo = `(só texto — imagens depois)`;
+  else if (strat === 'brand_asset') imgInfo = `+ fotos reais (R$ 0,00)`;
+  else if (strat === 'dalle_vision') imgInfo = `+ até 5 imagens DALL-E+visão (~R$ ${(Math.min(qty,5)*0.04*5.6).toFixed(2)})`;
+  else if (strat === 'dalle_pure') imgInfo = `+ até 5 imagens DALL-E (~R$ ${(Math.min(qty,5)*0.04*5.6).toFixed(2)})`;
+  const imgCost = strat === 'none' || strat === 'brand_asset' ? 0 : Math.min(qty,5) * 0.04 * 5.6;
+  const total = (parseFloat(textCost) + imgCost).toFixed(2);
+  const badge = document.getElementById('costBadge');
+  if(badge) badge.innerHTML = `💰 Custo estimado: R$ ${total} ${imgInfo}`;
 }
 
-document.getElementById('genQty').addEventListener('change', updateCostBadge);
-document.getElementById('genImages').addEventListener('change', updateCostBadge);
+document.getElementById('genQty')?.addEventListener('change', updateCostBadge);
+document.querySelectorAll('input[name="imgStrat"]').forEach(r => r.addEventListener('change', updateCostBadge));
 
 async function generateBulk() {
   const qty = parseInt(document.getElementById('genQty').value);
@@ -688,13 +730,15 @@ async function generateBulk() {
 
     genLastIds = r.ids || [];
 
-    if (withImages && r.ids && r.ids.length) {
-      document.getElementById('genProgressText').textContent = 'Gerando imagens com DALL-E...';
-      document.getElementById('genProgressSub').textContent = `0 / ${r.ids.length} imagens criadas`;
-      for (let i = 0; i < Math.min(r.ids.length, 5); i++) { // limita a 5 imagens de uma vez
-        document.getElementById('genProgressSub').textContent = `${i+1} / ${Math.min(r.ids.length,5)} imagens criadas`;
-        document.getElementById('genProgressBar').style.width = (90 + (i / Math.min(r.ids.length,5)) * 10) + '%';
-        await api(`/api/marketing/posts/${r.ids[i]}/generate-image`, { method: 'POST' }).catch(() => {});
+    const imgStrat = document.querySelector('input[name="imgStrat"]:checked')?.value || 'none';
+    if (imgStrat !== 'none' && r.ids && r.ids.length) {
+      const maxImgs = imgStrat === 'brand_asset' ? r.ids.length : Math.min(r.ids.length, 5);
+      document.getElementById('genProgressText').textContent = imgStrat === 'brand_asset' ? 'Aplicando fotos do Brand Kit...' : 'Gerando imagens com IA...';
+      document.getElementById('genProgressSub').textContent = `0 / ${maxImgs} imagens`;
+      for (let i = 0; i < maxImgs; i++) {
+        document.getElementById('genProgressSub').textContent = `${i+1} / ${maxImgs} imagens`;
+        document.getElementById('genProgressBar').style.width = (90 + (i / maxImgs) * 10) + '%';
+        await api(`/api/marketing/posts/${r.ids[i]}/generate-image`, { method: 'POST', body: JSON.stringify({ strategy: imgStrat }) }).catch(() => {});
       }
     }
 
