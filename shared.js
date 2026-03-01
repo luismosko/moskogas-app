@@ -1,6 +1,6 @@
 // shared.js — Utilitários compartilhados MoskoGás v1.15.0
-// v1.16.0
-// v1.16.0: 🎯 Marketing Digital adicionado ao menu Config
+// v1.17.0
+// v1.17.0: Nova navbar — menu ADM (Contratos/Estoque/Vales) + menu Marketing (GMB/Social/Ads)
 // v1.14.0: 📦 Estoque adicionado à navbar
 // v1.13.0: Dropdown Financeiro (Pagamentos + Empenhos GOV) na navbar
 // v1.11.0: Contratos adicionado à navbar
@@ -154,18 +154,31 @@ const NAV_ACTIVE = '#ffffff';
 const NAV_ITEMS = [
   { href: 'pedido.html', icon: '➕', label: 'Novo Pedido', roles: ['admin', 'atendente'] },
   { href: 'gestao.html', icon: '📋', label: 'Gestão', roles: ['admin', 'atendente'] },
-  { href: 'contratos.html', icon: '📄', label: 'Contratos', roles: ['admin', 'atendente'] },
-  { href: 'estoque.html', icon: '📦', label: 'Estoque', roles: ['admin', 'atendente'] },
-  { href: 'vales.html', icon: '🎟️', label: 'Vale Gás', roles: ['admin', 'atendente'] },
 ];
 
 // Dropdowns — cada um com ID único para abrir/fechar independente
 const NAV_DROPDOWNS = [
   {
+    id: 'adm', icon: '🏢', label: 'ADM', roles: ['admin', 'atendente'],
+    children: [
+      { href: 'contratos.html', icon: '📄', label: 'Contratos' },
+      { href: 'estoque.html', icon: '📦', label: 'Estoque' },
+      { href: 'vales.html', icon: '🎟️', label: 'Vale Gás' },
+    ]
+  },
+  {
     id: 'financeiro', icon: '💰', label: 'Financeiro', roles: ['admin', 'atendente'],
     children: [
       { href: 'pagamentos.html', icon: '💳', label: 'Pagamentos Pendentes' },
       { href: 'empenhos.html', icon: '🏛️', label: 'Empenhos GOV' },
+    ]
+  },
+  {
+    id: 'marketing', icon: '🎯', label: 'Marketing', roles: ['admin', 'atendente'],
+    children: [
+      { href: 'marketing-gmb.html', icon: '📍', label: 'Google Meu Negócio' },
+      { href: 'marketing-social.html', icon: '📱', label: 'Facebook & Instagram' },
+      { href: 'marketing-ads.html', icon: '📢', label: 'Google Ads' },
     ]
   },
   {
@@ -181,7 +194,6 @@ const NAV_DROPDOWNS = [
     id: 'config', icon: '⚙️', label: 'Config', roles: ['admin', 'atendente'],
     children: [
       { href: 'config.html', icon: '⚙️', label: 'Configurações' },
-      { href: 'config.html#marketingSection', icon: '🎯', label: 'Marketing Digital' },
       { href: 'usuarios.html', icon: '👥', label: 'Usuários' },
     ]
   },

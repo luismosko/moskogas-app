@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Meu Negócio v1.0.0 — MoskoGás</title>
+<script src="shared.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui,-apple-system,sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .version-badge { position:fixed;bottom:8px;right:8px;background:#1e293b;color:#94a3b8;font-size:10px;padding:2px 8px;border-radius:99px;z-index:999 }
+  .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .page-header { background: #fff; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 16px; }
+  .page-header .icon { font-size: 36px; }
+  .page-header h1 { font-size: 20px; font-weight: 700; color: #1e293b; }
+  .page-header p { font-size: 13px; color: #64748b; margin-top: 2px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .card h2 { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #374151; transition: all 0.15s; }
+  .btn:hover { background: #f1f5f9; }
+  .btn-green { background: #16a34a; color: #fff; border-color: #16a34a; }
+  .btn-green:hover { background: #15803d; }
+  .btn-blue { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .btn-blue:hover { background: #1d4ed8; }
+  .btn-red { background: #ef4444; color: #fff; border-color: #ef4444; }
+  .btn-red:hover { background: #dc2626; }
+  input, textarea, select { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; transition: border 0.15s; }
+  input:focus, textarea:focus { border-color: #3b82f6; }
+  textarea { resize: vertical; }
+  .status-bar { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+  .status-connected { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+  .status-disconnected { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+  .review-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+  .review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .review-author { font-weight: 700; font-size: 14px; color: #1e293b; }
+  .review-stars { color: #f59e0b; font-size: 16px; }
+  .review-comment { color: #374151; font-size: 13px; margin-bottom: 8px; }
+  .review-reply { background: #f0fdf4; border-left: 3px solid #16a34a; padding: 8px 12px; border-radius: 0 8px 8px 0; font-size: 12px; color: #166534; margin-top: 8px; }
+  .review-reply-form { margin-top: 8px; display: flex; gap: 8px; }
+  .review-reply-form input { flex: 1; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+  .badge-gray { background: #f1f5f9; color: #64748b; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+  .empty-state { text-align: center; padding: 40px; color: #94a3b8; }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+  .ia-badge { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border: none; }
+  .ia-badge:hover { opacity: 0.9; }
+  .char-count { font-size: 11px; color: #94a3b8; text-align: right; margin-top: 4px; }
+  .post-preview { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-top: 12px; font-size: 13px; color: #374151; white-space: pre-wrap; display: none; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="version-badge">v1.0.0 — marketing-gmb</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="icon">📍</div>
+    <div>
+      <h1>Google Meu Negócio</h1>
+      <p>Gerencie avaliações, publique posts e atualize seu perfil no Google</p>
+    </div>
+    <div style="margin-left:auto">
+      <span id="headerStatus" class="badge badge-gray">⏳ Verificando...</span>
+    </div>
+  </div>
+
+  <!-- Status de conexão -->
+  <div id="statusBar" class="status-bar status-disconnected">
+    <span id="statusIcon">🔴</span>
+    <span id="statusText">Não conectado ao Google</span>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button id="btnConnect" onclick="connectGoogle(this)" class="btn btn-blue" style="display:none">
+        <img src="https://www.google.com/favicon.ico" style="width:14px"> Conectar com Google
+      </button>
+      <button id="btnDisconnect" onclick="disconnectGoogle()" class="btn btn-red" style="display:none">Desconectar</button>
+    </div>
+  </div>
+
+  <!-- Conteúdo (visível só se conectado) -->
+  <div id="mainContent" style="display:none">
+
+    <div class="grid-2">
+
+      <!-- Publicar Post -->
+      <div class="card">
+        <h2>📝 Publicar Post</h2>
+        <textarea id="postText" placeholder="Ex: Promoção relâmpago! Gás P13 com entrega grátis hoje..." rows="5" oninput="updateCharCount()"></textarea>
+        <div class="char-count"><span id="charCount">0</span>/1500 caracteres</div>
+        <div id="postPreview" class="post-preview"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button onclick="suggestPost()" class="btn ia-badge">✨ Sugerir com IA</button>
+          <button onclick="publishPost()" class="btn btn-green">📤 Publicar agora</button>
+        </div>
+      </div>
+
+      <!-- Stats rápidas -->
+      <div class="card">
+        <h2>📊 Resumo do Perfil</h2>
+        <div id="profileStats">
+          <div style="text-align:center;padding:20px;color:#94a3b8">
+            <div style="font-size:32px;margin-bottom:8px">📍</div>
+            <p style="font-size:13px">Clique em "Atualizar" para carregar os dados do perfil</p>
+            <button onclick="loadProfile()" class="btn" style="margin-top:12px">🔄 Atualizar</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Avaliações -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin:0">⭐ Avaliações Recentes</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="filterReviews" onchange="filterReviewList()" style="width:auto;padding:6px 10px;font-size:12px">
+            <option value="all">Todas</option>
+            <option value="no-reply">Sem resposta</option>
+            <option value="5">⭐⭐⭐⭐⭐ 5 estrelas</option>
+            <option value="low">⭐⭐⭐ 3 ou menos</option>
+          </select>
+          <button onclick="loadReviews()" class="btn" style="padding:6px 12px;font-size:12px">🔄 Atualizar</button>
+        </div>
+      </div>
+      <div id="reviewsList">
+        <div class="empty-state">
+          <div class="icon">⭐</div>
+          <p>Clique em "Atualizar" para carregar as avaliações</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Desconectado -->
+  <div id="disconnectedContent">
+    <div class="card">
+      <div class="empty-state">
+        <div class="icon">📍</div>
+        <p style="font-size:15px;font-weight:600;color:#1e293b;margin-bottom:8px">Conecte sua conta Google</p>
+        <p style="font-size:13px;margin-bottom:20px">Para gerenciar avaliações e publicar posts no Google Meu Negócio</p>
+        <button onclick="connectGoogle(this)" class="btn btn-blue" style="font-size:14px;padding:12px 24px">
+          <img src="https://www.google.com/favicon.ico" style="width:16px"> Conectar com Google
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+checkAuth(['admin', 'atendente']);
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+let allReviews = [];
+
+async function initPage() {
+  try {
+    const r = await api('/api/marketing/google/status');
+    if (r && r.connected) {
+      setConnected(r.email);
+    } else {
+      setDisconnected();
+    }
+  } catch(e) {
+    setDisconnected();
+  }
+}
+
+function setConnected(email) {
+  document.getElementById('statusBar').className = 'status-bar status-connected';
+  document.getElementById('statusIcon').textContent = '✅';
+  document.getElementById('statusText').textContent = `Conectado como ${email}`;
+  document.getElementById('btnDisconnect').style.display = '';
+  document.getElementById('btnConnect').style.display = 'none';
+  document.getElementById('mainContent').style.display = '';
+  document.getElementById('disconnectedContent').style.display = 'none';
+  document.getElementById('headerStatus').textContent = '✅ Conectado';
+  document.getElementById('headerStatus').style.cssText = 'background:#dcfce7;color:#166534;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700';
+  loadReviews();
+}
+
+function setDisconnected() {
+  document.getElementById('statusBar').className = 'status-bar status-disconnected';
+  document.getElementById('statusIcon').textContent = '🔴';
+  document.getElementById('statusText').textContent = 'Não conectado ao Google';
+  document.getElementById('btnConnect').style.display = '';
+  document.getElementById('btnDisconnect').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('disconnectedContent').style.display = '';
+  document.getElementById('headerStatus').textContent = '🔴 Desconectado';
+  document.getElementById('headerStatus').style.cssText = 'background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700';
+}
+
+function connectGoogle(btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ Aguarde...';
+  api('/api/marketing/google/auth-url').then(r => {
+    if (r && r.url) window.location.href = r.url;
+    else { btn.disabled = false; btn.textContent = 'Conectar com Google'; toast('Erro ao conectar', 'error'); }
+  }).catch(() => { btn.disabled = false; btn.textContent = 'Conectar com Google'; toast('Erro ao conectar', 'error'); });
+}
+
+function disconnectGoogle() {
+  if (!confirm('Desconectar do Google?')) return;
+  api('/api/marketing/google/disconnect', { method: 'POST' }).then(() => { toast('Desconectado!', 'success'); setDisconnected(); });
+}
+
+function updateCharCount() {
+  const len = document.getElementById('postText').value.length;
+  document.getElementById('charCount').textContent = len;
+}
+
+async function suggestPost() {
+  const hint = document.getElementById('postText').value || 'promoção de gás de cozinha MoskoGás';
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  try {
+    const r = await api('/api/marketing/suggest-post', { method: 'POST', body: JSON.stringify({ context: hint, platform: 'gmb' }) });
+    if (r && r.text) {
+      document.getElementById('postText').value = r.text;
+      updateCharCount();
+      toast('✨ Texto gerado com IA!', 'success');
+    }
+  } catch(e) { toast('Erro ao gerar texto', 'error'); }
+  btn.disabled = false; btn.innerHTML = '✨ Sugerir com IA';
+}
+
+async function publishPost() {
+  const text = document.getElementById('postText').value.trim();
+  if (!text) { toast('Digite o texto do post', 'error'); return; }
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Publicando...';
+  try {
+    const r = await api('/api/marketing/gmb/post', { method: 'POST', body: JSON.stringify({ text }) });
+    if (r && r.ok) { toast('✅ Post publicado no Google!', 'success'); document.getElementById('postText').value = ''; updateCharCount(); }
+    else toast(r?.error || 'Erro ao publicar', 'error');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  btn.disabled = false; btn.textContent = '📤 Publicar agora';
+}
+
+async function loadReviews() {
+  const el = document.getElementById('reviewsList');
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">⏳ Carregando avaliações...</div>';
+  try {
+    const r = await api('/api/marketing/gmb/reviews');
+    allReviews = r.reviews || [];
+    renderReviews(allReviews);
+  } catch(e) { el.innerHTML = `<div class="empty-state"><div class="icon">❌</div><p>${e.message}</p></div>`; }
+}
+
+function filterReviewList() {
+  const filter = document.getElementById('filterReviews').value;
+  let filtered = allReviews;
+  if (filter === 'no-reply') filtered = allReviews.filter(r => !r.reply);
+  else if (filter === '5') filtered = allReviews.filter(r => r.rating === 5);
+  else if (filter === 'low') filtered = allReviews.filter(r => r.rating <= 3);
+  renderReviews(filtered);
+}
+
+function renderReviews(reviews) {
+  const el = document.getElementById('reviewsList');
+  if (!reviews.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">⭐</div><p>Nenhuma avaliação encontrada</p></div>';
+    return;
+  }
+  el.innerHTML = reviews.map(rv => `
+    <div class="review-card">
+      <div class="review-header">
+        <span class="review-author">${rv.author}</span>
+        <span class="review-stars">${'⭐'.repeat(rv.rating)}</span>
+      </div>
+      <div class="review-comment">${rv.comment || '<em style="color:#94a3b8">Sem comentário</em>'}</div>
+      ${rv.reply
+        ? `<div class="review-reply">💬 Sua resposta: ${rv.reply}</div>`
+        : `<div class="review-reply-form">
+            <input id="reply_${rv.id}" placeholder="Digite sua resposta..." onkeydown="if(event.key==='Enter') replyReview('${rv.id}')">
+            <button onclick="replyReview('${rv.id}')" class="btn btn-green" style="white-space:nowrap;padding:8px 14px">✉️ Responder</button>
+            <button onclick="suggestReply('${rv.id}','${(rv.comment||'').replace(/'/g,"\\'")}',${rv.rating})" class="btn ia-badge" style="white-space:nowrap;padding:8px 14px">✨ IA</button>
+          </div>`
+      }
+    </div>
+  `).join('');
+}
+
+async function suggestReply(reviewId, comment, rating) {
+  const prompt = `Cliente ${rating >= 4 ? 'satisfeito' : 'insatisfeito'} deixou: "${comment}". Crie uma resposta curta, profissional e cordial para uma empresa de gás (MoskoGás, Campo Grande/MS). Máximo 2 frases.`;
+  try {
+    const r = await api('/api/marketing/suggest-post', { method: 'POST', body: JSON.stringify({ context: prompt, platform: 'reply' }) });
+    if (r && r.text) document.getElementById('reply_' + reviewId).value = r.text;
+  } catch(e) { toast('Erro ao gerar resposta', 'error'); }
+}
+
+async function replyReview(reviewId) {
+  const text = document.getElementById('reply_' + reviewId).value.trim();
+  if (!text) { toast('Digite a resposta', 'error'); return; }
+  try {
+    await api(`/api/marketing/gmb/reviews/${reviewId}/reply`, { method: 'POST', body: JSON.stringify({ text }) });
+    toast('✅ Resposta enviada!', 'success');
+    loadReviews();
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+async function loadProfile() {
+  document.getElementById('profileStats').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">⏳ Carregando...</div>';
+  // Placeholder — expandir quando GMB API estiver totalmente configurada
+  setTimeout(() => {
+    document.getElementById('profileStats').innerHTML = `
+      <div style="font-size:13px">
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Empresa</span><strong>MoskoGás Ultragaz</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">Cidade</span><strong>Campo Grande, MS</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:#64748b">Status</span><span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">✅ Ativo</span></div>
+        <button onclick="window.open('https://business.google.com','_blank')" class="btn" style="width:100%;margin-top:12px;justify-content:center">🔗 Abrir Google Business</button>
+      </div>`;
+  }, 800);
+}
+
+initPage();
+</script>
+</body>
+</html>

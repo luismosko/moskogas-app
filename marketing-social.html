@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facebook & Instagram v1.0.0 — MoskoGás</title>
+<script src="shared.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui,-apple-system,sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .version-badge { position:fixed;bottom:8px;right:8px;background:#1e293b;color:#94a3b8;font-size:10px;padding:2px 8px;border-radius:99px;z-index:999 }
+  .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .page-header { background: linear-gradient(135deg, #1877f2, #e1306c); border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; color: #fff; }
+  .page-header .icon { font-size: 36px; }
+  .page-header h1 { font-size: 20px; font-weight: 700; }
+  .page-header p { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .card h2 { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #374151; transition: all 0.15s; }
+  .btn:hover { background: #f1f5f9; }
+  .btn-fb { background: #1877f2; color: #fff; border-color: #1877f2; }
+  .btn-fb:hover { background: #1558c0; }
+  .btn-green { background: #16a34a; color: #fff; border-color: #16a34a; }
+  .btn-green:hover { background: #15803d; }
+  .btn-red { background: #ef4444; color: #fff; border-color: #ef4444; }
+  input, textarea, select { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; transition: border 0.15s; }
+  input:focus, textarea:focus { border-color: #3b82f6; }
+  textarea { resize: vertical; }
+  .status-bar { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+  .status-connected { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+  .status-disconnected { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+  .platform-toggle { display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+  .platform-btn { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; border: 2px solid #e2e8f0; cursor: pointer; font-size: 13px; font-weight: 600; color: #64748b; transition: all 0.15s; user-select: none; }
+  .platform-btn.active-fb { border-color: #1877f2; background: #eff6ff; color: #1877f2; }
+  .platform-btn.active-ig { border-color: #e1306c; background: #fff1f7; color: #e1306c; }
+  .platform-btn.active-gmb { border-color: #34a853; background: #f0fdf4; color: #16a34a; }
+  .char-count { font-size: 11px; color: #94a3b8; text-align: right; margin-top: 4px; }
+  .ia-badge { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border: none; }
+  .empty-state { text-align: center; padding: 40px; color: #94a3b8; }
+  .preview-post { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-top: 16px; }
+  .preview-header { background: #f8fafc; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+  .preview-body { padding: 14px; font-size: 13px; color: #374151; white-space: pre-wrap; }
+  .schedule-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .schedule-row input[type=datetime-local] { flex: 1; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="version-badge">v1.0.0 — marketing-social</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="icon">📱</div>
+    <div>
+      <h1>Facebook & Instagram</h1>
+      <p>Publique posts, agende conteúdo e gerencie suas páginas nas redes sociais</p>
+    </div>
+    <div style="margin-left:auto">
+      <span id="headerStatus" style="background:rgba(255,255,255,0.2);color:#fff;padding:3px 12px;border-radius:99px;font-size:11px;font-weight:700">⏳ Verificando...</span>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div id="statusBar" class="status-bar status-disconnected">
+    <span id="statusIcon">🔴</span>
+    <span id="statusText">Não conectado ao Facebook</span>
+    <div style="margin-left:auto">
+      <button id="btnConnect" onclick="connectMeta(this)" class="btn btn-fb" style="display:none">
+        📘 Conectar com Facebook
+      </button>
+      <button id="btnDisconnect" onclick="disconnectMeta()" class="btn btn-red" style="display:none">Desconectar</button>
+    </div>
+  </div>
+
+  <!-- Conteúdo conectado -->
+  <div id="mainContent" style="display:none">
+
+    <!-- Plataformas ativas -->
+    <div class="card">
+      <h2>📲 Plataformas Conectadas</h2>
+      <div id="platformsRow" style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="background:#eff6ff;border:2px solid #1877f2;border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:8px;font-weight:700;color:#1877f2">
+          📘 <span id="fbPageName">Facebook</span>
+        </div>
+        <div id="igBadge" style="background:#fff1f7;border:2px solid #e1306c;border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:8px;font-weight:700;color:#e1306c;display:none">
+          📸 Instagram vinculado
+        </div>
+      </div>
+    </div>
+
+    <!-- Criar Post -->
+    <div class="card">
+      <h2>✍️ Criar Post</h2>
+
+      <!-- Selecionar plataformas -->
+      <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:8px">PUBLICAR EM:</div>
+      <div class="platform-toggle">
+        <label class="platform-btn" id="toggleFb" onclick="togglePlatform('fb')">
+          <input type="checkbox" id="chkFb" checked style="display:none"> 📘 Facebook
+        </label>
+        <label class="platform-btn" id="toggleIg" onclick="togglePlatform('ig')">
+          <input type="checkbox" id="chkIg" style="display:none"> 📸 Instagram
+        </label>
+        <label class="platform-btn" id="toggleGmb" onclick="togglePlatform('gmb')">
+          <input type="checkbox" id="chkGmb" style="display:none"> 📍 Google Meu Negócio
+        </label>
+      </div>
+
+      <!-- Texto -->
+      <textarea id="postText" placeholder="O que você quer compartilhar? Ex: Promoção especial de fim de semana! 🔥" rows="5" oninput="updateCharCount()"></textarea>
+      <div class="char-count"><span id="charCount">0</span>/2200 caracteres</div>
+
+      <!-- Preview -->
+      <div id="postPreview" style="display:none" class="preview-post">
+        <div class="preview-header">👁️ Prévia do post</div>
+        <div id="previewText" class="preview-body"></div>
+      </div>
+
+      <!-- Ações -->
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <button onclick="suggestPost()" class="btn ia-badge">✨ Sugerir com IA</button>
+        <button onclick="previewPost()" class="btn">👁️ Prévia</button>
+        <button onclick="publishNow()" class="btn btn-green">📤 Publicar agora</button>
+        <button onclick="toggleSchedule()" class="btn" style="background:#7c3aed;color:#fff;border-color:#7c3aed">📅 Agendar</button>
+      </div>
+
+      <!-- Agendar -->
+      <div id="scheduleRow" style="display:none" class="schedule-row">
+        <input type="datetime-local" id="scheduleDate">
+        <button onclick="schedulePost()" class="btn btn-green">✅ Confirmar agendamento</button>
+      </div>
+    </div>
+
+    <!-- Posts publicados -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin:0">📋 Posts Recentes</h2>
+        <button onclick="loadPosts()" class="btn" style="padding:6px 12px;font-size:12px">🔄 Atualizar</button>
+      </div>
+      <div id="postsList">
+        <div class="empty-state">
+          <div style="font-size:36px;margin-bottom:12px">📋</div>
+          <p>Clique em "Atualizar" para ver os posts recentes</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Desconectado -->
+  <div id="disconnectedContent">
+    <div class="card">
+      <div class="empty-state">
+        <div style="font-size:48px;margin-bottom:16px">📱</div>
+        <p style="font-size:15px;font-weight:600;color:#1e293b;margin-bottom:8px">Conecte sua Página do Facebook</p>
+        <p style="font-size:13px;margin-bottom:20px;max-width:400px;margin-left:auto;margin-right:auto">
+          Publique simultaneamente no Facebook, Instagram e Google Meu Negócio com um único clique
+        </p>
+        <button onclick="connectMeta(this)" class="btn btn-fb" style="font-size:14px;padding:12px 24px">
+          📘 Conectar com Facebook
+        </button>
+        <p style="font-size:11px;color:#94a3b8;margin-top:12px">
+          ⚠️ Integração Meta em desenvolvimento — disponível em breve
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+checkAuth(['admin', 'atendente']);
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+const platformState = { fb: true, ig: false, gmb: false };
+
+async function initPage() {
+  try {
+    const r = await api('/api/marketing/meta/status');
+    if (r && r.connected) {
+      setConnected(r);
+    } else {
+      setDisconnected();
+    }
+  } catch(e) { setDisconnected(); }
+}
+
+function setConnected(data) {
+  document.getElementById('statusBar').className = 'status-bar status-connected';
+  document.getElementById('statusIcon').textContent = '✅';
+  document.getElementById('statusText').textContent = `Conectado — Página: ${data.page_name || 'Facebook'}`;
+  document.getElementById('btnConnect').style.display = 'none';
+  document.getElementById('btnDisconnect').style.display = '';
+  document.getElementById('mainContent').style.display = '';
+  document.getElementById('disconnectedContent').style.display = 'none';
+  document.getElementById('fbPageName').textContent = data.page_name || 'Facebook';
+  if (data.instagram_id) {
+    document.getElementById('igBadge').style.display = '';
+    platformState.ig = true;
+    updateToggleUI('ig');
+  }
+  document.getElementById('headerStatus').textContent = '✅ Conectado';
+}
+
+function setDisconnected() {
+  document.getElementById('statusBar').className = 'status-bar status-disconnected';
+  document.getElementById('statusIcon').textContent = '🔴';
+  document.getElementById('statusText').textContent = 'Não conectado ao Facebook';
+  document.getElementById('btnConnect').style.display = '';
+  document.getElementById('btnDisconnect').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('disconnectedContent').style.display = '';
+  document.getElementById('headerStatus').textContent = '🔴 Desconectado';
+}
+
+function togglePlatform(p) {
+  platformState[p] = !platformState[p];
+  updateToggleUI(p);
+}
+
+function updateToggleUI(p) {
+  const cls = { fb: 'active-fb', ig: 'active-ig', gmb: 'active-gmb' };
+  const el = document.getElementById('toggle' + p.charAt(0).toUpperCase() + p.slice(1));
+  if (platformState[p]) el.classList.add(cls[p]);
+  else el.classList.remove(cls[p]);
+  document.getElementById('chk' + p.charAt(0).toUpperCase() + p.slice(1)).checked = platformState[p];
+}
+
+function updateCharCount() {
+  document.getElementById('charCount').textContent = document.getElementById('postText').value.length;
+}
+
+function previewPost() {
+  const text = document.getElementById('postText').value.trim();
+  if (!text) { toast('Digite o texto primeiro', 'error'); return; }
+  const prev = document.getElementById('postPreview');
+  document.getElementById('previewText').textContent = text;
+  prev.style.display = prev.style.display === 'none' ? '' : 'none';
+}
+
+function toggleSchedule() {
+  const row = document.getElementById('scheduleRow');
+  row.style.display = row.style.display === 'none' ? '' : 'none';
+  if (row.style.display !== 'none') {
+    const now = new Date(); now.setHours(now.getHours() + 1);
+    document.getElementById('scheduleDate').value = now.toISOString().slice(0,16);
+  }
+}
+
+async function suggestPost() {
+  const hint = document.getElementById('postText').value || 'promoção de gás de cozinha MoskoGás Campo Grande';
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  try {
+    const r = await api('/api/marketing/suggest-post', { method: 'POST', body: JSON.stringify({ context: hint, platform: 'social' }) });
+    if (r && r.text) { document.getElementById('postText').value = r.text; updateCharCount(); toast('✨ Texto gerado!', 'success'); }
+  } catch(e) { toast('Erro ao gerar', 'error'); }
+  btn.disabled = false; btn.innerHTML = '✨ Sugerir com IA';
+}
+
+async function publishNow() {
+  const text = document.getElementById('postText').value.trim();
+  if (!text) { toast('Digite o texto do post', 'error'); return; }
+  if (!platformState.fb && !platformState.ig && !platformState.gmb) { toast('Selecione ao menos uma plataforma', 'error'); return; }
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Publicando...';
+  try {
+    const r = await api('/api/marketing/social/post', { method: 'POST', body: JSON.stringify({ text, facebook: platformState.fb, instagram: platformState.ig, gmb: platformState.gmb }) });
+    if (r && r.ok) { toast('✅ Post publicado!', 'success'); document.getElementById('postText').value = ''; updateCharCount(); }
+    else toast(r?.error || 'Erro ao publicar', 'error');
+  } catch(e) { toast('Integração Meta em desenvolvimento', 'error'); }
+  btn.disabled = false; btn.textContent = '📤 Publicar agora';
+}
+
+function schedulePost() {
+  toast('⏳ Agendamento em breve!', 'success');
+}
+
+function connectMeta(btn) {
+  btn.disabled = true; btn.textContent = '⏳ Aguarde...';
+  toast('Integração Meta em desenvolvimento. Em breve!', 'success');
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = '📘 Conectar com Facebook'; }, 1500);
+}
+
+function disconnectMeta() {
+  api('/api/marketing/meta/disconnect', { method: 'POST' }).catch(() => {});
+  setDisconnected();
+}
+
+function loadPosts() {
+  document.getElementById('postsList').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">⏳ Em breve — histórico de posts</div>';
+}
+
+// Init toggle UI
+updateToggleUI('fb');
+initPage();
+</script>
+</body>
+</html>

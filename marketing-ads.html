@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Ads v1.0.0 — MoskoGás</title>
+<script src="shared.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui,-apple-system,sans-serif; background: #f1f5f9; min-height: 100vh; }
+  .version-badge { position:fixed;bottom:8px;right:8px;background:#1e293b;color:#94a3b8;font-size:10px;padding:2px 8px;border-radius:99px;z-index:999 }
+  .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  .page-header { background: linear-gradient(135deg, #1a73e8, #34a853); border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; color: #fff; }
+  .page-header .icon { font-size: 36px; }
+  .page-header h1 { font-size: 20px; font-weight: 700; }
+  .page-header p { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .card h2 { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #374151; transition: all 0.15s; }
+  .btn:hover { background: #f1f5f9; }
+  .btn-blue { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+  .btn-green { background: #16a34a; color: #fff; border-color: #16a34a; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .kpi-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); text-align: center; border-top: 3px solid; }
+  .kpi-card.blue { border-color: #1a73e8; }
+  .kpi-card.green { border-color: #34a853; }
+  .kpi-card.yellow { border-color: #fbbc04; }
+  .kpi-card.red { border-color: #ea4335; }
+  .kpi-value { font-size: 24px; font-weight: 800; color: #1e293b; }
+  .kpi-label { font-size: 11px; color: #64748b; font-weight: 600; margin-top: 4px; }
+  .kpi-change { font-size: 11px; margin-top: 4px; }
+  .kpi-change.up { color: #16a34a; }
+  .kpi-change.down { color: #ef4444; }
+  .campaign-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 8px; transition: background 0.15s; }
+  .campaign-row:hover { background: #f8fafc; }
+  .campaign-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .campaign-status.active { background: #34a853; }
+  .campaign-status.paused { background: #fbbc04; }
+  .campaign-name { font-weight: 600; font-size: 13px; color: #1e293b; flex: 1; }
+  .campaign-meta { font-size: 12px; color: #64748b; }
+  .campaign-budget { font-size: 13px; font-weight: 700; color: #1a73e8; min-width: 80px; text-align: right; }
+  .campaign-actions { display: flex; gap: 6px; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+  .tag-active { background: #dcfce7; color: #166534; }
+  .tag-paused { background: #fef9c3; color: #854d0e; }
+  .tag-search { background: #dbeafe; color: #1e40af; }
+  .tag-pmax { background: #ede9fe; color: #4c1d95; }
+  .pending-banner { background: linear-gradient(135deg, #fffbeb, #fef3c7); border: 1px solid #fde68a; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .progress-bar { background: #e2e8f0; border-radius: 99px; height: 6px; margin-top: 8px; overflow: hidden; }
+  .progress-fill { background: linear-gradient(90deg, #1a73e8, #34a853); height: 100%; border-radius: 99px; animation: progress 2s ease-in-out infinite alternate; }
+  @keyframes progress { from { width: 30%; } to { width: 70%; } }
+  .client-select { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .client-select label { font-size: 13px; font-weight: 600; color: #374151; white-space: nowrap; }
+  .client-select select { flex: 1; max-width: 300px; padding: 8px 12px; }
+  @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="version-badge">v1.0.0 — marketing-ads</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="icon">📢</div>
+    <div>
+      <h1>Google Ads</h1>
+      <p>Gerencie campanhas, orçamentos e performance dos seus clientes</p>
+    </div>
+    <div style="margin-left:auto">
+      <span id="headerStatus" style="background:rgba(255,255,255,0.2);color:#fff;padding:3px 12px;border-radius:99px;font-size:11px;font-weight:700">⏳ Aguardando aprovação</span>
+    </div>
+  </div>
+
+  <!-- Banner aprovação pendente -->
+  <div class="pending-banner">
+    <div style="display:flex;align-items:flex-start;gap:14px">
+      <div style="font-size:28px">⏳</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px;color:#92400e;margin-bottom:6px">Developer Token Basic — Aguardando aprovação do Google</div>
+        <div style="font-size:13px;color:#78350f">
+          Solicitação enviada em <strong>01/03/2026</strong>. O Google normalmente leva 3-5 dias úteis para revisar. 
+          Quando aprovado, todas as funcionalidades abaixo serão liberadas automaticamente.
+        </div>
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+        <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+          <a href="https://ads.google.com/aw/apicenter" target="_blank" class="btn" style="font-size:12px;padding:6px 12px">🔗 Verificar status no Google</a>
+          <a href="https://console.cloud.google.com/apis/credentials?project=mosko-marketing" target="_blank" class="btn" style="font-size:12px;padding:6px 12px">☁️ Google Cloud Console</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview da interface (modo demonstração) -->
+  <div style="position:relative">
+    <div style="position:absolute;inset:0;background:rgba(255,255,255,0.7);z-index:10;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
+      <div style="font-size:36px;margin-bottom:8px">🔒</div>
+      <div style="font-weight:700;font-size:15px;color:#1e293b">Disponível após aprovação do token</div>
+      <div style="font-size:12px;color:#64748b;margin-top:4px">Interface real — aguardando liberação Google</div>
+    </div>
+
+    <!-- KPIs (preview) -->
+    <div class="kpi-grid">
+      <div class="kpi-card blue">
+        <div class="kpi-value">R$ 4.280</div>
+        <div class="kpi-label">GASTO DO MÊS</div>
+        <div class="kpi-change up">↑ 12% vs mês anterior</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-value">8.342</div>
+        <div class="kpi-label">CLIQUES</div>
+        <div class="kpi-change up">↑ 8% vs mês anterior</div>
+      </div>
+      <div class="kpi-card yellow">
+        <div class="kpi-value">142.500</div>
+        <div class="kpi-label">IMPRESSÕES</div>
+        <div class="kpi-change down">↓ 3% vs mês anterior</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-value">5,86%</div>
+        <div class="kpi-label">CTR MÉDIO</div>
+        <div class="kpi-change up">↑ 0,4pp vs mês anterior</div>
+      </div>
+    </div>
+
+    <!-- Seletor de cliente -->
+    <div class="card">
+      <div class="client-select">
+        <label>👤 Cliente:</label>
+        <select disabled>
+          <option>Disk Entulho (324-013-9664)</option>
+          <option>Franco Caçambas (382-868-3295)</option>
+          <option>MoskoGás PJ (452-643-9074)</option>
+          <option>Capital Locações (579-544-8645)</option>
+          <option>BM Carvalho Advogados (238-782-7962)</option>
+          <option>Dalina Massas (458-609-0805)</option>
+        </select>
+        <button class="btn btn-blue" disabled>📊 Ver campanhas</button>
+      </div>
+
+      <h2>📋 Campanhas Ativas</h2>
+
+      <div class="campaign-row">
+        <div class="campaign-status active"></div>
+        <div style="flex:1">
+          <div class="campaign-name">Disk Entulho — Busca Caçamba</div>
+          <div class="campaign-meta">
+            <span class="tag tag-search">Search</span>
+            <span style="margin-left:6px">142 cliques · R$ 1,85 CPC médio</span>
+          </div>
+        </div>
+        <div class="campaign-budget">R$ 50/dia</div>
+        <div class="campaign-actions">
+          <span class="tag tag-active">● Ativa</span>
+          <button class="btn" style="padding:4px 10px;font-size:11px" disabled>⏸ Pausar</button>
+        </div>
+      </div>
+
+      <div class="campaign-row">
+        <div class="campaign-status active"></div>
+        <div style="flex:1">
+          <div class="campaign-name">Franco Caçambas — Performance Max</div>
+          <div class="campaign-meta">
+            <span class="tag tag-pmax">PMax</span>
+            <span style="margin-left:6px">89 cliques · R$ 2,10 CPC médio</span>
+          </div>
+        </div>
+        <div class="campaign-budget">R$ 35/dia</div>
+        <div class="campaign-actions">
+          <span class="tag tag-active">● Ativa</span>
+          <button class="btn" style="padding:4px 10px;font-size:11px" disabled>⏸ Pausar</button>
+        </div>
+      </div>
+
+      <div class="campaign-row">
+        <div class="campaign-status paused"></div>
+        <div style="flex:1">
+          <div class="campaign-name">Dalina Massas — Branding</div>
+          <div class="campaign-meta">
+            <span class="tag tag-search">Search</span>
+            <span style="margin-left:6px">Pausada desde 15/02/2026</span>
+          </div>
+        </div>
+        <div class="campaign-budget">R$ 20/dia</div>
+        <div class="campaign-actions">
+          <span class="tag tag-paused">⏸ Pausada</span>
+          <button class="btn" style="padding:4px 10px;font-size:11px" disabled>▶ Ativar</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /blur overlay -->
+
+  <!-- O que será possível após aprovação -->
+  <div class="card">
+    <h2>🚀 Funcionalidades que serão liberadas</h2>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;font-size:13px">
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:10px;background:#f8fafc;border-radius:8px">
+        <span>📊</span><div><strong>Dashboard de performance</strong><br><span style="color:#64748b">KPIs reais de todos os clientes em tempo real</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:10px;background:#f8fafc;border-radius:8px">
+        <span>⏸</span><div><strong>Pausar / Ativar campanhas</strong><br><span style="color:#64748b">Controle direto sem abrir o Google Ads</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:10px;background:#f8fafc;border-radius:8px">
+        <span>💰</span><div><strong>Ajustar orçamentos</strong><br><span style="color:#64748b">Alterar budget diário de qualquer campanha</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:10px;background:#f8fafc;border-radius:8px">
+        <span>✨</span><div><strong>Criar anúncios com IA</strong><br><span style="color:#64748b">Geração de títulos e descrições otimizados</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:10px;background:#f8fafc;border-radius:8px">
+        <span>📈</span><div><strong>Relatórios automáticos</strong><br><span style="color:#64748b">PDF com performance mensal por cliente</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:10px;background:#f8fafc;border-radius:8px">
+        <span>🔔</span><div><strong>Alertas de budget</strong><br><span style="color:#64748b">Notificação quando orçamento estiver acabando</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+checkAuth(['admin', 'atendente']);
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+</script>
+</body>
+</html>
