@@ -1,6 +1,6 @@
-// v2.47.0
+// v2.47.1
+// v2.47.1: Brand Kit — geração de posts usa tom e img_prompt da marca selecionada
 // v2.47.0: Sistema de Posts Marketing — bulk generate, schedule, approve, DALL-E, cron auto-publish
-// v2.46.8: OAuth callback público — fora do requireApiKey
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6336,6 +6336,8 @@ export default {
         const site = cfg.site || '';
         const regras = cfg.regras || 'Entrega grátis, aceita Gás do Povo';
         const extra = cfg.prompt_extra || '';
+        const brandTom = cfg.brand_tom || 'Tom amigável e local.';
+        const brandImgPrompt = cfg.brand_img_prompt || 'LPG gas cylinder delivery Brazil, realistic photo';
 
         const systemPrompt = `Você é especialista em marketing local para revendas de gás de cozinha e água mineral no Brasil.
 EMPRESA: ${nome}
@@ -6343,16 +6345,17 @@ TELEFONE: ${tel}
 ENDEREÇO: ${end}
 SITE: ${site}
 DIFERENCIAIS: ${regras}
+TOM DE COMUNICAÇÃO: ${brandTom}
 INSTRUÇÕES EXTRAS: ${extra}
 
 Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com estas regras:
 - Texto: máximo 280 caracteres para GMB, pode ser maior para Instagram
 - Sempre citar telefone ou endereço para SEO local
-- Tom amigável, direto, com chamada para ação
+- Tom conforme especificado acima
 - Variar os temas: promoção, dica de segurança, produto, comodidade, depoimento fictício
 - Cada post deve ser DIFERENTE dos outros
 - Responda APENAS com JSON válido, sem markdown: {"posts": [{"texto": "...", "tema": "...", "imagem_prompt": "..."}]}
-- imagem_prompt: descrição em INGLÊS para gerar imagem DALL-E (foto realista, produto, pessoa, etc.)`;
+- imagem_prompt: descrição em INGLÊS para gerar imagem DALL-E baseada em: "${brandImgPrompt}" — adaptar o contexto do post`;
 
         const userPrompt = `Gere ${qty} posts diferentes para a revenda. Variedade máxima de temas.`;
 
