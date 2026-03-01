@@ -4808,8 +4808,9 @@ export default {
     if (method === 'POST' && path === '/api/webhooks/izchat') {
       try {
         const payload = await request.json().catch(() => ({}));
-        const event = payload?.event || payload?.type || '';
-        console.log('[izchat-webhook] Event:', event, '| Payload:', JSON.stringify(payload).slice(0, 300));
+        // IzChat envia o evento no header X-Webhook-Event OU no body
+        const event = request.headers.get('X-Webhook-Event') || payload?.event || payload?.type || '';
+        console.log('[izchat-webhook] Event:', event, '| Payload:', JSON.stringify(payload).slice(0, 500));
 
         // ── Evento: oportunidade movida no CRM (agente IA moveu após receber nota) ──
         if (event === 'crm.opportunity.moved' || event === 'opportunity.moved') {
