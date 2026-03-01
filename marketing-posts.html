@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Posts Marketing v1.3.1 — MoskoGás</title>
+<title>Posts Marketing v1.4.0 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -116,7 +116,7 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.3.1 — marketing-posts</div>
+<div class="version-badge">v1.4.0 — marketing-posts</div>
 
 <div class="container">
 
@@ -347,6 +347,20 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
           <img id="logoImg" style="height:60px;border-radius:8px;border:1px solid #e2e8f0">
         </div>
       </div>
+
+      <!-- FOTOS DA REVENDA -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="margin:0">📸 Fotos da Revenda <span style="font-weight:400;color:#64748b;font-size:11px">(usadas como preferência na geração de imagens)</span></label>
+          <button onclick="openResellerPhotoModal()" class="btn btn-sm" style="background:#f0fdf4;color:#059669;border-color:#86efac">➕ Adicionar foto</button>
+        </div>
+        <p style="font-size:12px;color:#64748b;margin-bottom:10px">Fotos próprias da sua revenda — fachada, carro, moto, produtos, entregadores. A IA usa essas fotos <strong>primeiro</strong>, antes das fotos da marca.</p>
+        <div id="resellerPhotosGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">
+          <div style="text-align:center;padding:20px;color:#94a3b8;font-size:12px;border:1px dashed #e2e8f0;border-radius:8px;cursor:pointer" onclick="openResellerPhotoModal()">
+            ➕<br>Adicionar foto
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- PROMPT DE IA -->
@@ -382,6 +396,67 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 <input type="hidden" id="cfgBrandImgPrompt" value="">
 <input type="hidden" id="cfgBrandColors" value="">
 <input type="hidden" id="cfgBrandTom" value="">
+
+<!-- Modal: adicionar foto da revenda -->
+<div class="modal-overlay" id="modalResellerPhoto">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3>📸 Foto da Revenda</h3>
+      <button onclick="closeModal('modalResellerPhoto')" class="btn btn-sm">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:14px">
+        <label>Tipo / Contexto</label>
+        <select id="rpTipo">
+          <optgroup label="🏢 Estrutura">
+            <option value="fachada">🏢 Fachada da revenda</option>
+            <option value="interno">🏠 Área interna / depósito</option>
+          </optgroup>
+          <optgroup label="🚗 Frota">
+            <option value="carro">🚗 Carro de entrega</option>
+            <option value="moto">🏍️ Moto de entrega</option>
+            <option value="caminhao">🚚 Caminhão / veículo grande</option>
+          </optgroup>
+          <optgroup label="👥 Equipe">
+            <option value="entregador">👕 Entregador (com uniforme)</option>
+            <option value="equipe">👥 Equipe / foto do time</option>
+          </optgroup>
+          <optgroup label="🫙 Produtos">
+            <option value="p13">🔴 P13 na revenda</option>
+            <option value="p20">🟠 P20 na revenda</option>
+            <option value="p45">🟡 P45 na revenda</option>
+            <option value="agua_20l">💧 Água Mineral 20L</option>
+            <option value="produto_outro">🫙 Outro produto</option>
+          </optgroup>
+          <optgroup label="✨ Outros">
+            <option value="lifestyle">✨ Lifestyle / Cliente satisfeito</option>
+            <option value="outro">📎 Outro</option>
+          </optgroup>
+        </select>
+      </div>
+      <div style="margin-bottom:14px">
+        <label>Descrição para a IA <span style="font-weight:400;color:#64748b">(o que tem na foto)</span></label>
+        <textarea id="rpDescricao" rows="3" placeholder="Ex: Fachada da Mosko Gás na Av. Panamericana 295. Placa azul com logo, 3 entregadores na porta, moto e carro com adesivo da marca."></textarea>
+        <p style="font-size:11px;color:#64748b;margin-top:4px">💡 Quanto mais detalhes, melhor a IA usa essa foto como referência visual nos posts.</p>
+      </div>
+      <div style="margin-bottom:14px">
+        <label>Imagem</label>
+        <div id="rpDropzone" style="border:2px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:all 0.15s" onclick="document.getElementById('rpFileInput').click()" ondragover="rpDragOver(event)" ondrop="rpDrop(event)" ondragleave="rpDragLeave(event)">
+          <input type="file" id="rpFileInput" accept="image/*" style="display:none" onchange="rpPreviewFile(this)">
+          <div id="rpPreviewArea">
+            <div style="font-size:28px;margin-bottom:8px">📁</div>
+            <div style="font-size:13px;color:#94a3b8">Clique ou arraste a imagem aqui</div>
+            <div style="font-size:11px;color:#cbd5e1;margin-top:4px">PNG, JPG, WEBP • Max 5MB</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modalResellerPhoto')" class="btn">Cancelar</button>
+      <button onclick="saveResellerPhoto()" id="btnSaveRp" class="btn btn-primary">💾 Salvar Foto</button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal: editar post -->
 <div class="modal-overlay" id="modalPost">
@@ -928,6 +1003,9 @@ async function loadConfig() {
     }
     renderBrandGrid(cfg.brand_id || '');
     if (cfg.brand_id) selectBrand(cfg.brand_id);
+    // Fotos da revenda
+    resellerPhotos = cfg.reseller_photos || [];
+    renderResellerPhotos();
   } catch(e) { toast('Erro ao carregar config', 'error'); }
 }
 
@@ -945,6 +1023,7 @@ async function saveConfig() {
     brand_img_prompt: document.getElementById('cfgBrandImgPrompt').value,
     brand_colors: document.getElementById('cfgBrandColors').value,
     brand_tom: document.getElementById('cfgBrandTom').value,
+    reseller_photos: resellerPhotos,
   };
   const btn = document.getElementById('btnSaveConfig');
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
@@ -978,6 +1057,110 @@ function uploadLogo(input) {
     toast('Logo carregada!', 'success');
   };
   reader.readAsDataURL(file);
+}
+
+// ══════════════════════════════════════════════════
+// FOTOS DA REVENDA
+// ══════════════════════════════════════════════════
+let resellerPhotos = []; // carregado com loadConfig
+let rpSelectedFile = null;
+
+const RP_TIPO_LABEL = {
+  fachada:'🏢 Fachada', interno:'🏠 Interno', carro:'🚗 Carro', moto:'🏍️ Moto',
+  caminhao:'🚚 Caminhão', entregador:'👕 Entregador', equipe:'👥 Equipe',
+  p13:'🔴 P13', p20:'🟠 P20', p45:'🟡 P45', agua_20l:'💧 Água 20L',
+  produto_outro:'🫙 Produto', lifestyle:'✨ Lifestyle', outro:'📎 Outro'
+};
+
+function renderResellerPhotos() {
+  const grid = document.getElementById('resellerPhotosGrid');
+  if (!grid) return;
+  const addBtn = `<div style="text-align:center;padding:16px 8px;color:#94a3b8;font-size:12px;border:1px dashed #e2e8f0;border-radius:8px;cursor:pointer" onclick="openResellerPhotoModal()">➕<br>Adicionar</div>`;
+  if (!resellerPhotos.length) { grid.innerHTML = addBtn; return; }
+
+  grid.innerHTML = resellerPhotos.map((p, i) => `
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;position:relative">
+      <div style="aspect-ratio:1;overflow:hidden;background:#f1f5f9">
+        <img src="${p.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+      </div>
+      <div style="padding:6px 8px">
+        <div style="font-size:10px;font-weight:700;color:#475569">${RP_TIPO_LABEL[p.tipo]||p.tipo}</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${p.descricao||''}">${p.descricao||'Sem descrição'}</div>
+      </div>
+      <button onclick="deleteResellerPhoto(${i},event)" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.9);color:#fff;border:none;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:11px;line-height:1" title="Remover">✕</button>
+    </div>`).join('') + addBtn;
+}
+
+function openResellerPhotoModal() {
+  rpSelectedFile = null;
+  document.getElementById('rpTipo').value = 'fachada';
+  document.getElementById('rpDescricao').value = '';
+  document.getElementById('rpFileInput').value = '';
+  document.getElementById('rpPreviewArea').innerHTML = `
+    <div style="font-size:28px;margin-bottom:8px">📁</div>
+    <div style="font-size:13px;color:#94a3b8">Clique ou arraste a imagem aqui</div>
+    <div style="font-size:11px;color:#cbd5e1;margin-top:4px">PNG, JPG, WEBP • Max 5MB</div>`;
+  document.getElementById('modalResellerPhoto').classList.add('open');
+}
+
+function rpPreviewFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  rpSelectedFile = file;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('rpPreviewArea').innerHTML = `
+      <img src="${e.target.result}" style="max-height:140px;border-radius:8px;max-width:100%;display:block;margin:0 auto">
+      <div style="font-size:11px;color:#94a3b8;margin-top:6px">${file.name}</div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function rpDragOver(e) { e.preventDefault(); document.getElementById('rpDropzone').style.borderColor='#6366f1'; }
+function rpDragLeave(e) { document.getElementById('rpDropzone').style.borderColor='#e2e8f0'; }
+function rpDrop(e) {
+  e.preventDefault(); document.getElementById('rpDropzone').style.borderColor='#e2e8f0';
+  const file = e.dataTransfer.files[0];
+  if (file) { rpSelectedFile = file; const dt = new DataTransfer(); dt.items.add(file); document.getElementById('rpFileInput').files = dt.files; rpPreviewFile(document.getElementById('rpFileInput')); }
+}
+
+async function saveResellerPhoto() {
+  if (!rpSelectedFile) { toast('Selecione uma imagem', 'error'); return; }
+  const tipo = document.getElementById('rpTipo').value;
+  const descricao = document.getElementById('rpDescricao').value.trim();
+  if (!descricao) { toast('Adicione uma descrição para a IA poder usar esta foto', 'error'); return; }
+
+  const btn = document.getElementById('btnSaveRp');
+  btn.disabled = true; btn.textContent = '⏳ Enviando...';
+
+  try {
+    const r = await api(`/api/marketing/reseller-photos?tipo=${encodeURIComponent(tipo)}&descricao=${encodeURIComponent(descricao)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': rpSelectedFile.type || 'image/jpeg' },
+      body: rpSelectedFile
+    });
+    resellerPhotos.push({ tipo, descricao, url: r.url, r2_key: r.r2_key });
+    renderResellerPhotos();
+    closeModal('modalResellerPhoto');
+    toast(`✅ Foto "${RP_TIPO_LABEL[tipo]}" adicionada!`, 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+
+  btn.disabled = false; btn.textContent = '💾 Salvar Foto';
+}
+
+async function deleteResellerPhoto(idx, event) {
+  event.stopPropagation();
+  if (!confirm('Remover esta foto?')) return;
+  const photo = resellerPhotos[idx];
+  try {
+    await api(`/api/marketing/reseller-photos/${idx}`, { method: 'DELETE', body: JSON.stringify({ r2_key: photo.r2_key }) });
+    resellerPhotos.splice(idx, 1);
+    // Salvar novo array na config
+    const cfgRaw = await api('/api/marketing/config');
+    await api('/api/marketing/config', { method: 'POST', body: JSON.stringify({ ...cfgRaw, reseller_photos: resellerPhotos }) });
+    renderResellerPhotos();
+    toast('Foto removida', 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
 }
 
 // Init

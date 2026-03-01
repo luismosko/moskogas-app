@@ -1,4 +1,5 @@
-// v2.48.4
+// v2.48.5
+// v2.48.5: Fotos da revenda — upload R2, prioridade na geração, prompt bilíngue limpo
 // v2.48.4: buildSmartDallePrompt — traduz PT→EN + combina diretrizes marca + contexto post
 // v2.48.3: Fix routing — /api/admin/brands movido para nível raiz
 // v2.48.1: Geração de imagem 3 camadas — foto real brand kit (grátis) > DALL-E+visão > DALL-E puro
@@ -6411,13 +6412,49 @@ export default {
       // Marketing Config (perfil da revenda) ---
       if (path === '/api/marketing/config' && method === 'GET') {
         const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
-        const def = { nome: 'MoskoGás', telefone: '(67) 99333-0303 / (67) 3026-5454', endereco: 'Av. Panamericana, 295, Campo Grande/MS', site: '', regras: '', prompt_extra: '', logo_url: '', frequencia: 'diario' };
+        const def = { nome: 'MoskoGás', telefone: '(67) 99333-0303 / (67) 3026-5454', endereco: 'Av. Panamericana, 295, Campo Grande/MS', site: '', regras: '', prompt_extra: '', logo_url: '', frequencia: 'diario', reseller_photos: [] };
         return json(row ? { ...def, ...JSON.parse(row.value) } : def);
       }
 
       if (path === '/api/marketing/config' && method === 'POST') {
         const body = await request.json();
         await env.DB.prepare(`INSERT OR REPLACE INTO app_config(key,value,updated_at) VALUES('marketing_profile',?,datetime('now'))`).bind(JSON.stringify(body)).run();
+        return json({ ok: true });
+      }
+
+      // Upload de foto da revenda (R2)
+      if (path === '/api/marketing/reseller-photos' && method === 'POST') {
+        const tipo = url.searchParams.get('tipo') || 'outro';
+        const descricao = url.searchParams.get('descricao') || '';
+        const contentType = request.headers.get('content-type') || 'image/jpeg';
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+        const r2Key = `reseller/${Math.floor(Date.now()/1000)}_${tipo}.${ext}`;
+        const bodyBuf = await request.arrayBuffer();
+        await env.BUCKET.put(r2Key, bodyBuf, { httpMetadata: { contentType } });
+        const photoUrl = `https://api.moskogas.com.br/api/pub/brand-asset/${r2Key.replace(/\//g,'~')}`;
+        // Salvar na marketing_profile config
+        const cfgRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
+        const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
+        const photos = cfg.reseller_photos || [];
+        photos.push({ tipo, descricao, url: photoUrl, r2_key: r2Key });
+        cfg.reseller_photos = photos;
+        await env.DB.prepare(`INSERT OR REPLACE INTO app_config(key,value,updated_at) VALUES('marketing_profile',?,datetime('now'))`).bind(JSON.stringify(cfg)).run();
+        return json({ ok: true, url: photoUrl, r2_key: r2Key });
+      }
+
+      // Deletar foto da revenda
+      if (path.startsWith('/api/marketing/reseller-photos/') && method === 'DELETE') {
+        const idx = parseInt(path.split('/').pop());
+        const bodyDel = await request.json().catch(() => ({}));
+        if (bodyDel.r2_key) await env.BUCKET.delete(bodyDel.r2_key).catch(() => {});
+        const cfgRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
+        if (cfgRow) {
+          const cfg = JSON.parse(cfgRow.value);
+          const photos = cfg.reseller_photos || [];
+          photos.splice(idx, 1);
+          cfg.reseller_photos = photos;
+          await env.DB.prepare(`INSERT OR REPLACE INTO app_config(key,value,updated_at) VALUES('marketing_profile',?,datetime('now'))`).bind(JSON.stringify(cfg)).run();
+        }
         return json({ ok: true });
       }
 
@@ -6461,17 +6498,22 @@ export default {
             if (!assetsByTipo[a.tipo]) assetsByTipo[a.tipo] = [];
             assetsByTipo[a.tipo].push(a.nome || a.tipo);
           });
-          const tipoLabel = { logo:'Logo da marca', botijao:'Foto do botijão', uniforme:'Entregador com uniforme', veiculo:'Veículo de entrega', lifestyle:'Foto lifestyle/família', outro:'Outros materiais' };
+          const tipoLabel = { logo:'Logo da marca', botijao:'Foto do botijão', p13:'Foto P13', p20:'Foto P20', p45:'Foto P45', uniforme:'Entregador com uniforme', veiculo:'Veículo de entrega', lifestyle:'Foto lifestyle/família', outro:'Outros materiais' };
           const lines = Object.entries(assetsByTipo).map(([tipo, nomes]) => `  - ${tipoLabel[tipo]||tipo}: ${nomes.length} foto(s) disponível(is)`);
           if (lines.length) {
-            assetsContext = `\nFOTOS REAIS DISPONÍVEIS NO BRAND KIT (usar como base para imagem_prompt):
-${lines.join('\n')}
-IMPORTANTE: o campo imagem_prompt deve descrever QUAL das fotos acima usar como base, sendo específico sobre o contexto visual.
-Exemplo: se tem "botijão", usar "the brand's real gas cylinder in the image, [add context of the post theme]".
-Se tem "uniforme/entregador", usar "delivery man in brand uniform delivering gas cylinder, [post context]".
-Se tem "veiculo", usar "brand delivery vehicle, [post context]".
-Se tem "lifestyle", usar "family/home using the brand's gas, [post context]".`;
+            assetsContext = `\nFOTOS DO BRAND KIT disponíveis (usar como base para imagem_prompt):
+${lines.join('\n')}`;
           }
+        }
+
+        // Incluir fotos da REVENDA no contexto (prioridade máxima)
+        const resellerPhotosGen = cfg.reseller_photos || [];
+        let resellerAssetsContext = '';
+        if (resellerPhotosGen.length) {
+          const rpLines = resellerPhotosGen.map(p => `  - ${p.tipo}: ${p.descricao}`);
+          resellerAssetsContext = `\nFOTOS PRÓPRIAS DA REVENDA (PRIORIDADE MÁXIMA — use estas primeiras para imagem_prompt):
+${rpLines.join('\n')}
+IMPORTANTE: sempre que possível, base o imagem_prompt nas fotos da revenda acima. Mencione elementos visuais específicos descritos (fachada, carro, uniforme, etc.).`;
         }
 
         const systemPrompt = `Você é especialista em marketing local para revendas de gás de cozinha e água mineral no Brasil.
@@ -6482,6 +6524,7 @@ SITE: ${site}
 DIFERENCIAIS: ${regras}
 TOM DE COMUNICAÇÃO: ${brandTom}
 INSTRUÇÕES EXTRAS: ${extra}
+${resellerAssetsContext}
 ${assetsContext}
 
 Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com estas regras:
@@ -6558,19 +6601,65 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
         await ensureMarketingTables(env);
         const postId = path.split('/')[4];
         const body = await request.json().catch(() => ({}));
-        const strategy = body.strategy || 'auto'; // auto | brand_asset | dalle_vision | dalle_pure
+        const strategy = body.strategy || 'auto';
         const row = await env.DB.prepare(`SELECT * FROM marketing_posts WHERE id=?`).bind(postId).first();
         if (!row) return err('Post não encontrado', 404);
 
-        // Buscar brand_id do perfil da revenda
-        const cfgRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
-        const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
-        const brandId = cfg.brand_id || '';
+        // Buscar config da revenda (brand_id + fotos da revenda)
+        const cfgRow2 = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
+        const cfg2 = cfgRow2 ? JSON.parse(cfgRow2.value) : {};
+        const brandId = cfg2.brand_id || '';
+        const resellerPhotos = cfg2.reseller_photos || [];
 
-        // ─── ESTRATÉGIA 1: Foto real do Brand Kit ───────────────────
+        // ── Monta prompt DALL-E: combina diretrizes da marca + fotos revenda + tema do post ──
+        async function buildSmartPrompt(brandKit, postRow, rPhotos) {
+          const directives = brandKit?.img_prompt_base || '';
+          let resellerCtx = '';
+          if (rPhotos && rPhotos.length) {
+            const lines = rPhotos.map(p => `  - ${p.tipo}: ${p.descricao}`);
+            resellerCtx = `\nFOTOS REAIS DA REVENDA (elementos visuais disponíveis — use como referência prioritária):\n${lines.join('\n')}`;
+          }
+          const prompt = `Crie um prompt em INGLÊS para DALL-E 3 seguindo estas instruções:
+
+DIRETRIZES VISUAIS DA MARCA:
+${directives || 'Fotorrealismo profissional, iluminação natural, cenário brasileiro.'}
+${resellerCtx}
+
+CONTEXTO DO POST:
+- Tema: ${postRow.tema || ''}
+- Texto: ${postRow.texto || ''}
+- Tipo de imagem: ${postRow.asset_tipo_sugerido || 'produto'}
+
+REGRAS:
+1. Siga RIGOROSAMENTE as diretrizes visuais da marca
+2. Se há fotos da revenda, incorpore elementos visuais delas (fachada, veículo, uniforme)
+3. Represente o tema do post
+4. Máximo 900 caracteres
+5. Responda APENAS o prompt em inglês, sem aspas ou explicações`;
+
+          const r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
+          });
+          const d = await r.json();
+          return d.choices?.[0]?.message?.content?.trim() || `${directives}. Context: ${postRow.tema}, photorealistic`;
+        }
+
+        // ─── ESTRATÉGIA 1: Foto real — REVENDA primeiro, depois BRAND KIT ────
         if (strategy === 'brand_asset' || strategy === 'auto') {
+          // 1a. Fotos da REVENDA (prioridade máxima)
+          if (resellerPhotos.length) {
+            const tipoSugerido = row.asset_tipo_sugerido || '';
+            const match = tipoSugerido ? resellerPhotos.find(p => p.tipo === tipoSugerido) : null;
+            const chosen = match || resellerPhotos[Math.floor(Math.random() * resellerPhotos.length)];
+            if (chosen) {
+              await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, imagem_source='reseller_photo', updated_at=? WHERE id=?`).bind(chosen.url, Math.floor(Date.now()/1000), postId).run();
+              return json({ ok: true, imagem_url: chosen.url, strategy: 'reseller_photo', tipo: chosen.tipo, descricao: chosen.descricao });
+            }
+          }
+          // 1b. Fotos do BRAND KIT
           if (brandId) {
-            // Respeitar tipo sugerido pela IA ao gerar o post, depois fallbacks
             const tipoSugerido = row.asset_tipo_sugerido || 'botijao';
             const tipoPrefs = [tipoSugerido, 'lifestyle', 'botijao', 'uniforme', 'veiculo', 'outro'].filter((v,i,a) => a.indexOf(v) === i);
             let chosenAsset = null;
@@ -6583,133 +6672,64 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
               return json({ ok: true, imagem_url: chosenAsset.url, strategy: 'brand_asset', asset_tipo: chosenAsset.tipo });
             }
           }
-          if (strategy === 'brand_asset') return err('Nenhuma foto no Brand Kit. Faça upload em Admin → Brand Kits.', 400);
-          // Se auto e não tem asset → cai para dalle_vision
+          if (strategy === 'brand_asset') return err('Nenhuma foto disponível. Adicione em Config Revenda ou Admin → Brand Kits.', 400);
         }
 
-        // ─── ESTRATÉGIA 2: DALL-E com visão da foto real (GPT-4o) ──
+        // ─── ESTRATÉGIA 2: DALL-E com visão da foto real do botijão ──────────
         if (strategy === 'dalle_vision' || strategy === 'auto') {
-          let referencePhotoUrl = null;
-          if (brandId) {
-            // Pegar foto do botijão da marca como referência visual
-            const botijaoAsset = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? AND tipo='botijao' ORDER BY created_at DESC LIMIT 1`).bind(brandId).first();
-            if (botijaoAsset) referencePhotoUrl = botijaoAsset.url;
+          // Primeiro tenta foto do botijão da revenda, depois do brand kit
+          let refUrl = null;
+          const rpBotijao = resellerPhotos.find(p => ['p13','p20','p45','p5','produto_outro'].includes(p.tipo));
+          if (rpBotijao) refUrl = rpBotijao.url;
+          else if (brandId) {
+            const ba = await env.DB.prepare(`SELECT url FROM brand_assets WHERE brand_id=? AND tipo='botijao' ORDER BY created_at DESC LIMIT 1`).bind(brandId).first();
+            if (ba) refUrl = ba.url;
           }
-          if (referencePhotoUrl) {
-            // Usar GPT-4o Vision para descrever o botijão real em detalhes
-            const visionRes = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                max_tokens: 300,
-                messages: [{
-                  role: 'user',
-                  content: [
-                    { type: 'image_url', image_url: { url: referencePhotoUrl } },
-                    { type: 'text', text: `Describe this LPG gas cylinder in extreme visual detail for a DALL-E image generation prompt: exact colors, shape, markings, logo position, any text visible, material finish. Be very specific. Respond in English only, one paragraph, no preamble.` }
-                  ]
-                }]
-              })
-            });
-            const visionData = await visionRes.json();
-            const bottleDesc = visionData.choices?.[0]?.message?.content || '';
-        // ─── Função auxiliar: monta prompt inteligente e traduz PT→EN ──────
-        async function buildSmartDallePrompt(brandKit, postRow) {
-          const brandDirectives = brandKit?.img_prompt_base || '';
-          const postTema = postRow.tema || '';
-          const postTexto = postRow.texto || '';
-          const postImgHint = postRow.imagem_prompt || '';
-          const assetTipo = postRow.asset_tipo_sugerido || 'botijao';
-
-          // Pede ao GPT para combinar as diretrizes da marca com o contexto do post e traduzir
-          const combinePrompt = `Você é especialista em criar prompts para DALL-E 3.
-
-DIRETRIZES DA MARCA (regras visuais obrigatórias a seguir):
-${brandDirectives || 'Fotorrealismo profissional, iluminação natural.'}
-
-CONTEXTO DO POST:
-- Tema: ${postTema}
-- Texto do post: ${postTexto}
-- Tipo de imagem sugerida: ${assetTipo}
-- Dica adicional: ${postImgHint}
-
-TAREFA: Crie UM prompt em INGLÊS para o DALL-E 3 que:
-1. Siga RIGOROSAMENTE todas as diretrizes visuais da marca acima
-2. Represente visualmente o contexto do post (${postTema})
-3. Seja coerente com o tipo de imagem (${assetTipo})
-4. Máximo 900 caracteres
-
-Responda APENAS com o prompt em inglês, sem explicações, sem aspas.`;
-
-          const r = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 500, messages: [{ role: 'user', content: combinePrompt }] })
-          });
-          const d = await r.json();
-          return d.choices?.[0]?.message?.content?.trim() || `${brandDirectives}. Context: ${postTema}, Brazilian delivery, photorealistic`;
-        }
-
-        // ─── ESTRATÉGIA 2: DALL-E com visão da foto real (GPT-4o) ──────────
-        if (strategy === 'dalle_vision' || strategy === 'auto') {
-          let referencePhotoUrl = null;
-          if (brandId) {
-            const botijaoAsset = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? AND tipo='botijao' ORDER BY created_at DESC LIMIT 1`).bind(brandId).first();
-            if (botijaoAsset) referencePhotoUrl = botijaoAsset.url;
-          }
-          if (referencePhotoUrl) {
-            const visionRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          if (refUrl) {
+            const vRes = await fetch('https://api.openai.com/v1/chat/completions', {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 model: 'gpt-4o-mini', max_tokens: 300,
-                messages: [{
-                  role: 'user',
-                  content: [
-                    { type: 'image_url', image_url: { url: referencePhotoUrl } },
-                    { type: 'text', text: `Describe this LPG gas cylinder in extreme visual detail for DALL-E: exact colors, shape, markings, logo position, any text visible, material finish. Be very specific. English only, one paragraph.` }
-                  ]
-                }]
+                messages: [{ role: 'user', content: [
+                  { type: 'image_url', image_url: { url: refUrl } },
+                  { type: 'text', text: 'Describe this gas cylinder in extreme visual detail for DALL-E: exact colors, shape, markings, logo, finish. English only, one paragraph.' }
+                ]}]
               })
             });
-            const visionData = await visionRes.json();
-            const bottleDesc = visionData.choices?.[0]?.message?.content || '';
+            const vData = await vRes.json();
+            const bottleDesc = vData.choices?.[0]?.message?.content || '';
             if (bottleDesc) {
-              const brandKit = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
-              // Combina descrição do botijão real + diretrizes da marca + contexto do post
-              const smartPrompt = await buildSmartDallePrompt(
-                { img_prompt_base: (brandKit?.img_prompt_base || '') + '\n\nBotijão de referência visual: ' + bottleDesc },
-                row
-              );
-              const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
+              const brandKit2 = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
+              const augmented = { img_prompt_base: (brandKit2?.img_prompt_base || '') + '\n\nReferência visual do botijão real: ' + bottleDesc };
+              const smartPrompt = await buildSmartPrompt(augmented, row, resellerPhotos);
+              const iRes = await fetch('https://api.openai.com/v1/images/generations', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: 'dall-e-3', prompt: smartPrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
               });
-              const imgData = await imgRes.json();
-              const imgUrl = imgData.data?.[0]?.url;
-              if (imgUrl) {
-                await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, imagem_source='dalle_vision', updated_at=? WHERE id=?`).bind(imgUrl, Math.floor(Date.now()/1000), postId).run();
-                return json({ ok: true, imagem_url: imgUrl, strategy: 'dalle_vision' });
+              const iData = await iRes.json();
+              const iUrl = iData.data?.[0]?.url;
+              if (iUrl) {
+                await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, imagem_source='dalle_vision', updated_at=? WHERE id=?`).bind(iUrl, Math.floor(Date.now()/1000), postId).run();
+                return json({ ok: true, imagem_url: iUrl, strategy: 'dalle_vision' });
               }
             }
           }
-          if (strategy === 'dalle_vision') return err('Sem foto de botijão no Brand Kit para usar como referência.', 400);
+          if (strategy === 'dalle_vision') return err('Sem foto de botijão disponível para referência.', 400);
         }
 
-        // ─── ESTRATÉGIA 3: DALL-E com diretrizes da marca + contexto do post ─
-        const brandKit = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
-        // Monta prompt inteligente: traduz diretrizes PT→EN e combina com contexto do post
-        const smartPrompt = await buildSmartDallePrompt(brandKit, row);
+        // ─── ESTRATÉGIA 3: DALL-E com diretrizes + fotos revenda + tema do post ─
+        const brandKit3 = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
+        const finalPrompt = await buildSmartPrompt(brandKit3, row, resellerPhotos);
         const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'dall-e-3', prompt: smartPrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
+          body: JSON.stringify({ model: 'dall-e-3', prompt: finalPrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
         });
         const imgData = await imgRes.json();
         const imgUrl = imgData.data?.[0]?.url;
-        if (!imgUrl) return err('Erro ao gerar imagem: ' + JSON.stringify(imgData.error), 500);
+        if (!imgUrl) return err('Erro DALL-E: ' + JSON.stringify(imgData.error), 500);
         await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, imagem_source='dalle_pure', updated_at=? WHERE id=?`).bind(imgUrl, Math.floor(Date.now()/1000), postId).run();
         return json({ ok: true, imagem_url: imgUrl, strategy: 'dalle_pure' });
       }
