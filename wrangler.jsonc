@@ -10,7 +10,7 @@
     {
       "binding": "DB",
       "database_name": "moskogas_ops",
-      "database_id": "COLOQUE_O_ID_DO_D1_AQUI"
+      "database_id": "2c8c3bef-f365-45bd-88f6-bfa2ebecd7d5"
     }
   ],
   "r2_buckets": [

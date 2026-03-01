@@ -1,0 +1,24 @@
+name: Deploy Worker → Cloudflare
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'worker.js'        # só dispara quando worker.js mudar
+      - 'wrangler.jsonc'   # ou quando a config mudar
+
+jobs:
+  deploy:
+    name: 🚀 Deploy moskogas-backend-v2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: ⚡ Deploy via Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
