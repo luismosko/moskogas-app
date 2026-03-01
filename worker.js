@@ -1,6 +1,6 @@
-// v2.46.2
-// v2.46.2: Marketing OAuth callback fora do middleware auth + fix redirect URL correto
-// v2.46.1: Marketing suggest-post — OpenAI GPT-4o-mini (substituiu Anthropic)
+// v2.46.3
+// v2.46.3: Marketing OAuth — corrige redirect URI para /api/marketing/oauth/callback
+// v2.46.2: Marketing OAuth callback fora do auth middleware + fix redirect URL correto
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6148,12 +6148,12 @@ export default {
     }
 
     // ===== MARKETING MODULE — OAuth callback (sem auth — chamado pelo Google) =====
-    if (path === '/api/marketing/oauth/google/callback' && method === 'GET') {
+    if (path === '/api/marketing/oauth/callback' && method === 'GET') {
       const code = url.searchParams.get('code');
       if (!code) return new Response('Missing code', { status: 400 });
       const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
       const clientSecret = env.MARKETING_GOOGLE_CLIENT_SECRET;
-      const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/google/callback';
+      const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/callback';
       try {
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
@@ -6180,7 +6180,7 @@ export default {
       if (path === '/api/marketing/google/auth-url' && method === 'GET') {
         const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
         if (!clientId) return err('MARKETING_GOOGLE_CLIENT_ID não configurado', 500);
-        const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/google/callback';
+        const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/callback';
         const scopes = [
           'https://www.googleapis.com/auth/business.manage',
           'openid','email','profile'
