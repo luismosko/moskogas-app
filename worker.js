@@ -1,4 +1,5 @@
-// v2.48.2
+// v2.48.3
+// v2.48.3: Fix routing — /api/admin/brands movido para nível raiz (estava dentro /api/marketing/)
 // v2.48.2: Prompt de geração inclui fotos reais do brand kit + asset_tipo_sugerido por post
 // v2.48.1: Geração de imagem 3 camadas — foto real brand kit (grátis) > DALL-E+visão > DALL-E puro
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
@@ -6156,6 +6157,98 @@ export default {
       });
     }
 
+    // ── ENDPOINT PÚBLICO: servir asset de brand kit do R2 ────────────
+    if (path.startsWith('/api/pub/brand-asset/') && method === 'GET') {
+      const r2Key = decodeURIComponent(path.replace('/api/pub/brand-asset/', '').replace(/~/g, '/'));
+      const obj = await env.BUCKET.get(r2Key);
+      if (!obj) return err('Asset não encontrado', 404);
+      return new Response(obj.body, { headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg', 'Cache-Control': 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' } });
+    }
+
+      // ── ADMIN BRAND KITS (somente admin) ─────────────────────
+    if (path.startsWith('/api/admin/brands')) {
+      const authBrand = await requireAuth(request, env, ['admin']);
+        if (authBrand instanceof Response) return authBrand;
+      await ensureMarketingTables(env);
+
+        // Listar todos os brand kits
+      if (path === '/api/admin/brands' && method === 'GET') {
+        const rows = await env.DB.prepare(`SELECT * FROM brand_kits ORDER BY nome ASC`).all().then(r => r.results);
+        // Para cada brand, buscar assets
+        const brands = await Promise.all(rows.map(async b => {
+        const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(b.brand_id).all().then(r => r.results);
+        return { ...b, colors: JSON.parse(b.colors_json||'[]'), color_names: JSON.parse(b.color_names_json||'[]'), assets };
+        }));
+        return json(brands);
+        }
+
+        // Criar brand kit
+      if (path === '/api/admin/brands' && method === 'POST') {
+        const b = await request.json();
+        if (!b.brand_id || !b.nome) return err('brand_id e nome obrigatórios', 400);
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO brand_kits (brand_id, nome, slogan, colors_json, color_names_json, bottle_color, bottle_desc, tom, img_prompt_base, logo_url, ativo, updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,1,?)
+        `).bind(b.brand_id, b.nome, b.slogan||'', JSON.stringify(b.colors||[]), JSON.stringify(b.color_names||[]), b.bottle_color||'#6366f1', b.bottle_desc||'', b.tom||'', b.img_prompt_base||'', b.logo_url||'', Math.floor(Date.now()/1000)).run();
+        return json({ ok: true });
+        }
+
+        // Atualizar brand kit
+      if (path.startsWith('/api/admin/brands/') && !path.includes('/assets') && method === 'PATCH') {
+        const brandId = path.split('/')[4];
+        const b = await request.json();
+        await env.DB.prepare(`
+          UPDATE brand_kits SET nome=?, slogan=?, colors_json=?, color_names_json=?, bottle_color=?, bottle_desc=?, tom=?, img_prompt_base=?, logo_url=?, updated_at=?
+          WHERE brand_id=?
+        `).bind(b.nome, b.slogan||'', JSON.stringify(b.colors||[]), JSON.stringify(b.color_names||[]), b.bottle_color||'#6366f1', b.bottle_desc||'', b.tom||'', b.img_prompt_base||'', b.logo_url||'', Math.floor(Date.now()/1000), brandId).run();
+        return json({ ok: true });
+        }
+
+        // Deletar brand kit
+      if (path.startsWith('/api/admin/brands/') && !path.includes('/assets') && method === 'DELETE') {
+        const brandId = path.split('/')[4];
+        await env.DB.prepare(`DELETE FROM brand_kits WHERE brand_id=?`).bind(brandId).run();
+        await env.DB.prepare(`DELETE FROM brand_assets WHERE brand_id=?`).bind(brandId).run();
+        return json({ ok: true });
+        }
+
+        // Listar assets de um brand
+      if (path.match(/\/api\/admin\/brands\/[^/]+\/assets$/) && method === 'GET') {
+        const brandId = path.split('/')[4];
+        const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(brandId).all().then(r => r.results);
+        return json(assets);
+        }
+
+        // Upload asset (imagem) para R2
+      if (path.match(/\/api\/admin\/brands\/[^/]+\/assets$/) && method === 'POST') {
+        const brandId = path.split('/')[4];
+        const tipo = url.searchParams.get('tipo') || 'outro'; // logo|botijao|uniforme|veiculo|lifestyle|outro
+        const nome = url.searchParams.get('nome') || tipo;
+        const contentType = request.headers.get('content-type') || 'image/jpeg';
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+        const r2Key = `brands/${brandId}/${tipo}/${Date.now()}.${ext}`;
+        const body = await request.arrayBuffer();
+        await env.BUCKET.put(r2Key, body, { httpMetadata: { contentType } });
+        const assetUrl = `https://api.moskogas.com.br/api/pub/brand-asset/${r2Key.replace(/\//g,'~')}`;
+        await env.DB.prepare(`INSERT INTO brand_assets (brand_id, tipo, nome, r2_key, url, created_at) VALUES (?,?,?,?,?,?)`)
+          .bind(brandId, tipo, nome, r2Key, assetUrl, Math.floor(Date.now()/1000)).run();
+        // Se for logo, atualizar logo_url do brand_kit
+        if (tipo === 'logo') await env.DB.prepare(`UPDATE brand_kits SET logo_url=? WHERE brand_id=?`).bind(assetUrl, brandId).run();
+        return json({ ok: true, url: assetUrl, r2_key: r2Key });
+        }
+
+        // Deletar asset
+      if (path.match(/\/api\/admin\/brands\/[^/]+\/assets\/\d+$/) && method === 'DELETE') {
+        const parts = path.split('/');
+        const assetId = parts.pop();
+        const asset = await env.DB.prepare(`SELECT * FROM brand_assets WHERE id=?`).bind(assetId).first();
+        if (asset?.r2_key) await env.BUCKET.delete(asset.r2_key).catch(()=>{});
+        await env.DB.prepare(`DELETE FROM brand_assets WHERE id=?`).bind(assetId).run();
+        return json({ ok: true });
+        }
+      }
+
+
     // ===== MARKETING MODULE — OAuth callback (sem auth — chamado pelo Google) =====
     if (path === '/api/marketing/oauth/callback' && method === 'GET') {
       const code = url.searchParams.get('code');
@@ -6294,89 +6387,6 @@ export default {
         const aiData = await aiRes.json();
         const text = aiData.choices?.[0]?.message?.content || 'Promoção especial! Gás P13 com entrega rápida em Campo Grande. Ligue agora: (67) 99333-0303 🔥';
         return json({ text });
-      }
-
-      // ── ADMIN BRAND KITS (somente admin) ─────────────────────
-      if (path.startsWith('/api/admin/brands')) {
-        const authBrand = await requireAuth(request, env, ['admin']);
-        if (authBrand instanceof Response) return authBrand;
-        await ensureMarketingTables(env);
-
-        // Listar todos os brand kits
-        if (path === '/api/admin/brands' && method === 'GET') {
-          const rows = await env.DB.prepare(`SELECT * FROM brand_kits ORDER BY nome ASC`).all().then(r => r.results);
-          // Para cada brand, buscar assets
-          const brands = await Promise.all(rows.map(async b => {
-            const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(b.brand_id).all().then(r => r.results);
-            return { ...b, colors: JSON.parse(b.colors_json||'[]'), color_names: JSON.parse(b.color_names_json||'[]'), assets };
-          }));
-          return json(brands);
-        }
-
-        // Criar brand kit
-        if (path === '/api/admin/brands' && method === 'POST') {
-          const b = await request.json();
-          if (!b.brand_id || !b.nome) return err('brand_id e nome obrigatórios', 400);
-          await env.DB.prepare(`
-            INSERT OR REPLACE INTO brand_kits (brand_id, nome, slogan, colors_json, color_names_json, bottle_color, bottle_desc, tom, img_prompt_base, logo_url, ativo, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,1,?)
-          `).bind(b.brand_id, b.nome, b.slogan||'', JSON.stringify(b.colors||[]), JSON.stringify(b.color_names||[]), b.bottle_color||'#6366f1', b.bottle_desc||'', b.tom||'', b.img_prompt_base||'', b.logo_url||'', Math.floor(Date.now()/1000)).run();
-          return json({ ok: true });
-        }
-
-        // Atualizar brand kit
-        if (path.startsWith('/api/admin/brands/') && !path.includes('/assets') && method === 'PATCH') {
-          const brandId = path.split('/')[4];
-          const b = await request.json();
-          await env.DB.prepare(`
-            UPDATE brand_kits SET nome=?, slogan=?, colors_json=?, color_names_json=?, bottle_color=?, bottle_desc=?, tom=?, img_prompt_base=?, logo_url=?, updated_at=?
-            WHERE brand_id=?
-          `).bind(b.nome, b.slogan||'', JSON.stringify(b.colors||[]), JSON.stringify(b.color_names||[]), b.bottle_color||'#6366f1', b.bottle_desc||'', b.tom||'', b.img_prompt_base||'', b.logo_url||'', Math.floor(Date.now()/1000), brandId).run();
-          return json({ ok: true });
-        }
-
-        // Deletar brand kit
-        if (path.startsWith('/api/admin/brands/') && !path.includes('/assets') && method === 'DELETE') {
-          const brandId = path.split('/')[4];
-          await env.DB.prepare(`DELETE FROM brand_kits WHERE brand_id=?`).bind(brandId).run();
-          await env.DB.prepare(`DELETE FROM brand_assets WHERE brand_id=?`).bind(brandId).run();
-          return json({ ok: true });
-        }
-
-        // Listar assets de um brand
-        if (path.match(/\/api\/admin\/brands\/[^/]+\/assets$/) && method === 'GET') {
-          const brandId = path.split('/')[4];
-          const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(brandId).all().then(r => r.results);
-          return json(assets);
-        }
-
-        // Upload asset (imagem) para R2
-        if (path.match(/\/api\/admin\/brands\/[^/]+\/assets$/) && method === 'POST') {
-          const brandId = path.split('/')[4];
-          const tipo = url.searchParams.get('tipo') || 'outro'; // logo|botijao|uniforme|veiculo|lifestyle|outro
-          const nome = url.searchParams.get('nome') || tipo;
-          const contentType = request.headers.get('content-type') || 'image/jpeg';
-          const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-          const r2Key = `brands/${brandId}/${tipo}/${Date.now()}.${ext}`;
-          const body = await request.arrayBuffer();
-          await env.BUCKET.put(r2Key, body, { httpMetadata: { contentType } });
-          const assetUrl = `https://api.moskogas.com.br/api/pub/brand-asset/${r2Key.replace(/\//g,'~')}`;
-          await env.DB.prepare(`INSERT INTO brand_assets (brand_id, tipo, nome, r2_key, url, created_at) VALUES (?,?,?,?,?,?)`)
-            .bind(brandId, tipo, nome, r2Key, assetUrl, Math.floor(Date.now()/1000)).run();
-          // Se for logo, atualizar logo_url do brand_kit
-          if (tipo === 'logo') await env.DB.prepare(`UPDATE brand_kits SET logo_url=? WHERE brand_id=?`).bind(assetUrl, brandId).run();
-          return json({ ok: true, url: assetUrl, r2_key: r2Key });
-        }
-
-        // Deletar asset
-        if (path.match(/\/api\/admin\/brands\/[^/]+\/assets\/\d+$/) && method === 'DELETE') {
-          const parts = path.split('/');
-          const assetId = parts.pop();
-          const asset = await env.DB.prepare(`SELECT * FROM brand_assets WHERE id=?`).bind(assetId).first();
-          if (asset?.r2_key) await env.BUCKET.delete(asset.r2_key).catch(()=>{});
-          await env.DB.prepare(`DELETE FROM brand_assets WHERE id=?`).bind(assetId).run();
-          return json({ ok: true });
-        }
       }
 
       // ── ENDPOINT PÚBLICO: servir asset de brand kit do R2 ────
