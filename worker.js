@@ -1,5 +1,5 @@
 // v2.49.0
-// v2.49.0: Banco de Posts (post_templates) — CRUD, bulk-generate IA por marca, endpoint /use para revendedor
+// v2.49.0: Banco de Posts (post_templates) — CRUD admin, bulk-generate IA, endpoint /use
 // v2.48.8: avaliação cron — 1 msg/cliente/semana, marca todos pedidos do cliente
 // v2.48.7: brand_assets.descricao — edição inline, PATCH endpoint, migration automática
 // v2.48.6: DALL-E visão busca produto em revenda E brand kit (todos tipos), labels mais claros
@@ -7063,7 +7063,6 @@ async function ensureMarketingTables(env) {
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN gmb_result TEXT DEFAULT ''`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN imagem_source TEXT DEFAULT ''`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN asset_tipo_sugerido TEXT DEFAULT 'botijao'`).run().catch(()=>{});
-  await env.DB.prepare(`ALTER TABLE brand_assets ADD COLUMN descricao TEXT DEFAULT ''`).run().catch(()=>{});
   // Banco de Posts (templates curados pelo admin)
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS post_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
