@@ -1,6 +1,6 @@
-// v2.45.3
-// v2.45.3: Avaliação — mensagens reais MoskoGás + link Google Review configurado
-// v2.45.2: fix webhook payload — data.toStageTitle, data.contact.number (formato real IzChat)
+// v2.45.4
+// v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
+// v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
@@ -4866,9 +4866,8 @@ export default {
                 await env.DB.prepare('UPDATE satisfaction_surveys SET google_link_sent=1 WHERE id=?').bind(survey.id).run();
                 console.log(`[izchat-webhook] ⭐ Score 5 — link Google enviado para ${phoneDigits}`);
               } else {
-                // Follow-up + alerta admin
-                const msgCliente = montarMensagemAvaliacao(config.mensagem_negativa, { nome: nomeCliente });
-                await sendWhatsApp(env, phoneIntl, msgCliente, { category: 'avaliacao' });
+                // Follow-up é feito pelo próprio Agente IA do IzChat
+                // Worker apenas registra e alerta admins
                 await env.DB.prepare('UPDATE satisfaction_surveys SET follow_up_sent=1 WHERE id=?').bind(survey.id).run();
                 // Alerta admins
                 const { results: admins } = await env.DB.prepare(
