@@ -1,5 +1,6 @@
 // shared.js — Utilitários compartilhados MoskoGás v1.15.0
 // v1.19.0
+// v1.20.0: Banco de Posts adicionado ao menu Admin
 // v1.19.0: Brand Kits adicionado ao menu Config (admin root)
 // v1.18.0: Marketing Posts adicionado ao menu Marketing
 // v1.14.0: 📦 Estoque adicionado à navbar
@@ -198,6 +199,7 @@ const NAV_DROPDOWNS = [
       { href: 'config.html', icon: '⚙️', label: 'Configurações' },
       { href: 'usuarios.html', icon: '👥', label: 'Usuários' },
       { href: 'admin-brands.html', icon: '🏭', label: 'Brand Kits', roles: ['admin'] },
+      { href: 'admin-posts.html', icon: '📋', label: 'Banco de Posts', roles: ['admin'] },
     ]
   },
 ];

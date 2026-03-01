@@ -558,4 +558,113 @@ async function savePost() {
     if (id) { await api(`/api/post-templates/${id}`, { method: 'PATCH', body: JSON.stringify({ ...body, ativo: true }) }); }
     else { await api('/api/post-templates', { method: 'POST', body: JSON.stringify(body) }); }
     closeModal('modalPost');
-    await
+    await loadPosts();
+    toast('✅ Post salvo!', 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+async function deletePost(id) {
+  if (!confirm('Excluir este post do banco?')) return;
+  try {
+    await api(`/api/post-templates/${id}`, { method: 'DELETE' });
+    await loadPosts();
+    toast('Post removido', 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+// ──────────────────────────────────────────
+// VIEW POST
+// ──────────────────────────────────────────
+function viewPost(id) {
+  const p = allPosts.find(x => x.id === id);
+  if (!p) return;
+  currentViewId = id;
+  const brandMap = Object.fromEntries(brands.map(b => [b.brand_id, b]));
+  const brand = brandMap[p.brand_id];
+  const [ano, mm] = (p.mes_ano || '_').split('_');
+  const mNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const mesLabel = mm ? `${mNames[parseInt(mm)-1]}/${ano}` : '—';
+
+  document.getElementById('viewTema').textContent = `${p.tema || 'Post'} — ${brand?.nome || p.brand_id} — ${mesLabel}`;
+  document.getElementById('viewTexto').textContent = p.texto_base;
+
+  const imgArea = document.getElementById('viewImgArea');
+  if (p.imagem_url) {
+    document.getElementById('viewImg').src = p.imagem_url;
+    imgArea.style.display = '';
+  } else { imgArea.style.display = 'none'; }
+
+  const placeholders = [];
+  if (p.texto_base.includes('{{telefone}}')) placeholders.push('{{telefone}}');
+  if (p.texto_base.includes('{{hashtags}}')) placeholders.push('{{hashtags}}');
+  document.getElementById('viewMeta').innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <span>🏭 ${brand?.nome || p.brand_id}</span>
+      <span>📅 ${mesLabel}</span>
+      <span>📝 ${p.texto_base.length} chars</span>
+      ${placeholders.map(ph => `<span style="background:#4c1d95;color:#c4b5fd;padding:1px 6px;border-radius:4px;font-size:10px">${ph}</span>`).join('')}
+    </div>`;
+  document.getElementById('modalView').classList.add('open');
+}
+
+function editFromView() {
+  closeModal('modalView');
+  if (currentViewId) editPost(currentViewId);
+}
+
+// ──────────────────────────────────────────
+// IMAGE UPLOAD HELPERS
+// ──────────────────────────────────────────
+function previewImg(input) {
+  const file = input.files[0];
+  if (!file) return;
+  editImgFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('editImgEl').src = e.target.result;
+    document.getElementById('editImgPreview').style.display = '';
+    document.getElementById('editImgUrl').value = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+function urlToPreview(url) {
+  if (!url) { document.getElementById('editImgPreview').style.display = 'none'; return; }
+  document.getElementById('editImgEl').src = url;
+  document.getElementById('editImgPreview').style.display = '';
+  editImgFile = null;
+}
+
+function clearImg() {
+  editImgFile = null;
+  document.getElementById('editImgUrl').value = '';
+  document.getElementById('editImgPreview').style.display = 'none';
+  document.getElementById('editImgEl').src = '';
+}
+
+function imgDragOver(e) { e.preventDefault(); document.querySelector('.img-dropzone').style.borderColor='#7c3aed'; }
+function imgDrop(e) {
+  e.preventDefault(); document.querySelector('.img-dropzone').style.borderColor='#334155';
+  const file = e.dataTransfer.files[0];
+  if (file) { editImgFile = file; const dt = new DataTransfer(); dt.items.add(file); document.getElementById('editImgFile').files = dt.files; previewImg(document.getElementById('editImgFile')); }
+}
+
+// ──────────────────────────────────────────
+// QUICK IMAGE UPLOAD (from card "Adicionar foto")
+// ──────────────────────────────────────────
+function openImgUpload(postId, event) {
+  event.stopPropagation();
+  const p = allPosts.find(x => x.id === postId);
+  if (!p) return;
+  editPost(postId); // open edit modal, user can add image there
+}
+
+// ──────────────────────────────────────────
+// MODAL HELPERS
+// ──────────────────────────────────────────
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+</script>
+</body>
+</html>
