@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Banco de Posts v1.0.1 — MoskoGás Admin</title>
+<title>Banco de Posts v1.0.2 — MoskoGás Admin</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -123,6 +123,7 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
     </select>
     <input id="filterBusca" placeholder="🔍 Buscar por tema ou texto..." oninput="filterLocal()" style="flex:1">
     <span id="countLabel" style="font-size:12px;color:#64748b;white-space:nowrap"></span>
+    <button onclick="exportCSVCanva()" class="btn" style="background:#1d4ed8;color:#fff;border-color:#1d4ed8;white-space:nowrap" title="Exportar CSV pronto para o Bulk Create do Canva">📊 Exportar CSV Canva</button>
   </div>
 
   <!-- Posts grid -->
@@ -246,7 +247,7 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
   </div>
 </div>
 
-<div class="version-badge">Banco de Posts v1.0.1</div>
+<div class="version-badge">Banco de Posts v1.0.2</div>
 <div id="nav-placeholder-bottom"></div>
 
 <script>
@@ -693,6 +694,55 @@ async function doQuickUpload(postId, brandId, file) {
     toast('Erro: ' + e.message, 'error');
     if (card) card.style.opacity = '1';
   }
+}
+
+// ──────────────────────────────────────────
+// EXPORT CSV — formato Canva Bulk Create
+// ──────────────────────────────────────────
+function exportCSVCanva() {
+  // Pega os posts atualmente visíveis (filtrados)
+  const visibleIds = [...document.querySelectorAll('[id^="pcard-"]')].map(el => parseInt(el.id.replace('pcard-','')));
+  const posts = allPosts.filter(p => visibleIds.includes(p.id));
+
+  if (!posts.length) { toast('Nenhum post para exportar', 'error'); return; }
+
+  const brandMap = Object.fromEntries(brands.map(b => [b.brand_id, b]));
+  const mNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  // Cabeçalho compatível com Canva Bulk Create
+  const headers = ['ID','Marca','Mes','Tema','Texto','Imagem_URL','Telefone','Hashtags','Plataformas'];
+
+  const rows = posts.map(p => {
+    const brand = brandMap[p.brand_id];
+    const [ano, mm] = (p.mes_ano || '_').split('_');
+    const mesLabel = mm ? `${mNames[parseInt(mm)-1]} ${ano}` : '';
+    // Texto já com placeholders visíveis — o revendedor substitui no Canva
+    const textoLimpo = p.texto_base.replace(/\n/g,' ').replace(/"/g,'""');
+    return [
+      p.id,
+      brand?.nome || p.brand_id,
+      mesLabel,
+      p.tema || '',
+      `"${textoLimpo}"`,
+      p.imagem_url || '',
+      '{{telefone}}',
+      '{{hashtags}}',
+      (JSON.parse(p.plataformas || '[]')).join('|')
+    ].join(',');
+  });
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }); // BOM para Excel/Canva abrir certo
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const brand = document.getElementById('filterBrand').value;
+  const mes = document.getElementById('filterMes').value;
+  const brandNome = brand ? (brands.find(b=>b.brand_id===brand)?.nome || brand) : 'todas-marcas';
+  a.href = url;
+  a.download = `posts-canva_${brandNome}_${mes || 'todos'}_${posts.length}posts.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`✅ CSV exportado — ${posts.length} posts`, 'success');
 }
 
 // ──────────────────────────────────────────
