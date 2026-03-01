@@ -1,6 +1,6 @@
-// v2.45.0
-// v2.45.0: Avaliação — CRM IzChat (criar oportunidade ao enviar + webhook crm.opportunity.moved processa nota)
-// v2.44.0: Módulo Avaliação Pós-Compra — NPS WhatsApp, webhook IzChat, cron 2h, flag sem_avaliacao
+// v2.45.2
+// v2.45.2: fix webhook payload — data.toStageTitle, data.contact.number (formato real IzChat)
+// v2.45.1: fix webhook — ler evento do header X-Webhook-Event
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
@@ -4814,12 +4814,14 @@ export default {
 
         // ── Evento: oportunidade movida no CRM (agente IA moveu após receber nota) ──
         if (event === 'crm.opportunity.moved' || event === 'opportunity.moved') {
-          const opp = payload?.data?.opportunity || payload?.opportunity || {};
-          const stageName = opp?.stage?.name || opp?.stageName || '';
-          const oppId = String(opp?.id || opp?.opportunity_id || '');
-          const contactPhone = opp?.contact?.phone || opp?.contact?.number || '';
+          // Payload real IzChat: { event, data: { id, ticketId, toStageTitle, contact: { number, name } } }
+          const opp = payload?.data || {};
+          const stageName = opp?.toStageTitle || opp?.stageName || '';
+          const oppId = String(opp?.id || '');
+          const contactPhone = opp?.contact?.number || opp?.contact?.phone || '';
+          const contactName = opp?.contact?.name || '';
 
-          console.log(`[izchat-webhook] CRM moved → stage: "${stageName}", oppId: ${oppId}, phone: ${contactPhone}`);
+          console.log(`[izchat-webhook] CRM moved → toStage: "${stageName}", oppId: ${oppId}, phone: ${contactPhone}`);
 
           if (oppId) {
             // Determinar score pela etapa
@@ -4846,7 +4848,7 @@ export default {
               const config = await getAvaliacaoConfig(env);
               const phoneDigits = survey.phone_digits;
               const phoneIntl = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
-              const nomeCliente = (survey.customer_name || 'Cliente').split(' ')[0];
+              const nomeCliente = contactName || (survey.customer_name || 'Cliente').split(' ')[0];
 
               // Score final pela etapa
               const scoreFinal = stageNorm.includes('google') ? 5 : (survey.score_raw || 3);
