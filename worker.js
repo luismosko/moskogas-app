@@ -1,6 +1,6 @@
-// v2.45.2
+// v2.45.3
+// v2.45.3: Avaliação — mensagens reais MoskoGás + link Google Review configurado
 // v2.45.2: fix webhook payload — data.toStageTitle, data.contact.number (formato real IzChat)
-// v2.45.1: fix webhook — ler evento do header X-Webhook-Event
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
@@ -6272,11 +6272,11 @@ async function getAvaliacaoConfig(env) {
     ativo: true,
     delay_horas: 2,
     cron_ativo: true,
-    mensagem_pesquisa: 'Olá {nome}! 😊 Seu pedido foi entregue. *De 1 a 5, como foi seu atendimento conosco hoje?*\n\n5️⃣ Ótimo  4️⃣ Bom  3️⃣ Regular  2️⃣ Ruim  1️⃣ Péssimo\n\nResponda com o número! 👇',
-    mensagem_positiva: 'Que ótimo, {nome}! 🎉 Ficamos felizes que gostou! Que tal deixar uma avaliação no Google? Sua opinião nos ajuda muito!\n\n👉 {google_url}',
-    mensagem_negativa: 'Obrigado pelo retorno, {nome}. Sentimos muito que sua experiência não foi como esperado. 😔 Pode nos contar o que aconteceu? Assim podemos melhorar!',
+    mensagem_pesquisa: 'Obrigado por comprar no Mosko Gás. 🙏\n\nEstamos buscando sempre melhorar nosso atendimento e para isso sua opinião é muito importante.\n\nResponda por gentileza como você avalia o atendimento prestado.\nDe 1 a 5.\n\nConte para nós como foi seu atendimento por telefone e como foi sua entrega?\n\n😃 Ficaremos felizes em saber 😃\nTenha uma semana abençoada 🙌',
+    mensagem_positiva: 'Agradecemos sua avaliação\n\nPor gentileza, faça uma avaliação no Google pra gente...\nisso nos ajuda muito a continuar prestando um bom serviço. 🙏🏻😀\né só clicar no link abaixo, marcar 5 estrelas ⭐⭐⭐⭐⭐ e fazer um comentário.\n\n{google_url}',
+    mensagem_negativa: 'Obrigado pelo retorno, {nome}. Sentimos muito que sua experiência não foi como esperado. 😔\n\nPode nos contar o que aconteceu? Assim podemos melhorar!',
     mensagem_admin: '⚠️ *Avaliação baixa recebida!*\n\nCliente: {nome}\nTelefone: {telefone}\nNota: {score}/5\nPedido: #{pedido_id}',
-    google_url: '',
+    google_url: 'https://g.page/r/CY7yl-zGUwODEBM/review',
     horario_inicio: 8,
     horario_fim: 20,
   };
