@@ -1,6 +1,6 @@
-// v2.46.3
+// v2.46.4
+// v2.46.4: Marketing — try/catch para expor erro real do 500
 // v2.46.3: Marketing OAuth — corrige redirect URI para /api/marketing/oauth/callback
-// v2.46.2: Marketing OAuth callback fora do auth middleware + fix redirect URL correto
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6173,6 +6173,7 @@ export default {
 
     // ===== MARKETING MODULE (com auth) =====
     if (path.startsWith('/api/marketing/')) {
+      try {
       const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
       if (authCheck.error) return authCheck.error;
 
@@ -6299,6 +6300,7 @@ export default {
       }
 
       return err(`Endpoint marketing não encontrado (${method} ${path})`, 404);
+      } catch(e) { return err('Marketing erro: ' + e.message, 500); }
     }
 
     return err(`Not found (${method} ${path})`, 404);
