@@ -1,4 +1,5 @@
-// v2.46.0
+// v2.46.1
+// v2.46.1: Marketing suggest-post — OpenAI GPT-4o-mini (substituiu Anthropic)
 // v2.46.0: Módulo Marketing — Google OAuth, GMB reviews/posts, sugestão IA, Meta placeholder
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
@@ -6269,17 +6270,17 @@ export default {
         return err(postData.error?.message || 'Erro ao publicar', 400);
       }
 
-      // --- IA: Sugerir post ---
+      // --- IA: Sugerir post (OpenAI) ---
       if (path === '/api/marketing/suggest-post' && method === 'POST') {
         const body = await request.json();
         const prompt = `Você é um especialista em marketing para revenda de gás de cozinha e água mineral em Campo Grande, MS. Crie um post curto, direto e persuasivo (máximo 3 parágrafos) para redes sociais sobre: "${body.context}". Tom amigável, local. Não use hashtags em excesso. Retorne apenas o texto do post.`;
-        const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
-          headers: { 'x-api-key': env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 300, messages: [{ role: 'user', content: prompt }] })
+          headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 300, messages: [{ role: 'user', content: prompt }] })
         });
         const aiData = await aiRes.json();
-        const text = aiData.content?.[0]?.text || 'Promoção especial! Gás P13 com entrega rápida em Campo Grande. Ligue agora: (67) 99333-0303 🔥';
+        const text = aiData.choices?.[0]?.message?.content || 'Promoção especial! Gás P13 com entrega rápida em Campo Grande. Ligue agora: (67) 99333-0303 🔥';
         return json({ text });
       }
 
