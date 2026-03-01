@@ -1,6 +1,6 @@
-// v2.46.1
+// v2.46.2
+// v2.46.2: Marketing OAuth callback fora do middleware auth + fix redirect URL correto
 // v2.46.1: Marketing suggest-post — OpenAI GPT-4o-mini (substituiu Anthropic)
-// v2.46.0: Módulo Marketing — Google OAuth, GMB reviews/posts, sugestão IA, Meta placeholder
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6147,7 +6147,31 @@ export default {
       return err(`Endpoint vales não encontrado (${method} ${path})`, 404);
     }
 
-    // ===== MARKETING MODULE =====
+    // ===== MARKETING MODULE — OAuth callback (sem auth — chamado pelo Google) =====
+    if (path === '/api/marketing/oauth/google/callback' && method === 'GET') {
+      const code = url.searchParams.get('code');
+      if (!code) return new Response('Missing code', { status: 400 });
+      const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
+      const clientSecret = env.MARKETING_GOOGLE_CLIENT_SECRET;
+      const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/google/callback';
+      try {
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: 'authorization_code' })
+        });
+        const tokenData = await tokenRes.json();
+        if (!tokenData.access_token) return new Response('Falha ao obter token Google: ' + JSON.stringify(tokenData), { status: 400 });
+        const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
+        const profile = await profileRes.json();
+        await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?,datetime('now'))`).bind('marketing_google_tokens', JSON.stringify({ access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, email: profile.email, expires_at: Date.now() + (tokenData.expires_in * 1000) })).run();
+        return new Response(null, { status: 302, headers: { Location: 'https://moskogas-app.pages.dev/config.html#marketingSection' } });
+      } catch(e) {
+        return new Response('Erro OAuth: ' + e.message, { status: 500 });
+      }
+    }
+
+    // ===== MARKETING MODULE (com auth) =====
     if (path.startsWith('/api/marketing/')) {
       const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
       if (authCheck.error) return authCheck.error;
@@ -6155,37 +6179,15 @@ export default {
       // --- Google OAuth ---
       if (path === '/api/marketing/google/auth-url' && method === 'GET') {
         const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
+        if (!clientId) return err('MARKETING_GOOGLE_CLIENT_ID não configurado', 500);
         const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/google/callback';
         const scopes = [
           'https://www.googleapis.com/auth/business.manage',
-          'https://www.googleapis.com/auth/adwords',
           'openid','email','profile'
         ].join(' ');
         const state = crypto.randomUUID();
-        const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${state}`;
-        return json({ url });
-      }
-
-      if (path === '/api/marketing/oauth/google/callback' && method === 'GET') {
-        const code = url.searchParams.get('code');
-        if (!code) return err('Missing code', 400);
-        const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
-        const clientSecret = env.MARKETING_GOOGLE_CLIENT_SECRET;
-        const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/google/callback';
-        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: 'authorization_code' })
-        });
-        const tokenData = await tokenRes.json();
-        if (!tokenData.access_token) return err('Falha ao obter token Google', 400);
-        // Busca email do usuário
-        const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
-        const profile = await profileRes.json();
-        // Salva tokens no D1
-        await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?,datetime('now'))`).bind('marketing_google_tokens', JSON.stringify({ access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, email: profile.email, expires_at: Date.now() + (tokenData.expires_in * 1000) })).run();
-        // Redireciona para config.html com âncora marketing
-        return new Response(null, { status: 302, headers: { Location: 'https://luismosko.github.io/moskogas-app/config.html#marketing' } });
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${state}`;
+        return json({ url: authUrl });
       }
 
       if (path === '/api/marketing/google/status' && method === 'GET') {
