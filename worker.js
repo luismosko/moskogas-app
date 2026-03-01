@@ -1,4 +1,5 @@
-// v2.48.6
+// v2.48.7
+// v2.48.7: brand_assets.descricao — edição inline, PATCH endpoint, migration automática
 // v2.48.6: DALL-E visão busca produto em revenda E brand kit (todos tipos), labels mais claros
 // v2.48.5: Fotos da revenda — upload R2, prioridade na geração, prompt bilíngue limpo
 // v2.48.4: buildSmartDallePrompt — traduz PT→EN + combina diretrizes marca + contexto post
@@ -6178,7 +6179,7 @@ export default {
         const rows = await env.DB.prepare(`SELECT * FROM brand_kits ORDER BY nome ASC`).all().then(r => r.results);
         // Para cada brand, buscar assets
         const brands = await Promise.all(rows.map(async b => {
-        const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(b.brand_id).all().then(r => r.results);
+        const assets = await env.DB.prepare(`SELECT id, brand_id, tipo, nome, descricao, r2_key, url, created_at FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(b.brand_id).all().then(r => r.results);
         return { ...b, colors: JSON.parse(b.colors_json||'[]'), color_names: JSON.parse(b.color_names_json||'[]'), assets };
         }));
         return json(brands);
@@ -6217,7 +6218,7 @@ export default {
         // Listar assets de um brand
       if (path.match(/\/api\/admin\/brands\/[^/]+\/assets$/) && method === 'GET') {
         const brandId = path.split('/')[4];
-        const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(brandId).all().then(r => r.results);
+        const assets = await env.DB.prepare(`SELECT id, brand_id, tipo, nome, descricao, r2_key, url, created_at FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(brandId).all().then(r => r.results);
         return json(assets);
         }
 
@@ -6248,6 +6249,15 @@ export default {
         await env.DB.prepare(`DELETE FROM brand_assets WHERE id=?`).bind(assetId).run();
         return json({ ok: true });
         }
+
+      // Editar nome/descrição do asset
+      if (path.match(/\/api\/admin\/brands\/[^/]+\/assets\/\d+$/) && method === 'PATCH') {
+        const assetId = path.split('/').pop();
+        const body = await request.json();
+        await env.DB.prepare(`UPDATE brand_assets SET nome=?, descricao=? WHERE id=?`)
+          .bind(body.nome || '', body.descricao || '', assetId).run();
+        return json({ ok: true });
+      }
       }
 
 
@@ -6404,7 +6414,7 @@ export default {
         await ensureMarketingTables(env);
         const rows = await env.DB.prepare(`SELECT * FROM brand_kits WHERE ativo=1 ORDER BY nome ASC`).all().then(r => r.results);
         const brands = await Promise.all(rows.map(async b => {
-          const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(b.brand_id).all().then(r => r.results);
+          const assets = await env.DB.prepare(`SELECT id, brand_id, tipo, nome, descricao, r2_key, url, created_at FROM brand_assets WHERE brand_id=? ORDER BY tipo, created_at DESC`).bind(b.brand_id).all().then(r => r.results);
           return { ...b, colors: JSON.parse(b.colors_json||'[]'), color_names: JSON.parse(b.color_names_json||'[]'), assets };
         }));
         return json(brands);
@@ -6692,8 +6702,8 @@ REGRAS:
           if (!refUrl && brandId) {
             const baTipos = ['p13','p20','p45','botijao','p5'];
             for (const t of baTipos) {
-              const ba = await env.DB.prepare(`SELECT url FROM brand_assets WHERE brand_id=? AND tipo=? ORDER BY created_at DESC LIMIT 1`).bind(brandId, t).first();
-              if (ba) { refUrl = ba.url; break; }
+              const ba = await env.DB.prepare(`SELECT url, descricao FROM brand_assets WHERE brand_id=? AND tipo=? ORDER BY created_at DESC LIMIT 1`).bind(brandId, t).first();
+              if (ba) { refUrl = ba.url; refDesc = ba.descricao || ''; break; }
             }
           }
 
@@ -6895,6 +6905,7 @@ async function ensureMarketingTables(env) {
     brand_id TEXT NOT NULL,
     tipo TEXT NOT NULL,
     nome TEXT DEFAULT '',
+    descricao TEXT DEFAULT '',
     r2_key TEXT DEFAULT '',
     url TEXT NOT NULL,
     created_at INTEGER DEFAULT (unixepoch())
@@ -6904,6 +6915,7 @@ async function ensureMarketingTables(env) {
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN gmb_result TEXT DEFAULT ''`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN imagem_source TEXT DEFAULT ''`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN asset_tipo_sugerido TEXT DEFAULT 'botijao'`).run().catch(()=>{});
+  await env.DB.prepare(`ALTER TABLE brand_assets ADD COLUMN descricao TEXT DEFAULT ''`).run().catch(()=>{});
 }
 
 async function publishScheduledPosts(env) {

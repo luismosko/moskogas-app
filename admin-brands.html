@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brand Kits v1.2.0 — MoskoGás Admin</title>
+<title>Brand Kits v1.3.0 — MoskoGás Admin</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -108,7 +108,7 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.2.0 — admin-brands</div>
+<div class="version-badge">v1.3.0 — admin-brands</div>
 
 <div class="container">
 
@@ -499,19 +499,61 @@ async function loadAssetsGallery(brandId) {
     const tipoLabel = { logo:'🏷️ Logo', p13:'🔴 P13', p20:'🟠 P20', p45:'🟡 P45', p5:'⚪ P5', botijao:'🫙 Botijão', agua_20l:'💧 Água 20L', agua_garrafa:'🍶 Água Garrafa', uniforme:'👕 Uniforme', veiculo:'🚚 Veículo', lifestyle:'✨ Lifestyle', outro:'📎 Outro' };
     const tipoClass = { logo:'tipo-logo', p13:'tipo-botijao', p20:'tipo-botijao', p45:'tipo-botijao', p5:'tipo-botijao', botijao:'tipo-botijao', agua_20l:'tipo-lifestyle', agua_garrafa:'tipo-lifestyle', uniforme:'tipo-uniforme', veiculo:'tipo-veiculo', lifestyle:'tipo-lifestyle', outro:'tipo-outro' };
     gallery.innerHTML = assets.map(a => `
-      <div style="background:#0f172a;border:1px solid #334155;border-radius:10px;overflow:hidden">
-        <div style="aspect-ratio:1;overflow:hidden">
+      <div id="asset-card-${a.id}" style="background:#0f172a;border:1px solid #334155;border-radius:10px;overflow:hidden">
+        <div style="aspect-ratio:1;overflow:hidden;cursor:pointer" onclick="toggleAssetEdit(${a.id})">
           <img src="${a.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
         </div>
         <div style="padding:8px">
           <div class="tipo-chip ${tipoClass[a.tipo]||'tipo-outro'}" style="margin-bottom:4px">${tipoLabel[a.tipo]||a.tipo}</div>
-          <div style="font-size:11px;color:#64748b;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nome || '—'}</div>
-          <button onclick="deleteAsset('${brandId}',${a.id},event)" class="btn btn-sm btn-red" style="width:100%;justify-content:center">🗑️ Remover</button>
+
+          <!-- Modo visualização -->
+          <div id="asset-view-${a.id}">
+            <div style="font-size:11px;color:#94a3b8;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(a.nome||'').replace(/"/g,'')}">${a.nome || '<em style="color:#475569">sem nome</em>'}</div>
+            <div style="font-size:10px;color:#64748b;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:28px" title="${(a.descricao||'').replace(/"/g,'')}">${a.descricao || '<em style="color:#334155">sem descrição</em>'}</div>
+            <div style="display:flex;gap:4px">
+              <button onclick="toggleAssetEdit(${a.id})" class="btn btn-sm" style="flex:1;justify-content:center;font-size:11px;background:#1e293b;border-color:#334155;color:#94a3b8">✏️ Editar</button>
+              <button onclick="deleteAsset('${brandId}',${a.id},event)" class="btn btn-sm btn-red" style="padding:4px 8px">🗑️</button>
+            </div>
+          </div>
+
+          <!-- Modo edição (oculto por padrão) -->
+          <div id="asset-edit-${a.id}" style="display:none">
+            <input id="asset-nome-${a.id}" value="${(a.nome||'').replace(/"/g,'&quot;')}" placeholder="Nome" style="font-size:11px;margin-bottom:5px">
+            <textarea id="asset-desc-${a.id}" rows="3" placeholder="Descrição para a IA: cores, detalhes, contexto..." style="font-size:11px;margin-bottom:5px;resize:vertical">${a.descricao||''}</textarea>
+            <div style="display:flex;gap:4px">
+              <button onclick="saveAssetEdit('${brandId}',${a.id})" class="btn btn-sm btn-green" style="flex:1;justify-content:center;font-size:11px">💾 Salvar</button>
+              <button onclick="toggleAssetEdit(${a.id})" class="btn btn-sm" style="font-size:11px;background:#1e293b;border-color:#334155;color:#94a3b8">✕</button>
+            </div>
+          </div>
         </div>
       </div>`).join('');
   } catch(e) {
     gallery.innerHTML = `<div style="color:#ef4444">Erro: ${e.message}</div>`;
   }
+}
+
+function toggleAssetEdit(assetId) {
+  const view = document.getElementById(`asset-view-${assetId}`);
+  const edit = document.getElementById(`asset-edit-${assetId}`);
+  const isEditing = edit.style.display !== 'none';
+  view.style.display = isEditing ? '' : 'none';
+  edit.style.display = isEditing ? 'none' : '';
+  if (!isEditing) document.getElementById(`asset-nome-${assetId}`).focus();
+}
+
+async function saveAssetEdit(brandId, assetId) {
+  const nome = document.getElementById(`asset-nome-${assetId}`).value.trim();
+  const descricao = document.getElementById(`asset-desc-${assetId}`).value.trim();
+  try {
+    await api(`/api/admin/brands/${brandId}/assets/${assetId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ nome, descricao })
+    });
+    toggleAssetEdit(assetId);
+    await loadAssetsGallery(brandId);
+    await loadBrands();
+    toast('✅ Descrição salva!', 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
 }
 
 async function deleteAsset(brandId, assetId, event) {
