@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco de Posts v1.0.0 — MoskoGás Admin</title>
+<script src="shared.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui,-apple-system,sans-serif; background: #0f172a; min-height: 100vh; color: #e2e8f0; }
+.version-badge { position:fixed;bottom:8px;right:8px;background:#1e293b;color:#475569;font-size:10px;padding:2px 8px;border-radius:99px;z-index:999 }
+.container { max-width: 1300px; margin: 0 auto; padding: 16px; }
+
+.page-header { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 14px; padding: 22px 28px; margin-bottom: 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.page-header h1 { font-size: 22px; font-weight: 800; color: #f1f5f9; }
+.page-header p { font-size: 13px; color: #64748b; margin-top: 3px; }
+.root-badge { background: #7c3aed; color: #fff; padding: 4px 12px; border-radius: 99px; font-size: 11px; font-weight: 700; white-space:nowrap }
+
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 14px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; transition: all 0.15s; white-space:nowrap }
+.btn:hover { background: #1e293b; border-color: #475569; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-purple { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.btn-purple:hover { background: #6d28d9; }
+.btn-green { background: #059669; color: #fff; border-color: #059669; }
+.btn-green:hover { background: #047857; }
+.btn-red { background: #dc2626; color: #fff; border-color: #dc2626; }
+.btn-red:hover { background: #b91c1c; }
+.btn-orange { background: #d97706; color: #fff; border-color: #d97706; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+input, textarea, select { width: 100%; padding: 9px 12px; border: 1px solid #334155; border-radius: 8px; font-size: 13px; font-family: inherit; background: #0f172a; color: #e2e8f0; outline: none; transition: border 0.15s; }
+input:focus, textarea:focus, select:focus { border-color: #7c3aed; }
+label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 5px; }
+.form-row { margin-bottom: 14px; }
+
+/* Toolbar / Filters */
+.toolbar { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.toolbar select { width: auto; min-width: 160px; }
+.toolbar input { width: auto; min-width: 180px; flex: 1; }
+
+/* Stats bar */
+.stats-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.stat-chip { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 16px; text-align: center; flex: 1; min-width: 100px; }
+.stat-num { font-size: 22px; font-weight: 800; color: #f1f5f9; }
+.stat-lbl { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+/* Posts grid */
+.posts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.post-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.15s; }
+.post-card:hover { border-color: #475569; }
+.post-img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #0f172a; display: block; }
+.post-img-placeholder { width: 100%; aspect-ratio: 1; background: #0f172a; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; border-bottom: 1px solid #334155; color: #475569; font-size: 12px; }
+.post-body { padding: 12px; flex: 1; display: flex; flex-direction: column; }
+.post-tema { font-size: 10px; font-weight: 700; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.post-texto { font-size: 12px; color: #94a3b8; line-height: 1.5; flex: 1; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 10px; }
+.post-brand-chip { display: inline-flex; align-items: center; gap: 4px; background: #0f172a; border: 1px solid #334155; border-radius: 99px; padding: 2px 8px; font-size: 10px; color: #64748b; margin-bottom: 8px; }
+.post-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.post-status { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+.status-ativo { background: #064e3b; color: #34d399; }
+.status-inativo { background: #1f2937; color: #6b7280; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+.modal-overlay.open { display: flex; }
+.modal { background: #1e293b; border: 1px solid #334155; border-radius: 16px; max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto; }
+.modal-header { padding: 18px 20px 0; display: flex; align-items: center; justify-content: space-between; }
+.modal-header h3 { font-size: 16px; font-weight: 800; color: #f1f5f9; }
+.modal-body { padding: 18px 20px; }
+.modal-footer { padding: 0 20px 18px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Bulk gen */
+.tema-tag { display: inline-flex; align-items: center; gap: 4px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; transition: all 0.1s; }
+.tema-tag.sel { background: #4c1d95; border-color: #7c3aed; color: #c4b5fd; }
+.temas-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.progress-wrap { background: #0f172a; border-radius: 8px; overflow: hidden; height: 8px; margin: 8px 0; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a855f7); transition: width 0.3s; border-radius: 8px; }
+.gen-log { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; font-size: 11px; color: #64748b; max-height: 150px; overflow-y: auto; font-family: monospace; }
+
+/* Brand filter pills */
+.brand-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.brand-pill { padding: 5px 12px; border-radius: 99px; font-size: 12px; font-weight: 600; border: 1px solid #334155; background: #0f172a; color: #94a3b8; cursor: pointer; transition: all 0.15s; }
+.brand-pill.active { border-color: #7c3aed; background: #4c1d95; color: #c4b5fd; }
+.brand-pill-all { border-color: #475569; }
+
+/* Upload img */
+.img-dropzone { border: 2px dashed #334155; border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; transition: all 0.15s; }
+.img-dropzone:hover { border-color: #7c3aed; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+
+  <div class="page-header">
+    <div style="font-size:36px">📋</div>
+    <div style="flex:1">
+      <h1>Banco de Posts <span style="color:#7c3aed">por Marca</span></h1>
+      <p>Posts curados pelo admin — revendedores personalizam e publicam sem geração de IA</p>
+    </div>
+    <span class="root-badge">🔐 Admin Root</span>
+    <button onclick="openBulkModal()" class="btn btn-purple">⚡ Gerar Posts com IA</button>
+    <button onclick="openNewModal()" class="btn btn-green">➕ Adicionar Post</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-chip"><div class="stat-num" id="statTotal">—</div><div class="stat-lbl">Posts ativos</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statBrands">—</div><div class="stat-lbl">Marcas com posts</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statMes">—</div><div class="stat-lbl">Mês atual</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statSemImg">—</div><div class="stat-lbl">Sem imagem</div></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <select id="filterMes" onchange="loadPosts()">
+      <option value="">📅 Todos os meses</option>
+    </select>
+    <select id="filterBrand" onchange="loadPosts()">
+      <option value="">🏭 Todas as marcas</option>
+    </select>
+    <input id="filterBusca" placeholder="🔍 Buscar por tema ou texto..." oninput="filterLocal()" style="flex:1">
+    <span id="countLabel" style="font-size:12px;color:#64748b;white-space:nowrap"></span>
+  </div>
+
+  <!-- Posts grid -->
+  <div id="postsGrid" class="posts-grid">
+    <div style="grid-column:1/-1;text-align:center;padding:40px;color:#475569">⏳ Carregando posts...</div>
+  </div>
+
+</div>
+
+<!-- Modal: Gerar em Bulk -->
+<div class="modal-overlay" id="modalBulk">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3>⚡ Gerar Posts com IA — Todas as Marcas</h3>
+      <button onclick="closeModal('modalBulk')" class="btn btn-sm">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Mês de referência</label>
+        <input id="bulkMes" type="month" style="width:auto">
+      </div>
+
+      <div class="form-row">
+        <label>Marcas alvo (vazio = todas)</label>
+        <div id="bulkBrandPills" class="brand-pills">
+          <span class="brand-pill brand-pill-all active" onclick="toggleBrandPill(this,'')">🌐 Todas</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Temas / Ocasiões do mês <span style="font-weight:400;color:#475569">(clique para selecionar)</span></label>
+        <div class="temas-grid" id="temasGrid">
+          <!-- populated by JS -->
+        </div>
+        <input id="temaCustom" placeholder="+ Adicionar tema personalizado e pressionar Enter" style="margin-top:8px">
+      </div>
+
+      <div id="bulkProgress" style="display:none">
+        <div class="progress-wrap"><div class="progress-fill" id="bulkProgressFill" style="width:0%"></div></div>
+        <div class="gen-log" id="bulkLog"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modalBulk')" class="btn">Cancelar</button>
+      <button onclick="runBulkGenerate()" id="btnBulkGen" class="btn btn-purple">⚡ Gerar Posts</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Novo/Editar Post -->
+<div class="modal-overlay" id="modalPost">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalPostTitle">➕ Novo Post</h3>
+      <button onclick="closeModal('modalPost')" class="btn btn-sm">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editPostId">
+      <div class="form-row">
+        <label>Marca</label>
+        <select id="editPostBrand"></select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div>
+          <label>Mês (AAAA_MM)</label>
+          <input id="editPostMes" placeholder="ex: 2026_03">
+        </div>
+        <div>
+          <label>Tema / Ocasião</label>
+          <input id="editPostTema" placeholder="ex: Dia dos Pais">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Texto do post <span style="font-weight:400;color:#475569">— use {{telefone}} e {{hashtags}} como placeholders</span></label>
+        <textarea id="editPostTexto" rows="6" placeholder="☀️ Começo de semana com gás na medida certa! Entre em contato: {{telefone}} {{hashtags}}"></textarea>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;display:flex;justify-content:space-between">
+          <span>💡 {{telefone}} e {{hashtags}} serão substituídos pelos dados da revenda</span>
+          <span id="editCharCount">0</span>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Imagem do post</label>
+        <div id="editImgPreview" style="margin-bottom:8px;display:none">
+          <img id="editImgEl" style="max-height:180px;border-radius:8px;border:1px solid #334155">
+          <button onclick="clearImg()" class="btn btn-sm btn-red" style="margin-top:6px">🗑️ Remover imagem</button>
+        </div>
+        <div class="img-dropzone" onclick="document.getElementById('editImgFile').click()" ondragover="imgDragOver(event)" ondrop="imgDrop(event)">
+          <input type="file" id="editImgFile" accept="image/*" style="display:none" onchange="previewImg(this)">
+          <div style="font-size:20px;margin-bottom:4px">🖼️</div>
+          <div style="font-size:12px;color:#64748b">Clique ou arraste a imagem do post</div>
+          <div style="font-size:11px;color:#475569;margin-top:2px">PNG, JPG, WEBP • Max 5MB</div>
+        </div>
+        <input id="editImgUrl" placeholder="ou cole a URL da imagem..." style="margin-top:8px" oninput="urlToPreview(this.value)">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modalPost')" class="btn">Cancelar</button>
+      <button onclick="savePost()" id="btnSavePost" class="btn btn-green">💾 Salvar Post</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ver post completo -->
+<div class="modal-overlay" id="modalView">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3 id="viewTema">Post</h3>
+      <button onclick="closeModal('modalView')" class="btn btn-sm">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="viewImgArea" style="margin-bottom:14px;display:none">
+        <img id="viewImg" style="width:100%;border-radius:10px;border:1px solid #334155">
+      </div>
+      <div id="viewTexto" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;font-size:13px;line-height:1.6;white-space:pre-wrap;color:#e2e8f0;margin-bottom:14px"></div>
+      <div id="viewMeta" style="font-size:11px;color:#64748b"></div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modalView')" class="btn">Fechar</button>
+      <button onclick="editFromView()" id="btnEditFromView" class="btn btn-purple">✏️ Editar</button>
+    </div>
+  </div>
+</div>
+
+<div class="version-badge">Banco de Posts v1.0.0</div>
+<div id="nav-placeholder-bottom"></div>
+
+<script>
+checkAuth(['admin']);
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+const TEMAS_PADRAO = [
+  'Entrega Rápida','Promoção P13','Promoção Água 20L','Dica de Segurança',
+  'Dia dos Pais','Dia das Mães','Natal','Ano Novo','Carnaval','Festa Junina',
+  'Volta às Aulas','Churrasco','Verão','Inverno','Final de Semana',
+  'Segunda-feira','Depoimento Cliente','Curiosidade sobre Gás','Fidelidade',
+  'Urgente / Acabou o Gás','Água Mineral Gelada','Combo Gás + Água',
+  'Horário de Atendimento','Formas de Pagamento','PIX Aceito','Whatsapp',
+  'Equipe','Qualidade','Confiança','Marca Autorizada'
+];
+
+let allPosts = [];
+let brands = [];
+let selectedBrandPills = new Set();
+let selectedTemas = new Set();
+let currentViewId = null;
+let editImgFile = null;
+
+// ──────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────
+async function init() {
+  brands = await api('/api/marketing/brands').catch(() => []);
+  await populateFilters();
+  await loadPosts();
+  renderTemasGrid();
+  renderBulkBrandPills();
+  // Default mes
+  const now = new Date();
+  document.getElementById('bulkMes').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+init();
+
+async function populateFilters() {
+  // Meses
+  const meses = await api('/api/post-templates/meses').catch(() => []);
+  const selMes = document.getElementById('filterMes');
+  const uniqueMes = [...new Set(meses.map(m => m.mes_ano))].sort().reverse();
+  uniqueMes.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m;
+    const [ano, mm] = m.split('_');
+    const mNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    opt.textContent = `📅 ${mNames[parseInt(mm)-1]}/${ano}`;
+    selMes.appendChild(opt);
+  });
+  // Brands
+  const selBrand = document.getElementById('filterBrand');
+  brands.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.brand_id;
+    opt.textContent = b.nome;
+    selBrand.appendChild(opt);
+  });
+  // Edit modal brand select
+  const editBrand = document.getElementById('editPostBrand');
+  brands.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.brand_id;
+    opt.textContent = b.nome;
+    editBrand.appendChild(opt);
+  });
+}
+
+// ──────────────────────────────────────────
+// LOAD POSTS
+// ──────────────────────────────────────────
+async function loadPosts() {
+  const mes = document.getElementById('filterMes').value;
+  const brand = document.getElementById('filterBrand').value;
+  let qs = [];
+  if (mes) qs.push(`mes_ano=${encodeURIComponent(mes)}`);
+  if (brand) qs.push(`brand_id=${encodeURIComponent(brand)}`);
+  try {
+    allPosts = await api(`/api/post-templates?${qs.join('&')}`);
+    updateStats();
+    renderPosts(allPosts);
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function updateStats() {
+  const brandIds = new Set(allPosts.map(p => p.brand_id));
+  const now = new Date();
+  const mesCurrent = `${now.getFullYear()}_${String(now.getMonth()+1).padStart(2,'0')}`;
+  const mesCount = allPosts.filter(p => p.mes_ano === mesCurrent).length;
+  const semImg = allPosts.filter(p => !p.imagem_url).length;
+  document.getElementById('statTotal').textContent = allPosts.length;
+  document.getElementById('statBrands').textContent = brandIds.size;
+  document.getElementById('statMes').textContent = mesCount;
+  document.getElementById('statSemImg').textContent = semImg;
+}
+
+function filterLocal() {
+  const q = document.getElementById('filterBusca').value.toLowerCase();
+  if (!q) { renderPosts(allPosts); return; }
+  const filtered = allPosts.filter(p => p.tema.toLowerCase().includes(q) || p.texto_base.toLowerCase().includes(q));
+  renderPosts(filtered);
+}
+
+function renderPosts(posts) {
+  const grid = document.getElementById('postsGrid');
+  document.getElementById('countLabel').textContent = `${posts.length} post(s)`;
+  if (!posts.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:#475569">
+      <div style="font-size:40px;margin-bottom:12px">📭</div>
+      <div style="font-size:16px;font-weight:700;color:#64748b">Nenhum post encontrado</div>
+      <div style="font-size:13px;margin-top:6px">Use ⚡ Gerar Posts ou ➕ Adicionar manualmente</div>
+    </div>`;
+    return;
+  }
+
+  const brandMap = Object.fromEntries(brands.map(b => [b.brand_id, b]));
+  const mNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  grid.innerHTML = posts.map(p => {
+    const brand = brandMap[p.brand_id];
+    const [ano, mm] = (p.mes_ano || '_').split('_');
+    const mesLabel = mm ? `${mNames[parseInt(mm)-1]}/${ano}` : '—';
+    const imgHtml = p.imagem_url
+      ? `<img class="post-img" src="${p.imagem_url}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const placeholderHtml = `<div class="post-img-placeholder" style="${p.imagem_url?'display:none':''}">
+        <div style="font-size:28px">🖼️</div>
+        <div>Sem imagem</div>
+        <button onclick="openImgUpload(${p.id},event)" class="btn btn-sm btn-orange" style="margin-top:4px;font-size:11px">📤 Adicionar foto</button>
+      </div>`;
+
+    return `<div class="post-card" id="pcard-${p.id}">
+      ${imgHtml}${placeholderHtml}
+      <div class="post-body">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+          ${brand ? `<div class="post-brand-chip">${brand.logo_url ? `<img src="${brand.logo_url}" style="height:12px">` : '🏭'} ${brand.nome}</div>` : `<div class="post-brand-chip">🏭 ${p.brand_id}</div>`}
+          <div class="post-brand-chip">📅 ${mesLabel}</div>
+          <span class="post-status ${p.ativo ? 'status-ativo' : 'status-inativo'}">${p.ativo ? '✓ Ativo' : '— Inativo'}</span>
+        </div>
+        <div class="post-tema">${p.tema || 'Sem tema'}</div>
+        <div class="post-texto">${p.texto_base}</div>
+        <div class="post-actions">
+          <button onclick="viewPost(${p.id})" class="btn btn-sm" style="flex:1;justify-content:center;background:#0f172a;border-color:#334155">👁️ Ver</button>
+          <button onclick="editPost(${p.id})" class="btn btn-sm btn-purple" style="flex:1;justify-content:center">✏️ Editar</button>
+          <button onclick="deletePost(${p.id})" class="btn btn-sm btn-red" style="padding:5px 8px" title="Excluir">🗑️</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ──────────────────────────────────────────
+// BULK GENERATE
+// ──────────────────────────────────────────
+function renderTemasGrid() {
+  const grid = document.getElementById('temasGrid');
+  grid.innerHTML = TEMAS_PADRAO.map(t => `<span class="tema-tag" onclick="toggleTema(this,'${t}')">${t}</span>`).join('');
+  document.getElementById('temaCustom').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.value.trim()) {
+      const v = e.target.value.trim();
+      selectedTemas.add(v);
+      const span = document.createElement('span');
+      span.className = 'tema-tag sel';
+      span.textContent = '✕ ' + v;
+      span.dataset.val = v;
+      span.onclick = () => { selectedTemas.delete(v); span.remove(); };
+      grid.appendChild(span);
+      e.target.value = '';
+    }
+  });
+}
+
+function toggleTema(el, tema) {
+  if (selectedTemas.has(tema)) { selectedTemas.delete(tema); el.classList.remove('sel'); el.textContent = tema; }
+  else { selectedTemas.add(tema); el.classList.add('sel'); el.textContent = '✓ ' + tema; }
+}
+
+function renderBulkBrandPills() {
+  const cont = document.getElementById('bulkBrandPills');
+  cont.innerHTML = `<span class="brand-pill brand-pill-all ${selectedBrandPills.size===0?'active':''}" onclick="toggleBrandPill(this,'')">🌐 Todas</span>`;
+  brands.forEach(b => {
+    const sp = document.createElement('span');
+    sp.className = 'brand-pill' + (selectedBrandPills.has(b.brand_id)?' active':'');
+    sp.textContent = b.nome;
+    sp.onclick = () => toggleBrandPill(sp, b.brand_id);
+    cont.appendChild(sp);
+  });
+}
+
+function toggleBrandPill(el, brandId) {
+  if (!brandId) { selectedBrandPills.clear(); document.querySelectorAll('#bulkBrandPills .brand-pill').forEach(p => p.classList.remove('active')); el.classList.add('active'); return; }
+  document.querySelector('#bulkBrandPills .brand-pill-all').classList.remove('active');
+  if (selectedBrandPills.has(brandId)) { selectedBrandPills.delete(brandId); el.classList.remove('active'); }
+  else { selectedBrandPills.add(brandId); el.classList.add('active'); }
+  if (!selectedBrandPills.size) document.querySelector('#bulkBrandPills .brand-pill-all').classList.add('active');
+}
+
+async function runBulkGenerate() {
+  const temas = [...selectedTemas];
+  if (!temas.length) { toast('Selecione pelo menos 1 tema', 'error'); return; }
+  const mesRaw = document.getElementById('bulkMes').value; // YYYY-MM
+  if (!mesRaw) { toast('Selecione o mês', 'error'); return; }
+  const mesAno = mesRaw.replace('-', '_'); // 2026_03
+
+  const btn = document.getElementById('btnBulkGen');
+  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  const progWrap = document.getElementById('bulkProgress');
+  const log = document.getElementById('bulkLog');
+  const fill = document.getElementById('bulkProgressFill');
+  progWrap.style.display = '';
+  log.textContent = '🚀 Iniciando geração...\n';
+  fill.style.width = '10%';
+
+  try {
+    const body = { mes_ano: mesAno, temas, brand_ids: [...selectedBrandPills] };
+    const r = await api('/api/post-templates/bulk-generate', { method: 'POST', body: JSON.stringify(body) });
+    fill.style.width = '100%';
+    log.textContent += `\n✅ ${r.created} posts criados!\n`;
+    if (r.errors > 0) log.textContent += `⚠️ ${r.errors} erros.\n${r.erros_detalhes.map(e => `  - ${e.brand_id}/${e.tema}: ${e.error}`).join('\n')}`;
+    r.details?.slice(0,15).forEach(d => log.textContent += `  ✓ ${d.brand_nome} — ${d.tema}\n`);
+    if (r.details?.length > 15) log.textContent += `  ... e mais ${r.details.length-15} posts\n`;
+    toast(`✅ ${r.created} posts criados!`, 'success');
+    await loadPosts();
+    // Auto select the generated month in filter
+    document.getElementById('filterMes').value = mesAno;
+    await loadPosts();
+  } catch(e) {
+    log.textContent += `❌ Erro: ${e.message}`;
+    toast('Erro: ' + e.message, 'error');
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ Gerar Posts';
+}
+
+function openBulkModal() {
+  selectedTemas.clear();
+  document.querySelectorAll('.tema-tag').forEach(t => { t.classList.remove('sel'); t.textContent = t.textContent.replace('✓ ',''); });
+  document.getElementById('bulkProgress').style.display = 'none';
+  document.getElementById('bulkLog').textContent = '';
+  document.getElementById('modalBulk').classList.add('open');
+}
+
+// ──────────────────────────────────────────
+// POST CRUD
+// ──────────────────────────────────────────
+function openNewModal() {
+  document.getElementById('editPostId').value = '';
+  document.getElementById('modalPostTitle').textContent = '➕ Novo Post';
+  document.getElementById('editPostTexto').value = '';
+  document.getElementById('editPostTema').value = '';
+  document.getElementById('editPostMes').value = '';
+  document.getElementById('editImgUrl').value = '';
+  document.getElementById('editImgPreview').style.display = 'none';
+  editImgFile = null;
+  document.getElementById('modalPost').classList.add('open');
+}
+
+function editPost(id) {
+  const p = allPosts.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('editPostId').value = id;
+  document.getElementById('modalPostTitle').textContent = `✏️ Editar Post #${id}`;
+  document.getElementById('editPostBrand').value = p.brand_id;
+  document.getElementById('editPostMes').value = p.mes_ano;
+  document.getElementById('editPostTema').value = p.tema;
+  document.getElementById('editPostTexto').value = p.texto_base;
+  document.getElementById('editImgUrl').value = p.imagem_url || '';
+  document.getElementById('editCharCount').textContent = p.texto_base.length;
+  if (p.imagem_url) {
+    document.getElementById('editImgEl').src = p.imagem_url;
+    document.getElementById('editImgPreview').style.display = '';
+  } else { document.getElementById('editImgPreview').style.display = 'none'; }
+  editImgFile = null;
+  document.getElementById('modalPost').classList.add('open');
+}
+
+document.getElementById('editPostTexto').addEventListener('input', function() {
+  document.getElementById('editCharCount').textContent = this.value.length;
+});
+
+async function savePost() {
+  const id = document.getElementById('editPostId').value;
+  const brand_id = document.getElementById('editPostBrand').value;
+  const mes_ano = document.getElementById('editPostMes').value;
+  const tema = document.getElementById('editPostTema').value.trim();
+  const texto_base = document.getElementById('editPostTexto').value.trim();
+  if (!texto_base) { toast('Texto obrigatório', 'error'); return; }
+
+  let imagem_url = document.getElementById('editImgUrl').value.trim();
+
+  // Upload image if file selected
+  if (editImgFile) {
+    const btn = document.getElementById('btnSavePost');
+    btn.textContent = '📤 Enviando imagem...'; btn.disabled = true;
+    try {
+      const r = await api(`/api/admin/brands/${brand_id}/assets?tipo=post_img&nome=${encodeURIComponent(tema||'post')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': editImgFile.type },
+        body: editImgFile
+      });
+      imagem_url = r.url;
+    } catch(e) { toast('Erro upload: ' + e.message, 'error'); btn.textContent = '💾 Salvar Post'; btn.disabled = false; return; }
+    btn.disabled = false; btn.textContent = '💾 Salvar Post';
+  }
+
+  const body = { brand_id, mes_ano, tema, texto_base, imagem_url, plataformas: '["gmb","fb","ig"]' };
+  try {
+    if (id) { await api(`/api/post-templates/${id}`, { method: 'PATCH', body: JSON.stringify({ ...body, ativo: true }) }); }
+    else { await api('/api/post-templates', { method: 'POST', body: JSON.stringify(body) }); }
+    closeModal('modalPost');
+    await

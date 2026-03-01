@@ -1,4 +1,6 @@
-// v2.48.7
+// v2.49.0
+// v2.49.0: Banco de Posts (post_templates) — CRUD, bulk-generate IA por marca, endpoint /use para revendedor
+// v2.48.8: avaliação cron — 1 msg/cliente/semana, marca todos pedidos do cliente
 // v2.48.7: brand_assets.descricao — edição inline, PATCH endpoint, migration automática
 // v2.48.6: DALL-E visão busca produto em revenda E brand kit (todos tipos), labels mais claros
 // v2.48.5: Fotos da revenda — upload R2, prioridade na geração, prompt bilíngue limpo
@@ -6819,6 +6821,152 @@ REGRAS:
       } catch(e) { return err('Marketing erro: ' + e.message, 500); }
     }
 
+    // ── BANCO DE POSTS — Templates curados pelo admin ─────────────────────────
+    if (path.startsWith('/api/post-templates')) {
+      await ensureMarketingTables(env);
+      const authT = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authT instanceof Response) return authT;
+      const isAdmin = authT.role === 'admin';
+
+      // GET /api/post-templates?brand_id=&mes_ano=
+      if (path === '/api/post-templates' && method === 'GET') {
+        const brandId = url.searchParams.get('brand_id') || '';
+        const mesAno = url.searchParams.get('mes_ano') || '';
+        let q = `SELECT * FROM post_templates WHERE ativo=1`;
+        const params = [];
+        if (brandId) { q += ` AND brand_id=?`; params.push(brandId); }
+        if (mesAno) { q += ` AND mes_ano=?`; params.push(mesAno); }
+        q += ` ORDER BY ordem ASC, id ASC`;
+        const rows = await env.DB.prepare(q).bind(...params).all().then(r => r.results);
+        return json(rows);
+      }
+
+      // GET /api/post-templates/meses — lista meses disponíveis por marca
+      if (path === '/api/post-templates/meses' && method === 'GET') {
+        const brandId = url.searchParams.get('brand_id') || '';
+        let q = `SELECT DISTINCT mes_ano, brand_id, COUNT(*) as total FROM post_templates WHERE ativo=1`;
+        const params = [];
+        if (brandId) { q += ` AND brand_id=?`; params.push(brandId); }
+        q += ` GROUP BY mes_ano, brand_id ORDER BY mes_ano DESC`;
+        const rows = await env.DB.prepare(q).bind(...params).all().then(r => r.results);
+        return json(rows);
+      }
+
+      // POST /api/post-templates — criar template (admin only)
+      if (path === '/api/post-templates' && method === 'POST') {
+        if (!isAdmin) return err('Apenas admin pode criar templates', 403);
+        const b = await request.json();
+        if (!b.brand_id || !b.texto_base) return err('brand_id e texto_base obrigatórios', 400);
+        const r = await env.DB.prepare(`
+          INSERT INTO post_templates (brand_id, mes_ano, tema, texto_base, imagem_url, imagem_source, plataformas, ordem, ativo, created_by)
+          VALUES (?,?,?,?,?,?,?,?,1,?)
+        `).bind(b.brand_id, b.mes_ano||'', b.tema||'', b.texto_base, b.imagem_url||'', b.imagem_source||'', b.plataformas||'["gmb","fb","ig"]', b.ordem||0, 'admin').run();
+        return json({ ok: true, id: r.meta.last_row_id });
+      }
+
+      // PATCH /api/post-templates/:id
+      if (path.match(/\/api\/post-templates\/\d+$/) && method === 'PATCH') {
+        if (!isAdmin) return err('Apenas admin pode editar templates', 403);
+        const id = path.split('/').pop();
+        const b = await request.json();
+        await env.DB.prepare(`
+          UPDATE post_templates SET tema=?, texto_base=?, imagem_url=?, plataformas=?, ordem=?, ativo=?, updated_at=?
+          WHERE id=?
+        `).bind(b.tema||'', b.texto_base, b.imagem_url||'', b.plataformas||'["gmb","fb","ig"]', b.ordem||0, b.ativo===false?0:1, Math.floor(Date.now()/1000), id).run();
+        return json({ ok: true });
+      }
+
+      // DELETE /api/post-templates/:id (admin only)
+      if (path.match(/\/api\/post-templates\/\d+$/) && method === 'DELETE') {
+        if (!isAdmin) return err('Apenas admin pode excluir templates', 403);
+        const id = path.split('/').pop();
+        await env.DB.prepare(`DELETE FROM post_templates WHERE id=?`).bind(id).run();
+        return json({ ok: true });
+      }
+
+      // POST /api/post-templates/bulk-generate — gera N posts via IA para uma ou todas as marcas
+      if (path === '/api/post-templates/bulk-generate' && method === 'POST') {
+        if (!isAdmin) return err('Apenas admin', 403);
+        const b = await request.json();
+        const mesAno = b.mes_ano || new Date().toISOString().slice(0,7).replace('-','_');
+        const temas = b.temas || [];
+        const brandIds = b.brand_ids || [];
+
+        let marcas;
+        if (brandIds.length) {
+          marcas = await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id IN (${brandIds.map(()=>'?').join(',')}) AND ativo=1`).bind(...brandIds).all().then(r => r.results);
+        } else {
+          marcas = await env.DB.prepare(`SELECT * FROM brand_kits WHERE ativo=1 ORDER BY nome`).all().then(r => r.results);
+        }
+
+        const created = [];
+        const errors = [];
+        for (const marca of marcas) {
+          for (const tema of temas) {
+            try {
+              const prompt = `Você é copywriter especialista em redes sociais para revendas de gás e água mineral do Brasil.
+
+MARCA: ${marca.nome}
+SLOGAN: ${marca.slogan || ''}
+TOM DE VOZ: ${marca.tom || 'profissional e amigável'}
+
+TAREFA: Crie 1 post para redes sociais sobre: "${tema}"
+
+REGRAS:
+- Entre 150-280 caracteres no total
+- Tom da marca acima
+- Inclua {{telefone}} onde deve aparecer o telefone da revenda
+- Inclua {{hashtags}} no final para hashtags locais
+- Inclua emojis relevantes
+- Não mencione o nome da distribuidora (Ultragaz, Copagaz etc) — o revendedor personaliza
+- Foco no benefício para o cliente
+
+Responda APENAS com o texto do post, sem explicações ou aspas.`;
+
+              const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+              });
+              const aiData = await aiRes.json();
+              const texto = aiData.choices?.[0]?.message?.content?.trim();
+              if (!texto) throw new Error('GPT não retornou texto');
+
+              const r = await env.DB.prepare(`
+                INSERT INTO post_templates (brand_id, mes_ano, tema, texto_base, plataformas, ativo, created_by)
+                VALUES (?,?,?,?,?,1,'admin_bulk')
+              `).bind(marca.brand_id, mesAno, tema, texto, '["gmb","fb","ig"]').run();
+              created.push({ brand_id: marca.brand_id, brand_nome: marca.nome, tema, id: r.meta.last_row_id });
+            } catch(e) {
+              errors.push({ brand_id: marca.brand_id, tema, error: e.message });
+            }
+          }
+        }
+        return json({ ok: true, created: created.length, errors: errors.length, details: created, erros_detalhes: errors });
+      }
+
+      // POST /api/post-templates/:id/use — revendedor usa template → cria marketing_post personalizado
+      if (path.match(/\/api\/post-templates\/\d+\/use$/) && method === 'POST') {
+        const templateId = path.split('/')[3];
+        const template = await env.DB.prepare(`SELECT * FROM post_templates WHERE id=?`).bind(templateId).first();
+        if (!template) return err('Template não encontrado', 404);
+        const b = await request.json();
+        const telefone = b.telefone || '(67) 99333-0303';
+        const hashtags = b.hashtags || '#CampoGrande #GásCampoGrande';
+        const texto = template.texto_base
+          .replace(/\{\{telefone\}\}/g, telefone)
+          .replace(/\{\{hashtags\}\}/g, hashtags);
+        const scheduledAt = b.scheduled_at || 0;
+        const r = await env.DB.prepare(`
+          INSERT INTO marketing_posts (texto, tema, imagem_url, imagem_source, status, plataformas, scheduled_at, template_id, brand_id, created_at, updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        `).bind(texto, template.tema, template.imagem_url||'', template.imagem_source||'', scheduledAt?'aprovado':'pendente', template.plataformas, scheduledAt||0, templateId, template.brand_id, Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)).run();
+        return json({ ok: true, post_id: r.meta.last_row_id, texto });
+      }
+
+      return err(`post-templates endpoint não encontrado (${method} ${path})`, 404);
+    }
+
     return err(`Not found (${method} ${path})`, 404);
   },
 
@@ -6916,6 +7064,25 @@ async function ensureMarketingTables(env) {
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN imagem_source TEXT DEFAULT ''`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN asset_tipo_sugerido TEXT DEFAULT 'botijao'`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE brand_assets ADD COLUMN descricao TEXT DEFAULT ''`).run().catch(()=>{});
+  // Banco de Posts (templates curados pelo admin)
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS post_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    brand_id TEXT NOT NULL,
+    mes_ano TEXT NOT NULL,
+    tema TEXT DEFAULT '',
+    texto_base TEXT NOT NULL,
+    imagem_url TEXT DEFAULT '',
+    imagem_source TEXT DEFAULT '',
+    plataformas TEXT DEFAULT '["gmb","fb","ig"]',
+    ordem INTEGER DEFAULT 0,
+    ativo INTEGER DEFAULT 1,
+    created_by TEXT DEFAULT 'admin',
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(()=>{});
+  await env.DB.prepare(`ALTER TABLE post_templates ADD COLUMN ordem INTEGER DEFAULT 0`).run().catch(()=>{});
+  await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN template_id INTEGER DEFAULT 0`).run().catch(()=>{});
+  await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN brand_id TEXT DEFAULT ''`).run().catch(()=>{});
 }
 
 async function publishScheduledPosts(env) {
@@ -7091,7 +7258,8 @@ async function processarAvaliacoesCron(env) {
     }
 
     const delayEpoch = Math.floor(Date.now() / 1000) - (config.delay_horas * 3600);
-    // Buscar pedidos entregues há >= delay_horas, sem survey enviada, sem flag sem_avaliacao
+    const umaSemanaAtras = Math.floor(Date.now() / 1000) - (7 * 24 * 3600);
+    // Buscar UM pedido por cliente (mais recente), sem survey nos últimos 7 dias
     const { results: orders } = await env.DB.prepare(`
       SELECT o.id, o.phone_digits, o.customer_name, o.delivered_at
       FROM orders o
@@ -7104,9 +7272,23 @@ async function processarAvaliacoesCron(env) {
         AND o.phone_digits != ''
         AND o.phone_digits != '00000000000'
         AND (cc.sem_avaliacao IS NULL OR cc.sem_avaliacao = 0)
+        AND o.id = (
+          SELECT id FROM orders o2
+          WHERE o2.phone_digits = o.phone_digits
+            AND o2.status = 'entregue'
+            AND o2.survey_sent = 0
+            AND o2.delivered_at <= ?
+          ORDER BY o2.delivered_at DESC LIMIT 1
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM satisfaction_surveys ss
+          WHERE ss.phone_digits = o.phone_digits
+            AND ss.sent_at >= ?
+        )
+      GROUP BY o.phone_digits
       ORDER BY o.delivered_at ASC
       LIMIT 10
-    `).bind(delayEpoch).all();
+    `).bind(delayEpoch, delayEpoch, umaSemanaAtras).all();
 
     if (!orders?.length) {
       console.log('[avaliacao-cron] Nenhum pedido pendente de avaliação');
@@ -7131,8 +7313,8 @@ async function processarAvaliacoesCron(env) {
           break;
         }
 
-        // Marcar no orders
-        await env.DB.prepare('UPDATE orders SET survey_sent=1 WHERE id=?').bind(order.id).run();
+        // Marcar survey_sent=1 em TODOS os pedidos do cliente (evita duplicidade no mesmo dia)
+        await env.DB.prepare("UPDATE orders SET survey_sent=1 WHERE phone_digits=? AND status='entregue'").bind(order.phone_digits).run();
         // Registrar no satisfaction_surveys
         await env.DB.prepare(`
           INSERT OR IGNORE INTO satisfaction_surveys (order_id, phone_digits, customer_name, status)
