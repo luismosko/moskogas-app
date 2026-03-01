@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Posts Marketing v1.4.1 — MoskoGás</title>
+<title>Posts Marketing v1.4.2 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -116,7 +116,7 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.4.1 — marketing-posts</div>
+<div class="version-badge">v1.4.2 — marketing-posts</div>
 
 <div class="container">
 
@@ -227,15 +227,15 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
             </label>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:8px;cursor:pointer">
               <input type="radio" name="imgStrat" id="stratAsset" value="brand_asset" style="width:auto">
-              <div><strong>📸 Foto real do Brand Kit (grátis!)</strong><div style="font-size:11px;color:#64748b">Usa as fotos que você enviou — sem custo</div></div>
+              <div><strong>📸 Usar foto real — GRÁTIS</strong><div style="font-size:11px;color:#64748b">Fotos da revenda (fachada, carro, produtos) ou Brand Kit — sem custo</div></div>
             </label>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:8px;cursor:pointer">
               <input type="radio" name="imgStrat" id="stratDalleVision" value="dalle_vision" style="width:auto">
-              <div><strong>🤖 DALL-E usando foto do botijão real (~R$0,20/img)</strong><div style="font-size:11px;color:#64748b">IA analisa o botijão real e recria</div></div>
+              <div><strong>🔍 DALL-E analisando foto do produto (~R$0,20/img)</strong><div style="font-size:11px;color:#64748b">IA analisa foto real de botijão/produto e gera nova imagem fiel</div></div>
             </label>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px;cursor:pointer">
               <input type="radio" name="imgStrat" id="stratDallePure" value="dalle_pure" style="width:auto">
-              <div><strong>🎨 DALL-E criativo (~R$0,20/img)</strong><div style="font-size:11px;color:#64748b">Cria imagem nova baseada no tema</div></div>
+              <div><strong>🎨 DALL-E com diretrizes (~R$0,20/img)</strong><div style="font-size:11px;color:#64748b">Gera imagem nova seguindo as diretrizes visuais da marca</div></div>
             </label>
           </div>
           <div class="cost-badge" style="margin-top:8px" id="costBadge">💰 Custo estimado: R$ 0,00 (só texto)</div>
@@ -497,15 +497,15 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <select id="imageStrategy" style="flex:1;font-size:12px;padding:6px 10px">
-            <option value="auto">🔄 Automático (foto real → DALL-E+visão → DALL-E)</option>
-            <option value="brand_asset">📸 Foto real do Brand Kit (grátis)</option>
-            <option value="dalle_vision">🤖 DALL-E analisando foto real (~R$0,20)</option>
-            <option value="dalle_pure">🎨 DALL-E puro (~R$0,20)</option>
+            <option value="brand_asset">📸 Usar foto real (revenda ou marca) — GRÁTIS</option>
+            <option value="dalle_vision">🔍 DALL-E analisando foto do produto (~R$0,20)</option>
+            <option value="dalle_pure">🎨 DALL-E com diretrizes da marca (~R$0,20)</option>
+            <option value="auto">🔄 Automático (foto real → DALL-E visão → DALL-E)</option>
           </select>
           <button onclick="generatePostImage()" id="btnGenImage" class="btn btn-sm btn-primary">🖼️ Gerar imagem</button>
         </div>
         <div style="font-size:11px;color:#94a3b8;margin-top:4px">
-          💡 "Foto real" usa as imagens enviadas em Admin → Brand Kits (grátis e 100% correto)
+          💡 "Foto real" usa fotos da revenda (Config) ou Brand Kit (Admin). DALL-E gera nova imagem baseada nas diretrizes e fotos de produto.
         </div>
       </div>
     </div>
@@ -725,8 +725,10 @@ async function generatePostImage(id, strategyOverride) {
   const strategyLabels = {
     auto: '🔄 Buscando melhor imagem...',
     brand_asset: '🖼️ Buscando foto da marca...',
-    dalle_vision: '🤖 Analisando botijão real + DALL-E...',
-    dalle_pure: '🎨 Gerando com DALL-E 3...'
+    brand_asset: '📸 Buscando foto real...',
+    dalle_vision: '🔍 Analisando foto do produto + DALL-E (~R$0,20)...',
+    dalle_pure: '🎨 Gerando com DALL-E (diretrizes da marca)...',
+    auto: '⏳ Buscando melhor imagem disponível...'
   };
   btn.disabled = true; btn.textContent = strategyLabels[strategy] || '⏳ Gerando...';
   try {
@@ -735,7 +737,7 @@ async function generatePostImage(id, strategyOverride) {
       body: JSON.stringify({ strategy })
     });
     if (r.imagem_url) {
-      const sourceLabel = { brand_asset:'✅ Foto real da marca', dalle_vision:'🤖 DALL-E + foto real', dalle_pure:'🎨 DALL-E puro' };
+      const sourceLabel = { brand_asset:'📸 Foto real (brand kit)', reseller_photo:'📸 Foto real (revenda)', dalle_vision:'🔍 DALL-E + análise visual', dalle_pure:'🎨 DALL-E (diretrizes)' };
       document.getElementById('editImagePreview').innerHTML = `
         <img src="${r.imagem_url}" style="max-height:160px;border-radius:8px;max-width:100%;display:block;margin:0 auto">
         <div style="text-align:center;margin-top:6px;font-size:11px;color:#64748b">${sourceLabel[r.strategy]||r.strategy}</div>`;

@@ -1,4 +1,5 @@
-// v2.48.5
+// v2.48.6
+// v2.48.6: DALL-E visão busca produto em revenda E brand kit (todos tipos), labels mais claros
 // v2.48.5: Fotos da revenda — upload R2, prioridade na geração, prompt bilíngue limpo
 // v2.48.4: buildSmartDallePrompt — traduz PT→EN + combina diretrizes marca + contexto post
 // v2.48.3: Fix routing — /api/admin/brands movido para nível raiz
@@ -6675,33 +6676,44 @@ REGRAS:
           if (strategy === 'brand_asset') return err('Nenhuma foto disponível. Adicione em Config Revenda ou Admin → Brand Kits.', 400);
         }
 
-        // ─── ESTRATÉGIA 2: DALL-E com visão da foto real do botijão ──────────
+        // ─── ESTRATÉGIA 2: DALL-E com visão da foto real do produto ──────────
         if (strategy === 'dalle_vision' || strategy === 'auto') {
-          // Primeiro tenta foto do botijão da revenda, depois do brand kit
+          // Prioridade: fotos de produto da REVENDA → depois brand kit
+          // Tipos de produto aceitos como referência visual
+          const prodTipos = ['p13','p20','p45','p5','produto_outro','botijao','agua_20l'];
           let refUrl = null;
-          const rpBotijao = resellerPhotos.find(p => ['p13','p20','p45','p5','produto_outro'].includes(p.tipo));
-          if (rpBotijao) refUrl = rpBotijao.url;
-          else if (brandId) {
-            const ba = await env.DB.prepare(`SELECT url FROM brand_assets WHERE brand_id=? AND tipo='botijao' ORDER BY created_at DESC LIMIT 1`).bind(brandId).first();
-            if (ba) refUrl = ba.url;
+          let refDesc = '';
+
+          // 1. Fotos de produto da revenda
+          const rpProd = resellerPhotos.find(p => prodTipos.includes(p.tipo));
+          if (rpProd) { refUrl = rpProd.url; refDesc = rpProd.descricao; }
+
+          // 2. Se não achou na revenda, pega do brand kit
+          if (!refUrl && brandId) {
+            const baTipos = ['p13','p20','p45','botijao','p5'];
+            for (const t of baTipos) {
+              const ba = await env.DB.prepare(`SELECT url FROM brand_assets WHERE brand_id=? AND tipo=? ORDER BY created_at DESC LIMIT 1`).bind(brandId, t).first();
+              if (ba) { refUrl = ba.url; break; }
+            }
           }
+
           if (refUrl) {
             const vRes = await fetch('https://api.openai.com/v1/chat/completions', {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                model: 'gpt-4o-mini', max_tokens: 300,
+                model: 'gpt-4o-mini', max_tokens: 400,
                 messages: [{ role: 'user', content: [
                   { type: 'image_url', image_url: { url: refUrl } },
-                  { type: 'text', text: 'Describe this gas cylinder in extreme visual detail for DALL-E: exact colors, shape, markings, logo, finish. English only, one paragraph.' }
+                  { type: 'text', text: `Descreva em inglês e com máximo detalhe visual este produto para uso em prompt DALL-E: cores exatas, formato, marcas/logos visíveis, lacres, acabamento, textura. ${refDesc ? 'Contexto adicional: ' + refDesc : ''} Seja muito específico. Responda em inglês, um parágrafo, sem preâmbulo.` }
                 ]}]
               })
             });
             const vData = await vRes.json();
-            const bottleDesc = vData.choices?.[0]?.message?.content || '';
-            if (bottleDesc) {
+            const prodDesc = vData.choices?.[0]?.message?.content || '';
+            if (prodDesc) {
               const brandKit2 = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
-              const augmented = { img_prompt_base: (brandKit2?.img_prompt_base || '') + '\n\nReferência visual do botijão real: ' + bottleDesc };
+              const augmented = { img_prompt_base: (brandKit2?.img_prompt_base || '') + '\n\nReferência visual do produto real: ' + prodDesc };
               const smartPrompt = await buildSmartPrompt(augmented, row, resellerPhotos);
               const iRes = await fetch('https://api.openai.com/v1/images/generations', {
                 method: 'POST',
@@ -6716,7 +6728,7 @@ REGRAS:
               }
             }
           }
-          if (strategy === 'dalle_vision') return err('Sem foto de botijão disponível para referência.', 400);
+          if (strategy === 'dalle_vision') return err('Sem foto de produto disponível. Adicione fotos de botijão/produto em Config Revenda ou Admin → Brand Kits.', 400);
         }
 
         // ─── ESTRATÉGIA 3: DALL-E com diretrizes + fotos revenda + tema do post ─
