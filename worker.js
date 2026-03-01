@@ -1,6 +1,6 @@
-// v2.48.3
-// v2.48.3: Fix routing — /api/admin/brands movido para nível raiz (estava dentro /api/marketing/)
-// v2.48.2: Prompt de geração inclui fotos reais do brand kit + asset_tipo_sugerido por post
+// v2.48.4
+// v2.48.4: buildSmartDallePrompt — traduz PT→EN + combina diretrizes marca + contexto post
+// v2.48.3: Fix routing — /api/admin/brands movido para nível raiz
 // v2.48.1: Geração de imagem 3 camadas — foto real brand kit (grátis) > DALL-E+visão > DALL-E puro
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
@@ -6614,13 +6614,78 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
             });
             const visionData = await visionRes.json();
             const bottleDesc = visionData.choices?.[0]?.message?.content || '';
+        // ─── Função auxiliar: monta prompt inteligente e traduz PT→EN ──────
+        async function buildSmartDallePrompt(brandKit, postRow) {
+          const brandDirectives = brandKit?.img_prompt_base || '';
+          const postTema = postRow.tema || '';
+          const postTexto = postRow.texto || '';
+          const postImgHint = postRow.imagem_prompt || '';
+          const assetTipo = postRow.asset_tipo_sugerido || 'botijao';
+
+          // Pede ao GPT para combinar as diretrizes da marca com o contexto do post e traduzir
+          const combinePrompt = `Você é especialista em criar prompts para DALL-E 3.
+
+DIRETRIZES DA MARCA (regras visuais obrigatórias a seguir):
+${brandDirectives || 'Fotorrealismo profissional, iluminação natural.'}
+
+CONTEXTO DO POST:
+- Tema: ${postTema}
+- Texto do post: ${postTexto}
+- Tipo de imagem sugerida: ${assetTipo}
+- Dica adicional: ${postImgHint}
+
+TAREFA: Crie UM prompt em INGLÊS para o DALL-E 3 que:
+1. Siga RIGOROSAMENTE todas as diretrizes visuais da marca acima
+2. Represente visualmente o contexto do post (${postTema})
+3. Seja coerente com o tipo de imagem (${assetTipo})
+4. Máximo 900 caracteres
+
+Responda APENAS com o prompt em inglês, sem explicações, sem aspas.`;
+
+          const r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 500, messages: [{ role: 'user', content: combinePrompt }] })
+          });
+          const d = await r.json();
+          return d.choices?.[0]?.message?.content?.trim() || `${brandDirectives}. Context: ${postTema}, Brazilian delivery, photorealistic`;
+        }
+
+        // ─── ESTRATÉGIA 2: DALL-E com visão da foto real (GPT-4o) ──────────
+        if (strategy === 'dalle_vision' || strategy === 'auto') {
+          let referencePhotoUrl = null;
+          if (brandId) {
+            const botijaoAsset = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? AND tipo='botijao' ORDER BY created_at DESC LIMIT 1`).bind(brandId).first();
+            if (botijaoAsset) referencePhotoUrl = botijaoAsset.url;
+          }
+          if (referencePhotoUrl) {
+            const visionRes = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'gpt-4o-mini', max_tokens: 300,
+                messages: [{
+                  role: 'user',
+                  content: [
+                    { type: 'image_url', image_url: { url: referencePhotoUrl } },
+                    { type: 'text', text: `Describe this LPG gas cylinder in extreme visual detail for DALL-E: exact colors, shape, markings, logo position, any text visible, material finish. Be very specific. English only, one paragraph.` }
+                  ]
+                }]
+              })
+            });
+            const visionData = await visionRes.json();
+            const bottleDesc = visionData.choices?.[0]?.message?.content || '';
             if (bottleDesc) {
-              const tema = row.tema || 'gas delivery';
-              const enhancedPrompt = `${bottleDesc}. Context: ${tema}, Brazilian residential delivery, happy family, warm natural lighting, photorealistic, professional photography, 4k`;
+              const brandKit = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
+              // Combina descrição do botijão real + diretrizes da marca + contexto do post
+              const smartPrompt = await buildSmartDallePrompt(
+                { img_prompt_base: (brandKit?.img_prompt_base || '') + '\n\nBotijão de referência visual: ' + bottleDesc },
+                row
+              );
               const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: 'dall-e-3', prompt: enhancedPrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
+                body: JSON.stringify({ model: 'dall-e-3', prompt: smartPrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
               });
               const imgData = await imgRes.json();
               const imgUrl = imgData.data?.[0]?.url;
@@ -6633,14 +6698,14 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
           if (strategy === 'dalle_vision') return err('Sem foto de botijão no Brand Kit para usar como referência.', 400);
         }
 
-        // ─── ESTRATÉGIA 3: DALL-E puro (fallback) ───────────────────
+        // ─── ESTRATÉGIA 3: DALL-E com diretrizes da marca + contexto do post ─
         const brandKit = brandId ? await env.DB.prepare(`SELECT * FROM brand_kits WHERE brand_id=?`).bind(brandId).first() : null;
-        const brandBasePrompt = brandKit?.img_prompt_base || 'LPG gas cylinder Brazil, delivery service, realistic photo';
-        const promptImg = `${brandBasePrompt}. Theme: ${row.tema || 'delivery'}. ${row.imagem_prompt || ''}. Photorealistic, professional photography, bright natural lighting, no text overlay`;
+        // Monta prompt inteligente: traduz diretrizes PT→EN e combina com contexto do post
+        const smartPrompt = await buildSmartDallePrompt(brandKit, row);
         const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'dall-e-3', prompt: promptImg, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
+          body: JSON.stringify({ model: 'dall-e-3', prompt: smartPrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
         });
         const imgData = await imgRes.json();
         const imgUrl = imgData.data?.[0]?.url;

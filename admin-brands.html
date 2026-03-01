@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brand Kits v1.1.0 — MoskoGás Admin</title>
+<title>Brand Kits v1.2.0 — MoskoGás Admin</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -108,7 +108,7 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.1.0 — admin-brands</div>
+<div class="version-badge">v1.2.0 — admin-brands</div>
 
 <div class="container">
 
@@ -213,9 +213,16 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
       </div>
 
       <div class="form-row">
-        <label>Prompt base para imagens DALL-E (em inglês)</label>
-        <textarea id="editBrandImgPrompt" rows="3" placeholder="ex: blue LPG gas cylinder Ultragaz brand, delivery in Brazil, realistic photo, blue and white colors, residential delivery, happy family"></textarea>
-        <p style="font-size:11px;color:#475569;margin-top:4px">💡 Descreva o botijão, cores, contexto. A IA vai adaptar para cada post.</p>
+        <label>Diretrizes visuais da marca para geração de imagens</label>
+        <textarea id="editBrandImgPrompt" rows="5" placeholder="Escreva em PORTUGUÊS mesmo — o sistema traduz automaticamente para inglês antes de enviar ao DALL-E.
+
+Exemplo:
+Fotorrealismo extremo, aparência de foto profissional.
+Os botijões de gás devem ser azuis com a marca Ultragaz gravada em relevo, lacres vermelhos intactos.
+Iluminação natural, sem sombras artificiais.
+Cenário: residência brasileira ou revenda com fachada real.
+Uniformes azuis e brancos dos entregadores, logo Mosko Gás visível."></textarea>
+        <p style="font-size:11px;color:#475569;margin-top:4px">✍️ Escreva em português. O sistema combina automaticamente com o tema de cada post antes de traduzir e enviar ao DALL-E.</p>
       </div>
     </div>
     <div class="modal-footer">
@@ -563,14 +570,77 @@ function syncColorPicker(input, pickerId) { if (/^#[0-9A-Fa-f]{6}$/.test(input.v
 // SEED BRANDS PADRÃO
 // ══════════════════════════════════════════════════
 const DEFAULT_BRANDS = [
-  { brand_id:'ultragaz', nome:'Ultragaz', slogan:'Energia que transforma', bottle_color:'#1B5FA6', bottle_desc:'Botijão azul com faixa branca', colors:['#1B5FA6','#FFFFFF','#003087'], color_names:['Azul Ultragaz','Branco','Azul Escuro'], tom:'Confiante, tradicional e familiar. Maior distribuidora do Brasil. Transmitir confiança e liderança de mercado.', img_prompt_base:'blue LPG gas cylinder Ultragaz brand Brazil, delivery residential, realistic photo, blue and white colors, professional delivery man smiling' },
-  { brand_id:'supergasbras', nome:'Supergasbras', slogan:'Com você em todo lugar', bottle_color:'#C8960C', bottle_desc:'Botijão dourado/amarelo', colors:['#C8960C','#E8B419','#1A1A1A'], color_names:['Dourado','Amarelo','Preto'], tom:'Dinâmico e acessível. Destacar presença local, entrega rápida e preço competitivo.', img_prompt_base:'golden yellow LPG gas cylinder Supergasbras Brazil, fast delivery service, realistic photo, gold colors, happy customer' },
-  { brand_id:'copagaz', nome:'Copagaz', slogan:'Gás e muito mais', bottle_color:'#00833E', bottle_desc:'Botijão verde', colors:['#00833E','#FFFFFF','#006630'], color_names:['Verde Copagaz','Branco','Verde Escuro'], tom:'Fresco, sustentável e próximo da comunidade. Tom acolhedor e amigável.', img_prompt_base:'green LPG gas cylinder Copagaz Brazil, residential gas delivery, realistic photo, green and white colors, family home' },
-  { brand_id:'nacionalgas', nome:'Nacional Gás', slogan:'Qualidade que você confia', bottle_color:'#5A5A5A', bottle_desc:'Botijão cinza', colors:['#5A5A5A','#E8E8E8','#1A1A1A'], color_names:['Cinza','Prata','Preto'], tom:'Sólido, econômico e confiável. Foco em custo-benefício e economia para a família.', img_prompt_base:'gray silver LPG gas cylinder Nacional Gas Brazil, residential delivery, realistic photo, gray and silver colors, economy value' },
-  { brand_id:'liquigas', nome:'Liquigás', slogan:'Energia para sua vida', bottle_color:'#CC0000', bottle_desc:'Botijão vermelho', colors:['#CC0000','#FFFFFF','#990000'], color_names:['Vermelho','Branco','Vermelho Escuro'], tom:'Energético e forte. Marca do grupo Petrobras, transmite segurança, qualidade e tradição.', img_prompt_base:'red LPG gas cylinder Liquigas Petrobras Brazil, gas delivery service, realistic photo, red and white colors, safe reliable' },
-  { brand_id:'consigaz', nome:'Consigaz', slogan:'Qualidade garantida', bottle_color:'#E05A00', bottle_desc:'Botijão laranja', colors:['#E05A00','#FFFFFF','#B34700'], color_names:['Laranja','Branco','Laranja Escuro'], tom:'Regional e próximo. Foco em atendimento personalizado e relacionamento com o cliente.', img_prompt_base:'orange LPG gas cylinder Consigaz Brazil, gas delivery, realistic photo, orange and white colors, local service' },
-  { brand_id:'minasgaz', nome:'Minasgás', slogan:'O gás de Minas', bottle_color:'#7B3F00', bottle_desc:'Botijão marrom/terracota', colors:['#7B3F00','#FFFFFF','#5C2E00'], color_names:['Marrom','Branco','Marrom Escuro'], tom:'Regional mineiro, tradicional e caseiro. Tom acolhedor, como gás da casa da vovó.', img_prompt_base:'brown LPG gas cylinder Minasgaz Brazil, home delivery, realistic photo, warm brown colors, traditional family' },
-  { brand_id:'independente', nome:'Independente', slogan:'Minha marca, meu estilo', bottle_color:'#6366f1', bottle_desc:'Cores personalizadas', colors:['#6366f1','#FFFFFF','#374151'], color_names:['Cor Principal','Branco','Cinza Escuro'], tom:'Personalizável conforme as instruções da revenda. Adapta-se ao estilo do cliente.', img_prompt_base:'LPG gas cylinder delivery Brazil, professional photo, gas delivery service, realistic, friendly delivery man' },
+  { brand_id:'ultragaz', nome:'Ultragaz', slogan:'Energia que transforma', bottle_color:'#1B5FA6', bottle_desc:'Botijão azul com faixa branca', colors:['#1B5FA6','#FFFFFF','#003087'], color_names:['Azul Ultragaz','Branco','Azul Escuro'],
+    tom:'Confiante, tradicional e familiar. Maior distribuidora do Brasil. Transmitir confiança e liderança de mercado.',
+    img_prompt_base:`Fotorrealismo extremo — aparência de fotografia profissional 100% real.
+Botijão: azul petróleo (#1B5FA6) com a marca ULTRAGAZ gravada em relevo no metal, lacres de segurança vermelhos ou amarelos novos e intactos. Nunca gere botijões cinzas ou genéricos.
+Iluminação: natural, luz do dia ou pôr do sol, sem sombras artificiais.
+Cenário: residência brasileira real, quintal, cozinha ou revenda com fachada. Nada de cenário artificial ou 3D.
+Paleta: azul e branco predominantes.
+Entregador (se houver): uniforme azul e branco, logo da marca visível.` },
+
+  { brand_id:'supergasbras', nome:'Supergasbras', slogan:'Com você em todo lugar', bottle_color:'#C8960C', bottle_desc:'Botijão dourado/amarelo', colors:['#C8960C','#E8B419','#1A1A1A'], color_names:['Dourado','Amarelo','Preto'],
+    tom:'Dinâmico e acessível. Destacar presença local, entrega rápida e preço competitivo.',
+    img_prompt_base:`Fotorrealismo profissional, aparência de foto real.
+Botijão: dourado/amarelo com marca SUPERGASBRAS, lacres intactos.
+Iluminação: natural e vibrante, transmitindo agilidade e dinamismo.
+Cenário: rua brasileira, porta de residência ou moto de entrega.
+Paleta: dourado, amarelo e preto.
+Tom visual: moderno, ágil, popular.` },
+
+  { brand_id:'copagaz', nome:'Copagaz', slogan:'Gás e muito mais', bottle_color:'#00833E', bottle_desc:'Botijão verde', colors:['#00833E','#FFFFFF','#006630'], color_names:['Verde Copagaz','Branco','Verde Escuro'],
+    tom:'Fresco, sustentável e próximo da comunidade. Tom acolhedor e amigável.',
+    img_prompt_base:`Fotorrealismo, aparência de fotografia real.
+Botijão: verde (#00833E) com marca COPAGAZ, lacres intactos.
+Iluminação: natural, clara e acolhedora.
+Cenário: casa brasileira, jardim, cozinha familiar.
+Paleta: verde e branco predominantes.
+Tom visual: sustentável, familiar, próximo.` },
+
+  { brand_id:'nacionalgas', nome:'Nacional Gás', slogan:'Qualidade que você confia', bottle_color:'#5A5A5A', bottle_desc:'Botijão cinza', colors:['#5A5A5A','#E8E8E8','#1A1A1A'], color_names:['Cinza','Prata','Preto'],
+    tom:'Sólido, econômico e confiável. Foco em custo-benefício e economia para a família.',
+    img_prompt_base:`Fotorrealismo, aparência de foto profissional.
+Botijão: cinza prateado com marca NACIONAL GÁS, lacres intactos.
+Iluminação: natural, limpa.
+Cenário: residência simples brasileira, cozinha do dia a dia.
+Paleta: cinza, prata e preto.
+Tom visual: sólido, econômico, confiável.` },
+
+  { brand_id:'liquigas', nome:'Liquigás', slogan:'Energia para sua vida', bottle_color:'#CC0000', bottle_desc:'Botijão vermelho', colors:['#CC0000','#FFFFFF','#990000'], color_names:['Vermelho','Branco','Vermelho Escuro'],
+    tom:'Energético e forte. Marca do grupo Petrobras, transmite segurança, qualidade e tradição.',
+    img_prompt_base:`Fotorrealismo extremo, aparência de foto profissional.
+Botijão: vermelho vibrante (#CC0000) com marca LIQUIGÁS, lacres intactos.
+Iluminação: natural, dinâmica.
+Cenário: residência brasileira ou revenda com fachada.
+Paleta: vermelho e branco.
+Tom visual: energético, forte, seguro.` },
+
+  { brand_id:'consigaz', nome:'Consigaz', slogan:'Qualidade garantida', bottle_color:'#E05A00', bottle_desc:'Botijão laranja', colors:['#E05A00','#FFFFFF','#B34700'], color_names:['Laranja','Branco','Laranja Escuro'],
+    tom:'Regional e próximo. Foco em atendimento personalizado e relacionamento com o cliente.',
+    img_prompt_base:`Fotorrealismo, aparência de fotografia real.
+Botijão: laranja (#E05A00) com marca CONSIGAZ, lacres intactos.
+Iluminação: natural e calorosa.
+Cenário: bairro residencial brasileiro, entrega porta a porta.
+Paleta: laranja e branco.
+Tom visual: próximo, regional, personalizado.` },
+
+  { brand_id:'minasgaz', nome:'Minasgás', slogan:'O gás de Minas', bottle_color:'#7B3F00', bottle_desc:'Botijão marrom/terracota', colors:['#7B3F00','#FFFFFF','#5C2E00'], color_names:['Marrom','Branco','Marrom Escuro'],
+    tom:'Regional mineiro, tradicional e caseiro. Tom acolhedor, como gás da casa da vovó.',
+    img_prompt_base:`Fotorrealismo, aparência de foto real.
+Botijão: marrom/terracota (#7B3F00) com marca MINASGÁS, lacres intactos.
+Iluminação: quente, aconchegante, luz natural de interior.
+Cenário: cozinha mineira, casa simples e acolhedora, família ao redor.
+Paleta: marrom, bege e branco.
+Tom visual: tradicional, familiar, acolhedor.` },
+
+  { brand_id:'independente', nome:'Independente', slogan:'Minha marca, meu estilo', bottle_color:'#6366f1', bottle_desc:'Cores personalizadas', colors:['#6366f1','#FFFFFF','#374151'], color_names:['Cor Principal','Branco','Cinza Escuro'],
+    tom:'Personalizável conforme as instruções da revenda. Adapta-se ao estilo do cliente.',
+    img_prompt_base:`Fotorrealismo profissional, aparência de fotografia real.
+Botijão de gás com as cores e identidade da revenda.
+Iluminação: natural.
+Cenário: residência brasileira real, entrega porta a porta.
+Tom visual: profissional, confiável, local.
+(Personalize estas diretrizes conforme a identidade visual da sua revenda.)` },
 ];
 
 async function seedDefaultBrands() {
