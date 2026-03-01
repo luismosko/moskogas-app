@@ -1,5 +1,6 @@
-// v2.44.0 
-// v2.44.0: Módulo Avaliação — deploy automático via GitHub Actions Pós-Compra — NPS WhatsApp, webhook IzChat, cron 2h, flag sem_avaliacao
+// v2.45.0
+// v2.45.0: Avaliação — CRM IzChat (criar oportunidade ao enviar + webhook crm.opportunity.moved processa nota)
+// v2.44.0: Módulo Avaliação Pós-Compra — NPS WhatsApp, webhook IzChat, cron 2h, flag sem_avaliacao
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
 // v2.42.1
 // v2.42.0: Módulo Estoque — contagem manhã, divergência auto, Bling NFe import, cascos, WhatsApp admin
@@ -4807,9 +4808,90 @@ export default {
     if (method === 'POST' && path === '/api/webhooks/izchat') {
       try {
         const payload = await request.json().catch(() => ({}));
-        console.log('[izchat-webhook] Payload recebido:', JSON.stringify(payload).slice(0, 300));
-        // IzChat envia: { type, data: { message: { body, fromMe, contact: { number } } } }
-        // ou variações — tentar diferentes formatos
+        const event = payload?.event || payload?.type || '';
+        console.log('[izchat-webhook] Event:', event, '| Payload:', JSON.stringify(payload).slice(0, 300));
+
+        // ── Evento: oportunidade movida no CRM (agente IA moveu após receber nota) ──
+        if (event === 'crm.opportunity.moved' || event === 'opportunity.moved') {
+          const opp = payload?.data?.opportunity || payload?.opportunity || {};
+          const stageName = opp?.stage?.name || opp?.stageName || '';
+          const oppId = String(opp?.id || opp?.opportunity_id || '');
+          const contactPhone = opp?.contact?.phone || opp?.contact?.number || '';
+
+          console.log(`[izchat-webhook] CRM moved → stage: "${stageName}", oppId: ${oppId}, phone: ${contactPhone}`);
+
+          if (oppId) {
+            // Determinar score pela etapa
+            let score = null;
+            const stageNorm = stageName.toLowerCase();
+            if (stageNorm.includes('google')) score = 5;
+            else if (stageNorm.includes('interna') || stageNorm.includes('avalia')) score = 3; // placeholder — será sobrescrito pelo número real
+
+            // Buscar survey pelo opp_id ou phone
+            let survey = null;
+            if (oppId) {
+              survey = await env.DB.prepare(
+                `SELECT * FROM satisfaction_surveys WHERE izchat_opp_id=? ORDER BY sent_at DESC LIMIT 1`
+              ).bind(oppId).first().catch(() => null);
+            }
+            if (!survey && contactPhone) {
+              const phone = contactPhone.replace(/\D/g, '');
+              survey = await env.DB.prepare(
+                `SELECT * FROM satisfaction_surveys WHERE phone_digits=? AND status='sent' ORDER BY sent_at DESC LIMIT 1`
+              ).bind(phone).first().catch(() => null);
+            }
+
+            if (survey) {
+              const config = await getAvaliacaoConfig(env);
+              const phoneDigits = survey.phone_digits;
+              const phoneIntl = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
+              const nomeCliente = (survey.customer_name || 'Cliente').split(' ')[0];
+
+              // Score final pela etapa
+              const scoreFinal = stageNorm.includes('google') ? 5 : (survey.score_raw || 3);
+
+              // Atualizar survey
+              await env.DB.prepare(
+                `UPDATE satisfaction_surveys SET score=?, answered_at=unixepoch(), status='answered', izchat_opp_id=? WHERE id=?`
+              ).bind(scoreFinal, oppId, survey.id).run();
+
+              if (scoreFinal >= 5) {
+                // Enviar link Google Review
+                const googleUrl = config.google_url || 'https://g.page/r/moskogas';
+                const msg = montarMensagemAvaliacao(config.mensagem_positiva, { nome: nomeCliente, google_url: googleUrl });
+                await sendWhatsApp(env, phoneIntl, msg, { category: 'avaliacao' });
+                await env.DB.prepare('UPDATE satisfaction_surveys SET google_link_sent=1 WHERE id=?').bind(survey.id).run();
+                console.log(`[izchat-webhook] ⭐ Score 5 — link Google enviado para ${phoneDigits}`);
+              } else {
+                // Follow-up + alerta admin
+                const msgCliente = montarMensagemAvaliacao(config.mensagem_negativa, { nome: nomeCliente });
+                await sendWhatsApp(env, phoneIntl, msgCliente, { category: 'avaliacao' });
+                await env.DB.prepare('UPDATE satisfaction_surveys SET follow_up_sent=1 WHERE id=?').bind(survey.id).run();
+                // Alerta admins
+                const { results: admins } = await env.DB.prepare(
+                  "SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1 AND telefone IS NOT NULL"
+                ).all().catch(() => ({ results: [] }));
+                const msgAdmin = montarMensagemAvaliacao(config.mensagem_admin, {
+                  nome: survey.customer_name || 'Desconhecido',
+                  telefone: phoneDigits,
+                  score: scoreFinal,
+                  pedido_id: survey.order_id,
+                });
+                for (const admin of admins) {
+                  const ap = admin.telefone.replace(/\D/g, '');
+                  await sendWhatsApp(env, ap.startsWith('55') ? ap : `55${ap}`, msgAdmin, { category: 'admin_alerta' });
+                  await new Promise(r => setTimeout(r, 1500));
+                }
+                console.log(`[izchat-webhook] ⚠️ Score ${scoreFinal} — follow-up + admins alertados`);
+              }
+            } else {
+              console.log(`[izchat-webhook] Survey não encontrada para oppId ${oppId}`);
+            }
+          }
+          return json({ ok: true });
+        }
+
+        // ── Evento: mensagem recebida (fallback para resposta direta 1-5) ──
         const fromMe = payload?.data?.message?.fromMe ?? payload?.fromMe ?? false;
         if (fromMe) return json({ ok: true, ignored: 'fromMe' });
 
@@ -4818,6 +4900,13 @@ export default {
 
         if (body && number) {
           const phoneDigits = number.replace(/\D/g, '');
+          // Salvar score_raw para usar quando o CRM mover
+          const score = parseInt(body.trim());
+          if (!isNaN(score) && score >= 1 && score <= 5) {
+            await env.DB.prepare(
+              `UPDATE satisfaction_surveys SET score_raw=? WHERE phone_digits=? AND status='sent' ORDER BY sent_at DESC LIMIT 1`
+            ).bind(score, phoneDigits).run().catch(() => {});
+          }
           const respondeu = await processarRespostaAvaliacao(env, phoneDigits, body);
           console.log(`[izchat-webhook] ${phoneDigits} "${body}" → avaliacao: ${respondeu}`);
         }
@@ -6110,16 +6199,69 @@ async function ensureAvaliacaoTables(env) {
       sent_at INTEGER DEFAULT (unixepoch()),
       answered_at INTEGER,
       score INTEGER,
+      score_raw INTEGER,
+      izchat_opp_id TEXT,
       follow_up_sent INTEGER DEFAULT 0,
       google_link_sent INTEGER DEFAULT 0,
       status TEXT DEFAULT 'sent',
       FOREIGN KEY(order_id) REFERENCES orders(id)
     )`).run();
-    // Adicionar coluna sem_avaliacao em customers_cache se não existir
     await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN sem_avaliacao INTEGER DEFAULT 0`).run().catch(() => {});
-    // Adicionar coluna survey_sent em orders se não existir
     await env.DB.prepare(`ALTER TABLE orders ADD COLUMN survey_sent INTEGER DEFAULT 0`).run().catch(() => {});
+    await env.DB.prepare(`ALTER TABLE satisfaction_surveys ADD COLUMN score_raw INTEGER`).run().catch(() => {});
+    await env.DB.prepare(`ALTER TABLE satisfaction_surveys ADD COLUMN izchat_opp_id TEXT`).run().catch(() => {});
   } catch (e) { /* table já existe */ }
+}
+
+// Criar oportunidade no CRM IzChat para rastrear avaliação
+async function criarOportunidadeCRM(env, survey, config) {
+  try {
+    const companyToken = env.IZCHAT_COMPANY_TOKEN;
+    if (!companyToken) { console.log('[crm] IZCHAT_COMPANY_TOKEN não configurado'); return null; }
+
+    // Buscar pipelines para pegar o ID correto do pipeline de avaliação
+    const pipelinesRes = await fetch('https://chatapi.izchat.com.br/api/external/pipelines', {
+      headers: { 'Authorization': `Bearer ${companyToken}` }
+    });
+    const pipelinesData = await pipelinesRes.json();
+    const pipelines = pipelinesData?.data?.pipelines || pipelinesData?.pipelines || [];
+    const pipeline = pipelines.find(p => p.name?.toLowerCase().includes('avalia') || p.name?.toLowerCase().includes('pós venda') || p.name?.toLowerCase().includes('pos venda'));
+    if (!pipeline) { console.log('[crm] Pipeline de avaliação não encontrado'); return null; }
+
+    // Primeira etapa = "Avaliação Interna" (onde entra ao enviar)
+    const firstStage = pipeline.stages?.[0] || pipeline.lanes?.[0];
+    if (!firstStage) { console.log('[crm] Etapas do pipeline não encontradas'); return null; }
+
+    // Buscar ou criar contato
+    const phoneSearch = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/search?phone=${survey.phone_digits}`, {
+      headers: { 'Authorization': `Bearer ${companyToken}` }
+    });
+    const phoneData = await phoneSearch.json();
+    const contact = phoneData?.data?.contact || phoneData?.contact;
+    const contactId = contact?.id;
+
+    // Criar oportunidade
+    const oppBody = {
+      title: `Avaliação #${survey.order_id} — ${survey.customer_name || survey.phone_digits}`,
+      pipeline_id: pipeline.id,
+      stage_id: firstStage.id,
+      contact_id: contactId || undefined,
+      value: 0,
+    };
+
+    const oppRes = await fetch('https://chatapi.izchat.com.br/api/external/crm/opportunity', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${companyToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(oppBody)
+    });
+    const oppData = await oppRes.json();
+    const oppId = oppData?.data?.opportunity?.id || oppData?.opportunity?.id || oppData?.id;
+    console.log(`[crm] Oportunidade criada: ${oppId} para pedido #${survey.order_id}`);
+    return String(oppId);
+  } catch (e) {
+    console.error('[crm] Erro ao criar oportunidade:', e.message);
+    return null;
+  }
 }
 
 async function getAvaliacaoConfig(env) {
@@ -6215,6 +6357,19 @@ async function processarAvaliacoesCron(env) {
           INSERT OR IGNORE INTO satisfaction_surveys (order_id, phone_digits, customer_name, status)
           VALUES (?, ?, ?, 'sent')
         `).bind(order.id, order.phone_digits, order.customer_name || '').run();
+
+        // Criar oportunidade no CRM IzChat para rastrear resposta do agente IA
+        const surveyRow = await env.DB.prepare(`SELECT id FROM satisfaction_surveys WHERE order_id=?`).bind(order.id).first().catch(() => null);
+        if (surveyRow) {
+          const oppId = await criarOportunidadeCRM(env, {
+            order_id: order.id,
+            phone_digits: order.phone_digits,
+            customer_name: order.customer_name,
+          }, config);
+          if (oppId) {
+            await env.DB.prepare('UPDATE satisfaction_surveys SET izchat_opp_id=? WHERE id=?').bind(oppId, surveyRow.id).run();
+          }
+        }
 
         enviados++;
         console.log(`[avaliacao-cron] ✅ Enviado para pedido #${order.id} (${phone})`);
