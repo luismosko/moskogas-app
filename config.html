@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.12.3 — MoskoGás</title>
+<title>Config v2.13.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -11,6 +11,9 @@
   h1 { color: #1e293b; font-size: 22px; margin-bottom: 20px; }
   .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
   .card h2 { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 14px; }
+  .mkt-tab { background: none; border: none; border-bottom: 3px solid transparent; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; color: #64748b; margin-bottom: -2px; border-radius: 0; transition: all 0.2s; }
+  .mkt-tab:hover { color: #1e293b; }
+  .mkt-tab-active { color: #1a73e8 !important; border-bottom-color: #1a73e8 !important; }
   label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 4px; text-transform: uppercase; }
   input, select { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; margin-bottom: 12px; }
   input:focus { outline: none; border-color: #f97316; }
@@ -30,8 +33,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.12.3 — config</div>
-  <h1>⚙️ Configurações v2.12.3</h1>
+  <div class="version-badge">v2.13.0 — config</div>
+  <h1>⚙️ Configurações v2.13.0</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -402,6 +405,117 @@
         </div>
       </div>
     </details>
+  </div>
+
+
+  <!-- ===== MARKETING ===== -->
+  <div class="card" id="marketingSection">
+    <h2>🎯 Marketing Digital</h2>
+
+    <!-- Sub-abas -->
+    <div style="display:flex;gap:8px;margin-bottom:20px;border-bottom:2px solid #e2e8f0;padding-bottom:0">
+      <button onclick="mktTab('gmb')" id="mktTabGmb" class="mkt-tab mkt-tab-active">📍 Google Meu Negócio</button>
+      <button onclick="mktTab('social')" id="mktTabSocial" class="mkt-tab">📱 Facebook & Instagram</button>
+      <button onclick="mktTab('ads')" id="mktTabAds" class="mkt-tab">📢 Google Ads</button>
+    </div>
+
+    <!-- Google Meu Negócio -->
+    <div id="mktPanelGmb">
+      <div id="mktGmbStatus" style="margin-bottom:14px">
+        <div style="background:#f1f5f9;border-radius:8px;padding:12px;font-size:13px;color:#64748b;display:flex;align-items:center;gap:10px">
+          <span id="mktGmbStatusIcon">⏳</span>
+          <span id="mktGmbStatusText">Verificando conexão com Google...</span>
+        </div>
+      </div>
+      <div id="mktGmbDisconnected">
+        <p style="font-size:13px;color:#64748b;margin-bottom:12px">Conecte sua conta Google para gerenciar o perfil da empresa, responder avaliações e publicar posts.</p>
+        <button onclick="mktConnectGoogle()" class="btn btn-green" style="font-size:14px;padding:10px 20px">
+          <img src="https://www.google.com/favicon.ico" style="width:16px;vertical-align:middle;margin-right:6px">
+          Conectar com Google
+        </button>
+      </div>
+      <div id="mktGmbConnected" style="display:none">
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px">
+          ✅ Conectado como <strong id="mktGmbEmail"></strong>
+          <button onclick="mktDisconnectGoogle()" style="margin-left:12px;background:none;border:1px solid #e2e8f0;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;color:#ef4444">Desconectar</button>
+        </div>
+
+        <!-- Avaliações -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <strong style="font-size:13px">⭐ Avaliações recentes</strong>
+            <button onclick="mktLoadReviews()" class="btn" style="padding:6px 12px;font-size:12px">🔄 Atualizar</button>
+          </div>
+          <div id="mktReviewsList" style="font-size:13px;color:#64748b">Clique em Atualizar para carregar avaliações.</div>
+        </div>
+
+        <!-- Posts GMB -->
+        <div>
+          <strong style="font-size:13px;display:block;margin-bottom:10px">📝 Publicar Post no Google Meu Negócio</strong>
+          <textarea id="mktGmbPostText" placeholder="Texto do post... (ex: Promoção relâmpago! P13 com desconto hoje!)" style="width:100%;height:80px;font-size:13px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;resize:vertical"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button onclick="mktSuggestPost('gmb')" class="btn" style="font-size:12px;padding:8px 14px">✨ Sugerir com IA</button>
+            <button onclick="mktPublishGmb()" class="btn btn-green" style="font-size:12px;padding:8px 14px">📤 Publicar agora</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Facebook & Instagram -->
+    <div id="mktPanelSocial" style="display:none">
+      <div id="mktSocialStatus" style="margin-bottom:14px">
+        <div style="background:#f1f5f9;border-radius:8px;padding:12px;font-size:13px;color:#64748b;display:flex;align-items:center;gap:10px">
+          <span id="mktSocialStatusIcon">⏳</span>
+          <span id="mktSocialStatusText">Verificando conexão com Meta...</span>
+        </div>
+      </div>
+      <div id="mktSocialDisconnected">
+        <p style="font-size:13px;color:#64748b;margin-bottom:12px">Conecte sua Página do Facebook para publicar posts no Facebook e Instagram simultaneamente.</p>
+        <button onclick="mktConnectMeta()" class="btn" style="background:#1877f2;color:#fff;font-size:14px;padding:10px 20px;border:none">
+          <span style="margin-right:6px">📘</span> Conectar com Facebook
+        </button>
+      </div>
+      <div id="mktSocialConnected" style="display:none">
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px">
+          ✅ Página conectada: <strong id="mktPageName"></strong>
+          <span id="mktIgBadge" style="margin-left:8px;background:#e1306c;color:#fff;border-radius:4px;padding:2px 8px;font-size:11px">📸 Instagram vinculado</span>
+        </div>
+
+        <!-- Criar Post -->
+        <div>
+          <strong style="font-size:13px;display:block;margin-bottom:10px">✍️ Criar Post</strong>
+          <textarea id="mktSocialPostText" placeholder="Texto do post..." style="width:100%;height:80px;font-size:13px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;resize:vertical"></textarea>
+          <div style="margin:8px 0;font-size:13px;color:#64748b">Publicar em:</div>
+          <div style="display:flex;gap:10px;margin-bottom:10px;font-size:13px">
+            <label><input type="checkbox" id="mktChkFb" checked> 📘 Facebook</label>
+            <label><input type="checkbox" id="mktChkIg" checked> 📸 Instagram</label>
+            <label><input type="checkbox" id="mktChkGmb"> 📍 Google Meu Negócio</label>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button onclick="mktSuggestPost('social')" class="btn" style="font-size:12px;padding:8px 14px">✨ Sugerir com IA</button>
+            <button onclick="mktPublishSocial()" class="btn btn-green" style="font-size:12px;padding:8px 14px">📤 Publicar agora</button>
+            <button onclick="mktScheduleSocial()" class="btn" style="font-size:12px;padding:8px 14px;background:#6366f1;color:#fff;border:none">📅 Agendar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Google Ads -->
+    <div id="mktPanelAds" style="display:none">
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e">
+        ⏳ <strong>Aguardando aprovação do Developer Token Basic</strong> — solicitação enviada ao Google em 01/03/2026. Prazo: 3-5 dias úteis.
+      </div>
+      <div style="background:#f8fafc;border-radius:8px;padding:14px;font-size:13px;color:#64748b">
+        <p style="margin-bottom:8px">Quando aprovado, você poderá aqui:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li>Ver campanhas ativas dos seus clientes</li>
+          <li>Ativar / pausar campanhas</li>
+          <li>Ajustar orçamento diário</li>
+          <li>Ver métricas: cliques, impressões, gasto</li>
+          <li>Criar anúncios com sugestão de IA</li>
+        </ul>
+      </div>
+    </div>
   </div>
 
 </div><!-- /container -->
@@ -1270,6 +1384,155 @@ carregarSafetyConfig();
 carregarLembreteConfig();
 carregarRelatorioConfig();
 carregarReviewConfig();
+initMarketing();
+
+// ===== MARKETING MODULE =====
+function mktTab(tab) {
+  ['gmb','social','ads'].forEach(t => {
+    document.getElementById('mktPanel' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === tab ? '' : 'none';
+    const btn = document.getElementById('mktTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) { btn.classList.toggle('mkt-tab-active', t === tab); }
+  });
+}
+
+async function initMarketing() {
+  // Verifica status GMB
+  try {
+    const r = await apiCall('/api/marketing/google/status');
+    if (r && r.connected) {
+      document.getElementById('mktGmbStatusIcon').textContent = '✅';
+      document.getElementById('mktGmbStatusText').textContent = 'Conectado como ' + (r.email || '');
+      document.getElementById('mktGmbEmail').textContent = r.email || '';
+      document.getElementById('mktGmbDisconnected').style.display = 'none';
+      document.getElementById('mktGmbConnected').style.display = '';
+    } else {
+      document.getElementById('mktGmbStatusIcon').textContent = '🔴';
+      document.getElementById('mktGmbStatusText').textContent = 'Não conectado';
+    }
+  } catch(e) {
+    document.getElementById('mktGmbStatusIcon').textContent = '🔴';
+    document.getElementById('mktGmbStatusText').textContent = 'Módulo não ativo ainda — endpoints em breve';
+  }
+  // Verifica status Meta
+  try {
+    const r = await apiCall('/api/marketing/meta/status');
+    if (r && r.connected) {
+      document.getElementById('mktSocialStatusIcon').textContent = '✅';
+      document.getElementById('mktSocialStatusText').textContent = 'Conectado — Página: ' + (r.page_name || '');
+      document.getElementById('mktPageName').textContent = r.page_name || '';
+      document.getElementById('mktSocialDisconnected').style.display = 'none';
+      document.getElementById('mktSocialConnected').style.display = '';
+      if (!r.instagram_id) document.getElementById('mktIgBadge').style.display = 'none';
+    } else {
+      document.getElementById('mktSocialStatusIcon').textContent = '🔴';
+      document.getElementById('mktSocialStatusText').textContent = 'Não conectado';
+    }
+  } catch(e) {
+    document.getElementById('mktSocialStatusIcon').textContent = '🔴';
+    document.getElementById('mktSocialStatusText').textContent = 'Módulo não ativo ainda — endpoints em breve';
+  }
+}
+
+function mktConnectGoogle() {
+  showLoading('Redirecionando para o Google...');
+  apiCall('/api/marketing/google/auth-url').then(r => {
+    hideLoading();
+    if (r && r.url) window.location.href = r.url;
+    else showToast('Erro ao gerar URL de autorização', 'error');
+  }).catch(() => { hideLoading(); showToast('Endpoint não disponível ainda', 'error'); });
+}
+
+function mktDisconnectGoogle() {
+  if (!confirm('Desconectar do Google?')) return;
+  apiCall('/api/marketing/google/disconnect', 'POST').then(() => {
+    showToast('Desconectado do Google', 'success');
+    initMarketing();
+  });
+}
+
+function mktConnectMeta() {
+  showLoading('Redirecionando para o Facebook...');
+  apiCall('/api/marketing/meta/auth-url').then(r => {
+    hideLoading();
+    if (r && r.url) window.location.href = r.url;
+    else showToast('Erro ao gerar URL de autorização', 'error');
+  }).catch(() => { hideLoading(); showToast('Endpoint não disponível ainda', 'error'); });
+}
+
+async function mktSuggestPost(context) {
+  const textareaId = context === 'gmb' ? 'mktGmbPostText' : 'mktSocialPostText';
+  const textarea = document.getElementById(textareaId);
+  const hint = textarea.value || 'promoção de gás de cozinha';
+  showLoading('Gerando texto com IA...');
+  try {
+    const r = await apiCall('/api/marketing/suggest-post', 'POST', { context: hint, platform: context });
+    hideLoading();
+    if (r && r.text) { textarea.value = r.text; showToast('Texto gerado com IA!', 'success'); }
+  } catch(e) { hideLoading(); showToast('Erro ao gerar texto', 'error'); }
+}
+
+async function mktPublishGmb() {
+  const text = document.getElementById('mktGmbPostText').value.trim();
+  if (!text) { showToast('Digite o texto do post', 'error'); return; }
+  showLoading('Publicando no Google Meu Negócio...');
+  try {
+    const r = await apiCall('/api/marketing/gmb/post', 'POST', { text });
+    hideLoading();
+    if (r && r.ok) { showToast('Post publicado no GMB!', 'success'); document.getElementById('mktGmbPostText').value = ''; }
+    else showToast(r?.error || 'Erro ao publicar', 'error');
+  } catch(e) { hideLoading(); showToast('Endpoint em desenvolvimento', 'error'); }
+}
+
+async function mktPublishSocial() {
+  const text = document.getElementById('mktSocialPostText').value.trim();
+  if (!text) { showToast('Digite o texto do post', 'error'); return; }
+  const fb = document.getElementById('mktChkFb').checked;
+  const ig = document.getElementById('mktChkIg').checked;
+  const gmb = document.getElementById('mktChkGmb').checked;
+  if (!fb && !ig && !gmb) { showToast('Selecione ao menos uma plataforma', 'error'); return; }
+  showLoading('Publicando...');
+  try {
+    const r = await apiCall('/api/marketing/social/post', 'POST', { text, facebook: fb, instagram: ig, gmb });
+    hideLoading();
+    if (r && r.ok) { showToast('Post publicado!', 'success'); document.getElementById('mktSocialPostText').value = ''; }
+    else showToast(r?.error || 'Erro ao publicar', 'error');
+  } catch(e) { hideLoading(); showToast('Endpoint em desenvolvimento', 'error'); }
+}
+
+function mktScheduleSocial() {
+  showToast('Agendamento em breve!', 'info');
+}
+
+async function mktLoadReviews() {
+  const el = document.getElementById('mktReviewsList');
+  el.innerHTML = '⏳ Carregando...';
+  try {
+    const r = await apiCall('/api/marketing/gmb/reviews');
+    if (r && r.reviews && r.reviews.length > 0) {
+      el.innerHTML = r.reviews.map(rv => `
+        <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <strong>${rv.author}</strong>
+            <span style="color:#f59e0b">${'⭐'.repeat(rv.rating)}</span>
+          </div>
+          <div style="color:#374151;margin-bottom:6px">${rv.comment || '(sem comentário)'}</div>
+          ${rv.reply ? '<div style="background:#f0fdf4;padding:6px 10px;border-radius:6px;font-size:12px;color:#166534">✅ Respondida: ' + rv.reply + '</div>' :
+          '<button onclick="mktReplyReview(\'' + rv.id + '\')" class="btn" style="font-size:11px;padding:4px 10px">💬 Responder</button>'}
+        </div>`).join('');
+    } else {
+      el.innerHTML = '<span style="color:#94a3b8">Nenhuma avaliação encontrada.</span>';
+    }
+  } catch(e) { el.innerHTML = '<span style="color:#ef4444">Endpoint em desenvolvimento</span>'; }
+}
+
+function mktReplyReview(reviewId) {
+  const text = prompt('Digite sua resposta:');
+  if (!text) return;
+  apiCall('/api/marketing/gmb/reviews/' + reviewId + '/reply', 'POST', { text }).then(r => {
+    if (r && r.ok) { showToast('Resposta enviada!', 'success'); mktLoadReviews(); }
+    else showToast('Erro ao responder', 'error');
+  });
+}
 </script>
 </body>
 </html>
