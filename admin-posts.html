@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Banco de Posts v1.0.2 — MoskoGás Admin</title>
+<title>Banco de Posts v1.0.3 — MoskoGás Admin</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -123,7 +123,36 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
     </select>
     <input id="filterBusca" placeholder="🔍 Buscar por tema ou texto..." oninput="filterLocal()" style="flex:1">
     <span id="countLabel" style="font-size:12px;color:#64748b;white-space:nowrap"></span>
-    <button onclick="exportCSVCanva()" class="btn" style="background:#1d4ed8;color:#fff;border-color:#1d4ed8;white-space:nowrap" title="Exportar CSV pronto para o Bulk Create do Canva">📊 Exportar CSV Canva</button>
+    <div style="display:flex;align-items:center;gap:6px;position:relative">
+      <button onclick="exportCSVCanva()" class="btn" style="background:#1d4ed8;color:#fff;border-color:#1d4ed8;white-space:nowrap" title="Exportar CSV pronto para o Bulk Create do Canva">📊 Exportar CSV Canva</button>
+      <button onclick="toggleHelp()" id="btnHelp" style="width:26px;height:26px;border-radius:50%;background:#334155;border:1px solid #475569;color:#94a3b8;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Como usar">?</button>
+      <div id="helpPopover" style="display:none;position:absolute;right:0;top:34px;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;width:300px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+        <div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:10px">📊 Como usar o CSV no Canva</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:20px;height:20px;border-radius:50%;background:#1d4ed8;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+            <div style="font-size:12px;color:#cbd5e1;line-height:1.4">Filtre por <b style="color:#f1f5f9">marca + mês</b> e clique <b style="color:#60a5fa">📊 Exportar CSV</b></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:20px;height:20px;border-radius:50%;background:#1d4ed8;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+            <div style="font-size:12px;color:#cbd5e1;line-height:1.4">No Canva, abra seu template de post → <b style="color:#f1f5f9">Apps → Bulk Create</b></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:20px;height:20px;border-radius:50%;background:#1d4ed8;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+            <div style="font-size:12px;color:#cbd5e1;line-height:1.4">Importe o CSV e <b style="color:#f1f5f9">mapeie as colunas</b> para os campos do template</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:20px;height:20px;border-radius:50%;background:#1d4ed8;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</div>
+            <div style="font-size:12px;color:#cbd5e1;line-height:1.4">Clique <b style="color:#f1f5f9">Gerar</b> → 30 designs prontos em segundos</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:20px;height:20px;border-radius:50%;background:#1d4ed8;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">5</div>
+            <div style="font-size:12px;color:#cbd5e1;line-height:1.4">Baixe as imagens do Canva e suba aqui com <b style="color:#f97316">📤 Upload foto</b></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #334155;font-size:11px;color:#475569">Clique em qualquer lugar para fechar</div>
+      </div>
+    </div>
   </div>
 
   <!-- Posts grid -->
@@ -247,7 +276,7 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
   </div>
 </div>
 
-<div class="version-badge">Banco de Posts v1.0.2</div>
+<div class="version-badge">Banco de Posts v1.0.3</div>
 <div id="nav-placeholder-bottom"></div>
 
 <script>
@@ -695,6 +724,16 @@ async function doQuickUpload(postId, brandId, file) {
     if (card) card.style.opacity = '1';
   }
 }
+
+function toggleHelp() {
+  const pop = document.getElementById('helpPopover');
+  pop.style.display = pop.style.display === 'none' ? '' : 'none';
+}
+document.addEventListener('click', e => {
+  const pop = document.getElementById('helpPopover');
+  const btn = document.getElementById('btnHelp');
+  if (pop && !pop.contains(e.target) && e.target !== btn) pop.style.display = 'none';
+});
 
 // ──────────────────────────────────────────
 // EXPORT CSV — formato Canva Bulk Create
