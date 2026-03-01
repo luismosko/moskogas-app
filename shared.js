@@ -1,5 +1,6 @@
 // shared.js — Utilitários compartilhados MoskoGás v1.15.0
-// v1.15.0: 🎟️ Novo Módulo de Vales/Tickets (vales.html, print-vales.html) added to NavBar
+// v1.16.0
+// v1.16.0: 🎯 Marketing Digital adicionado ao menu Config
 // v1.14.0: 📦 Estoque adicionado à navbar
 // v1.13.0: Dropdown Financeiro (Pagamentos + Empenhos GOV) na navbar
 // v1.11.0: Contratos adicionado à navbar
@@ -180,6 +181,7 @@ const NAV_DROPDOWNS = [
     id: 'config', icon: '⚙️', label: 'Config', roles: ['admin', 'atendente'],
     children: [
       { href: 'config.html', icon: '⚙️', label: 'Configurações' },
+      { href: 'config.html#marketingSection', icon: '🎯', label: 'Marketing Digital' },
       { href: 'usuarios.html', icon: '👥', label: 'Usuários' },
     ]
   },
