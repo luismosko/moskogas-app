@@ -1,6 +1,6 @@
-// v2.48.1
+// v2.48.2
+// v2.48.2: Prompt de geração inclui fotos reais do brand kit + asset_tipo_sugerido por post
 // v2.48.1: Geração de imagem 3 camadas — foto real brand kit (grátis) > DALL-E+visão > DALL-E puro
-// v2.48.0: Brand Kits admin — tabelas brand_kits+brand_assets, CRUD, upload R2, API pública
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6440,6 +6440,29 @@ export default {
         const extra = cfg.prompt_extra || '';
         const brandTom = cfg.brand_tom || 'Tom amigável e local.';
         const brandImgPrompt = cfg.brand_img_prompt || 'LPG gas cylinder delivery Brazil, realistic photo';
+        const brandId = cfg.brand_id || '';
+
+        // Buscar assets reais do brand kit para incluir no prompt
+        let assetsContext = '';
+        let assetsByTipo = {};
+        if (brandId) {
+          const assets = await env.DB.prepare(`SELECT tipo, nome, url FROM brand_assets WHERE brand_id=? ORDER BY tipo`).bind(brandId).all().then(r => r.results).catch(() => []);
+          assets.forEach(a => {
+            if (!assetsByTipo[a.tipo]) assetsByTipo[a.tipo] = [];
+            assetsByTipo[a.tipo].push(a.nome || a.tipo);
+          });
+          const tipoLabel = { logo:'Logo da marca', botijao:'Foto do botijão', uniforme:'Entregador com uniforme', veiculo:'Veículo de entrega', lifestyle:'Foto lifestyle/família', outro:'Outros materiais' };
+          const lines = Object.entries(assetsByTipo).map(([tipo, nomes]) => `  - ${tipoLabel[tipo]||tipo}: ${nomes.length} foto(s) disponível(is)`);
+          if (lines.length) {
+            assetsContext = `\nFOTOS REAIS DISPONÍVEIS NO BRAND KIT (usar como base para imagem_prompt):
+${lines.join('\n')}
+IMPORTANTE: o campo imagem_prompt deve descrever QUAL das fotos acima usar como base, sendo específico sobre o contexto visual.
+Exemplo: se tem "botijão", usar "the brand's real gas cylinder in the image, [add context of the post theme]".
+Se tem "uniforme/entregador", usar "delivery man in brand uniform delivering gas cylinder, [post context]".
+Se tem "veiculo", usar "brand delivery vehicle, [post context]".
+Se tem "lifestyle", usar "family/home using the brand's gas, [post context]".`;
+          }
+        }
 
         const systemPrompt = `Você é especialista em marketing local para revendas de gás de cozinha e água mineral no Brasil.
 EMPRESA: ${nome}
@@ -6449,15 +6472,17 @@ SITE: ${site}
 DIFERENCIAIS: ${regras}
 TOM DE COMUNICAÇÃO: ${brandTom}
 INSTRUÇÕES EXTRAS: ${extra}
+${assetsContext}
 
 Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com estas regras:
 - Texto: máximo 280 caracteres para GMB, pode ser maior para Instagram
 - Sempre citar telefone ou endereço para SEO local
 - Tom conforme especificado acima
-- Variar os temas: promoção, dica de segurança, produto, comodidade, depoimento fictício
+- Variar os temas: promoção, dica de segurança, produto, comodidade, depoimento fictício, dica culinária, água mineral
 - Cada post deve ser DIFERENTE dos outros
-- Responda APENAS com JSON válido, sem markdown: {"posts": [{"texto": "...", "tema": "...", "imagem_prompt": "..."}]}
-- imagem_prompt: descrição em INGLÊS para gerar imagem DALL-E baseada em: "${brandImgPrompt}" — adaptar o contexto do post`;
+- Responda APENAS com JSON válido, sem markdown: {"posts": [{"texto": "...", "tema": "...", "imagem_prompt": "...", "asset_tipo": "..."}]}
+- imagem_prompt: descrição em INGLÊS para DALL-E baseada nas fotos reais da marca — sempre referenciar as fotos disponíveis acima como base. Base visual: "${brandImgPrompt}"
+- asset_tipo: qual tipo de foto do brand kit usar preferencialmente (botijao|uniforme|veiculo|lifestyle|logo|outro) — escolha o mais adequado para o tema do post`;
 
         const userPrompt = `Gere ${qty} posts diferentes para a revenda. Variedade máxima de temas.`;
 
@@ -6486,9 +6511,9 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
           const p = posts[i];
           const scheduledAt = now + (i * intervalDays * 86400);
           const r = await env.DB.prepare(`
-            INSERT INTO marketing_posts (texto, tema, imagem_prompt, status, scheduled_at, plataformas, created_at)
-            VALUES (?, ?, ?, 'pendente', ?, '["gmb","fb","ig"]', ?)
-          `).bind(p.texto, p.tema || '', p.imagem_prompt || '', scheduledAt, now).run();
+            INSERT INTO marketing_posts (texto, tema, imagem_prompt, asset_tipo_sugerido, status, scheduled_at, plataformas, created_at)
+            VALUES (?, ?, ?, ?, 'pendente', ?, '["gmb","fb","ig"]', ?)
+          `).bind(p.texto, p.tema || '', p.imagem_prompt || '', p.asset_tipo || 'botijao', scheduledAt, now).run();
           savedIds.push(r.meta?.last_row_id);
         }
 
@@ -6535,8 +6560,9 @@ Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com est
         // ─── ESTRATÉGIA 1: Foto real do Brand Kit ───────────────────
         if (strategy === 'brand_asset' || strategy === 'auto') {
           if (brandId) {
-            // Prioridade: lifestyle > botijao > uniforme > veiculo > qualquer asset
-            const tipoPrefs = ['lifestyle', 'botijao', 'uniforme', 'veiculo', 'outro'];
+            // Respeitar tipo sugerido pela IA ao gerar o post, depois fallbacks
+            const tipoSugerido = row.asset_tipo_sugerido || 'botijao';
+            const tipoPrefs = [tipoSugerido, 'lifestyle', 'botijao', 'uniforme', 'veiculo', 'outro'].filter((v,i,a) => a.indexOf(v) === i);
             let chosenAsset = null;
             for (const tipo of tipoPrefs) {
               const assets = await env.DB.prepare(`SELECT * FROM brand_assets WHERE brand_id=? AND tipo=? ORDER BY RANDOM() LIMIT 1`).bind(brandId, tipo).all().then(r => r.results);
@@ -6770,6 +6796,7 @@ async function ensureMarketingTables(env) {
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN likes INTEGER DEFAULT 0`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN gmb_result TEXT DEFAULT ''`).run().catch(()=>{});
   await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN imagem_source TEXT DEFAULT ''`).run().catch(()=>{});
+  await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN asset_tipo_sugerido TEXT DEFAULT 'botijao'`).run().catch(()=>{});
 }
 
 async function publishScheduledPosts(env) {
