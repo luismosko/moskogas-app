@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.1 — MoskoGás</title>
+<title>Config v2.13.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -33,8 +33,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.1 — config</div>
-  <h1>⚙️ Configurações v2.13.1</h1>
+  <div class="version-badge">v2.13.2 — config</div>
+  <h1>⚙️ Configurações v2.13.2</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -429,7 +429,7 @@
       </div>
       <div id="mktGmbDisconnected">
         <p style="font-size:13px;color:#64748b;margin-bottom:12px">Conecte sua conta Google para gerenciar o perfil da empresa, responder avaliações e publicar posts.</p>
-        <button onclick="mktConnectGoogle()" class="btn btn-green" style="font-size:14px;padding:10px 20px">
+        <button onclick="mktConnectGoogle(this)" class="btn btn-green" style="font-size:14px;padding:10px 20px">
           <img src="https://www.google.com/favicon.ico" style="width:16px;vertical-align:middle;margin-right:6px">
           Conectar com Google
         </button>
@@ -1433,8 +1433,7 @@ async function initMarketing() {
   }
 }
 
-function mktConnectGoogle() {
-  const btn = event.target;
+function mktConnectGoogle(btn) {
   btn.disabled = true;
   btn.textContent = '⏳ Aguarde...';
   apiCall('/api/marketing/google/auth-url').then(r => {
