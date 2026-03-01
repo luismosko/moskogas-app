@@ -1,4 +1,5 @@
-// v2.45.4
+// v2.46.0
+// v2.46.0: Módulo Marketing — Google OAuth, GMB reviews/posts, sugestão IA, Meta placeholder
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6143,6 +6144,158 @@ export default {
       }
 
       return err(`Endpoint vales não encontrado (${method} ${path})`, 404);
+    }
+
+    // ===== MARKETING MODULE =====
+    if (path.startsWith('/api/marketing/')) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck.error) return authCheck.error;
+
+      // --- Google OAuth ---
+      if (path === '/api/marketing/google/auth-url' && method === 'GET') {
+        const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
+        const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/google/callback';
+        const scopes = [
+          'https://www.googleapis.com/auth/business.manage',
+          'https://www.googleapis.com/auth/adwords',
+          'openid','email','profile'
+        ].join(' ');
+        const state = crypto.randomUUID();
+        const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${state}`;
+        return json({ url });
+      }
+
+      if (path === '/api/marketing/oauth/google/callback' && method === 'GET') {
+        const code = url.searchParams.get('code');
+        if (!code) return err('Missing code', 400);
+        const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
+        const clientSecret = env.MARKETING_GOOGLE_CLIENT_SECRET;
+        const redirectUri = 'https://api.moskogas.com.br/api/marketing/oauth/google/callback';
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: 'authorization_code' })
+        });
+        const tokenData = await tokenRes.json();
+        if (!tokenData.access_token) return err('Falha ao obter token Google', 400);
+        // Busca email do usuário
+        const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
+        const profile = await profileRes.json();
+        // Salva tokens no D1
+        await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?,datetime('now'))`).bind('marketing_google_tokens', JSON.stringify({ access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, email: profile.email, expires_at: Date.now() + (tokenData.expires_in * 1000) })).run();
+        // Redireciona para config.html com âncora marketing
+        return new Response(null, { status: 302, headers: { Location: 'https://luismosko.github.io/moskogas-app/config.html#marketing' } });
+      }
+
+      if (path === '/api/marketing/google/status' && method === 'GET') {
+        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
+        if (!row) return json({ connected: false });
+        const tokens = JSON.parse(row.value);
+        return json({ connected: true, email: tokens.email });
+      }
+
+      if (path === '/api/marketing/google/disconnect' && method === 'POST') {
+        await env.DB.prepare(`DELETE FROM app_config WHERE key='marketing_google_tokens'`).run();
+        return json({ ok: true });
+      }
+
+      // --- Google Meu Negócio: Reviews ---
+      if (path === '/api/marketing/gmb/reviews' && method === 'GET') {
+        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
+        if (!row) return err('Google não conectado', 401);
+        const tokens = JSON.parse(row.value);
+        // Lista contas GMB
+        const accsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+        const accs = await accsRes.json();
+        if (!accs.accounts || !accs.accounts.length) return json({ reviews: [] });
+        const accountName = accs.accounts[0].name;
+        // Lista locais
+        const locsRes = await fetch(`https://mybusinessaccountmanagement.googleapis.com/v1/${accountName}/locations`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+        const locs = await locsRes.json();
+        if (!locs.locations || !locs.locations.length) return json({ reviews: [] });
+        const locationName = locs.locations[0].name;
+        // Lista reviews
+        const revRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/reviews`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+        const revData = await revRes.json();
+        const reviews = (revData.reviews || []).slice(0, 10).map(r => ({
+          id: r.reviewId,
+          author: r.reviewer?.displayName || 'Anônimo',
+          rating: { ONE:1,TWO:2,THREE:3,FOUR:4,FIVE:5 }[r.starRating] || 0,
+          comment: r.comment || '',
+          reply: r.reviewReply?.comment || null
+        }));
+        return json({ reviews });
+      }
+
+      if (path.match(/^\/api\/marketing\/gmb\/reviews\/[^/]+\/reply$/) && method === 'POST') {
+        const reviewId = path.split('/')[5];
+        const body = await request.json();
+        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
+        if (!row) return err('Google não conectado', 401);
+        const tokens = JSON.parse(row.value);
+        const accsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+        const accs = await accsRes.json();
+        const accountName = accs.accounts[0].name;
+        const locsRes = await fetch(`https://mybusinessaccountmanagement.googleapis.com/v1/${accountName}/locations`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+        const locs = await locsRes.json();
+        const locationName = locs.locations[0].name;
+        await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/reviews/${reviewId}/reply`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${tokens.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comment: body.text })
+        });
+        return json({ ok: true });
+      }
+
+      // --- GMB Post ---
+      if (path === '/api/marketing/gmb/post' && method === 'POST') {
+        const body = await request.json();
+        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
+        if (!row) return err('Google não conectado', 401);
+        const tokens = JSON.parse(row.value);
+        const accsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+        const accs = await accsRes.json();
+        const accountName = accs.accounts[0].name;
+        const locsRes = await fetch(`https://mybusinessaccountmanagement.googleapis.com/v1/${accountName}/locations`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+        const locs = await locsRes.json();
+        const locationName = locs.locations[0].name;
+        const postRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/localPosts`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tokens.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ languageCode: 'pt-BR', summary: body.text, topicType: 'STANDARD' })
+        });
+        const postData = await postRes.json();
+        if (postData.name) return json({ ok: true, name: postData.name });
+        return err(postData.error?.message || 'Erro ao publicar', 400);
+      }
+
+      // --- IA: Sugerir post ---
+      if (path === '/api/marketing/suggest-post' && method === 'POST') {
+        const body = await request.json();
+        const prompt = `Você é um especialista em marketing para revenda de gás de cozinha e água mineral em Campo Grande, MS. Crie um post curto, direto e persuasivo (máximo 3 parágrafos) para redes sociais sobre: "${body.context}". Tom amigável, local. Não use hashtags em excesso. Retorne apenas o texto do post.`;
+        const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'x-api-key': env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 300, messages: [{ role: 'user', content: prompt }] })
+        });
+        const aiData = await aiRes.json();
+        const text = aiData.content?.[0]?.text || 'Promoção especial! Gás P13 com entrega rápida em Campo Grande. Ligue agora: (67) 99333-0303 🔥';
+        return json({ text });
+      }
+
+      // --- Meta OAuth (placeholder) ---
+      if (path === '/api/marketing/meta/status' && method === 'GET') {
+        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_meta_tokens'`).first();
+        if (!row) return json({ connected: false });
+        const tokens = JSON.parse(row.value);
+        return json({ connected: true, page_name: tokens.page_name, instagram_id: tokens.instagram_id });
+      }
+
+      if (path === '/api/marketing/meta/auth-url' && method === 'GET') {
+        return json({ url: null, message: 'Integração Meta em breve' });
+      }
+
+      return err(`Endpoint marketing não encontrado (${method} ${path})`, 404);
     }
 
     return err(`Not found (${method} ${path})`, 404);
