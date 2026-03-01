@@ -1,6 +1,6 @@
-// v2.46.6
+// v2.46.7
+// v2.46.7: Marketing diag endpoint público (fora do requireApiKey)
 // v2.46.6: Marketing — endpoint diagnóstico para verificar secrets
-// v2.46.5: force redeploy — worker precisa ler MARKETING_GOOGLE_CLIENT_ID
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -2163,7 +2163,7 @@ export default {
     }
 
     // Contratos, webhooks, rotas públicas e relatório (auth próprio) têm auth próprio
-    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks') && !path.startsWith('/api/pub/') && !path.startsWith('/api/pix/') && !path.startsWith('/api/relatorio/')) {
+    if (!path.startsWith('/api/contratos') && !path.startsWith('/api/webhooks') && !path.startsWith('/api/pub/') && !path.startsWith('/api/pix/') && !path.startsWith('/api/relatorio/') && path !== '/api/marketing/diag') {
       const authErr = requireApiKey(request, env);
       if (authErr) return authErr;
     }
