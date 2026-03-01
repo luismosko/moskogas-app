@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Posts Marketing v1.0.0 — MoskoGás</title>
+<script src="shared.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui,-apple-system,sans-serif; background: #f1f5f9; min-height: 100vh; }
+.version-badge { position:fixed;bottom:8px;right:8px;background:#1e293b;color:#94a3b8;font-size:10px;padding:2px 8px;border-radius:99px;z-index:999 }
+.container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+/* Header */
+.page-header { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%); border-radius: 14px; padding: 22px 28px; margin-bottom: 18px; color: #fff; display: flex; align-items: center; gap: 16px; }
+.page-header h1 { font-size: 22px; font-weight: 800; }
+.page-header p { font-size: 13px; opacity: 0.85; margin-top: 3px; }
+
+/* Cards */
+.card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.card-title { font-size: 14px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #374151; transition: all 0.15s; text-decoration: none; }
+.btn:hover { background: #f1f5f9; transform: translateY(-1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border: none; }
+.btn-primary:hover { opacity: 0.9; }
+.btn-green { background: #16a34a; color: #fff; border-color: #16a34a; }
+.btn-red { background: #ef4444; color: #fff; border-color: #ef4444; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* Form elements */
+input, textarea, select { width: 100%; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; transition: border 0.15s; }
+input:focus, textarea:focus, select:focus { border-color: #6366f1; }
+textarea { resize: vertical; }
+label { font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 5px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; background: #f1f5f9; border-radius: 10px; padding: 4px; margin-bottom: 18px; }
+.tab { flex: 1; padding: 9px; text-align: center; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; color: #64748b; transition: all 0.15s; border: none; background: transparent; }
+.tab.active { background: #fff; color: #6366f1; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+/* Posts Grid */
+.posts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+
+/* Post Card */
+.post-card { border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; transition: all 0.2s; position: relative; }
+.post-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.post-card.pendente { border-color: #e2e8f0; }
+.post-card.aprovado { border-color: #86efac; background: #f0fdf4; }
+.post-card.rejeitado { border-color: #fca5a5; background: #fef2f2; opacity: 0.7; }
+.post-card.publicado { border-color: #93c5fd; background: #eff6ff; }
+
+.post-img { width: 100%; height: 160px; object-fit: cover; background: linear-gradient(135deg, #e0e7ff, #fce7f3); display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 32px; cursor: pointer; }
+.post-img img { width: 100%; height: 100%; object-fit: cover; }
+
+.post-body { padding: 12px; }
+.post-tema { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6366f1; margin-bottom: 6px; }
+.post-texto { font-size: 13px; color: #374151; line-height: 1.5; max-height: 80px; overflow: hidden; }
+.post-texto.expanded { max-height: none; }
+.post-date { font-size: 11px; color: #94a3b8; margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+
+.post-platforms { display: flex; gap: 4px; margin-top: 8px; }
+.plt { padding: 2px 7px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+.plt-gmb { background: #dcfce7; color: #166534; }
+.plt-fb { background: #dbeafe; color: #1e40af; }
+.plt-ig { background: #fce7f3; color: #9d174d; }
+
+.post-actions { padding: 10px 12px; border-top: 1px solid #f1f5f9; display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Status badge */
+.status-badge { position: absolute; top: 8px; right: 8px; padding: 3px 9px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+.status-pendente { background: #fef9c3; color: #854d0e; }
+.status-aprovado { background: #dcfce7; color: #166534; }
+.status-rejeitado { background: #fee2e2; color: #991b1b; }
+.status-publicado { background: #dbeafe; color: #1e40af; }
+
+/* Config section */
+.config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 700px) { .config-grid { grid-template-columns: 1fr; } .posts-grid { grid-template-columns: 1fr; } }
+
+/* Generate Panel */
+.generate-panel { background: linear-gradient(135deg, #f0f0ff, #fdf0ff); border: 2px dashed #a78bfa; border-radius: 12px; padding: 20px; margin-bottom: 18px; }
+.freq-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.freq-btn { padding: 8px 16px; border-radius: 8px; border: 2px solid #e2e8f0; font-size: 13px; font-weight: 600; cursor: pointer; color: #64748b; background: #fff; transition: all 0.15s; }
+.freq-btn.active { border-color: #6366f1; color: #6366f1; background: #eff0ff; }
+
+/* Stats bar */
+.stats-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.stat { background: #fff; border-radius: 10px; padding: 12px 18px; flex: 1; min-width: 120px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.stat-value { font-size: 24px; font-weight: 800; color: #1e293b; }
+.stat-label { font-size: 11px; color: #64748b; font-weight: 600; margin-top: 2px; }
+
+/* Cost indicator */
+.cost-badge { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 8px 14px; font-size: 12px; color: #166534; display: flex; align-items: center; gap: 6px; }
+
+/* Calendar view */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-header { text-align: center; font-size: 11px; font-weight: 700; color: #64748b; padding: 4px; }
+.cal-day { min-height: 70px; border: 1px solid #f1f5f9; border-radius: 6px; padding: 4px; font-size: 11px; }
+.cal-day-num { font-weight: 700; color: #64748b; margin-bottom: 3px; }
+.cal-post-dot { background: #6366f1; color: #fff; border-radius: 4px; padding: 1px 4px; font-size: 10px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.cal-post-dot.aprovado { background: #16a34a; }
+.cal-post-dot.publicado { background: #2563eb; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+.modal-overlay.open { display: flex; }
+.modal { background: #fff; border-radius: 14px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 16px; font-weight: 700; }
+.modal-body { padding: 20px 24px; }
+.modal-footer { padding: 14px 24px; border-top: 1px solid #f1f5f9; display: flex; gap: 8px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="version-badge">v1.0.0 — marketing-posts</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div style="font-size:40px">🗓️</div>
+    <div style="flex:1">
+      <h1>Central de Posts</h1>
+      <p>Gere, agende e publique automaticamente no Google Meu Negócio, Instagram e Facebook</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="openTab('config')" class="btn" style="background:rgba(255,255,255,0.2);color:#fff;border-color:rgba(255,255,255,0.3)">⚙️ Configurar Revenda</button>
+      <button onclick="openTab('gerar')" class="btn" style="background:#fff;color:#6366f1;border:none;font-weight:700">✨ Gerar Posts</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="openTab('posts')" id="tab-posts">📋 Posts</button>
+    <button class="tab" onclick="openTab('calendario')" id="tab-calendario">📅 Calendário</button>
+    <button class="tab" onclick="openTab('gerar')" id="tab-gerar">✨ Gerar com IA</button>
+    <button class="tab" onclick="openTab('config')" id="tab-config">⚙️ Config Revenda</button>
+  </div>
+
+  <!-- ===== TAB: POSTS ===== -->
+  <div id="section-posts">
+
+    <!-- Stats -->
+    <div class="stats-bar" id="statsBar">
+      <div class="stat"><div class="stat-value" id="statPendente">—</div><div class="stat-label">⏳ Pendentes</div></div>
+      <div class="stat"><div class="stat-value" id="statAprovado">—</div><div class="stat-label">✅ Aprovados</div></div>
+      <div class="stat"><div class="stat-value" id="statPublicado">—</div><div class="stat-label">📤 Publicados</div></div>
+      <div class="stat"><div class="stat-value" id="statRejeitado">—</div><div class="stat-label">❌ Rejeitados</div></div>
+    </div>
+
+    <!-- Filtros -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1">
+        <button onclick="filterPosts('todos')" id="filter-todos" class="btn btn-sm" style="background:#6366f1;color:#fff;border-color:#6366f1">Todos</button>
+        <button onclick="filterPosts('pendente')" id="filter-pendente" class="btn btn-sm">⏳ Pendentes</button>
+        <button onclick="filterPosts('aprovado')" id="filter-aprovado" class="btn btn-sm">✅ Aprovados</button>
+        <button onclick="filterPosts('publicado')" id="filter-publicado" class="btn btn-sm">📤 Publicados</button>
+        <button onclick="filterPosts('rejeitado')" id="filter-rejeitado" class="btn btn-sm">❌ Rejeitados</button>
+      </div>
+      <button onclick="loadPosts()" class="btn btn-sm">🔄 Atualizar</button>
+    </div>
+
+    <!-- Posts Grid -->
+    <div id="postsGrid" class="posts-grid">
+      <div style="grid-column:1/-1;text-align:center;padding:40px;color:#94a3b8">
+        <div style="font-size:48px;margin-bottom:12px">🗓️</div>
+        <p>Carregando posts...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: CALENDÁRIO ===== -->
+  <div id="section-calendario" style="display:none">
+    <div class="card">
+      <div class="card-title">📅 Calendário de Publicação — <span id="calMonthLabel"></span></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button onclick="calPrev()" class="btn btn-sm">← Anterior</button>
+        <button onclick="calNext()" class="btn btn-sm">Próximo →</button>
+        <button onclick="calToday()" class="btn btn-sm" style="background:#6366f1;color:#fff;border-color:#6366f1">Hoje</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div style="display:flex;gap:12px;margin-top:12px;font-size:11px">
+        <span><span style="background:#6366f1;color:#fff;padding:1px 6px;border-radius:4px">●</span> Pendente</span>
+        <span><span style="background:#16a34a;color:#fff;padding:1px 6px;border-radius:4px">●</span> Aprovado</span>
+        <span><span style="background:#2563eb;color:#fff;padding:1px 6px;border-radius:4px">●</span> Publicado</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: GERAR COM IA ===== -->
+  <div id="section-gerar" style="display:none">
+
+    <div class="generate-panel">
+      <div style="font-size:24px;margin-bottom:8px">✨ Geração em Bulk com IA</div>
+      <p style="font-size:13px;color:#4c1d95;margin-bottom:16px">Gere vários posts de uma vez. O sistema usa o perfil da sua revenda para criar conteúdo personalizado e relevante.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <label>Quantidade de posts</label>
+          <select id="genQty">
+            <option value="5">5 posts</option>
+            <option value="10" selected>10 posts</option>
+            <option value="15">15 posts</option>
+            <option value="20">20 posts</option>
+            <option value="30">30 posts (1 mês)</option>
+          </select>
+        </div>
+        <div>
+          <label>Frequência de publicação</label>
+          <div class="freq-btns">
+            <button class="freq-btn active" onclick="setFreq(this,'diario')">📅 1/dia</button>
+            <button class="freq-btn" onclick="setFreq(this,'3dias')">📅 1/3 dias</button>
+            <button class="freq-btn" onclick="setFreq(this,'semanal')">📅 2/semana</button>
+          </div>
+          <input type="hidden" id="genFreq" value="diario">
+        </div>
+        <div>
+          <label>Incluir imagem IA (DALL-E 3)</label>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400">
+              <input type="checkbox" id="genImages" style="width:auto">
+              Gerar imagens automático
+            </label>
+          </div>
+          <div class="cost-badge" style="margin-top:8px" id="costBadge">💰 Custo estimado: R$ 0,20 (só texto)</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <label>Contexto adicional (opcional)</label>
+        <input id="genContext" placeholder="Ex: Semana do Trabalhador, promoção especial P13, lançamento de água gelada...">
+      </div>
+
+      <button onclick="generateBulk()" id="btnGenerate" class="btn btn-primary" style="font-size:14px;padding:12px 28px">
+        ✨ Gerar Posts com IA
+      </button>
+    </div>
+
+    <!-- Progress durante geração -->
+    <div id="genProgress" style="display:none" class="card">
+      <div style="text-align:center;padding:20px">
+        <div style="font-size:36px;margin-bottom:12px;animation:spin 1s linear infinite">⚡</div>
+        <div id="genProgressText" style="font-size:15px;font-weight:600;color:#6366f1">Gerando posts com IA...</div>
+        <div id="genProgressSub" style="font-size:13px;color:#64748b;margin-top:6px">Aguarde, isso pode levar 10-30 segundos</div>
+        <div style="background:#e2e8f0;border-radius:99px;height:6px;margin-top:16px;overflow:hidden">
+          <div id="genProgressBar" style="background:linear-gradient(90deg,#6366f1,#ec4899);height:100%;border-radius:99px;width:0%;transition:width 0.5s"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    <div id="genResult" style="display:none" class="card">
+      <div class="card-title">🎉 Posts Gerados!</div>
+      <div id="genResultText" style="font-size:13px;color:#374151;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="openTab('posts')" class="btn btn-green">📋 Ver todos os posts</button>
+        <button onclick="approveAll()" class="btn" style="background:#f0fdf4;color:#166534;border-color:#86efac">✅ Aprovar todos</button>
+        <button onclick="generateBulk()" class="btn btn-primary">🔄 Gerar mais</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== TAB: CONFIG REVENDA ===== -->
+  <div id="section-config" style="display:none">
+    <div class="card">
+      <div class="card-title">🏪 Perfil da Revenda</div>
+      <p style="font-size:13px;color:#64748b;margin-bottom:18px">Essas informações são usadas em TODOS os posts gerados pela IA. Quanto mais detalhado, melhor o resultado.</p>
+
+      <div class="config-grid">
+        <div>
+          <label>Nome da revenda</label>
+          <input id="cfgNome" placeholder="Ex: MoskoGás Ultragaz">
+        </div>
+        <div>
+          <label>Telefone(s)</label>
+          <input id="cfgTelefone" placeholder="Ex: (67) 99333-0303 / (67) 3026-5454">
+        </div>
+        <div>
+          <label>Endereço completo</label>
+          <input id="cfgEndereco" placeholder="Ex: Av. Panamericana, 295, Campo Grande/MS">
+        </div>
+        <div>
+          <label>Site</label>
+          <input id="cfgSite" placeholder="Ex: https://moskogás.com.br">
+        </div>
+      </div>
+
+      <div style="margin-top:16px">
+        <label>Diferenciais e regras comerciais</label>
+        <textarea id="cfgRegras" rows="3" placeholder="Ex: Entrega grátis, aceita Gás do Povo, aceita cartão, funciona 7 dias por semana, entrega em até 30 minutos, melhor preço de Campo Grande..."></textarea>
+      </div>
+
+      <div style="margin-top:16px">
+        <label>Instrução extra para IA (prompt personalizado)</label>
+        <textarea id="cfgPrompt" rows="4" placeholder="Ex: Use sempre um tom animado e local. Mencione que somos referência em Campo Grande há X anos. Crie posts variados sobre: promoção de P13, dicas de segurança com gás, água mineral gelada no verão, facilidade do delivery..."></textarea>
+      </div>
+
+      <div style="margin-top:16px">
+        <label>Frequência padrão de publicação</label>
+        <select id="cfgFreq">
+          <option value="diario">1 post por dia (ideal para GMB)</option>
+          <option value="3dias">1 post a cada 3 dias</option>
+          <option value="semanal">2 posts por semana</option>
+        </select>
+      </div>
+
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f1f5f9">
+        <label>Logo da revenda (URL ou upload)</label>
+        <div style="display:flex;gap:8px">
+          <input id="cfgLogo" placeholder="https://... ou use o botão para fazer upload">
+          <button onclick="document.getElementById('cfgLogoFile').click()" class="btn" style="white-space:nowrap">📁 Upload</button>
+          <input type="file" id="cfgLogoFile" accept="image/*" style="display:none" onchange="uploadLogo(this)">
+        </div>
+        <div id="logoPreview" style="margin-top:8px;display:none">
+          <img id="logoImg" style="height:60px;border-radius:8px;border:1px solid #e2e8f0">
+        </div>
+      </div>
+
+      <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+        <button onclick="saveConfig()" class="btn btn-primary" id="btnSaveConfig">💾 Salvar configurações</button>
+        <button onclick="testGenerate()" class="btn" style="background:#f0f0ff;color:#6366f1;border-color:#a78bfa">✨ Testar geração (1 post)</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal: editar post -->
+<div class="modal-overlay" id="modalPost">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>✏️ Editar Post</h3>
+      <button onclick="closeModal()" class="btn btn-sm">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editPostId">
+      <div style="margin-bottom:14px">
+        <label>Texto do post</label>
+        <textarea id="editPostText" rows="6"></textarea>
+        <div style="font-size:11px;color:#94a3b8;text-align:right;margin-top:3px"><span id="editCharCount">0</span> caracteres</div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label>Data de publicação</label>
+        <input type="datetime-local" id="editPostDate">
+      </div>
+      <div style="margin-bottom:14px">
+        <label>Plataformas</label>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400">
+            <input type="checkbox" id="editPltGmb" style="width:auto"> 📍 Google Meu Negócio
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400">
+            <input type="checkbox" id="editPltFb" style="width:auto"> 📘 Facebook
+          </label>
+          <label style="display:flex;align-items:center;gap=6px;font-size:13px;font-weight:400">
+            <input type="checkbox" id="editPltIg" style="width:auto"> 📸 Instagram
+          </label>
+        </div>
+      </div>
+      <div id="editImageArea" style="margin-bottom:14px">
+        <label>Imagem</label>
+        <div id="editImagePreview" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;margin-bottom:8px">
+          <span style="color:#94a3b8;font-size:13px">Sem imagem</span>
+        </div>
+        <button onclick="generatePostImage()" id="btnGenImage" class="btn btn-sm btn-primary">🖼️ Gerar com DALL-E 3 (~R$0,20)</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal()" class="btn">Cancelar</button>
+      <button onclick="savePost()" class="btn btn-primary">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
+
+<script>
+checkAuth(['admin', 'atendente']);
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+let allPosts = [];
+let currentFilter = 'todos';
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let currentFreq = 'diario';
+let genLastIds = [];
+
+// ══════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════
+function openTab(name) {
+  ['posts','calendario','gerar','config'].forEach(t => {
+    document.getElementById('section-' + t).style.display = 'none';
+    document.getElementById('tab-' + t).classList.remove('active');
+  });
+  document.getElementById('section-' + name).style.display = '';
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'posts') loadPosts();
+  if (name === 'calendario') renderCalendar();
+  if (name === 'config') loadConfig();
+}
+
+// ══════════════════════════════════════════════════
+// POSTS
+// ══════════════════════════════════════════════════
+async function loadPosts() {
+  try {
+    allPosts = await api('/api/marketing/posts');
+    updateStats();
+    renderPosts(currentFilter);
+  } catch(e) {
+    document.getElementById('postsGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444">Erro: ${e.message}</div>`;
+  }
+}
+
+function updateStats() {
+  const cnt = (s) => allPosts.filter(p => p.status === s).length;
+  document.getElementById('statPendente').textContent = cnt('pendente');
+  document.getElementById('statAprovado').textContent = cnt('aprovado');
+  document.getElementById('statPublicado').textContent = cnt('publicado');
+  document.getElementById('statRejeitado').textContent = cnt('rejeitado');
+}
+
+function filterPosts(status) {
+  currentFilter = status;
+  ['todos','pendente','aprovado','publicado','rejeitado'].forEach(s => {
+    const btn = document.getElementById('filter-' + s);
+    btn.style.background = s === status ? '#6366f1' : '';
+    btn.style.color = s === status ? '#fff' : '';
+    btn.style.borderColor = s === status ? '#6366f1' : '';
+  });
+  renderPosts(status);
+}
+
+function renderPosts(filter) {
+  const posts = filter === 'todos' ? allPosts : allPosts.filter(p => p.status === filter);
+  const grid = document.getElementById('postsGrid');
+
+  if (!posts.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#94a3b8">
+      <div style="font-size:48px;margin-bottom:12px">📭</div>
+      <p>${filter === 'todos' ? 'Nenhum post ainda. Use "Gerar com IA" para criar!' : 'Nenhum post com status "' + filter + '"'}</p>
+      ${filter === 'todos' ? '<button onclick="openTab(\'gerar\')" class="btn btn-primary" style="margin-top:12px">✨ Gerar Posts</button>' : ''}
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = posts.map(p => {
+    const dt = p.scheduled_at ? new Date(p.scheduled_at * 1000).toLocaleDateString('pt-BR', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+    const plts = p.plataformas || ['gmb','fb','ig'];
+    const pltHtml = plts.map(pl => `<span class="plt plt-${pl}">${{gmb:'📍 GMB',fb:'📘 FB',ig:'📸 IG'}[pl]||pl}</span>`).join('');
+    const textoShort = (p.texto || '').slice(0, 120) + (p.texto?.length > 120 ? '...' : '');
+
+    return `
+    <div class="post-card ${p.status}" id="pc-${p.id}">
+      <span class="status-badge status-${p.status}">${{pendente:'⏳ Pendente',aprovado:'✅ Aprovado',rejeitado:'❌ Rejeitado',publicado:'📤 Publicado'}[p.status]||p.status}</span>
+      <div class="post-img" onclick="editPost(${p.id})">
+        ${p.imagem_url ? `<img src="${p.imagem_url}" alt="post">` : '<div style="text-align:center"><div>🖼️</div><div style="font-size:11px;margin-top:4px;color:#94a3b8">Sem imagem</div></div>'}
+      </div>
+      <div class="post-body">
+        ${p.tema ? `<div class="post-tema">🏷️ ${p.tema}</div>` : ''}
+        <div class="post-texto">${textoShort}</div>
+        <div class="post-date">📅 ${dt}</div>
+        <div class="post-platforms" style="margin-top:8px">${pltHtml}</div>
+      </div>
+      <div class="post-actions">
+        ${p.status === 'pendente' ? `
+          <button onclick="approvePost(${p.id})" class="btn btn-sm btn-green" title="Aprovar">👍 Aprovar</button>
+          <button onclick="rejectPost(${p.id})" class="btn btn-sm btn-red" title="Rejeitar">👎</button>
+        ` : ''}
+        ${p.status === 'aprovado' ? `
+          <button onclick="publishNow(${p.id})" class="btn btn-sm" style="background:#2563eb;color:#fff;border-color:#2563eb">📤 Publicar</button>
+        ` : ''}
+        <button onclick="editPost(${p.id})" class="btn btn-sm" title="Editar">✏️</button>
+        <button onclick="deletePost(${p.id})" class="btn btn-sm" title="Apagar" style="color:#ef4444">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function approvePost(id) {
+  await api(`/api/marketing/posts/${id}`, { method: 'PATCH', body: JSON.stringify({ action: 'approve' }) });
+  const p = allPosts.find(p => p.id === id);
+  if (p) p.status = 'aprovado';
+  renderPosts(currentFilter);
+  updateStats();
+  toast('✅ Post aprovado!', 'success');
+}
+
+async function rejectPost(id) {
+  await api(`/api/marketing/posts/${id}`, { method: 'PATCH', body: JSON.stringify({ action: 'reject' }) });
+  const p = allPosts.find(p => p.id === id);
+  if (p) p.status = 'rejeitado';
+  renderPosts(currentFilter);
+  updateStats();
+  toast('Post rejeitado', 'success');
+}
+
+async function approveAll() {
+  const ids = (genLastIds.length > 0 ? allPosts.filter(p => genLastIds.includes(p.id)) : allPosts.filter(p => p.status === 'pendente')).map(p => p.id);
+  if (!ids.length) { toast('Nenhum post pendente', 'error'); return; }
+  showLoading();
+  for (const id of ids) await api(`/api/marketing/posts/${id}`, { method: 'PATCH', body: JSON.stringify({ action: 'approve' }) });
+  hideLoading();
+  await loadPosts();
+  openTab('posts');
+  toast(`✅ ${ids.length} posts aprovados!`, 'success');
+}
+
+async function publishNow(id) {
+  if (!confirm('Publicar este post agora no GMB?')) return;
+  showLoading();
+  try {
+    const r = await api(`/api/marketing/posts/${id}/publish`, { method: 'POST' });
+    await loadPosts();
+    toast('📤 Post publicado!', 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  hideLoading();
+}
+
+async function deletePost(id) {
+  if (!confirm('Apagar este post?')) return;
+  await api(`/api/marketing/posts/${id}`, { method: 'DELETE' });
+  allPosts = allPosts.filter(p => p.id !== id);
+  renderPosts(currentFilter);
+  updateStats();
+  toast('Post apagado', 'success');
+}
+
+// ══════════════════════════════════════════════════
+// MODAL EDITAR POST
+// ══════════════════════════════════════════════════
+function editPost(id) {
+  const p = allPosts.find(p => p.id === id);
+  if (!p) return;
+  document.getElementById('editPostId').value = p.id;
+  document.getElementById('editPostText').value = p.texto || '';
+  document.getElementById('editCharCount').textContent = (p.texto || '').length;
+  document.getElementById('editPostText').oninput = () => { document.getElementById('editCharCount').textContent = document.getElementById('editPostText').value.length; };
+  const plts = p.plataformas || ['gmb','fb','ig'];
+  document.getElementById('editPltGmb').checked = plts.includes('gmb');
+  document.getElementById('editPltFb').checked = plts.includes('fb');
+  document.getElementById('editPltIg').checked = plts.includes('ig');
+  if (p.scheduled_at) {
+    const dt = new Date(p.scheduled_at * 1000);
+    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+    document.getElementById('editPostDate').value = dt.toISOString().slice(0,16);
+  }
+  const imgArea = document.getElementById('editImagePreview');
+  imgArea.innerHTML = p.imagem_url
+    ? `<img src="${p.imagem_url}" style="max-height:160px;border-radius:8px;max-width:100%">`
+    : '<span style="color:#94a3b8;font-size:13px">🖼️ Sem imagem — clique em "Gerar com DALL-E"</span>';
+  document.getElementById('btnGenImage').onclick = () => generatePostImage(id);
+  document.getElementById('modalPost').classList.add('open');
+}
+
+async function savePost() {
+  const id = document.getElementById('editPostId').value;
+  const texto = document.getElementById('editPostText').value.trim();
+  const dateVal = document.getElementById('editPostDate').value;
+  const scheduled_at = dateVal ? Math.floor(new Date(dateVal).getTime() / 1000) : null;
+  const plts = [];
+  if (document.getElementById('editPltGmb').checked) plts.push('gmb');
+  if (document.getElementById('editPltFb').checked) plts.push('fb');
+  if (document.getElementById('editPltIg').checked) plts.push('ig');
+
+  showLoading();
+  await api(`/api/marketing/posts/${id}`, { method: 'PATCH', body: JSON.stringify({ texto, scheduled_at, plataformas: plts }) });
+  hideLoading();
+  closeModal();
+  await loadPosts();
+  toast('✅ Post salvo!', 'success');
+}
+
+async function generatePostImage(id) {
+  const postId = id || document.getElementById('editPostId').value;
+  const btn = document.getElementById('btnGenImage');
+  btn.disabled = true; btn.textContent = '⏳ Gerando imagem (~30s)...';
+  try {
+    const r = await api(`/api/marketing/posts/${postId}/generate-image`, { method: 'POST' });
+    if (r.imagem_url) {
+      document.getElementById('editImagePreview').innerHTML = `<img src="${r.imagem_url}" style="max-height:160px;border-radius:8px;max-width:100%">`;
+      const p = allPosts.find(p => p.id == postId);
+      if (p) p.imagem_url = r.imagem_url;
+      toast('🖼️ Imagem gerada!', 'success');
+    }
+  } catch(e) { toast('Erro ao gerar imagem: ' + e.message, 'error'); }
+  btn.disabled = false; btn.innerHTML = '🖼️ Gerar com DALL-E 3 (~R$0,20)';
+}
+
+function closeModal() { document.getElementById('modalPost').classList.remove('open'); }
+
+// ══════════════════════════════════════════════════
+// GERAR COM IA
+// ══════════════════════════════════════════════════
+function setFreq(btn, val) {
+  document.querySelectorAll('.freq-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('genFreq').value = val;
+  currentFreq = val;
+  updateCostBadge();
+}
+
+function updateCostBadge() {
+  const qty = parseInt(document.getElementById('genQty').value);
+  const withImages = document.getElementById('genImages').checked;
+  const textCost = (qty * 0.0001 * 5).toFixed(2); // gpt-4o-mini
+  const imgCost = withImages ? (qty * 0.04 * 5.6).toFixed(2) : 0; // DALL-E 3 + BRL
+  const total = (parseFloat(textCost) + parseFloat(imgCost)).toFixed(2);
+  document.getElementById('costBadge').innerHTML = `💰 Custo estimado: R$ ${total} ${withImages ? `(texto + ${qty} imagens DALL-E)` : '(só texto — imagens podem ser geradas individualmente)'}`;
+}
+
+document.getElementById('genQty').addEventListener('change', updateCostBadge);
+document.getElementById('genImages').addEventListener('change', updateCostBadge);
+
+async function generateBulk() {
+  const qty = parseInt(document.getElementById('genQty').value);
+  const frequencia = document.getElementById('genFreq').value;
+  const withImages = document.getElementById('genImages').checked;
+  const context = document.getElementById('genContext').value;
+
+  const btn = document.getElementById('btnGenerate');
+  btn.disabled = true;
+  document.getElementById('genProgress').style.display = '';
+  document.getElementById('genResult').style.display = 'none';
+
+  // Animate progress bar
+  let prog = 0;
+  const interval = setInterval(() => {
+    prog = Math.min(prog + 3, 90);
+    document.getElementById('genProgressBar').style.width = prog + '%';
+  }, 500);
+
+  try {
+    document.getElementById('genProgressText').textContent = `Gerando ${qty} posts com IA...`;
+    const r = await api('/api/marketing/posts/generate', {
+      method: 'POST',
+      body: JSON.stringify({ qty, frequencia, context })
+    });
+
+    genLastIds = r.ids || [];
+
+    if (withImages && r.ids && r.ids.length) {
+      document.getElementById('genProgressText').textContent = 'Gerando imagens com DALL-E...';
+      document.getElementById('genProgressSub').textContent = `0 / ${r.ids.length} imagens criadas`;
+      for (let i = 0; i < Math.min(r.ids.length, 5); i++) { // limita a 5 imagens de uma vez
+        document.getElementById('genProgressSub').textContent = `${i+1} / ${Math.min(r.ids.length,5)} imagens criadas`;
+        document.getElementById('genProgressBar').style.width = (90 + (i / Math.min(r.ids.length,5)) * 10) + '%';
+        await api(`/api/marketing/posts/${r.ids[i]}/generate-image`, { method: 'POST' }).catch(() => {});
+      }
+    }
+
+    clearInterval(interval);
+    document.getElementById('genProgressBar').style.width = '100%';
+
+    await loadPosts(); // refresh allPosts
+    document.getElementById('genResult').style.display = '';
+    document.getElementById('genResultText').innerHTML = `
+      <strong>${r.gerados} posts</strong> gerados com sucesso!
+      ${withImages ? `<br>Imagens geradas para os primeiros ${Math.min(r.gerados,5)} posts.` : ''}
+      <br><span style="color:#64748b">Revise os posts abaixo e aprove os que gostar.</span>`;
+
+  } catch(e) {
+    clearInterval(interval);
+    toast('Erro ao gerar: ' + e.message, 'error');
+  }
+
+  setTimeout(() => { document.getElementById('genProgress').style.display = 'none'; }, 500);
+  btn.disabled = false;
+}
+
+// ══════════════════════════════════════════════════
+// CALENDÁRIO
+// ══════════════════════════════════════════════════
+function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
+function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
+function calToday() { calYear=new Date().getFullYear(); calMonth=new Date().getMonth(); renderCalendar(); }
+
+function renderCalendar() {
+  const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  document.getElementById('calMonthLabel').textContent = `${months[calMonth]} ${calYear}`;
+
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const days = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+  const postsByDay = {};
+  allPosts.forEach(p => {
+    if (!p.scheduled_at) return;
+    const d = new Date(p.scheduled_at * 1000);
+    if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
+      const day = d.getDate();
+      if (!postsByDay[day]) postsByDay[day] = [];
+      postsByDay[day].push(p);
+    }
+  });
+
+  let html = days.map(d => `<div class="cal-header">${d}</div>`).join('');
+  for (let i = 0; i < firstDay; i++) html += `<div class="cal-day"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const today = new Date();
+    const isToday = d === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
+    html += `<div class="cal-day" style="${isToday ? 'background:#eff0ff;border-color:#6366f1;' : ''}">
+      <div class="cal-day-num" style="${isToday ? 'color:#6366f1;' : ''}">${d}</div>
+      ${(postsByDay[d] || []).map(p => `<div class="cal-post-dot ${p.status}" onclick="editPost(${p.id})" title="${(p.texto||'').slice(0,50)}">${p.status==='publicado'?'📤':'✉️'} ${(p.tema||'Post').slice(0,12)}</div>`).join('')}
+    </div>`;
+  }
+  document.getElementById('calGrid').innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════
+// CONFIG REVENDA
+// ══════════════════════════════════════════════════
+async function loadConfig() {
+  try {
+    const cfg = await api('/api/marketing/config');
+    document.getElementById('cfgNome').value = cfg.nome || '';
+    document.getElementById('cfgTelefone').value = cfg.telefone || '';
+    document.getElementById('cfgEndereco').value = cfg.endereco || '';
+    document.getElementById('cfgSite').value = cfg.site || '';
+    document.getElementById('cfgRegras').value = cfg.regras || '';
+    document.getElementById('cfgPrompt').value = cfg.prompt_extra || '';
+    document.getElementById('cfgFreq').value = cfg.frequencia || 'diario';
+    if (cfg.logo_url) {
+      document.getElementById('cfgLogo').value = cfg.logo_url;
+      document.getElementById('logoImg').src = cfg.logo_url;
+      document.getElementById('logoPreview').style.display = '';
+    }
+  } catch(e) { toast('Erro ao carregar config', 'error'); }
+}
+
+async function saveConfig() {
+  const cfg = {
+    nome: document.getElementById('cfgNome').value,
+    telefone: document.getElementById('cfgTelefone').value,
+    endereco: document.getElementById('cfgEndereco').value,
+    site: document.getElementById('cfgSite').value,
+    regras: document.getElementById('cfgRegras').value,
+    prompt_extra: document.getElementById('cfgPrompt').value,
+    frequencia: document.getElementById('cfgFreq').value,
+    logo_url: document.getElementById('cfgLogo').value,
+  };
+  const btn = document.getElementById('btnSaveConfig');
+  btn.disabled = true; btn.textContent = '⏳ Salvando...';
+  try {
+    await api('/api/marketing/config', { method: 'POST', body: JSON.stringify(cfg) });
+    toast('✅ Configurações salvas!', 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  btn.disabled = false; btn.textContent = '💾 Salvar configurações';
+}
+
+async function testGenerate() {
+  showLoading();
+  try {
+    const r = await api('/api/marketing/posts/generate', { method: 'POST', body: JSON.stringify({ qty: 1, frequencia: 'diario' }) });
+    hideLoading();
+    await loadPosts();
+    openTab('posts');
+    toast('✨ Post de teste gerado!', 'success');
+  } catch(e) { hideLoading(); toast('Erro: ' + e.message, 'error'); }
+}
+
+function uploadLogo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('cfgLogo').value = e.target.result;
+    document.getElementById('logoImg').src = e.target.result;
+    document.getElementById('logoPreview').style.display = '';
+    toast('Logo carregada!', 'success');
+  };
+  reader.readAsDataURL(file);
+}
+
+// Init
+loadPosts();
+</script>
+</body>
+</html>

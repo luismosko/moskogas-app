@@ -1,6 +1,6 @@
-// v2.46.8
+// v2.47.0
+// v2.47.0: Sistema de Posts Marketing — bulk generate, schedule, approve, DALL-E, cron auto-publish
 // v2.46.8: OAuth callback público — fora do requireApiKey
-// v2.46.7: Marketing diag endpoint público (fora do requireApiKey)
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
@@ -6296,6 +6296,189 @@ export default {
         return json({ text });
       }
 
+      // --- Marketing Config (perfil da revenda) ---
+      if (path === '/api/marketing/config' && method === 'GET') {
+        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
+        const def = { nome: 'MoskoGás', telefone: '(67) 99333-0303 / (67) 3026-5454', endereco: 'Av. Panamericana, 295, Campo Grande/MS', site: '', regras: '', prompt_extra: '', logo_url: '', frequencia: 'diario' };
+        return json(row ? { ...def, ...JSON.parse(row.value) } : def);
+      }
+
+      if (path === '/api/marketing/config' && method === 'POST') {
+        const body = await request.json();
+        await env.DB.prepare(`INSERT OR REPLACE INTO app_config(key,value,updated_at) VALUES('marketing_profile',?,datetime('now'))`).bind(JSON.stringify(body)).run();
+        return json({ ok: true });
+      }
+
+      // --- Marketing Posts CRUD ---
+      if (path === '/api/marketing/posts' && method === 'GET') {
+        await ensureMarketingTables(env);
+        const status = url.searchParams.get('status') || '';
+        let q = `SELECT * FROM marketing_posts ORDER BY scheduled_at ASC, created_at DESC LIMIT 100`;
+        if (status) q = `SELECT * FROM marketing_posts WHERE status=? ORDER BY scheduled_at ASC, created_at DESC LIMIT 100`;
+        const rows = status
+          ? await env.DB.prepare(q).bind(status).all().then(r => r.results)
+          : await env.DB.prepare(q).all().then(r => r.results);
+        return json(rows.map(r => ({ ...r, plataformas: JSON.parse(r.plataformas || '["gmb","fb","ig"]') })));
+      }
+
+      if (path === '/api/marketing/posts/generate' && method === 'POST') {
+        await ensureMarketingTables(env);
+        const body = await request.json();
+        const qty = Math.min(body.qty || 10, 30);
+        const freq = body.frequencia || 'diario'; // diario | 3dias | semanal
+
+        // Buscar perfil da revenda
+        const cfgRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_profile'`).first();
+        const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
+        const nome = cfg.nome || 'MoskoGás';
+        const tel = cfg.telefone || '(67) 99333-0303';
+        const end = cfg.endereco || 'Av. Panamericana, 295, Campo Grande/MS';
+        const site = cfg.site || '';
+        const regras = cfg.regras || 'Entrega grátis, aceita Gás do Povo';
+        const extra = cfg.prompt_extra || '';
+
+        const systemPrompt = `Você é especialista em marketing local para revendas de gás de cozinha e água mineral no Brasil.
+EMPRESA: ${nome}
+TELEFONE: ${tel}
+ENDEREÇO: ${end}
+SITE: ${site}
+DIFERENCIAIS: ${regras}
+INSTRUÇÕES EXTRAS: ${extra}
+
+Crie posts para redes sociais (Google Meu Negócio, Instagram, Facebook) com estas regras:
+- Texto: máximo 280 caracteres para GMB, pode ser maior para Instagram
+- Sempre citar telefone ou endereço para SEO local
+- Tom amigável, direto, com chamada para ação
+- Variar os temas: promoção, dica de segurança, produto, comodidade, depoimento fictício
+- Cada post deve ser DIFERENTE dos outros
+- Responda APENAS com JSON válido, sem markdown: {"posts": [{"texto": "...", "tema": "...", "imagem_prompt": "..."}]}
+- imagem_prompt: descrição em INGLÊS para gerar imagem DALL-E (foto realista, produto, pessoa, etc.)`;
+
+        const userPrompt = `Gere ${qty} posts diferentes para a revenda. Variedade máxima de temas.`;
+
+        const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini', max_tokens: 3000,
+            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+          })
+        });
+        const aiData = await aiRes.json();
+        let posts = [];
+        try {
+          const raw = aiData.choices?.[0]?.message?.content || '{"posts":[]}';
+          const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+          posts = parsed.posts || [];
+        } catch(e) { return err('Erro ao parsear resposta da IA: ' + e.message, 500); }
+
+        // Calcular datas de agendamento
+        const intervalDays = freq === 'diario' ? 1 : freq === '3dias' ? 3 : 7;
+        const now = Math.floor(Date.now() / 1000);
+        const savedIds = [];
+
+        for (let i = 0; i < posts.length; i++) {
+          const p = posts[i];
+          const scheduledAt = now + (i * intervalDays * 86400);
+          const r = await env.DB.prepare(`
+            INSERT INTO marketing_posts (texto, tema, imagem_prompt, status, scheduled_at, plataformas, created_at)
+            VALUES (?, ?, ?, 'pendente', ?, '["gmb","fb","ig"]', ?)
+          `).bind(p.texto, p.tema || '', p.imagem_prompt || '', scheduledAt, now).run();
+          savedIds.push(r.meta?.last_row_id);
+        }
+
+        return json({ ok: true, gerados: posts.length, ids: savedIds });
+      }
+
+      if (path.startsWith('/api/marketing/posts/') && method === 'PATCH') {
+        await ensureMarketingTables(env);
+        const postId = path.split('/').pop();
+        const body = await request.json();
+        if (body.action === 'approve') {
+          await env.DB.prepare(`UPDATE marketing_posts SET status='aprovado', updated_at=? WHERE id=?`).bind(Math.floor(Date.now()/1000), postId).run();
+          return json({ ok: true });
+        }
+        if (body.action === 'reject') {
+          await env.DB.prepare(`UPDATE marketing_posts SET status='rejeitado', updated_at=? WHERE id=?`).bind(Math.floor(Date.now()/1000), postId).run();
+          return json({ ok: true });
+        }
+        if (body.action === 'reschedule' && body.scheduled_at) {
+          await env.DB.prepare(`UPDATE marketing_posts SET scheduled_at=?, updated_at=? WHERE id=?`).bind(body.scheduled_at, Math.floor(Date.now()/1000), postId).run();
+          return json({ ok: true });
+        }
+        // Atualizar texto
+        if (body.texto !== undefined) {
+          await env.DB.prepare(`UPDATE marketing_posts SET texto=?, updated_at=? WHERE id=?`).bind(body.texto, Math.floor(Date.now()/1000), postId).run();
+          return json({ ok: true });
+        }
+        return err('Ação inválida', 400);
+      }
+
+      if (path.startsWith('/api/marketing/posts/') && path.endsWith('/generate-image') && method === 'POST') {
+        await ensureMarketingTables(env);
+        const postId = path.split('/')[4];
+        const row = await env.DB.prepare(`SELECT * FROM marketing_posts WHERE id=?`).bind(postId).first();
+        if (!row) return err('Post não encontrado', 404);
+        const promptImg = row.imagem_prompt || 'Brazilian gas cylinder delivery, realistic photo, warm colors';
+        const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'dall-e-3', prompt: promptImg, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' })
+        });
+        const imgData = await imgRes.json();
+        const imgUrl = imgData.data?.[0]?.url;
+        if (!imgUrl) return err('Erro ao gerar imagem: ' + JSON.stringify(imgData.error), 500);
+        await env.DB.prepare(`UPDATE marketing_posts SET imagem_url=?, updated_at=? WHERE id=?`).bind(imgUrl, Math.floor(Date.now()/1000), postId).run();
+        return json({ ok: true, imagem_url: imgUrl });
+      }
+
+      if (path.startsWith('/api/marketing/posts/') && !path.endsWith('/generate-image') && method === 'DELETE') {
+        await ensureMarketingTables(env);
+        const postId = path.split('/').pop();
+        await env.DB.prepare(`DELETE FROM marketing_posts WHERE id=?`).bind(postId).run();
+        return json({ ok: true });
+      }
+
+      if (path.startsWith('/api/marketing/posts/') && path.endsWith('/publish') && method === 'POST') {
+        await ensureMarketingTables(env);
+        const postId = path.split('/')[4];
+        const row = await env.DB.prepare(`SELECT * FROM marketing_posts WHERE id=?`).bind(postId).first();
+        if (!row) return err('Post não encontrado', 404);
+        const results = {};
+        // Publicar no GMB
+        const gmbTokenRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
+        if (gmbTokenRow) {
+          try {
+            const gmbTokens = JSON.parse(gmbTokenRow.value);
+            // Get locations first
+            const locRes = await fetch('https://mybusinessbusinessinformation.googleapis.com/v1/accounts', {
+              headers: { 'Authorization': `Bearer ${gmbTokens.access_token}` }
+            });
+            const locData = await locRes.json();
+            const accountName = locData.accounts?.[0]?.name;
+            if (accountName) {
+              const locsRes = await fetch(`https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=name`, {
+                headers: { 'Authorization': `Bearer ${gmbTokens.access_token}` }
+              });
+              const locsData = await locsRes.json();
+              const locationName = locsData.locations?.[0]?.name;
+              if (locationName) {
+                const postRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/localPosts`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${gmbTokens.access_token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ languageCode: 'pt-BR', summary: row.texto, topicType: 'STANDARD' })
+                });
+                results.gmb = postRes.ok ? 'ok' : 'error';
+              }
+            }
+          } catch(e) { results.gmb = 'error: ' + e.message; }
+        }
+        // Marcar como publicado
+        await env.DB.prepare(`UPDATE marketing_posts SET status='publicado', published_at=?, gmb_result=?, updated_at=? WHERE id=?`)
+          .bind(Math.floor(Date.now()/1000), JSON.stringify(results), Math.floor(Date.now()/1000), postId).run();
+        return json({ ok: true, results });
+      }
+
       // --- Meta OAuth (placeholder) ---
       if (path === '/api/marketing/meta/status' && method === 'GET') {
         const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_meta_tokens'`).first();
@@ -6350,8 +6533,84 @@ export default {
     }
     // Avaliações pós-compra: cron a cada execução (filtra por horário internamente)
     ctx.waitUntil(processarAvaliacoesCron(env));
+    // Marketing: publicar posts agendados aprovados
+    ctx.waitUntil(publishScheduledPosts(env));
   },
 };
+
+// ══════════════════════════════════════════════════════════════
+// MÓDULO MARKETING POSTS (v2.47.0)
+// ══════════════════════════════════════════════════════════════
+
+async function ensureMarketingTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS marketing_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    texto TEXT NOT NULL,
+    tema TEXT DEFAULT '',
+    imagem_prompt TEXT DEFAULT '',
+    imagem_url TEXT DEFAULT '',
+    status TEXT DEFAULT 'pendente',
+    plataformas TEXT DEFAULT '["gmb","fb","ig"]',
+    scheduled_at INTEGER,
+    published_at INTEGER,
+    gmb_result TEXT DEFAULT '',
+    fb_result TEXT DEFAULT '',
+    ig_result TEXT DEFAULT '',
+    likes INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(()=>{});
+  // Garantir colunas extras caso tabela já exista
+  await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN likes INTEGER DEFAULT 0`).run().catch(()=>{});
+  await env.DB.prepare(`ALTER TABLE marketing_posts ADD COLUMN gmb_result TEXT DEFAULT ''`).run().catch(()=>{});
+}
+
+async function publishScheduledPosts(env) {
+  await ensureMarketingTables(env);
+  const now = Math.floor(Date.now() / 1000);
+  const posts = await env.DB.prepare(`
+    SELECT * FROM marketing_posts
+    WHERE status='aprovado' AND scheduled_at <= ? AND scheduled_at > 0
+    LIMIT 5
+  `).bind(now).all().then(r => r.results);
+
+  for (const post of posts) {
+    try {
+      const results = {};
+      const gmbTokenRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
+      if (gmbTokenRow) {
+        const gmbTokens = JSON.parse(gmbTokenRow.value);
+        const locRes = await fetch('https://mybusinessbusinessinformation.googleapis.com/v1/accounts', {
+          headers: { 'Authorization': `Bearer ${gmbTokens.access_token}` }
+        });
+        const locData = await locRes.json();
+        const accountName = locData.accounts?.[0]?.name;
+        if (accountName) {
+          const locsRes = await fetch(`https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=name`, {
+            headers: { 'Authorization': `Bearer ${gmbTokens.access_token}` }
+          });
+          const locsData = await locsRes.json();
+          const locationName = locsData.locations?.[0]?.name;
+          if (locationName) {
+            const postBody = { languageCode: 'pt-BR', summary: post.texto, topicType: 'STANDARD' };
+            if (post.imagem_url) postBody.media = [{ mediaFormat: 'PHOTO', sourceUrl: post.imagem_url }];
+            const postRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/localPosts`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${gmbTokens.access_token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(postBody)
+            });
+            results.gmb = postRes.ok ? 'ok' : 'error_' + postRes.status;
+          }
+        }
+      }
+      await env.DB.prepare(`UPDATE marketing_posts SET status='publicado', published_at=?, gmb_result=?, updated_at=? WHERE id=?`)
+        .bind(now, JSON.stringify(results), now, post.id).run();
+      console.log(`[marketing-cron] Post ${post.id} publicado:`, JSON.stringify(results));
+    } catch(e) {
+      console.error(`[marketing-cron] Erro post ${post.id}:`, e.message);
+    }
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 // MÓDULO AVALIAÇÃO PÓS-COMPRA (v2.44.0)

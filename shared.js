@@ -1,5 +1,6 @@
 // shared.js — Utilitários compartilhados MoskoGás v1.15.0
-// v1.17.0
+// v1.18.0
+// v1.18.0: Marketing Posts adicionado ao menu Marketing
 // v1.17.0: Nova navbar — menu ADM (Contratos/Estoque/Vales) + menu Marketing (GMB/Social/Ads)
 // v1.14.0: 📦 Estoque adicionado à navbar
 // v1.13.0: Dropdown Financeiro (Pagamentos + Empenhos GOV) na navbar
@@ -176,6 +177,7 @@ const NAV_DROPDOWNS = [
   {
     id: 'marketing', icon: '🎯', label: 'Marketing', roles: ['admin', 'atendente'],
     children: [
+      { href: 'marketing-posts.html', icon: '🗓️', label: 'Central de Posts' },
       { href: 'marketing-gmb.html', icon: '📍', label: 'Google Meu Negócio' },
       { href: 'marketing-social.html', icon: '📱', label: 'Facebook & Instagram' },
       { href: 'marketing-ads.html', icon: '📢', label: 'Google Ads' },
