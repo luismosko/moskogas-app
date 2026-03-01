@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brand Kits v1.0.0 — MoskoGás Admin</title>
+<script src="shared.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui,-apple-system,sans-serif; background: #0f172a; min-height: 100vh; color: #e2e8f0; }
+.version-badge { position:fixed;bottom:8px;right:8px;background:#1e293b;color:#475569;font-size:10px;padding:2px 8px;border-radius:99px;z-index:999 }
+.container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+/* Header */
+.page-header { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 14px; padding: 22px 28px; margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
+.page-header h1 { font-size: 22px; font-weight: 800; color: #f1f5f9; }
+.page-header p { font-size: 13px; color: #64748b; margin-top: 3px; }
+.root-badge { background: #7c3aed; color: #fff; padding: 4px 12px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+
+/* Cards */
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 14px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; transition: all 0.15s; }
+.btn:hover { background: #1e293b; border-color: #475569; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-purple { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.btn-purple:hover { background: #6d28d9; }
+.btn-green { background: #059669; color: #fff; border-color: #059669; }
+.btn-green:hover { background: #047857; }
+.btn-red { background: #dc2626; color: #fff; border-color: #dc2626; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* Form */
+input, textarea, select { width: 100%; padding: 9px 12px; border: 1px solid #334155; border-radius: 8px; font-size: 13px; font-family: inherit; background: #0f172a; color: #e2e8f0; outline: none; transition: border 0.15s; }
+input:focus, textarea:focus, select:focus { border-color: #7c3aed; }
+label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 5px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-row { margin-bottom: 14px; }
+
+/* Brand cards grid */
+.brands-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.brand-card { background: #1e293b; border: 2px solid #334155; border-radius: 14px; overflow: hidden; transition: all 0.2s; }
+.brand-card:hover { border-color: #475569; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.brand-header { padding: 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #334155; }
+.brand-logo { width: 52px; height: 52px; border-radius: 10px; object-fit: contain; background: #0f172a; border: 1px solid #334155; }
+.brand-logo-placeholder { width: 52px; height: 52px; border-radius: 10px; background: #0f172a; border: 1px dashed #475569; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.brand-name { font-size: 16px; font-weight: 800; color: #f1f5f9; }
+.brand-slogan { font-size: 11px; color: #64748b; margin-top: 2px; }
+.color-swatches { display: flex; gap: 4px; margin-top: 6px; }
+.color-swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
+
+.brand-body { padding: 14px; }
+.brand-tom { font-size: 12px; color: #94a3b8; line-height: 1.5; margin-bottom: 12px; padding: 10px; background: #0f172a; border-radius: 8px; border-left: 3px solid #7c3aed; }
+
+/* Assets gallery */
+.assets-section { margin-top: 12px; }
+.assets-title { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.assets-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.asset-thumb { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: #0f172a; border: 1px solid #334155; cursor: pointer; }
+.asset-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.asset-thumb:hover .asset-overlay { opacity: 1; }
+.asset-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.7); opacity: 0; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.asset-tipo-badge { position: absolute; bottom: 3px; left: 3px; background: rgba(0,0,0,0.8); color: #94a3b8; font-size: 9px; padding: 1px 5px; border-radius: 4px; }
+.asset-add { aspect-ratio: 1; border-radius: 8px; border: 1px dashed #334155; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #475569; font-size: 10px; gap: 4px; transition: all 0.15s; }
+.asset-add:hover { border-color: #7c3aed; color: #7c3aed; background: #7c3aed10; }
+
+.brand-actions { padding: 12px 14px; border-top: 1px solid #334155; display: flex; gap: 8px; }
+
+/* Tipo chips */
+.tipo-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; border: 1px solid; cursor: pointer; transition: all 0.15s; }
+.tipo-logo { background: #7c3aed20; color: #a78bfa; border-color: #7c3aed40; }
+.tipo-botijao { background: #059669 20; color: #6ee7b7; border-color: #05966940; }
+.tipo-uniforme { background: #2563eb20; color: #93c5fd; border-color: #2563eb40; }
+.tipo-veiculo { background: #d9770620; color: #fcd34d; border-color: #d9770640; }
+.tipo-lifestyle { background: #db277720; color: #f9a8d4; border-color: #db277740; }
+.tipo-outro { background: #33415520; color: #94a3b8; border-color: #33415560; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+.modal-overlay.open { display: flex; }
+.modal { background: #1e293b; border: 1px solid #334155; border-radius: 16px; max-width: 680px; width: 100%; max-height: 92vh; overflow-y: auto; }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 16px; font-weight: 700; color: #f1f5f9; }
+.modal-body { padding: 20px 24px; }
+.modal-footer { padding: 14px 24px; border-top: 1px solid #334155; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Color picker row */
+.color-row { display: flex; gap: 8px; align-items: center; }
+.color-row input[type=color] { width: 44px; height: 36px; padding: 2px; cursor: pointer; flex-shrink: 0; }
+.color-row input[type=text] { flex: 1; }
+
+/* Upload drop zone */
+.dropzone { border: 2px dashed #334155; border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.15s; }
+.dropzone:hover, .dropzone.drag-over { border-color: #7c3aed; background: #7c3aed10; }
+.dropzone input[type=file] { display: none; }
+.upload-progress { background: #0f172a; border-radius: 8px; padding: 10px 14px; margin-top: 8px; display: none; }
+.progress-bar { background: #334155; border-radius: 99px; height: 4px; margin-top: 6px; }
+.progress-fill { background: #7c3aed; height: 100%; border-radius: 99px; transition: width 0.3s; }
+
+/* Tabs */
+.tipo-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px; }
+
+/* Seed brands notice */
+.seed-notice { background: #1e293b; border: 1px solid #7c3aed40; border-radius: 10px; padding: 14px; margin-bottom: 16px; font-size: 13px; color: #a78bfa; display: flex; gap: 10px; align-items: flex-start; }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="version-badge">v1.0.0 — admin-brands</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div style="font-size:40px">🏭</div>
+    <div style="flex:1">
+      <h1>Gerenciamento de Brand Kits</h1>
+      <p>Crie e mantenha os enxovais de marca para as distribuidoras de GLP. Usado pelos revendedores para gerar posts automáticos.</p>
+    </div>
+    <span class="root-badge">🔐 Admin Root</span>
+  </div>
+
+  <!-- Seed notice -->
+  <div class="seed-notice" id="seedNotice" style="display:none">
+    <span style="font-size:20px">💡</span>
+    <div>
+      <strong>Nenhum brand kit encontrado.</strong> Clique em "Importar Marcas Padrão" para carregar as 7 distribuidoras brasileiras pré-configuradas, ou crie manualmente.
+      <br><button onclick="seedDefaultBrands()" class="btn btn-purple" style="margin-top:8px">⚡ Importar Marcas Padrão (Ultragaz, Copagaz, Supergasbras...)</button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+    <button onclick="openCreateModal()" class="btn btn-purple">➕ Nova Marca</button>
+    <button onclick="loadBrands()" class="btn">🔄 Atualizar</button>
+    <div style="margin-left:auto;font-size:12px;color:#475569" id="brandsCount"></div>
+  </div>
+
+  <!-- Brands grid -->
+  <div id="brandsGrid" class="brands-grid">
+    <div style="grid-column:1/-1;text-align:center;padding:40px;color:#475569">
+      <div style="font-size:36px;margin-bottom:12px">⏳</div>
+      <p>Carregando brand kits...</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal: criar/editar brand -->
+<div class="modal-overlay" id="modalBrand">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalBrandTitle">➕ Nova Marca</h3>
+      <button onclick="closeModal('modalBrand')" class="btn btn-sm">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editBrandId">
+      <div class="form-grid">
+        <div class="form-row">
+          <label>ID da marca (único, sem espaços)</label>
+          <input id="editBrandSlug" placeholder="ex: ultragaz, copagaz, minharevenda">
+        </div>
+        <div class="form-row">
+          <label>Nome exibido</label>
+          <input id="editBrandNome" placeholder="ex: Ultragaz">
+        </div>
+        <div class="form-row" style="grid-column:1/-1">
+          <label>Slogan</label>
+          <input id="editBrandSlogan" placeholder="ex: Energia que transforma">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Cor principal do botijão</label>
+        <div class="color-row">
+          <input type="color" id="editBottleColorPicker" value="#1B5FA6" oninput="syncColor(this,'editBottleColor')">
+          <input type="text" id="editBottleColor" value="#1B5FA6" placeholder="#HEX" oninput="syncColorPicker(this,'editBottleColorPicker')">
+          <span id="editBottleColorName" style="font-size:12px;color:#64748b">Azul</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Descrição do botijão</label>
+        <input id="editBottleDesc" placeholder="ex: Botijão azul com faixa branca">
+      </div>
+
+      <div class="form-row">
+        <label>Paleta de cores (até 3)</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="color-row">
+            <input type="color" id="cp1" oninput="syncColor(this,'c1')">
+            <input type="text" id="c1" placeholder="#HEX Principal" oninput="syncColorPicker(this,'cp1')">
+            <input type="text" id="cn1" placeholder="Nome (ex: Azul Ultragaz)" style="flex:1">
+          </div>
+          <div class="color-row">
+            <input type="color" id="cp2" value="#FFFFFF" oninput="syncColor(this,'c2')">
+            <input type="text" id="c2" placeholder="#FFFFFF Branco" oninput="syncColorPicker(this,'cp2')">
+            <input type="text" id="cn2" placeholder="Nome (ex: Branco)" style="flex:1">
+          </div>
+          <div class="color-row">
+            <input type="color" id="cp3" value="#003087" oninput="syncColor(this,'c3')">
+            <input type="text" id="c3" placeholder="#003087 Escuro" oninput="syncColorPicker(this,'cp3')">
+            <input type="text" id="cn3" placeholder="Nome (ex: Azul Escuro)" style="flex:1">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Tom de comunicação / personalidade da marca</label>
+        <textarea id="editBrandTom" rows="3" placeholder="ex: Confiante, tradicional e familiar. Maior distribuidora do Brasil. Use tom respeitoso e próximo da família."></textarea>
+      </div>
+
+      <div class="form-row">
+        <label>Prompt base para imagens DALL-E (em inglês)</label>
+        <textarea id="editBrandImgPrompt" rows="3" placeholder="ex: blue LPG gas cylinder Ultragaz brand, delivery in Brazil, realistic photo, blue and white colors, residential delivery, happy family"></textarea>
+        <p style="font-size:11px;color:#475569;margin-top:4px">💡 Descreva o botijão, cores, contexto. A IA vai adaptar para cada post.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modalBrand')" class="btn">Cancelar</button>
+      <button onclick="saveBrand()" id="btnSaveBrand" class="btn btn-purple">💾 Salvar Marca</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: gerenciar assets de um brand -->
+<div class="modal-overlay" id="modalAssets">
+  <div class="modal" style="max-width:780px">
+    <div class="modal-header">
+      <h3 id="modalAssetsTitle">🖼️ Imagens da Marca</h3>
+      <button onclick="closeModal('modalAssets')" class="btn btn-sm">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="assetsBrandId">
+
+      <!-- Tipo selector -->
+      <div class="tipo-tabs">
+        <span class="tipo-chip tipo-logo" style="cursor:default">🏷️ Logo</span>
+        <span class="tipo-chip tipo-botijao" style="cursor:default">🫙 Botijão</span>
+        <span class="tipo-chip tipo-uniforme" style="cursor:default">👕 Uniforme/Entregador</span>
+        <span class="tipo-chip tipo-veiculo" style="cursor:default">🚚 Veículo</span>
+        <span class="tipo-chip tipo-lifestyle" style="cursor:default">✨ Lifestyle</span>
+        <span class="tipo-chip tipo-outro" style="cursor:default">📎 Outro</span>
+      </div>
+
+      <!-- Upload zone -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:10px">📤 Upload de Imagens</div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <div>
+            <label>Tipo da imagem</label>
+            <select id="uploadTipo" style="width:auto">
+              <option value="logo">🏷️ Logo da marca</option>
+              <option value="botijao">🫙 Botijão (foto do produto)</option>
+              <option value="uniforme">👕 Entregador com uniforme</option>
+              <option value="veiculo">🚚 Veículo de entrega</option>
+              <option value="lifestyle">✨ Lifestyle / Família / Uso</option>
+              <option value="outro">📎 Outro</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:180px">
+            <label>Nome (opcional)</label>
+            <input id="uploadNome" placeholder="ex: Logo horizontal fundo branco">
+          </div>
+        </div>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()" ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave(event)">
+          <input type="file" id="fileInput" accept="image/*" multiple onchange="handleFiles(this.files)">
+          <div style="font-size:28px;margin-bottom:8px">📁</div>
+          <div style="font-weight:600;color:#94a3b8;font-size:13px">Clique para selecionar ou arraste as imagens aqui</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">PNG, JPG, WEBP • Múltiplos arquivos • Max 5MB cada</div>
+        </div>
+        <div id="uploadProgress" class="upload-progress">
+          <div id="uploadProgressText" style="font-size:12px;color:#94a3b8"></div>
+          <div class="progress-bar"><div class="progress-fill" id="uploadProgressFill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Gallery atual -->
+      <div class="card-title" style="margin-bottom:12px">🖼️ Galeria atual</div>
+      <div id="assetsGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+        <div style="text-align:center;padding:20px;color:#475569">Carregando...</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modalAssets')" class="btn btn-green">✅ Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+checkAuth(['admin']);
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+let brands = [];
+
+// ══════════════════════════════════════════════════
+// LOAD BRANDS
+// ══════════════════════════════════════════════════
+async function loadBrands() {
+  try {
+    brands = await api('/api/admin/brands');
+    document.getElementById('brandsCount').textContent = `${brands.length} marca(s)`;
+    if (!brands.length) {
+      document.getElementById('seedNotice').style.display = '';
+      document.getElementById('brandsGrid').innerHTML = '';
+    } else {
+      document.getElementById('seedNotice').style.display = 'none';
+      renderBrands();
+    }
+  } catch(e) {
+    document.getElementById('brandsGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444">Erro: ${e.message}</div>`;
+  }
+}
+
+function renderBrands() {
+  const grid = document.getElementById('brandsGrid');
+  grid.innerHTML = brands.map(b => {
+    const colors = b.colors || [];
+    const swatches = colors.map(c => `<div class="color-swatch" style="background:${c}" title="${c}"></div>`).join('');
+    const assets = b.assets || [];
+    const logo = assets.find(a => a.tipo === 'logo');
+    const previewAssets = assets.slice(0, 8);
+
+    const tipoLabel = { logo:'🏷️', botijao:'🫙', uniforme:'👕', veiculo:'🚚', lifestyle:'✨', outro:'📎' };
+
+    return `
+    <div class="brand-card" style="border-color:${b.bottle_color}40">
+      <div class="brand-header" style="background:${b.bottle_color}15">
+        ${logo
+          ? `<img src="${logo.url}" class="brand-logo" alt="${b.nome}">`
+          : `<div class="brand-logo-placeholder" style="font-size:24px;color:${b.bottle_color}">🏭</div>`}
+        <div style="flex:1">
+          <div class="brand-name" style="color:${b.bottle_color}">${b.nome}</div>
+          <div class="brand-slogan">${b.slogan || ''}</div>
+          <div class="color-swatches">${swatches}</div>
+        </div>
+        <div style="font-size:10px;background:${b.bottle_color};color:#fff;padding:3px 8px;border-radius:99px;white-space:nowrap">${b.bottle_desc || 'Botijão'}</div>
+      </div>
+
+      <div class="brand-body">
+        <div class="brand-tom">${b.tom || '<em style="color:#475569">Tom não configurado</em>'}</div>
+
+        <div class="assets-section">
+          <div class="assets-title">
+            🖼️ Imagens (${assets.length})
+            <button onclick="openAssetsModal('${b.brand_id}')" class="btn btn-sm" style="font-size:11px">+ Gerenciar</button>
+          </div>
+          ${assets.length > 0
+            ? `<div class="assets-grid">
+                ${previewAssets.map(a => `
+                  <div class="asset-thumb" title="${a.nome || a.tipo}">
+                    <img src="${a.url}" loading="lazy">
+                    <div class="asset-tipo-badge">${tipoLabel[a.tipo]||'📎'}</div>
+                    <div class="asset-overlay">
+                      <button onclick="deleteAsset('${b.brand_id}',${a.id},event)" class="btn btn-sm btn-red" style="padding:4px 8px">🗑️</button>
+                    </div>
+                  </div>`).join('')}
+                ${assets.length > 8 ? `<div class="asset-add" onclick="openAssetsModal('${b.brand_id}')">+${assets.length-8}<br>mais</div>` : ''}
+                <div class="asset-add" onclick="openAssetsModal('${b.brand_id}')">
+                  <span style="font-size:18px">➕</span>
+                  <span>Adicionar</span>
+                </div>
+              </div>`
+            : `<div class="asset-add" style="min-height:60px;flex-direction:row;gap:8px" onclick="openAssetsModal('${b.brand_id}')">
+                <span style="font-size:20px">📁</span>
+                <span>Upload de imagens da marca</span>
+              </div>`}
+        </div>
+      </div>
+
+      <div class="brand-actions">
+        <button onclick="openEditModal('${b.brand_id}')" class="btn btn-sm btn-purple">✏️ Editar</button>
+        <button onclick="openAssetsModal('${b.brand_id}')" class="btn btn-sm btn-green">🖼️ Imagens</button>
+        <button onclick="deleteBrand('${b.brand_id}')" class="btn btn-sm btn-red" style="margin-left:auto">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════
+// BRAND CRUD
+// ══════════════════════════════════════════════════
+function openCreateModal() {
+  document.getElementById('editBrandId').value = '';
+  document.getElementById('modalBrandTitle').textContent = '➕ Nova Marca';
+  ['editBrandSlug','editBrandNome','editBrandSlogan','editBottleColor','editBottleDesc','editBrandTom','editBrandImgPrompt','c1','cn1','c2','cn2','c3','cn3'].forEach(id => {
+    document.getElementById(id).value = id === 'c2' ? '#FFFFFF' : id === 'c3' ? '#003087' : '';
+  });
+  document.getElementById('editBrandSlug').disabled = false;
+  document.getElementById('modalBrand').classList.add('open');
+}
+
+function openEditModal(brandId) {
+  const b = brands.find(b => b.brand_id === brandId);
+  if (!b) return;
+  document.getElementById('editBrandId').value = b.brand_id;
+  document.getElementById('modalBrandTitle').textContent = `✏️ Editar — ${b.nome}`;
+  document.getElementById('editBrandSlug').value = b.brand_id;
+  document.getElementById('editBrandSlug').disabled = true;
+  document.getElementById('editBrandNome').value = b.nome || '';
+  document.getElementById('editBrandSlogan').value = b.slogan || '';
+  document.getElementById('editBottleColor').value = b.bottle_color || '#6366f1';
+  document.getElementById('editBottleColorPicker').value = b.bottle_color || '#6366f1';
+  document.getElementById('editBottleDesc').value = b.bottle_desc || '';
+  document.getElementById('editBrandTom').value = b.tom || '';
+  document.getElementById('editBrandImgPrompt').value = b.img_prompt_base || '';
+  const colors = b.colors || [];
+  const names = b.color_names || [];
+  ['c1','c2','c3'].forEach((id, i) => {
+    document.getElementById(id).value = colors[i] || '';
+    document.getElementById('cn' + (i+1)).value = names[i] || '';
+    if (colors[i]) document.getElementById('cp' + (i+1)).value = colors[i];
+  });
+  document.getElementById('modalBrand').classList.add('open');
+}
+
+async function saveBrand() {
+  const isEdit = !!document.getElementById('editBrandId').value;
+  const brandId = isEdit ? document.getElementById('editBrandId').value : document.getElementById('editBrandSlug').value.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+  if (!brandId || !document.getElementById('editBrandNome').value) { toast('ID e Nome são obrigatórios', 'error'); return; }
+
+  const payload = {
+    brand_id: brandId,
+    nome: document.getElementById('editBrandNome').value,
+    slogan: document.getElementById('editBrandSlogan').value,
+    bottle_color: document.getElementById('editBottleColor').value,
+    bottle_desc: document.getElementById('editBottleDesc').value,
+    tom: document.getElementById('editBrandTom').value,
+    img_prompt_base: document.getElementById('editBrandImgPrompt').value,
+    colors: [document.getElementById('c1').value, document.getElementById('c2').value, document.getElementById('c3').value].filter(Boolean),
+    color_names: [document.getElementById('cn1').value, document.getElementById('cn2').value, document.getElementById('cn3').value].filter(Boolean),
+  };
+
+  const btn = document.getElementById('btnSaveBrand');
+  btn.disabled = true; btn.textContent = '⏳ Salvando...';
+  try {
+    if (isEdit) await api(`/api/admin/brands/${brandId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+    else await api('/api/admin/brands', { method: 'POST', body: JSON.stringify(payload) });
+    closeModal('modalBrand');
+    await loadBrands();
+    toast(`✅ Marca "${payload.nome}" salva!`, 'success');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  btn.disabled = false; btn.textContent = '💾 Salvar Marca';
+}
+
+async function deleteBrand(brandId) {
+  const b = brands.find(b => b.brand_id === brandId);
+  if (!confirm(`Apagar a marca "${b?.nome}"? Todas as imagens também serão removidas.`)) return;
+  showLoading();
+  await api(`/api/admin/brands/${brandId}`, { method: 'DELETE' });
+  hideLoading();
+  await loadBrands();
+  toast('Marca removida', 'success');
+}
+
+// ══════════════════════════════════════════════════
+// ASSETS (imagens)
+// ══════════════════════════════════════════════════
+function openAssetsModal(brandId) {
+  const b = brands.find(b => b.brand_id === brandId);
+  document.getElementById('assetsBrandId').value = brandId;
+  document.getElementById('modalAssetsTitle').textContent = `🖼️ Imagens — ${b?.nome || brandId}`;
+  document.getElementById('modalAssets').classList.add('open');
+  loadAssetsGallery(brandId);
+}
+
+async function loadAssetsGallery(brandId) {
+  const gallery = document.getElementById('assetsGallery');
+  gallery.innerHTML = '<div style="text-align:center;padding:20px;color:#475569">⏳ Carregando...</div>';
+  try {
+    const assets = await api(`/api/admin/brands/${brandId}/assets`);
+    if (!assets.length) {
+      gallery.innerHTML = '<div style="text-align:center;padding:30px;color:#475569">Nenhuma imagem ainda. Faça upload acima.</div>';
+      return;
+    }
+    const tipoLabel = { logo:'🏷️ Logo', botijao:'🫙 Botijão', uniforme:'👕 Uniforme', veiculo:'🚚 Veículo', lifestyle:'✨ Lifestyle', outro:'📎 Outro' };
+    const tipoClass = { logo:'tipo-logo', botijao:'tipo-botijao', uniforme:'tipo-uniforme', veiculo:'tipo-veiculo', lifestyle:'tipo-lifestyle', outro:'tipo-outro' };
+    gallery.innerHTML = assets.map(a => `
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:10px;overflow:hidden">
+        <div style="aspect-ratio:1;overflow:hidden">
+          <img src="${a.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+        </div>
+        <div style="padding:8px">
+          <div class="tipo-chip ${tipoClass[a.tipo]||'tipo-outro'}" style="margin-bottom:4px">${tipoLabel[a.tipo]||a.tipo}</div>
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nome || '—'}</div>
+          <button onclick="deleteAsset('${brandId}',${a.id},event)" class="btn btn-sm btn-red" style="width:100%;justify-content:center">🗑️ Remover</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    gallery.innerHTML = `<div style="color:#ef4444">Erro: ${e.message}</div>`;
+  }
+}
+
+async function deleteAsset(brandId, assetId, event) {
+  event.stopPropagation();
+  if (!confirm('Remover esta imagem?')) return;
+  await api(`/api/admin/brands/${brandId}/assets/${assetId}`, { method: 'DELETE' });
+  await loadAssetsGallery(brandId);
+  await loadBrands();
+  toast('Imagem removida', 'success');
+}
+
+// Upload
+async function handleFiles(files) {
+  const brandId = document.getElementById('assetsBrandId').value;
+  const tipo = document.getElementById('uploadTipo').value;
+  const nome = document.getElementById('uploadNome').value;
+  if (!brandId) { toast('Selecione um brand primeiro', 'error'); return; }
+
+  const progress = document.getElementById('uploadProgress');
+  const progressText = document.getElementById('uploadProgressText');
+  const progressFill = document.getElementById('uploadProgressFill');
+  progress.style.display = '';
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    progressText.textContent = `Enviando ${i+1}/${files.length}: ${file.name}`;
+    progressFill.style.width = ((i / files.length) * 100) + '%';
+    try {
+      await api(`/api/admin/brands/${brandId}/assets?tipo=${tipo}&nome=${encodeURIComponent(nome || file.name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'image/jpeg' },
+        body: file
+      });
+    } catch(e) { toast(`Erro ao enviar ${file.name}: ${e.message}`, 'error'); }
+  }
+
+  progressFill.style.width = '100%';
+  progressText.textContent = `✅ ${files.length} imagem(ns) enviada(s)!`;
+  setTimeout(() => { progress.style.display = 'none'; }, 2000);
+  await loadAssetsGallery(brandId);
+  await loadBrands();
+  toast(`✅ ${files.length} imagem(ns) enviada(s)!`, 'success');
+}
+
+function onDragOver(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('drag-over'); }
+function onDragLeave(e) { document.getElementById('dropzone').classList.remove('drag-over'); }
+function onDrop(e) { e.preventDefault(); document.getElementById('dropzone').classList.remove('drag-over'); handleFiles(e.dataTransfer.files); }
+
+// ══════════════════════════════════════════════════
+// COLOR SYNC
+// ══════════════════════════════════════════════════
+function syncColor(picker, inputId) { document.getElementById(inputId).value = picker.value; }
+function syncColorPicker(input, pickerId) { if (/^#[0-9A-Fa-f]{6}$/.test(input.value)) document.getElementById(pickerId).value = input.value; }
+
+// ══════════════════════════════════════════════════
+// SEED BRANDS PADRÃO
+// ══════════════════════════════════════════════════
+const DEFAULT_BRANDS = [
+  { brand_id:'ultragaz', nome:'Ultragaz', slogan:'Energia que transforma', bottle_color:'#1B5FA6', bottle_desc:'Botijão azul com faixa branca', colors:['#1B5FA6','#FFFFFF','#003087'], color_names:['Azul Ultragaz','Branco','Azul Escuro'], tom:'Confiante, tradicional e familiar. Maior distribuidora do Brasil. Transmitir confiança e liderança de mercado.', img_prompt_base:'blue LPG gas cylinder Ultragaz brand Brazil, delivery residential, realistic photo, blue and white colors, professional delivery man smiling' },
+  { brand_id:'supergasbras', nome:'Supergasbras', slogan:'Com você em todo lugar', bottle_color:'#C8960C', bottle_desc:'Botijão dourado/amarelo', colors:['#C8960C','#E8B419','#1A1A1A'], color_names:['Dourado','Amarelo','Preto'], tom:'Dinâmico e acessível. Destacar presença local, entrega rápida e preço competitivo.', img_prompt_base:'golden yellow LPG gas cylinder Supergasbras Brazil, fast delivery service, realistic photo, gold colors, happy customer' },
+  { brand_id:'copagaz', nome:'Copagaz', slogan:'Gás e muito mais', bottle_color:'#00833E', bottle_desc:'Botijão verde', colors:['#00833E','#FFFFFF','#006630'], color_names:['Verde Copagaz','Branco','Verde Escuro'], tom:'Fresco, sustentável e próximo da comunidade. Tom acolhedor e amigável.', img_prompt_base:'green LPG gas cylinder Copagaz Brazil, residential gas delivery, realistic photo, green and white colors, family home' },
+  { brand_id:'nacionalgas', nome:'Nacional Gás', slogan:'Qualidade que você confia', bottle_color:'#5A5A5A', bottle_desc:'Botijão cinza', colors:['#5A5A5A','#E8E8E8','#1A1A1A'], color_names:['Cinza','Prata','Preto'], tom:'Sólido, econômico e confiável. Foco em custo-benefício e economia para a família.', img_prompt_base:'gray silver LPG gas cylinder Nacional Gas Brazil, residential delivery, realistic photo, gray and silver colors, economy value' },
+  { brand_id:'liquigas', nome:'Liquigás', slogan:'Energia para sua vida', bottle_color:'#CC0000', bottle_desc:'Botijão vermelho', colors:['#CC0000','#FFFFFF','#990000'], color_names:['Vermelho','Branco','Vermelho Escuro'], tom:'Energético e forte. Marca do grupo Petrobras, transmite segurança, qualidade e tradição.', img_prompt_base:'red LPG gas cylinder Liquigas Petrobras Brazil, gas delivery service, realistic photo, red and white colors, safe reliable' },
+  { brand_id:'consigaz', nome:'Consigaz', slogan:'Qualidade garantida', bottle_color:'#E05A00', bottle_desc:'Botijão laranja', colors:['#E05A00','#FFFFFF','#B34700'], color_names:['Laranja','Branco','Laranja Escuro'], tom:'Regional e próximo. Foco em atendimento personalizado e relacionamento com o cliente.', img_prompt_base:'orange LPG gas cylinder Consigaz Brazil, gas delivery, realistic photo, orange and white colors, local service' },
+  { brand_id:'minasgaz', nome:'Minasgás', slogan:'O gás de Minas', bottle_color:'#7B3F00', bottle_desc:'Botijão marrom/terracota', colors:['#7B3F00','#FFFFFF','#5C2E00'], color_names:['Marrom','Branco','Marrom Escuro'], tom:'Regional mineiro, tradicional e caseiro. Tom acolhedor, como gás da casa da vovó.', img_prompt_base:'brown LPG gas cylinder Minasgaz Brazil, home delivery, realistic photo, warm brown colors, traditional family' },
+  { brand_id:'independente', nome:'Independente', slogan:'Minha marca, meu estilo', bottle_color:'#6366f1', bottle_desc:'Cores personalizadas', colors:['#6366f1','#FFFFFF','#374151'], color_names:['Cor Principal','Branco','Cinza Escuro'], tom:'Personalizável conforme as instruções da revenda. Adapta-se ao estilo do cliente.', img_prompt_base:'LPG gas cylinder delivery Brazil, professional photo, gas delivery service, realistic, friendly delivery man' },
+];
+
+async function seedDefaultBrands() {
+  if (!confirm('Importar as 7 marcas padrão? Marcas existentes com o mesmo ID serão sobrescritas.')) return;
+  showLoading();
+  try {
+    for (const b of DEFAULT_BRANDS) {
+      await api('/api/admin/brands', { method: 'POST', body: JSON.stringify(b) });
+    }
+    await loadBrands();
+    toast('✅ 8 marcas importadas com sucesso!', 'success');
+  } catch(e) { toast('Erro ao importar: ' + e.message, 'error'); }
+  hideLoading();
+}
+
+// ══════════════════════════════════════════════════
+// MODAL
+// ══════════════════════════════════════════════════
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Init
+loadBrands();
+</script>
+</body>
+</html>

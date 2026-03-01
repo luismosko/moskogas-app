@@ -1,7 +1,7 @@
 // shared.js — Utilitários compartilhados MoskoGás v1.15.0
-// v1.18.0
+// v1.19.0
+// v1.19.0: Brand Kits adicionado ao menu Config (admin root)
 // v1.18.0: Marketing Posts adicionado ao menu Marketing
-// v1.17.0: Nova navbar — menu ADM (Contratos/Estoque/Vales) + menu Marketing (GMB/Social/Ads)
 // v1.14.0: 📦 Estoque adicionado à navbar
 // v1.13.0: Dropdown Financeiro (Pagamentos + Empenhos GOV) na navbar
 // v1.11.0: Contratos adicionado à navbar
@@ -197,6 +197,7 @@ const NAV_DROPDOWNS = [
     children: [
       { href: 'config.html', icon: '⚙️', label: 'Configurações' },
       { href: 'usuarios.html', icon: '👥', label: 'Usuários' },
+      { href: 'admin-brands.html', icon: '🏭', label: 'Brand Kits', roles: ['admin'] },
     ]
   },
 ];

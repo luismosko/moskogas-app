@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Posts Marketing v1.1.0 — MoskoGás</title>
+<title>Posts Marketing v1.2.0 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -116,7 +116,7 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.1.0 — marketing-posts</div>
+<div class="version-badge">v1.2.0 — marketing-posts</div>
 
 <div class="container">
 
@@ -124,7 +124,7 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
   <div class="page-header">
     <div style="font-size:40px">🗓️</div>
     <div style="flex:1">
-      <h1>Central de Posts</h1>
+      <h1>Central de Posts <span style="font-size:12px;opacity:0.7">v1.2.0</span></h1>
       <p>Gere, agende e publique automaticamente no Google Meu Negócio, Instagram e Facebook</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -760,128 +760,37 @@ function renderCalendar() {
 // CONFIG REVENDA
 // ══════════════════════════════════════════════════
 // ══════════════════════════════════════════════════
-// BRAND KIT — Marcas de GLP do Brasil
+// BRAND KIT — busca da API (gerenciado pelo admin root em admin-brands.html)
 // ══════════════════════════════════════════════════
-const BRANDS = [
-  {
-    id: 'ultragaz',
-    nome: 'Ultragaz',
-    slogan: 'Energia que transforma',
-    emoji: '🔵',
-    bottle: '🫙',
-    bottleColor: '#1B5FA6',
-    bottleDesc: 'Botijão azul com faixa branca',
-    colors: ['#1B5FA6', '#FFFFFF', '#003087'],
-    colorNames: ['Azul Ultragaz', 'Branco', 'Azul Escuro'],
-    tom: 'Confiante, tradicional e familiar. Maior distribuidora do Brasil.',
-    imgPrompt: 'blue LPG gas cylinder Ultragaz brand, delivery in Brazil, realistic photo, blue and white colors, residential delivery',
-    logoNote: 'Upload o logo da Ultragaz da sua revenda',
-  },
-  {
-    id: 'supergasbras',
-    nome: 'Supergasbras',
-    slogan: 'Com você em todo lugar',
-    emoji: '🟡',
-    bottle: '🫙',
-    bottleColor: '#C8960C',
-    bottleDesc: 'Botijão dourado/amarelo',
-    colors: ['#C8960C', '#E8B419', '#1A1A1A'],
-    colorNames: ['Dourado', 'Amarelo', 'Preto'],
-    tom: 'Dinâmico e acessível. Destacar presença local e preço competitivo.',
-    imgPrompt: 'golden yellow LPG gas cylinder Supergasbras Brazil, delivery service, realistic photo, gold and black colors',
-    logoNote: 'Upload o logo da Supergasbras da sua revenda',
-  },
-  {
-    id: 'copagaz',
-    nome: 'Copagaz',
-    slogan: 'Gás e muito mais',
-    emoji: '🟢',
-    bottle: '🫙',
-    bottleColor: '#00833E',
-    bottleDesc: 'Botijão verde',
-    colors: ['#00833E', '#FFFFFF', '#006630'],
-    colorNames: ['Verde Copagaz', 'Branco', 'Verde Escuro'],
-    tom: 'Fresco, sustentável e próximo da comunidade local.',
-    imgPrompt: 'green LPG gas cylinder Copagaz Brazil, gas delivery, realistic photo, green and white colors',
-    logoNote: 'Upload o logo da Copagaz da sua revenda',
-  },
-  {
-    id: 'nacionalgas',
-    nome: 'Nacional Gás',
-    slogan: 'Qualidade que você confia',
-    emoji: '⚫',
-    bottle: '🫙',
-    bottleColor: '#5A5A5A',
-    bottleDesc: 'Botijão cinza',
-    colors: ['#5A5A5A', '#E8E8E8', '#1A1A1A'],
-    colorNames: ['Cinza', 'Prata', 'Preto'],
-    tom: 'Sólido, econômico e confiável. Foco em custo-benefício.',
-    imgPrompt: 'gray silver LPG gas cylinder Nacional Gas Brazil, residential gas delivery, realistic photo, gray colors',
-    logoNote: 'Upload o logo da Nacional Gás da sua revenda',
-  },
-  {
-    id: 'liquigas',
-    nome: 'Liquigás',
-    slogan: 'Energia para sua vida',
-    emoji: '🔴',
-    bottle: '🫙',
-    bottleColor: '#CC0000',
-    bottleDesc: 'Botijão vermelho',
-    colors: ['#CC0000', '#FFFFFF', '#990000'],
-    colorNames: ['Vermelho', 'Branco', 'Vermelho Escuro'],
-    tom: 'Energético e forte. Marca do grupo Petrobras, transmite segurança.',
-    imgPrompt: 'red LPG gas cylinder Liquigas Petrobras Brazil, gas delivery service, realistic photo, red and white colors',
-    logoNote: 'Upload o logo da Liquigás da sua revenda',
-  },
-  {
-    id: 'consigaz',
-    nome: 'Consigaz',
-    slogan: 'Qualidade garantida',
-    emoji: '🟠',
-    bottle: '🫙',
-    bottleColor: '#E05A00',
-    bottleDesc: 'Botijão laranja',
-    colors: ['#E05A00', '#FFFFFF', '#B34700'],
-    colorNames: ['Laranja', 'Branco', 'Laranja Escuro'],
-    tom: 'Regional e próximo. Foco em atendimento personalizado.',
-    imgPrompt: 'orange LPG gas cylinder Consigaz Brazil, gas delivery, realistic photo, orange and white colors',
-    logoNote: 'Upload o logo da Consigaz da sua revenda',
-  },
-  {
-    id: 'minasgaz',
-    nome: 'Minasgás',
-    slogan: 'O gás de Minas',
-    emoji: '🟤',
-    bottle: '🫙',
-    bottleColor: '#7B3F00',
-    bottleDesc: 'Botijão marrom/terracota',
-    colors: ['#7B3F00', '#FFFFFF', '#5C2E00'],
-    colorNames: ['Marrom', 'Branco', 'Marrom Escuro'],
-    tom: 'Regional mineiro, tradicional e caseiro. Tom acolhedor.',
-    imgPrompt: 'brown terracotta LPG gas cylinder Minasgaz Brazil, residential delivery, realistic photo',
-    logoNote: 'Upload o logo da Minasgás da sua revenda',
-  },
-  {
-    id: 'independente',
-    nome: 'Independente',
-    slogan: 'Minha marca, meu estilo',
-    emoji: '⭐',
-    bottle: '🫙',
-    bottleColor: '#6366f1',
-    bottleDesc: 'Cores personalizadas',
-    colors: ['#6366f1', '#FFFFFF', '#374151'],
-    colorNames: ['Cor Principal', 'Secundária', 'Texto'],
-    tom: 'Personalizado conforme as instruções da revenda.',
-    imgPrompt: 'LPG gas cylinder delivery Brazil, professional photo, gas delivery service, realistic',
-    logoNote: 'Upload o logo da sua revenda',
-    custom: true,
-  },
-];
+let BRANDS = []; // carregado de /api/marketing/brands
+
+async function loadBrandsAPI() {
+  try {
+    const data = await api('/api/marketing/brands');
+    BRANDS = data.map(b => ({
+      id: b.brand_id, brand_id: b.brand_id,
+      nome: b.nome, slogan: b.slogan || '',
+      bottleColor: b.bottle_color || '#6366f1',
+      bottleDesc: b.bottle_desc || '',
+      colors: b.colors || [], colorNames: b.color_names || [],
+      tom: b.tom || '', imgPrompt: b.img_prompt_base || '',
+      logo_url: b.logo_url || '', assets: b.assets || [],
+      custom: b.brand_id === 'independente',
+    }));
+  } catch(e) { BRANDS = []; }
+}
 
 let selectedBrand = null;
 
 function renderBrandGrid(savedBrandId) {
   const grid = document.getElementById('brandGrid');
+  if (!BRANDS.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px;font-size:13px;color:#92400e">
+      ⚠️ Nenhum Brand Kit cadastrado. O admin root precisa configurá-los em
+      <a href="admin-brands.html" style="color:#d97706;font-weight:700">Admin → Brand Kits</a>.
+    </div>`;
+    return;
+  }
   grid.innerHTML = BRANDS.map(b => `
     <div onclick="selectBrand('${b.id}')" id="brand-card-${b.id}" style="
       border: 2px solid ${savedBrandId === b.id ? b.bottleColor : '#e2e8f0'};
@@ -889,7 +798,9 @@ function renderBrandGrid(savedBrandId) {
       background: ${savedBrandId === b.id ? b.bottleColor + '18' : '#fff'};
       transition: all 0.2s; position: relative;">
       ${savedBrandId === b.id ? `<div style="position:absolute;top:6px;right:6px;background:${b.bottleColor};color:#fff;border-radius:99px;font-size:9px;font-weight:700;padding:1px 6px">✓ ATIVO</div>` : ''}
-      <div style="font-size:32px;margin-bottom:6px">${b.emoji}</div>
+      ${b.logo_url
+        ? `<img src="${b.logo_url}" style="height:34px;object-fit:contain;margin-bottom:4px;display:block;margin-left:auto;margin-right:auto">`
+        : `<div style="font-size:28px;margin-bottom:6px">🏭</div>`}
       <div style="font-size:12px;font-weight:700;color:#1e293b">${b.nome}</div>
       <div style="width:100%;height:6px;border-radius:99px;background:${b.bottleColor};margin-top:8px"></div>
     </div>
@@ -897,7 +808,7 @@ function renderBrandGrid(savedBrandId) {
 }
 
 function selectBrand(id) {
-  const b = BRANDS.find(b => b.id === id);
+  const b = BRANDS.find(b => b.id === id || b.brand_id === id);
   if (!b) return;
   selectedBrand = b;
 
@@ -925,11 +836,11 @@ function selectBrand(id) {
   ['brandColor1','brandColor2','brandColor3'].forEach((elId, i) => {
     const el = document.getElementById(elId);
     el.style.background = colors[i];
-    el.title = b.colorNames[i];
+    el.title = (b.colorNames||b.color_names||[])[i] || '';
     el.style.boxShadow = `0 0 0 2px #fff, 0 0 0 4px ${colors[i]}40`;
   });
 
-  document.getElementById('brandImgPrompt').innerHTML = `<strong>Imagem DALL-E:</strong><br>"${b.imgPrompt}"`;
+  document.getElementById('brandImgPrompt').innerHTML = `<strong>Imagem DALL-E:</strong><br>"${b.imgPrompt || b.img_prompt_base || ''}"`; 
 
   if (b.custom) {
     document.getElementById('brandCustomNote').style.display = '';
@@ -940,7 +851,7 @@ function selectBrand(id) {
 
   // Update DALL-E image prompt default in the hidden field
   document.getElementById('cfgBrandId').value = id;
-  document.getElementById('cfgBrandImgPrompt').value = b.imgPrompt;
+  document.getElementById('cfgBrandImgPrompt').value = b.imgPrompt || b.img_prompt_base || '';
   document.getElementById('cfgBrandColors').value = JSON.stringify(b.colors);
   document.getElementById('cfgBrandTom').value = b.tom;
 
@@ -959,6 +870,7 @@ function getBrandBottleSvg(b) {
 
 async function loadConfig() {
   try {
+    await loadBrandsAPI(); // carrega brands do banco
     const cfg = await api('/api/marketing/config');
     document.getElementById('cfgNome').value = cfg.nome || '';
     document.getElementById('cfgTelefone').value = cfg.telefone || '';
