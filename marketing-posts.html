@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Posts Marketing v1.3.0 — MoskoGás</title>
+<title>Posts Marketing v1.3.1 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -116,7 +116,7 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.3.0 — marketing-posts</div>
+<div class="version-badge">v1.3.1 — marketing-posts</div>
 
 <div class="container">
 
@@ -870,21 +870,27 @@ function selectBrand(id) {
   preview.style.borderColor = b.bottleColor;
   preview.style.background = b.bottleColor + '08';
 
-  document.getElementById('brandBottle').textContent = b.emoji === '⭐' ? '⭐' :
-    `<span style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2))">${getBrandBottleSvg(b)}</span>`;
+  const bottleEmoji = { ultragaz:'🔵', supergasbras:'🟡', copagaz:'🟢', nacionalgas:'⚫', liquigas:'🔴', consigaz:'🟠', minasgaz:'🟤', independente:'⭐' }[b.id] || '🫙';
+  document.getElementById('brandBottle').innerHTML = b.logo_url
+    ? `<img src="${b.logo_url}" style="height:56px;object-fit:contain;max-width:100%">`
+    : `<span style="font-size:56px">${bottleEmoji}</span>`;
   document.getElementById('brandName').textContent = b.nome;
   document.getElementById('brandName').style.color = b.bottleColor;
   document.getElementById('brandSlogan').textContent = b.slogan;
 
-  const colors = [b.colors[0], b.colors[1], b.colors[2]];
+  const colors = b.colors || [];
   ['brandColor1','brandColor2','brandColor3'].forEach((elId, i) => {
     const el = document.getElementById(elId);
-    el.style.background = colors[i];
+    if (!el) return;
+    el.style.background = colors[i] || '#e2e8f0';
     el.title = (b.colorNames||b.color_names||[])[i] || '';
-    el.style.boxShadow = `0 0 0 2px #fff, 0 0 0 4px ${colors[i]}40`;
+    el.style.boxShadow = colors[i] ? `0 0 0 2px #fff, 0 0 0 4px ${colors[i]}40` : '';
   });
 
-  document.getElementById('brandImgPrompt').innerHTML = `<strong>Imagem DALL-E:</strong><br>"${b.imgPrompt || b.img_prompt_base || ''}"`; 
+    const imgP = b.imgPrompt || b.img_prompt_base || '';
+  document.getElementById('brandImgPrompt').innerHTML = imgP
+    ? `<strong>Base DALL-E:</strong><br><em style="color:#475569;font-size:11px">"${imgP.substring(0,120)}${imgP.length>120?'...':''}"</em>`
+    : `<em style="color:#94a3b8;font-size:12px">Sem prompt configurado — configure em Admin → Brand Kits</em>`;
 
   if (b.custom) {
     document.getElementById('brandCustomNote').style.display = '';
@@ -902,15 +908,7 @@ function selectBrand(id) {
   toast(`✅ Marca "${b.nome}" selecionada!`, 'success');
 }
 
-function getBrandBottleSvg(b) {
-  // Retorna emoji colorido representando o botijão
-  const colorMap = {
-    '#1B5FA6': '🔵', '#C8960C': '🟡', '#00833E': '🟢',
-    '#5A5A5A': '⚫', '#CC0000': '🔴', '#E05A00': '🟠',
-    '#7B3F00': '🟤', '#6366f1': '⭐'
-  };
-  return `<span style="font-size:40px">${colorMap[b.bottleColor] || '🫙'}</span>`;
-}
+// getBrandBottleSvg removida — substituída por logo_url ou emoji por brand_id
 
 async function loadConfig() {
   try {
