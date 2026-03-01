@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.0 — MoskoGás</title>
+<title>Config v2.13.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -33,8 +33,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.0 — config</div>
-  <h1>⚙️ Configurações v2.13.0</h1>
+  <div class="version-badge">v2.13.1 — config</div>
+  <h1>⚙️ Configurações v2.13.1</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -1434,12 +1434,22 @@ async function initMarketing() {
 }
 
 function mktConnectGoogle() {
-  showLoading('Redirecionando para o Google...');
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ Aguarde...';
   apiCall('/api/marketing/google/auth-url').then(r => {
-    hideLoading();
-    if (r && r.url) window.location.href = r.url;
-    else showToast('Erro ao gerar URL de autorização', 'error');
-  }).catch(() => { hideLoading(); showToast('Endpoint não disponível ainda', 'error'); });
+    if (r && r.url) {
+      window.location.href = r.url;
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<img src="https://www.google.com/favicon.ico" style="width:16px;vertical-align:middle;margin-right:6px"> Conectar com Google';
+      showToast('Erro ao gerar URL de autorização', 'error');
+    }
+  }).catch(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<img src="https://www.google.com/favicon.ico" style="width:16px;vertical-align:middle;margin-right:6px"> Conectar com Google';
+    showToast('Erro ao conectar', 'error');
+  });
 }
 
 function mktDisconnectGoogle() {
