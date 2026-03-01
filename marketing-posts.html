@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Posts Marketing v1.4.0 — MoskoGás</title>
+<title>Posts Marketing v1.4.1 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -116,7 +116,7 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.4.0 — marketing-posts</div>
+<div class="version-badge">v1.4.1 — marketing-posts</div>
 
 <div class="container">
 
@@ -747,7 +747,7 @@ async function generatePostImage(id, strategyOverride) {
   btn.disabled = false; btn.innerHTML = '🖼️ Gerar imagem';
 }
 
-function closeModal() { document.getElementById('modalPost').classList.remove('open'); }
+function closeModal(id) { document.getElementById(id || 'modalPost').classList.remove('open'); }
 
 // ══════════════════════════════════════════════════
 // GERAR COM IA
