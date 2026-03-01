@@ -1,4 +1,4 @@
-// v2.44.0
+// v2.44.0 
 // v2.44.0: Módulo Avaliação — deploy automático via GitHub Actions Pós-Compra — NPS WhatsApp, webhook IzChat, cron 2h, flag sem_avaliacao
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
 // v2.42.1
