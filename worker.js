@@ -1,6 +1,6 @@
-// v2.46.4
+// v2.46.5
+// v2.46.5: force redeploy — worker precisa ler MARKETING_GOOGLE_CLIENT_ID
 // v2.46.4: Marketing — try/catch para expor erro real do 500
-// v2.46.3: Marketing OAuth — corrige redirect URI para /api/marketing/oauth/callback
 // v2.45.4: Avaliação nota baixa — agente IA conversa com cliente (worker só alerta admin)
 // v2.45.3: mensagens reais MoskoGás + link Google Review configurado
 // v2.43.4: Vales — DELETE /api/vales/notas/:id (admin only)
