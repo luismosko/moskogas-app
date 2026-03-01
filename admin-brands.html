@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brand Kits v1.0.0 — MoskoGás Admin</title>
+<title>Brand Kits v1.1.0 — MoskoGás Admin</title>
 <script src="shared.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -108,7 +108,7 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.0.0 — admin-brands</div>
+<div class="version-badge">v1.1.0 — admin-brands</div>
 
 <div class="container">
 
@@ -252,12 +252,26 @@ label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margi
           <div>
             <label>Tipo da imagem</label>
             <select id="uploadTipo" style="width:auto">
-              <option value="logo">🏷️ Logo da marca</option>
-              <option value="botijao">🫙 Botijão (foto do produto)</option>
-              <option value="uniforme">👕 Entregador com uniforme</option>
-              <option value="veiculo">🚚 Veículo de entrega</option>
-              <option value="lifestyle">✨ Lifestyle / Família / Uso</option>
-              <option value="outro">📎 Outro</option>
+              <optgroup label="🏷️ Identidade">
+                <option value="logo">🏷️ Logo da marca</option>
+              </optgroup>
+              <optgroup label="🫙 Produtos — Botijões GLP">
+                <option value="p13">🔴 P13 — Botijão 13kg</option>
+                <option value="p20">🟠 P20 — Botijão 20kg</option>
+                <option value="p45">🟡 P45 — Botijão 45kg</option>
+                <option value="p5">⚪ P5 — Botijão 5kg (mini)</option>
+                <option value="botijao">🫙 Botijão geral (sem especificar)</option>
+              </optgroup>
+              <optgroup label="💧 Produtos — Água Mineral">
+                <option value="agua_20l">💧 Água Mineral 20L (garrafão)</option>
+                <option value="agua_garrafa">🍶 Água Mineral garrafa (500ml/1,5L)</option>
+              </optgroup>
+              <optgroup label="📸 Outros">
+                <option value="uniforme">👕 Entregador com uniforme</option>
+                <option value="veiculo">🚚 Veículo de entrega</option>
+                <option value="lifestyle">✨ Lifestyle / Família / Uso</option>
+                <option value="outro">📎 Outro</option>
+              </optgroup>
             </select>
           </div>
           <div style="flex:1;min-width:180px">
@@ -323,7 +337,7 @@ function renderBrands() {
     const logo = assets.find(a => a.tipo === 'logo');
     const previewAssets = assets.slice(0, 8);
 
-    const tipoLabel = { logo:'🏷️', botijao:'🫙', uniforme:'👕', veiculo:'🚚', lifestyle:'✨', outro:'📎' };
+    const tipoLabel = { logo:'🏷️', p13:'🔴', p20:'🟠', p45:'🟡', p5:'⚪', botijao:'🫙', agua_20l:'💧', agua_garrafa:'🍶', uniforme:'👕', veiculo:'🚚', lifestyle:'✨', outro:'📎' };
 
     return `
     <div class="brand-card" style="border-color:${b.bottle_color}40">
@@ -475,8 +489,8 @@ async function loadAssetsGallery(brandId) {
       gallery.innerHTML = '<div style="text-align:center;padding:30px;color:#475569">Nenhuma imagem ainda. Faça upload acima.</div>';
       return;
     }
-    const tipoLabel = { logo:'🏷️ Logo', botijao:'🫙 Botijão', uniforme:'👕 Uniforme', veiculo:'🚚 Veículo', lifestyle:'✨ Lifestyle', outro:'📎 Outro' };
-    const tipoClass = { logo:'tipo-logo', botijao:'tipo-botijao', uniforme:'tipo-uniforme', veiculo:'tipo-veiculo', lifestyle:'tipo-lifestyle', outro:'tipo-outro' };
+    const tipoLabel = { logo:'🏷️ Logo', p13:'🔴 P13', p20:'🟠 P20', p45:'🟡 P45', p5:'⚪ P5', botijao:'🫙 Botijão', agua_20l:'💧 Água 20L', agua_garrafa:'🍶 Água Garrafa', uniforme:'👕 Uniforme', veiculo:'🚚 Veículo', lifestyle:'✨ Lifestyle', outro:'📎 Outro' };
+    const tipoClass = { logo:'tipo-logo', p13:'tipo-botijao', p20:'tipo-botijao', p45:'tipo-botijao', p5:'tipo-botijao', botijao:'tipo-botijao', agua_20l:'tipo-lifestyle', agua_garrafa:'tipo-lifestyle', uniforme:'tipo-uniforme', veiculo:'tipo-veiculo', lifestyle:'tipo-lifestyle', outro:'tipo-outro' };
     gallery.innerHTML = assets.map(a => `
       <div style="background:#0f172a;border:1px solid #334155;border-radius:10px;overflow:hidden">
         <div style="aspect-ratio:1;overflow:hidden">
