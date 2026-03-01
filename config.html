@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.2 — MoskoGás</title>
+<title>Config v2.13.3 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -33,8 +33,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.2 — config</div>
-  <h1>⚙️ Configurações v2.13.2</h1>
+  <div class="version-badge">v2.13.3 — config</div>
+  <h1>⚙️ Configurações v2.13.3</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -1398,7 +1398,7 @@ function mktTab(tab) {
 async function initMarketing() {
   // Verifica status GMB
   try {
-    const r = await apiCall('/api/marketing/google/status');
+    const r = await api('/api/marketing/google/status');
     if (r && r.connected) {
       document.getElementById('mktGmbStatusIcon').textContent = '✅';
       document.getElementById('mktGmbStatusText').textContent = 'Conectado como ' + (r.email || '');
@@ -1415,7 +1415,7 @@ async function initMarketing() {
   }
   // Verifica status Meta
   try {
-    const r = await apiCall('/api/marketing/meta/status');
+    const r = await api('/api/marketing/meta/status');
     if (r && r.connected) {
       document.getElementById('mktSocialStatusIcon').textContent = '✅';
       document.getElementById('mktSocialStatusText').textContent = 'Conectado — Página: ' + (r.page_name || '');
@@ -1436,7 +1436,7 @@ async function initMarketing() {
 function mktConnectGoogle(btn) {
   btn.disabled = true;
   btn.textContent = '⏳ Aguarde...';
-  apiCall('/api/marketing/google/auth-url').then(r => {
+  api('/api/marketing/google/auth-url').then(r => {
     if (r && r.url) {
       window.location.href = r.url;
     } else {
@@ -1453,7 +1453,7 @@ function mktConnectGoogle(btn) {
 
 function mktDisconnectGoogle() {
   if (!confirm('Desconectar do Google?')) return;
-  apiCall('/api/marketing/google/disconnect', 'POST').then(() => {
+  api('/api/marketing/google/disconnect', 'POST').then(() => {
     showToast('Desconectado do Google', 'success');
     initMarketing();
   });
@@ -1461,7 +1461,7 @@ function mktDisconnectGoogle() {
 
 function mktConnectMeta() {
   showLoading('Redirecionando para o Facebook...');
-  apiCall('/api/marketing/meta/auth-url').then(r => {
+  api('/api/marketing/meta/auth-url').then(r => {
     hideLoading();
     if (r && r.url) window.location.href = r.url;
     else showToast('Erro ao gerar URL de autorização', 'error');
@@ -1474,7 +1474,7 @@ async function mktSuggestPost(context) {
   const hint = textarea.value || 'promoção de gás de cozinha';
   showLoading('Gerando texto com IA...');
   try {
-    const r = await apiCall('/api/marketing/suggest-post', 'POST', { context: hint, platform: context });
+    const r = await api('/api/marketing/suggest-post', 'POST', { context: hint, platform: context });
     hideLoading();
     if (r && r.text) { textarea.value = r.text; showToast('Texto gerado com IA!', 'success'); }
   } catch(e) { hideLoading(); showToast('Erro ao gerar texto', 'error'); }
@@ -1485,7 +1485,7 @@ async function mktPublishGmb() {
   if (!text) { showToast('Digite o texto do post', 'error'); return; }
   showLoading('Publicando no Google Meu Negócio...');
   try {
-    const r = await apiCall('/api/marketing/gmb/post', 'POST', { text });
+    const r = await api('/api/marketing/gmb/post', 'POST', { text });
     hideLoading();
     if (r && r.ok) { showToast('Post publicado no GMB!', 'success'); document.getElementById('mktGmbPostText').value = ''; }
     else showToast(r?.error || 'Erro ao publicar', 'error');
@@ -1501,7 +1501,7 @@ async function mktPublishSocial() {
   if (!fb && !ig && !gmb) { showToast('Selecione ao menos uma plataforma', 'error'); return; }
   showLoading('Publicando...');
   try {
-    const r = await apiCall('/api/marketing/social/post', 'POST', { text, facebook: fb, instagram: ig, gmb });
+    const r = await api('/api/marketing/social/post', 'POST', { text, facebook: fb, instagram: ig, gmb });
     hideLoading();
     if (r && r.ok) { showToast('Post publicado!', 'success'); document.getElementById('mktSocialPostText').value = ''; }
     else showToast(r?.error || 'Erro ao publicar', 'error');
@@ -1516,7 +1516,7 @@ async function mktLoadReviews() {
   const el = document.getElementById('mktReviewsList');
   el.innerHTML = '⏳ Carregando...';
   try {
-    const r = await apiCall('/api/marketing/gmb/reviews');
+    const r = await api('/api/marketing/gmb/reviews');
     if (r && r.reviews && r.reviews.length > 0) {
       el.innerHTML = r.reviews.map(rv => `
         <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px">
@@ -1537,7 +1537,7 @@ async function mktLoadReviews() {
 function mktReplyReview(reviewId) {
   const text = prompt('Digite sua resposta:');
   if (!text) return;
-  apiCall('/api/marketing/gmb/reviews/' + reviewId + '/reply', 'POST', { text }).then(r => {
+  api('/api/marketing/gmb/reviews/' + reviewId + '/reply', 'POST', { text }).then(r => {
     if (r && r.ok) { showToast('Resposta enviada!', 'success'); mktLoadReviews(); }
     else showToast('Erro ao responder', 'error');
   });
