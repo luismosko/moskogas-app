@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MoskoGás — Avaliações v1.0.0</title>
-  <script src="shared.js"></script>
+  <title>MoskoGás — Avaliações v1.2.0</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; color: #1a202c; min-height: 100vh; }
@@ -17,7 +16,6 @@
 
     .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 
-    /* STATS CARDS */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
     .stat-card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); border-left: 4px solid #ddd; }
     .stat-card.blue { border-color: #3b82f6; }
@@ -29,7 +27,6 @@
     .stat-value { font-size: 28px; font-weight: 800; line-height: 1; }
     .stat-sub { font-size: 12px; color: #9ca3af; margin-top: 4px; }
 
-    /* CHART */
     .chart-card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 24px; }
     .chart-title { font-size: 15px; font-weight: 700; color: #374151; margin-bottom: 16px; }
     .chart-bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding-top: 8px; }
@@ -51,7 +48,6 @@
     .nota-bar-label { font-size: 10px; color: #6b7280; }
     .nota-bar-count { font-size: 13px; font-weight: 700; }
 
-    /* TABS / FILTERS */
     .filters-bar { background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .filter-tabs { display: flex; background: #f3f4f6; border-radius: 8px; padding: 3px; gap: 2px; }
     .filter-tab { border: none; background: none; padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; color: #6b7280; font-weight: 500; transition: all .2s; }
@@ -67,10 +63,7 @@
     .btn-sm { padding: 5px 10px; font-size: 12px; }
     .spacer { flex: 1; }
 
-    /* TABLE */
     .table-card { background: #fff; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
-    .table-header { padding: 16px 20px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 10px; }
-    .table-title { font-size: 15px; font-weight: 700; color: #374151; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #f9fafb; padding: 10px 14px; text-align: left; font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
     td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; font-size: 13px; vertical-align: middle; }
@@ -92,7 +85,6 @@
 
     .alert-badge { display: inline-flex; align-items: center; gap: 4px; background: #fee2e2; color: #b91c1c; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
 
-    /* MODAL */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
     .modal-overlay.active { display: flex; }
     .modal { background: #fff; border-radius: 16px; padding: 28px; max-width: 580px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
@@ -117,23 +109,19 @@
     .toggle-switch input:checked + .toggle-track::after { left: 20px; }
     .toggle-label { font-size: 14px; font-weight: 500; }
 
-    /* EMPTY STATE */
     .empty-state { text-align: center; padding: 60px 20px; color: #9ca3af; }
     .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
     .empty-state p { font-size: 15px; }
 
-    /* LOADING */
     .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: #6b7280; gap: 10px; }
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-    /* PAGINATION */
     .pagination { display: flex; justify-content: center; gap: 6px; padding: 16px; }
     .page-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 7px; padding: 6px 12px; font-size: 13px; cursor: pointer; transition: all .2s; }
     .page-btn:hover { background: #f3f4f6; }
     .page-btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
 
-    /* WEBHOOK INFO BOX */
     .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
     .info-box-title { font-size: 13px; font-weight: 700; color: #1d4ed8; margin-bottom: 6px; }
     .info-box-body { font-size: 12px; color: #1e40af; line-height: 1.6; }
@@ -148,11 +136,13 @@
   </style>
 </head>
 <body>
+  <div id="nav-placeholder"></div>
+
   <!-- TOPBAR -->
   <div class="topbar">
     <button class="topbar-back" onclick="window.location.href='gestao.html'" title="Voltar">← Voltar</button>
     <div class="topbar-title">⭐ Avaliações Pós-Compra</div>
-    <div class="version-badge">v1.0.0</div>
+    <div class="version-badge">v1.2.0</div>
     <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:none" onclick="abrirConfig()" title="Configurações">⚙️ Config</button>
     <button class="btn btn-success btn-sm" onclick="executarCron()" title="Executar cron agora">▶ Rodar Cron</button>
   </div>
@@ -180,9 +170,7 @@
     <!-- CHART NOTAS -->
     <div class="chart-card">
       <div class="chart-title">📊 Distribuição de Notas</div>
-      <div class="chart-nota-bars" id="notaBars">
-        <!-- JS preenchido -->
-      </div>
+      <div class="chart-nota-bars" id="notaBars"></div>
     </div>
 
     <!-- CHART TENDÊNCIA -->
@@ -307,24 +295,20 @@
     </div>
   </div>
 
+  <script src="shared.js"></script>
   <script>
-    // ─── GLOBALS ───────────────────────────────────────────────
+    // v1.2.0
+    document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
     let currentTab = 'all';
     let currentPage = 1;
     let configData = {};
 
-    // ─── INIT ──────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
-      await checkAuth();
+      checkAuth(['admin', 'atendente']);
       carregarAvaliacoes(1);
     });
 
-    async function checkAuth() {
-      const token = localStorage.getItem('mg_session_token');
-      if (!token) { window.location.href = 'login.html'; return; }
-    }
-
-    // ─── TABS ──────────────────────────────────────────────────
     function setTab(tab, el) {
       currentTab = tab;
       document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
@@ -332,7 +316,6 @@
       carregarAvaliacoes(1);
     }
 
-    // ─── CARREGAR AVALIAÇÕES ───────────────────────────────────
     async function carregarAvaliacoes(page = 1) {
       currentPage = page;
       document.getElementById('tableContent').innerHTML = '<div class="loading"><span class="spin">⏳</span> Carregando...</div>';
@@ -346,14 +329,9 @@
       if (desde) params.set('desde', desde);
       if (ate) params.set('ate', ate);
 
-      const token = localStorage.getItem('mg_session_token');
       try {
-        const res = await fetch(`https://api.moskogas.com.br/api/avaliacoes?${params}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await res.json();
+        const data = await api(`/api/avaliacoes?${params}`);
 
-        // Filtro local para notas baixas
         let rows = data.surveys || [];
         if (currentTab === 'answered_low') rows = rows.filter(r => r.score !== null && r.score < 5);
 
@@ -368,7 +346,6 @@
       }
     }
 
-    // ─── RENDER STATS ──────────────────────────────────────────
     function renderStats(s) {
       if (!s) return;
       const resp = s.respondidas || 0;
@@ -406,7 +383,7 @@
       const maxEnv = Math.max(...serie.map(d => d.enviadas), 1);
       el.innerHTML = serie.slice(-20).map(d => {
         const h = Math.max(8, Math.round(d.enviadas / maxEnv * 110));
-        const dia = d.dia?.slice(5); // MM-DD
+        const dia = d.dia?.slice(5);
         return `
           <div class="chart-bar-wrap">
             <div class="chart-bar" style="height:${h}px;background:${d.media_dia >= 4.5 ? '#10b981' : d.media_dia >= 3.5 ? '#f59e0b' : '#ef4444'}">
@@ -417,7 +394,6 @@
       }).join('');
     }
 
-    // ─── RENDER TABELA ─────────────────────────────────────────
     function renderTabela(rows, total, pages) {
       if (!rows.length) {
         document.getElementById('tableContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Nenhuma avaliação encontrada</p></div>';
@@ -447,7 +423,6 @@
 
       document.getElementById('tableContent').innerHTML = html;
 
-      // Paginação
       const pags = [];
       for (let i = 1; i <= Math.min(pages, 10); i++) {
         pags.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="carregarAvaliacoes(${i})">${i}</button>`);
@@ -463,9 +438,7 @@
       const statusLabel = { sent: '⏳ Aguardando', answered: '✅ Respondida', expired: '⌛ Expirada' }[r.status] || r.status;
       const datEnv = r.sent_at ? new Date(r.sent_at * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
       const datResp = r.answered_at ? new Date(r.answered_at * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-
-      const alertaBadge = (r.score !== null && r.score < 5 && r.status === 'answered')
-        ? '<span class="alert-badge">⚠️ Baixa</span>' : '';
+      const alertaBadge = (r.score !== null && r.score < 5 && r.status === 'answered') ? '<span class="alert-badge">⚠️ Baixa</span>' : '';
       const googleBadge = r.google_link_sent ? '<span style="font-size:11px;color:#059669">🔗 Google</span>' : '';
 
       return `<tr>
@@ -491,7 +464,6 @@
     function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     function formatPhone(p) { if (!p) return ''; const d = p.replace(/\D/g,''); if (d.length >= 12) return `(${d.slice(2,4)}) ${d.slice(4,9)}-${d.slice(9)}`; return p; }
 
-    // ─── AÇÕES ─────────────────────────────────────────────────
     function enviarPedido(orderId) {
       document.getElementById('envioOrderId').value = orderId;
       document.getElementById('modalEnvio').classList.add('active');
@@ -499,57 +471,36 @@
 
     async function enviarManual() {
       const orderId = document.getElementById('envioOrderId').value;
-      if (!orderId) { showToast('Informe o número do pedido', 'warning'); return; }
-      const token = localStorage.getItem('mg_session_token');
+      if (!orderId) { toast('Informe o número do pedido', 'warning'); return; }
       try {
-        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/enviar', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_id: parseInt(orderId) })
-        });
-        const d = await res.json();
-        if (d.ok) { showToast('✅ Avaliação enviada!', 'success'); fecharModal('modalEnvio'); carregarAvaliacoes(currentPage); }
-        else showToast('❌ ' + (d.error || 'Erro'), 'error');
-      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+        const d = await api('/api/avaliacoes/enviar', { method: 'POST', body: JSON.stringify({ order_id: parseInt(orderId) }) });
+        if (d.ok) { toast('✅ Avaliação enviada!', 'success'); fecharModal('modalEnvio'); carregarAvaliacoes(currentPage); }
+        else toast('❌ ' + (d.error || 'Erro'), 'error');
+      } catch (e) { toast('❌ Erro: ' + e.message, 'error'); }
     }
 
-    async function toggleSemAvaliacao(phone, btn) {
+    async function toggleSemAvaliacao(phone) {
       if (!confirm('Desativar/ativar avaliação automática para este cliente?')) return;
-      const token = localStorage.getItem('mg_session_token');
       try {
-        const res = await fetch(`https://api.moskogas.com.br/api/avaliacoes/cliente/${phone}/toggle`, {
-          method: 'PATCH',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const d = await res.json();
+        const d = await api(`/api/avaliacoes/cliente/${phone}/toggle`, { method: 'PATCH' });
         if (d.ok) {
-          showToast(d.sem_avaliacao ? '🚫 Avaliação desativada para este cliente' : '✅ Avaliação reativada', 'success');
+          toast(d.sem_avaliacao ? '🚫 Avaliação desativada' : '✅ Avaliação reativada', 'success');
           carregarAvaliacoes(currentPage);
-        } else showToast('❌ ' + (d.error || 'Erro'), 'error');
-      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+        } else toast('❌ ' + (d.error || 'Erro'), 'error');
+      } catch (e) { toast('❌ Erro: ' + e.message, 'error'); }
     }
 
     async function executarCron() {
-      const token = localStorage.getItem('mg_session_token');
       try {
-        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/enviar-cron', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const d = await res.json();
-        if (d.ok) { showToast('▶ Cron executado!', 'success'); setTimeout(() => carregarAvaliacoes(currentPage), 1500); }
-        else showToast('❌ ' + (d.error || 'Sem permissão'), 'error');
-      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+        const d = await api('/api/avaliacoes/enviar-cron', { method: 'POST' });
+        if (d.ok) { toast('▶ Cron executado!', 'success'); setTimeout(() => carregarAvaliacoes(currentPage), 1500); }
+        else toast('❌ ' + (d.error || 'Sem permissão'), 'error');
+      } catch (e) { toast('❌ Erro: ' + e.message, 'error'); }
     }
 
-    // ─── CONFIG ────────────────────────────────────────────────
     async function abrirConfig() {
-      const token = localStorage.getItem('mg_session_token');
       try {
-        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/config', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        configData = await res.json();
+        configData = await api('/api/avaliacoes/config');
         document.getElementById('cfgAtivo').checked = configData.ativo !== false;
         document.getElementById('cfgDelay').value = configData.delay_horas || 2;
         document.getElementById('cfgHoraInicio').value = configData.horario_inicio ?? 8;
@@ -560,11 +511,10 @@
         document.getElementById('cfgMsgNegativa').value = configData.mensagem_negativa || '';
         document.getElementById('cfgMsgAdmin').value = configData.mensagem_admin || '';
         document.getElementById('modalConfig').classList.add('active');
-      } catch (e) { showToast('❌ Erro ao carregar config: ' + e.message, 'error'); }
+      } catch (e) { toast('❌ Erro ao carregar config: ' + e.message, 'error'); }
     }
 
     async function salvarConfig() {
-      const token = localStorage.getItem('mg_session_token');
       const cfg = {
         ativo: document.getElementById('cfgAtivo').checked,
         cron_ativo: true,
@@ -578,32 +528,13 @@
         mensagem_admin: document.getElementById('cfgMsgAdmin').value.trim(),
       };
       try {
-        const res = await fetch('https://api.moskogas.com.br/api/avaliacoes/config', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(cfg)
-        });
-        const d = await res.json();
-        if (d.ok) { showToast('✅ Configurações salvas!', 'success'); fecharModal('modalConfig'); }
-        else showToast('❌ ' + (d.error || 'Erro'), 'error');
-      } catch (e) { showToast('❌ Erro: ' + e.message, 'error'); }
+        const d = await api('/api/avaliacoes/config', { method: 'POST', body: JSON.stringify(cfg) });
+        if (d.ok) { toast('✅ Configurações salvas!', 'success'); fecharModal('modalConfig'); }
+        else toast('❌ ' + (d.error || 'Erro'), 'error');
+      } catch (e) { toast('❌ Erro: ' + e.message, 'error'); }
     }
 
-    // ─── MODAIS ────────────────────────────────────────────────
     function fecharModal(id) { document.getElementById(id).classList.remove('active'); }
-
-    // ─── TOAST ────────────────────────────────────────────────
-    function showToast(msg, type = 'info') {
-      const colors = { success: '#059669', error: '#dc2626', warning: '#d97706', info: '#1d4ed8' };
-      const t = document.createElement('div');
-      t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;background:${colors[type]||colors.info};color:#fff;padding:14px 20px;border-radius:12px;font-size:15px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.25);animation:slideIn .3s ease;max-width:380px`;
-      t.textContent = msg;
-      const style = document.createElement('style');
-      style.textContent = '@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}';
-      document.head.appendChild(style);
-      document.body.appendChild(t);
-      setTimeout(() => t.remove(), 3500);
-    }
   </script>
 </body>
 </html>
