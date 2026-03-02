@@ -1,4 +1,5 @@
-// v2.49.3
+// v2.49.4
+// v2.49.4: try/catch global no fetch handler + validação env.DB binding na inicialização
 // v2.49.3: post_templates image upload direto R2, card com trocar foto inline
 // v2.49.2: fix requireAuth sem await em todos endpoints /api/avaliacoes
 // v2.49.1: avaliacoes/enviar-cron — ensureAvaliacaoTables antes de rodar
@@ -1644,9 +1645,18 @@ async function ensureValesTables(env) {
 
 export default {
   async fetch(request, env, ctx) {
+    try {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+
+    // Verificar bindings críticos
+    if (!env.DB) {
+      console.error('[CRITICAL] D1 binding DB não encontrado! Verificar bindings no Cloudflare.');
+      return new Response(JSON.stringify({ error: 'Banco de dados não configurado. Contate o administrador.', code: 'MISSING_DB_BINDING' }), {
+        status: 503, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
 
     if (path.startsWith('/api/address') || path.startsWith('/api/streets')) {
       try {
@@ -6987,6 +6997,13 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
     }
 
     return err(`Not found (${method} ${path})`, 404);
+
+    } catch (globalErr) {
+      console.error('[GLOBAL FETCH ERROR]', globalErr.message, globalErr.stack);
+      return new Response(JSON.stringify({ error: 'Erro interno no servidor: ' + globalErr.message }), {
+        status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
   },
 
   async scheduled(event, env, ctx) {
