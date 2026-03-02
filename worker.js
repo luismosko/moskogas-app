@@ -1,4 +1,5 @@
-// v2.49.5
+// v2.49.6
+// v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
 // v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
 // v2.49.4: try/catch global no fetch handler + validação env.DB binding na inicialização
 // v2.49.3: post_templates image upload direto R2, card com trocar foto inline
@@ -1928,9 +1929,21 @@ export default {
 
     if (method === 'GET' && path === '/bling/ping') {
       try {
-        const resp = await blingFetch('/contatos?limite=1', {}, env);
-        return json({ ok: resp.ok, status: resp.status });
-      } catch (e) { return json({ ok: false, error: e.message }, 500); }
+        const row = await getTokenRow(env);
+        if (!row || !row.access_token) return json({ ok: false, error: 'no_token' });
+        const now = Math.floor(Date.now() / 1000);
+        const expiresAt = (row.obtained_at || 0) + (row.expires_in || 3600);
+        const minutesLeft = Math.floor((expiresAt - now) / 60);
+        // Se ainda tem mais de 10 min, retorna ok SEM chamar API Bling (evita barra vermelha por rate limit/latência)
+        if (minutesLeft > 10) return json({ ok: true, minutesLeft });
+        // Próximo de vencer: valida e tenta renovar
+        try {
+          const newToken = await refreshBlingToken(env, row.refresh_token);
+          const newRow = await getTokenRow(env);
+          const ml2 = Math.floor(((newRow.obtained_at || 0) + (newRow.expires_in || 3600) - now) / 60);
+          return json({ ok: true, minutesLeft: ml2, refreshed: true });
+        } catch (re) { return json({ ok: false, error: 'refresh_failed: ' + re.message }); }
+      } catch (e) { return json({ ok: false, error: e.message }); }
     }
 
     if (method === 'GET' && path === '/bling/oauth/start') {
