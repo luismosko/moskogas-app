@@ -1,4 +1,5 @@
-// v2.49.6
+// v2.49.7
+// v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
 // v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
 // v2.49.4: try/catch global no fetch handler + validação env.DB binding na inicialização
@@ -7213,48 +7214,28 @@ async function ensureAvaliacaoTables(env) {
 // Criar oportunidade no CRM IzChat para rastrear avaliação
 async function criarOportunidadeCRM(env, survey, config) {
   try {
-    const companyToken = env.IZCHAT_COMPANY_TOKEN;
-    if (!companyToken) { console.log('[crm] IZCHAT_COMPANY_TOKEN não configurado'); return null; }
+    // Usa IZCHAT_TOKEN (company token) — pipeline "Pós Venda - Avaliação" ID=4
+    const companyToken = env.IZCHAT_COMPANY_TOKEN || env.IZCHAT_TOKEN;
+    if (!companyToken) { console.log('[crm] Token IzChat não configurado'); return null; }
 
-    // Buscar pipelines para pegar o ID correto do pipeline de avaliação
-    const pipelinesRes = await fetch('https://chatapi.izchat.com.br/api/external/pipelines', {
-      headers: { 'Authorization': `Bearer ${companyToken}` }
-    });
-    const pipelinesData = await pipelinesRes.json();
-    const pipelines = pipelinesData?.data?.pipelines || pipelinesData?.pipelines || [];
-    const pipeline = pipelines.find(p => p.name?.toLowerCase().includes('avalia') || p.name?.toLowerCase().includes('pós venda') || p.name?.toLowerCase().includes('pos venda'));
-    if (!pipeline) { console.log('[crm] Pipeline de avaliação não encontrado'); return null; }
-
-    // Primeira etapa = "Avaliação Interna" (onde entra ao enviar)
-    const firstStage = pipeline.stages?.[0] || pipeline.lanes?.[0];
-    if (!firstStage) { console.log('[crm] Etapas do pipeline não encontradas'); return null; }
-
-    // Buscar ou criar contato
-    const phoneSearch = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/search?phone=${survey.phone_digits}`, {
-      headers: { 'Authorization': `Bearer ${companyToken}` }
-    });
-    const phoneData = await phoneSearch.json();
-    const contact = phoneData?.data?.contact || phoneData?.contact;
-    const contactId = contact?.id;
-
-    // Criar oportunidade
-    const oppBody = {
-      title: `Avaliação #${survey.order_id} — ${survey.customer_name || survey.phone_digits}`,
-      pipeline_id: pipeline.id,
-      stage_id: firstStage.id,
-      contact_id: contactId || undefined,
-      value: 0,
-    };
+    const phone = survey.phone_digits.startsWith('55') ? survey.phone_digits : `55${survey.phone_digits}`;
 
     const oppRes = await fetch('https://chatapi.izchat.com.br/api/external/crm/opportunity', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${companyToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(oppBody)
+      body: JSON.stringify({
+        phone,
+        pipelineId: 4, // Pipeline "Pós Venda - Avaliação"
+        name: survey.customer_name || phone,
+        observations: `Pedido #${survey.order_id} — Avaliação enviada automaticamente`,
+        leadTemperature: 'Morno',
+      })
     });
     const oppData = await oppRes.json();
+    console.log('[crm] Resposta:', JSON.stringify(oppData).slice(0, 200));
     const oppId = oppData?.data?.opportunity?.id || oppData?.opportunity?.id || oppData?.id;
-    console.log(`[crm] Oportunidade criada: ${oppId} para pedido #${survey.order_id}`);
-    return String(oppId);
+    console.log(`[crm] ✅ Oportunidade criada/atualizada: ${oppId} para pedido #${survey.order_id}`);
+    return oppId ? String(oppId) : null;
   } catch (e) {
     console.error('[crm] Erro ao criar oportunidade:', e.message);
     return null;
@@ -7434,9 +7415,8 @@ async function processarRespostaAvaliacao(env, phoneDigits, mensagemTexto) {
       await env.DB.prepare('UPDATE satisfaction_surveys SET google_link_sent=1 WHERE id=?').bind(survey.id).run();
       console.log(`[avaliacao-webhook] ⭐ Score 5 para pedido #${survey.order_id} — link Google enviado`);
     } else {
-      // Enviar mensagem de follow-up ao cliente
-      const msgCliente = montarMensagemAvaliacao(config.mensagem_negativa, { nome: nomeCliente });
-      await sendWhatsApp(env, phoneIntl, msgCliente, { category: 'avaliacao' });
+      // Nota < 5: NÃO enviar follow-up ao cliente (não encher o saco)
+      // Apenas alertar admins
       await env.DB.prepare('UPDATE satisfaction_surveys SET follow_up_sent=1 WHERE id=?').bind(survey.id).run();
 
       // Alertar admins
