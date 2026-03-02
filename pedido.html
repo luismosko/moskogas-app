@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.24</title>
+<title>Novo Pedido — MoskoGás v2.11.25</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.24 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.25 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.24</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.25</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -205,7 +205,7 @@
         <button type="button" id="btn-data-amanha" onclick="setDataPedido(1)" style="padding:6px 12px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;color:#374151;font-size:12px;font-weight:700;cursor:pointer">🌅 Amanhã</button>
         <button type="button" id="btn-data-dois"   onclick="setDataPedido(2)" style="padding:6px 12px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;color:#374151;font-size:12px;font-weight:700;cursor:pointer">📆 +2 dias</button>
         <input type="date" id="data-pedido-input" oninput="onDataPedidoInput()"
-          style="padding:5px 8px;border-radius:6px;border:2px solid #e2e8f0;font-size:12px;color:#374151;font-family:inherit">
+          style="padding:5px 8px;border-radius:6px;border:2px solid #e2e8f0;font-size:12px;color:#374151;font-family:inherit;flex:1;min-width:130px;max-width:160px">
         <span id="data-pedido-label" style="font-size:11px;color:#6366f1;font-weight:700;display:none"></span>
       </div>
     </div>
