@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.9.9 — MoskoGás</title>
+<title>Gestão v2.9.1 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.9</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.1</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -147,7 +147,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.9
+// v2.9.1
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -256,7 +256,8 @@ async function _load() {
   if (dateFrom || dateTo) {
     rows = rows.filter(r => {
       if (!r.created_at) return true;
-      const d = new Date(r.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+      // v2.9.1: usa data_pedido se disponível, senão created_at
+      const d = r.data_pedido || new Date(r.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
       if (dateFrom && d < dateFrom) return false;
       if (dateTo   && d > dateTo)   return false;
       return true;
@@ -290,6 +291,16 @@ function renderTable(rows) {
     const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
     const hora  = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
     const dataHora = o.created_at ? new Date(o.created_at * 1000).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:'America/Campo_Grande'}) + ' ' + hora : '—';
+    // v2.9.1: Badge para pedidos agendados (data_pedido diferente de hoje)
+    const _hoje = todayCG();
+    const _dataPedido = o.data_pedido || null;
+    const _isAgendado = _dataPedido && _dataPedido !== _hoje;
+    const _dataBadge = _isAgendado ? (() => {
+      const [y,m,d] = _dataPedido.split('-');
+      const _amanha = (() => { const dt = new Date(); dt.setDate(dt.getDate()+1); return dt.toLocaleDateString('sv-SE',{timeZone:'America/Campo_Grande'}); })();
+      const _label = _dataPedido === _amanha ? '🌅 Amanhã' : `📆 ${d}/${m}`;
+      return `<span style="display:inline-block;background:#ede9fe;color:#4f46e5;border:1px solid #c4b5fd;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px" title="Pedido agendado para ${d}/${m}/${y}">${_label}</span>`;
+    })() : '';
     const nomeExibir = (o.customer_name||'').length > 50 ? (o.customer_name||'').substring(0,50)+'…' : (o.customer_name||'');
 
     const pgtoLabels = { dinheiro:'💵 Din', pix_vista:'✅ PIX Pago', pix_receber:'⏳ PIX Rec.', debito:'💳 Déb', credito:'💳 Créd', mensalista:'📅 Mensal', boleto:'🧾 Boleto', nfe:'📄 NFe' };
@@ -310,7 +321,7 @@ function renderTable(rows) {
       <td><strong style="color:#6366f1">#${o.id}</strong></td>
       <td style="white-space:nowrap">${dataHora}</td>
       <td title="${o.customer_name||''}">
-        <div style="font-weight:700;color:#1e293b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nomeExibir}</div>
+        <div style="font-weight:700;color:#1e293b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nomeExibir}${_dataBadge}</div>
         <div style="font-size:11px;color:#64748b">${o.phone_digits || ''}</div>
       </td>
       <td>

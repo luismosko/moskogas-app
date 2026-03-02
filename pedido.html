@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.23</title>
+<title>Novo Pedido — MoskoGás v2.11.24</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.23 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.24 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.23</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.24</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -196,6 +196,20 @@
       <label>📝 Observação (opcional)</label>
       <textarea id="notes" placeholder="Urgente, troco para..." style="height:40px"></textarea>
     </div>
+
+    <!-- v2.11.23: DATA DO PEDIDO -->
+    <div style="margin-bottom:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1.5px solid #e2e8f0">
+      <label style="font-size:12px;font-weight:800;color:#374151;letter-spacing:.4px;margin-bottom:6px;display:block">📅 DATA DO PEDIDO</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button type="button" id="btn-data-hoje"   onclick="setDataPedido(0)" style="padding:6px 12px;border-radius:6px;border:2px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:700;cursor:pointer">📅 Hoje</button>
+        <button type="button" id="btn-data-amanha" onclick="setDataPedido(1)" style="padding:6px 12px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;color:#374151;font-size:12px;font-weight:700;cursor:pointer">🌅 Amanhã</button>
+        <button type="button" id="btn-data-dois"   onclick="setDataPedido(2)" style="padding:6px 12px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;color:#374151;font-size:12px;font-weight:700;cursor:pointer">📆 +2 dias</button>
+        <input type="date" id="data-pedido-input" oninput="onDataPedidoInput()"
+          style="padding:5px 8px;border-radius:6px;border:2px solid #e2e8f0;font-size:12px;color:#374151;font-family:inherit">
+        <span id="data-pedido-label" style="font-size:11px;color:#6366f1;font-weight:700;display:none"></span>
+      </div>
+    </div>
+
     <label style="font-size:12px;font-weight:800;color:#4f46e5;letter-spacing:.5px">💳 PAGAMENTO <span style="color:#dc2626">*</span></label>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px" id="pgto-grid">
       <button type="button" class="tipo-pgto-btn" data-tipo="dinheiro"     data-key="dinheiro" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💵 Dinheiro</button>
@@ -528,6 +542,69 @@ async function selectCustomer(i) {
 let currentPhone = '';
 let allAddresses = [];
 let _lastOrderData = null;
+
+// ── Data do Pedido (v2.11.23) ────────────────────────────────
+function dataCGOffset(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+}
+function setDataPedido(offset) {
+  const dt = dataCGOffset(offset);
+  document.getElementById('data-pedido-input').value = dt;
+  _atualizarBotoesData(offset, dt);
+}
+function onDataPedidoInput() {
+  const val = document.getElementById('data-pedido-input').value;
+  const hoje = dataCGOffset(0);
+  const amanha = dataCGOffset(1);
+  const doisDias = dataCGOffset(2);
+  if (val < hoje) {
+    // Bloqueia data passada
+    document.getElementById('data-pedido-input').value = hoje;
+    _atualizarBotoesData(0, hoje);
+    toast('⚠️ Não é possível agendar para data passada', 'error');
+    return;
+  }
+  let offset = null;
+  if (val === hoje) offset = 0;
+  else if (val === amanha) offset = 1;
+  else if (val === doisDias) offset = 2;
+  _atualizarBotoesData(offset, val);
+}
+function _atualizarBotoesData(offset, dt) {
+  const hoje = dataCGOffset(0);
+  const btns = [
+    { id: 'btn-data-hoje',   off: 0 },
+    { id: 'btn-data-amanha', off: 1 },
+    { id: 'btn-data-dois',   off: 2 },
+  ];
+  btns.forEach(b => {
+    const el = document.getElementById(b.id);
+    const sel = b.off === offset;
+    el.style.borderColor = sel ? '#10b981' : '#e2e8f0';
+    el.style.background  = sel ? '#d1fae5' : '#f8fafc';
+    el.style.color       = sel ? '#065f46' : '#374151';
+  });
+  const lbl = document.getElementById('data-pedido-label');
+  if (offset === null) {
+    // Data personalizada
+    const parts = dt.split('-');
+    lbl.textContent = `📅 ${parts[2]}/${parts[1]}/${parts[0]}`;
+    lbl.style.display = 'inline';
+    lbl.style.color = '#f97316';
+  } else if (offset === 0) {
+    lbl.style.display = 'none';
+  } else {
+    const parts = dt.split('-');
+    lbl.textContent = `📅 ${parts[2]}/${parts[1]}/${parts[0]}`;
+    lbl.style.display = 'inline';
+    lbl.style.color = '#6366f1';
+  }
+}
+function getDataPedido() {
+  return document.getElementById('data-pedido-input').value || dataCGOffset(0);
+}
 
 // ── Último pedido do cliente ──────────────────────────────────
 async function loadLastOrder(phone) {
@@ -1149,6 +1226,7 @@ async function saveOrder() {
         forma_pagamento_key: document.getElementById('forma_pagamento_key').value,
         bling_contact_id: isConsumidorFinal ? CONSUMIDOR_FINAL_BLING_ID : (window._lastBlingContactId || null),
         empenho_id: window._empenhoSelecionado?.id || null,
+        data_pedido: getDataPedido(),
       }),
     });
 
@@ -1200,6 +1278,8 @@ async function saveOrder() {
       // Reativar botão
       btn.disabled = false;
       btn.textContent = '✅ SALVAR PEDIDO';
+      // v2.11.23: Reset data pedido para hoje
+      setDataPedido(0);
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
       // v2.11.22: Restaurar favoritos originais
@@ -1219,8 +1299,11 @@ async function saveOrder() {
 }
 
 renderItems();
-
-// ── Modal dados completos Bling ───────────────────────────────────
+// v2.11.23: Inicializa data do pedido como hoje
+setDataPedido(0);
+// Bloquear seleção de data passada
+const _dpInput = document.getElementById('data-pedido-input');
+if (_dpInput) _dpInput.min = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
 async function abrirModalDadosBling() {
   const blingId = window._lastBlingContactId;
   if (!blingId) return;
