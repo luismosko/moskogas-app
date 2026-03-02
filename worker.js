@@ -1,4 +1,4 @@
-// v2.49.7
+// v2.49.8
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
 // v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
@@ -1836,7 +1836,8 @@ export default {
 
     if (method === 'POST' && path === '/api/address/save') {
       const b = await request.json();
-      const phone = (b.phone_digits || '').replace(/\D/g, '');
+      // v2.43.5: aceita phone real (só dígitos) OU bling_contact_id como chave de endereço
+      const phone = (b.phone_digits || '').trim();
       if (!phone || !b.address_line) return json({ error: 'phone e address obrigatórios' }, 400);
       await env.DB.prepare(`INSERT INTO customer_addresses (phone_digits, obs, address_line, bairro, complemento, referencia) VALUES (?, ?, ?, ?, ?, ?)`).bind(phone, b.obs || '', b.address_line, b.bairro || '', b.complemento || '', b.referencia || '').run();
       return json({ ok: true });

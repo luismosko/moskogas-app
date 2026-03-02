@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.22</title>
+<title>Novo Pedido — MoskoGás v2.11.23</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.22 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.23 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.22</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.23</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -416,6 +416,13 @@ function clearSearch(inputId) {
 
 async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
+  // v2.11.23: Reset imediato ao trocar cliente — evita endereços do cliente anterior
+  currentPhone = '';
+  allAddresses = [];
+  const _addrBadge = document.getElementById('addr-count-badge');
+  if (_addrBadge) _addrBadge.textContent = '0';
+  const _addrBar = document.getElementById('multi-addr-bar');
+  if (_addrBar) _addrBar.style.display = 'none';
   document.getElementById('cName').value   = c.name || c.customer_name || '';
   document.getElementById('cPhone').value  = c.phone_digits || '';
   // Preenche rua e numero separados
@@ -452,8 +459,9 @@ async function selectCustomer(i) {
       }
     } catch(e) {}
   }
-  // Carrega endereços múltiplos
-  if (c.phone_digits) loadSavedAddresses(c.phone_digits);
+  // Carrega endereços múltiplos (fallback para bling_contact_id se sem phone)
+  const _addrKey = c.phone_digits || (c.bling_contact_id ? String(c.bling_contact_id) : null);
+  if (_addrKey) loadSavedAddresses(_addrKey);
   // Carrega último pedido (exceto Consumidor Final)
   const nome = (c.name || c.customer_name || '').toUpperCase();
   // Botão vincular ao Bling — só aparece se cliente não tem bling_contact_id
