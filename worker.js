@@ -1,4 +1,5 @@
-// v2.49.11
+// v2.49.12
+// v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
 // v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
@@ -7021,6 +7022,179 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
       }
 
       return err(`post-templates endpoint não encontrado (${method} ${path})`, 404);
+    }
+
+    // ============================================================
+    // MÓDULO ULTRAGAZ HUB — Integração pedidos externos
+    // ============================================================
+    if (path.startsWith('/api/ultragaz')) {
+
+      // GET /api/ultragaz/config — Robot busca credenciais (APP_API_KEY ou admin)
+      if (path === '/api/ultragaz/config' && method === 'GET') {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+        const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_hub_config'").first();
+        if (!row) return json({ ok: false, configurado: false });
+        const cfg = JSON.parse(row.value || '{}');
+        // Nunca expõe a senha completa na UI — só retorna se for APP_API_KEY (robô)
+        const isApiKey = authCheck.authType === 'api_key';
+        return json({
+          ok: true,
+          configurado: !!(cfg.login && cfg.senha),
+          login: cfg.login || '',
+          senha: isApiKey ? (cfg.senha || '') : '••••••••',
+          hub_url: cfg.hub_url || 'https://hub.ultragaz.com.br',
+          reseller_id: cfg.reseller_id || '',
+          ativo: cfg.ativo !== false,
+          webhook_url: cfg.webhook_url || '',
+        });
+      }
+
+      // POST /api/ultragaz/config — Admin salva credenciais
+      if (path === '/api/ultragaz/config' && method === 'POST') {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+        const body = await request.json();
+        const { login, senha, hub_url, reseller_id, ativo, webhook_url } = body;
+        if (!login) return err('Login obrigatório');
+
+        // Lê config atual para preservar senha se vier vazia (••••••••)
+        const rowAtual = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_hub_config'").first();
+        const cfgAtual = rowAtual ? JSON.parse(rowAtual.value || '{}') : {};
+        const senhaFinal = (senha && senha !== '••••••••') ? senha : cfgAtual.senha || '';
+
+        const cfg = {
+          login: login.trim(),
+          senha: senhaFinal,
+          hub_url: hub_url || 'https://hub.ultragaz.com.br',
+          reseller_id: reseller_id || '',
+          ativo: ativo !== false,
+          webhook_url: webhook_url || '',
+          updated_at: new Date().toISOString(),
+        };
+        await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_hub_config', ?, datetime('now'))").bind(JSON.stringify(cfg)).run();
+        return json({ ok: true, login: cfg.login, configurado: true });
+      }
+
+      // POST /api/ultragaz/pedido — Robot envia novo pedido capturado (só APP_API_KEY)
+      if (path === '/api/ultragaz/pedido' && method === 'POST') {
+        const apiKey = request.headers.get('X-API-KEY') || url.searchParams.get('api_key') || '';
+        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+
+        const body = await request.json();
+        const {
+          ultragaz_order_id, customer_name, phone_digits, address_line, bairro,
+          complemento, referencia, items_json, total_value, tipo_pagamento,
+          event_type, raw_payload
+        } = body;
+
+        if (!ultragaz_order_id) return err('ultragaz_order_id obrigatório');
+
+        // Idempotência — ignora se já existe
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS ultragaz_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ultragaz_order_id TEXT UNIQUE NOT NULL,
+            moskogas_order_id INTEGER,
+            event_type TEXT,
+            customer_name TEXT,
+            address_line TEXT,
+            items_json TEXT,
+            total_value REAL,
+            tipo_pagamento TEXT,
+            raw_payload TEXT,
+            status TEXT DEFAULT 'recebido',
+            created_at INTEGER DEFAULT (unixepoch()),
+            processed_at INTEGER
+          )
+        `).run();
+
+        const existing = await env.DB.prepare("SELECT id, moskogas_order_id FROM ultragaz_orders WHERE ultragaz_order_id=?").bind(String(ultragaz_order_id)).first();
+        if (existing) {
+          return json({ ok: true, duplicado: true, moskogas_order_id: existing.moskogas_order_id });
+        }
+
+        // Cria pedido no sistema principal
+        const now = Math.floor(Date.now() / 1000);
+        const itemsStr = typeof items_json === 'string' ? items_json : JSON.stringify(items_json || []);
+
+        let moskogas_order_id = null;
+        try {
+          const r = await env.DB.prepare(`
+            INSERT INTO orders (
+              phone_digits, customer_name, address_line, bairro, complemento, referencia,
+              items_json, total_value, notes, status, sync_status,
+              tipo_pagamento, pago, vendedor_nome, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOVO', 'pendente', ?, 0, 'Ultragaz Hub', ?, ?)
+          `).bind(
+            phone_digits || '',
+            customer_name || 'Cliente Ultragaz',
+            address_line || '',
+            bairro || '',
+            complemento || '',
+            referencia || '',
+            itemsStr,
+            parseFloat(total_value) || 0,
+            `Pedido Ultragaz #${ultragaz_order_id}`,
+            tipo_pagamento || 'boleto_orgao',
+            now, now
+          ).run();
+          moskogas_order_id = r.meta?.last_row_id || null;
+        } catch (e) {
+          console.error('[ultragaz] Erro ao criar pedido:', e.message);
+          return err('Erro ao criar pedido: ' + e.message, 500);
+        }
+
+        // Registra na tabela ultragaz_orders
+        await env.DB.prepare(`
+          INSERT INTO ultragaz_orders (ultragaz_order_id, moskogas_order_id, event_type, customer_name, address_line, items_json, total_value, tipo_pagamento, raw_payload, status, processed_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'processado', ?)
+        `).bind(
+          String(ultragaz_order_id),
+          moskogas_order_id,
+          event_type || 'newOrder',
+          customer_name || '',
+          address_line || '',
+          itemsStr,
+          parseFloat(total_value) || 0,
+          tipo_pagamento || 'boleto_orgao',
+          JSON.stringify(raw_payload || {}),
+          now
+        ).run();
+
+        // Alerta WhatsApp para admins/atendentes
+        try {
+          const driversRow = await env.DB.prepare(
+            "SELECT telefone FROM app_users WHERE ativo=1 AND role IN ('admin','atendente') AND recebe_whatsapp=1"
+          ).all();
+          const itemsArr = JSON.parse(itemsStr);
+          const produtoStr = itemsArr.map(i => `${i.quantidade || 1}x ${i.produto || i.name || 'item'}`).join(', ');
+          const msg = `🔔 *NOVO PEDIDO ULTRAGAZ*\n\n📋 *#${ultragaz_order_id}*\n👤 ${customer_name || 'N/D'}\n📦 ${produtoStr}\n📍 ${address_line || 'N/D'}\n💰 R$ ${parseFloat(total_value || 0).toFixed(2).replace('.', ',')}\n\nAcesse o sistema para encaminhar.`;
+          for (const u of (driversRow?.results || [])) {
+            if (u.telefone) {
+              const to = u.telefone.replace(/\D/g, '');
+              if (to.length >= 10) {
+                await sendWhatsApp(env, to, msg, { category: 'notificacao_interna' });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[ultragaz] Aviso WhatsApp falhou:', e.message);
+        }
+
+        return json({ ok: true, moskogas_order_id, ultragaz_order_id, criado: true });
+      }
+
+      // GET /api/ultragaz/orders — Lista pedidos recebidos via Hub (admin)
+      if (path === '/api/ultragaz/orders' && method === 'GET') {
+        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        if (authCheck instanceof Response) return authCheck;
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ultragaz_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, ultragaz_order_id TEXT UNIQUE NOT NULL, moskogas_order_id INTEGER, event_type TEXT, customer_name TEXT, address_line TEXT, items_json TEXT, total_value REAL, tipo_pagamento TEXT, raw_payload TEXT, status TEXT DEFAULT 'recebido', created_at INTEGER DEFAULT (unixepoch()), processed_at INTEGER)`).run();
+        const rows = await env.DB.prepare("SELECT id, ultragaz_order_id, moskogas_order_id, event_type, customer_name, address_line, total_value, status, created_at FROM ultragaz_orders ORDER BY created_at DESC LIMIT 100").all();
+        return json({ ok: true, orders: rows.results || [] });
+      }
+
+      return err(`Ultragaz endpoint não encontrado (${method} ${path})`, 404);
     }
 
     return err(`Not found (${method} ${path})`, 404);
