@@ -1,4 +1,5 @@
-// v2.49.4
+// v2.49.5
+// v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
 // v2.49.4: try/catch global no fetch handler + validação env.DB binding na inicialização
 // v2.49.3: post_templates image upload direto R2, card com trocar foto inline
 // v2.49.2: fix requireAuth sem await em todos endpoints /api/avaliacoes
@@ -4947,13 +4948,13 @@ export default {
       // Config GET/POST
       if (path === '/api/avaliacoes/config') {
         if (method === 'GET') {
-          const authErr = await requireAuth(request, env, ['admin', 'atendente']);
-          if (authErr) return authErr;
+          const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+          if (authCheck instanceof Response) return authCheck;
           return json(await getAvaliacaoConfig(env));
         }
         if (method === 'POST') {
-          const authErr = await requireAuth(request, env, ['admin']);
-          if (authErr) return authErr;
+          const authCheck = await requireAuth(request, env, ['admin']);
+          if (authCheck instanceof Response) return authCheck;
           const body = await request.json();
           await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('avaliacao_config', ?, datetime('now'))").bind(JSON.stringify(body)).run();
           return json({ ok: true });
@@ -4962,8 +4963,8 @@ export default {
 
       // Listar avaliações com filtros
       if (method === 'GET' && path === '/api/avaliacoes') {
-        const authErr = await requireAuth(request, env, ['admin', 'atendente']);
-        if (authErr) return authErr;
+        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        if (authCheck instanceof Response) return authCheck;
         const qp = new URL(request.url).searchParams;
         const status = qp.get('status') || '';
         const desde = qp.get('desde') || '';
@@ -5026,8 +5027,8 @@ export default {
 
       // Enviar avaliação manual para um pedido específico
       if (method === 'POST' && path === '/api/avaliacoes/enviar') {
-        const authErr = await requireAuth(request, env, ['admin', 'atendente']);
-        if (authErr) return authErr;
+        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        if (authCheck instanceof Response) return authCheck;
         const { order_id } = await request.json();
         if (!order_id) return json({ error: 'order_id obrigatório' }, 400);
 
@@ -5060,8 +5061,8 @@ export default {
 
       // Toggle sem_avaliacao por telefone
       if (method === 'PATCH' && path.match(/^\/api\/avaliacoes\/cliente\/(.+)\/toggle$/)) {
-        const authErr = await requireAuth(request, env, ['admin', 'atendente']);
-        if (authErr) return authErr;
+        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        if (authCheck instanceof Response) return authCheck;
         const phone = path.split('/')[4];
         const cc = await env.DB.prepare('SELECT sem_avaliacao FROM customers_cache WHERE phone_digits=?').bind(phone).first();
         const novoValor = cc?.sem_avaliacao ? 0 : 1;
@@ -5071,8 +5072,8 @@ export default {
 
       // Enviar bulk (reenviar para respondidas/não respondidas em lote)
       if (method === 'POST' && path === '/api/avaliacoes/enviar-cron') {
-        const authErr = await requireAuth(request, env, ['admin']);
-        if (authErr) return authErr;
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
         await ensureAvaliacaoTables(env);
         await processarAvaliacoesCron(env);
         return json({ ok: true, message: 'Cron de avaliações executado' });
