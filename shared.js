@@ -1,5 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.15.0
-// v1.19.0
+// shared.js — Utilitários compartilhados MoskoGás v1.21.0
+// v1.21.0: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
 // v1.20.0: Banco de Posts adicionado ao menu Admin
 // v1.19.0: Brand Kits adicionado ao menu Config (admin root)
 // v1.18.0: Marketing Posts adicionado ao menu Marketing
@@ -1019,3 +1019,128 @@ async function checkBlingBeforeAction() {
 }
 
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ══════════════════════════════════════════════════════════════
+// BLING STATUS MONITOR v1.21.0 (centralizado)
+// initBlingMonitor(badgeId) — monitora e mostra status real
+// Usa /bling/ping (teste real contra API Bling) em vez de keep-alive
+// Badge clicável → abre OAuth direto de qualquer tela
+// ══════════════════════════════════════════════════════════════
+
+let _blingConnected = null; // null=unknown, true/false
+
+function initBlingMonitor(badgeId = 'bling-indicator') {
+  const el = document.getElementById(badgeId);
+  if (!el) return;
+
+  // Garantir cursor pointer
+  el.style.cursor = 'pointer';
+
+  // Click no badge → ensureBling (OAuth se necessário)
+  el.onclick = async (e) => {
+    e.preventDefault();
+    const ok = await ensureBling();
+    if (ok) {
+      _blingConnected = true;
+      _updateBlingBadge(el, true);
+      _hideBlingDisconnectBanner();
+    }
+  };
+
+  // Primeiro check + interval + visibility
+  _blingPingCheck(el);
+  setInterval(() => _blingPingCheck(el), 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) _blingPingCheck(el);
+  });
+}
+
+async function _blingPingCheck(el) {
+  if (!el) return;
+  try {
+    const r = await api('/bling/ping');
+    const ok = r.ok === true;
+    _blingConnected = ok;
+    _updateBlingBadge(el, ok);
+    if (ok) _hideBlingDisconnectBanner();
+    else _showBlingDisconnectBanner();
+  } catch(e) {
+    _blingConnected = false;
+    _updateBlingBadge(el, false);
+    _showBlingDisconnectBanner();
+  }
+}
+
+function _updateBlingBadge(el, ok) {
+  if (!el) return;
+  // Suporta tanto inline-style (pedido/gestao) quanto class-based (dashboard)
+  if (el.classList.contains('bling-badge')) {
+    // Dashboard usa classes CSS
+    el.className = ok ? 'bling-badge bling-ok' : 'bling-badge bling-err';
+    el.textContent = ok ? '✅ Bling OK' : '❌ Bling OFF';
+    el.title = ok ? 'Bling conectado — clique para verificar' : 'Clique para reconectar o Bling';
+  } else {
+    // Pedido/Gestao usa inline styles
+    el.style.background = ok ? '#16a34a' : '#dc2626';
+    el.textContent = ok ? '🟢 Bling OK' : '🔴 Bling OFF';
+    el.title = ok ? 'Bling conectado — clique para verificar' : 'Clique para reconectar o Bling';
+  }
+}
+
+function _showBlingDisconnectBanner() {
+  if (document.getElementById('bling-disconnect-banner')) return;
+  const b = document.createElement('div');
+  b.id = 'bling-disconnect-banner';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+  b.innerHTML = '<span>⚠️ Bling desconectado — pedidos serão salvos mas SEM venda no Bling!</span>'
+    + '<button onclick="_reconnectBlingFromBanner()" style="background:#fff;color:#dc2626;padding:6px 16px;border-radius:8px;font-weight:700;border:none;cursor:pointer;margin-left:12px;white-space:nowrap;font-size:13px">🔑 Reconectar Agora</button>';
+  document.body.prepend(b);
+  document.body.style.paddingTop = '52px';
+  // Esconder banner legado se existir
+  const old = document.getElementById('bling-banner');
+  if (old) { old.remove(); }
+  const old2 = document.getElementById('reauth-banner');
+  if (old2) { old2.remove(); }
+}
+
+function _hideBlingDisconnectBanner() {
+  const b = document.getElementById('bling-disconnect-banner');
+  if (b) { b.remove(); document.body.style.paddingTop = ''; }
+  // Limpar banners legados
+  const old = document.getElementById('bling-banner');
+  if (old) { old.remove(); document.body.style.paddingTop = ''; }
+  const old2 = document.getElementById('reauth-banner');
+  if (old2) { old2.remove(); }
+}
+
+async function _reconnectBlingFromBanner() {
+  const ok = await ensureBling();
+  if (ok) {
+    _blingConnected = true;
+    // Atualizar todos os badges na página
+    ['bling-indicator', 'blingBadge'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) _updateBlingBadge(el, true);
+    });
+    _hideBlingDisconnectBanner();
+    showToast('✅ Bling reconectado com sucesso!', 'success');
+  }
+}
+
+/**
+ * checkBlingReauth(err) — Detecta erros de reauth Bling e mostra banner
+ * Retorna true se era erro de reauth
+ */
+function checkBlingReauth(err) {
+  const msg = (err?.message || String(err) || '').toLowerCase();
+  if (msg.includes('reauth') || msg.includes('invalid_token') || msg.includes('bling 401') || msg.includes('bling_reauth') || (msg.includes('token') && msg.includes('expir'))) {
+    _blingConnected = false;
+    ['bling-indicator', 'blingBadge'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) _updateBlingBadge(el, false);
+    });
+    _showBlingDisconnectBanner();
+    return true;
+  }
+  return false;
+}

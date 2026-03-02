@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard — MoskoApp v1.0.1</title>
+<title>Dashboard — MoskoApp v1.0.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
@@ -18,7 +18,7 @@
   .btn-refresh { background: #0B2A6F; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.15s; }
   .btn-refresh:hover { background: #104BB8; }
   .btn-refresh.loading { opacity: 0.6; pointer-events: none; }
-  .bling-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .bling-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; cursor: pointer; }
   .bling-ok { background: #dcfce7; color: #166534; }
   .bling-warn { background: #fef3c7; color: #92400e; }
   .bling-err { background: #fee2e2; color: #991b1b; }
@@ -80,7 +80,7 @@
 <div id="nav-placeholder"></div>
 <div class="container">
   <div class="dash-header">
-    <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.1</div>
+    <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.2</div>
     <div class="dash-controls">
       <span class="bling-badge bling-warn" id="blingBadge">⏳ Bling...</span>
       <input type="date" id="dashDate">
@@ -139,7 +139,7 @@
       </div>
     </div>
   </div>
-  <div class="version-badge">v1.0.1 — dashboard</div>
+  <div class="version-badge">v1.0.2 — dashboard</div>
 </div>
 
 <script src="shared.js"></script>
@@ -150,15 +150,8 @@ document.getElementById('nav-placeholder').innerHTML = buildNav();
 const hoje = new Date(Date.now() - 4*3600000).toISOString().slice(0, 10);
 document.getElementById('dashDate').value = hoje;
 
-// Bling ping
-(async () => {
-  try {
-    const d = await api('/bling/ping');
-    const el = document.getElementById('blingBadge');
-    if (d.ok || d.status === 'ok') { el.className = 'bling-badge bling-ok'; el.textContent = '✅ Bling OK'; }
-    else { el.className = 'bling-badge bling-err'; el.textContent = '❌ Bling erro'; }
-  } catch { const el = document.getElementById('blingBadge'); el.className = 'bling-badge bling-warn'; el.textContent = '⚠️ Sem resposta'; }
-})();
+// Bling monitor (centralizado via shared.js)
+initBlingMonitor('blingBadge');
 
 const ST = {
   novo:             { cor: '#ef4444', label: 'Novo',             icon: '🔴' },

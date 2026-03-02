@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.21</title>
+<title>Novo Pedido — MoskoGás v2.11.22</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.21 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.22 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle" onclick="checkBlingStatus(true)">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.21</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.22</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -304,56 +304,8 @@
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
-// ── Bling Status Monitor ──────────────────────────────────────
-async function checkBlingStatus(manual = false) {
-  const ind = document.getElementById('bling-indicator');
-  if (!ind) return;
-  try {
-    const r = await api('/api/bling/keep-alive');
-    if (r.connected) {
-      ind.style.background = '#16a34a';
-      ind.textContent = '🟢 Bling OK';
-      ind.title = `Token válido (${r.minutesLeft}min) — clique para verificar`;
-      hideBlingBanner();
-    } else {
-      ind.style.background = '#dc2626';
-      ind.textContent = '🔴 Bling OFF';
-      ind.title = 'Reautorize em Config → Conectar Bling';
-      showBlingBanner();
-    }
-  } catch(e) {
-    ind.style.background = '#dc2626';
-    ind.textContent = '🔴 Bling OFF';
-    ind.title = 'Erro ao verificar — clique para tentar';
-    showBlingBanner();
-  }
-}
-
-function showBlingBanner() {
-  if (document.getElementById('bling-banner')) return;
-  const b = document.createElement('div');
-  b.id = 'bling-banner';
-  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
-  b.innerHTML = '<span>⚠️ Bling desconectado — pedidos serão salvos mas SEM venda no Bling!</span>'
-    + '<a href="config.html" style="background:#fff;color:#dc2626;padding:6px 16px;border-radius:8px;font-weight:700;text-decoration:none;margin-left:12px;white-space:nowrap">🔑 Reconectar</a>';
-  document.body.prepend(b);
-  document.body.style.paddingTop = '52px';
-}
-
-function hideBlingBanner() {
-  const b = document.getElementById('bling-banner');
-  if (b) { b.remove(); document.body.style.paddingTop = ''; }
-  // Limpar também banner legado (reauth-banner)
-  const old = document.getElementById('reauth-banner');
-  if (old) { old.remove(); }
-}
-
-// Check on load + every 3 min (backup) + imediato ao voltar pra aba
-checkBlingStatus(true);
-setInterval(() => checkBlingStatus(false), 60000);
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) checkBlingStatus(true);
-});
+// ── Bling Status Monitor (centralizado via shared.js) ──
+initBlingMonitor('bling-indicator');
 
 let items = [];
 let searchTimer;
@@ -615,25 +567,7 @@ function repeatLastOrder() {
   document.getElementById('last-order-card').style.display = 'none';
 }
 
-// ── Banner de reautorização Bling ─────────────────────────────
-function checkBlingReauth(err) {
-  const msg = (err?.message || String(err) || '').toLowerCase();
-  if (msg.includes('reauth') || msg.includes('invalid_token') || msg.includes('bling 401') || msg.includes('bling_reauth') || msg.includes('token') && msg.includes('expir')) {
-    // Atualizar indicador para VERMELHO imediatamente
-    const ind = document.getElementById('bling-indicator');
-    if (ind) {
-      ind.style.background = '#dc2626';
-      ind.textContent = '🔴 Bling OFF';
-      ind.title = 'Token expirado — clique para tentar reconectar';
-    }
-    // Usar o banner unificado
-    showBlingBanner();
-    // Tentar auto-recovery em background (keep-alive tenta refresh)
-    setTimeout(() => checkBlingStatus(true), 2000);
-    return true;
-  }
-  return false;
-}
+// ── Banner de reautorização Bling (usa checkBlingReauth do shared.js) ──
 
 // ── Carrega endereços e atualiza badge ───────────────────────
 async function loadSavedAddresses(phone) {
@@ -1239,7 +1173,7 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.21: Não redireciona — limpa form para novo pedido
+    // v2.11.22: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1260,7 +1194,7 @@ async function saveOrder() {
       btn.textContent = '✅ SALVAR PEDIDO';
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.21: Restaurar favoritos originais
+      // v2.11.22: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1424,7 +1358,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.21 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.22 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
