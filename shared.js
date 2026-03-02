@@ -1,4 +1,4 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.22.0
+// shared.js — Utilitários compartilhados MoskoGás v1.22.1
 // v1.21.0: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
 // v1.20.0: Banco de Posts adicionado ao menu Admin
 // v1.19.0: Brand Kits adicionado ao menu Config (admin root)
@@ -62,7 +62,7 @@ async function api(path, options = {}) {
 function statusBadge(status) {
   const map = {
     novo: ['#dc2626', 'NOVO'],
-    encaminhado: ['#d97706', 'ENCAMINHADO'],
+    encaminhado: ['#d97706', 'ATRIBUÍDO'],
     whatsapp_enviado: ['#16a34a', 'WHATS'],
     entregue: ['#2563eb', 'ENTREGUE'],
     cancelado: ['#6b7280', 'CANCELADO'],

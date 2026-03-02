@@ -1,4 +1,4 @@
-// v2.49.10
+// v2.49.11
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
 // v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
@@ -7645,7 +7645,7 @@ function buildReportHTML(report) {
   };
 
   const statusLabel = {
-    novo: '🔴 NOVO', encaminhado: '🟡 ENCAMINHADO',
+    novo: '🔴 NOVO', encaminhado: '🟡 ATRIBUÍDO',
     whatsapp_enviado: '🟢 WHATS ENVIADO', entregue: '🔵 ENTREGUE',
     cancelado: '⚫ CANCELADO'
   };
