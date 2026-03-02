@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.9.1 — MoskoGás</title>
+<title>Gestão v2.9.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -61,7 +61,7 @@
     </button>
     <div id="statusMenu" style="display:none;position:absolute;top:42px;left:0;z-index:200;background:#fff;border:2px solid #f97316;border-radius:8px;padding:8px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
       <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="novo" onchange="updateStatusFilter()" checked> 🔴 Novo</label>
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="encaminhado" onchange="updateStatusFilter()" checked> 🟡 Encaminhado</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="encaminhado" onchange="updateStatusFilter()" checked> 🟡 Atribuído</label>
       <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="whatsapp_enviado" onchange="updateStatusFilter()" checked> 🟢 WhatsApp Enviado</label>
       <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="entregue" onchange="updateStatusFilter()" checked> 🔵 Entregue</label>
       <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="cancelado" onchange="updateStatusFilter()"> ⚫ Cancelado</label>
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.1</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.2</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -147,7 +147,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.1
+// v2.9.2
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -356,7 +356,7 @@ function renderSummary(rows) {
 
   document.getElementById('summary-bar').innerHTML = `
     <span>🔴 Novos: <strong>${counts.novo}</strong></span>
-    <span>🟡 Encaminhados: <strong>${counts.encaminhado}</strong></span>
+    <span>🟡 Atribuídos: <strong>${counts.encaminhado}</strong></span>
     <span>🟢 WhatsApp: <strong>${counts.whatsapp_enviado}</strong></span>
     <span>🔵 Entregues: <strong>${counts.entregue}</strong></span>
     <span>⚫ Cancelados: <strong>${counts.cancelado}</strong></span>
@@ -501,48 +501,71 @@ async function confirmCancel(orderId) {
 // ── Modal Reabrir / Reverter Status ───────────────────────────
 function openRevertModal(orderId, statusAtual) {
   const isCancel = statusAtual === 'cancelado';
-  const titulo = isCancel ? '↩️ Reabrir Pedido Cancelado' : '↩️ Reverter Status do Pedido';
-  const cor = '#f59e0b';
+  const isAtribuido = statusAtual === 'encaminhado';
+  const titulo = isCancel ? '↩️ Reabrir Pedido Cancelado' : isAtribuido ? '↩️ Remover Atribuição' : '↩️ Reverter Status do Pedido';
+  const cor = isAtribuido ? '#ef4444' : '#f59e0b';
 
   // Opções de status destino baseadas no status atual
   const optsMap = {
     entregue: [
       { value: 'whatsapp_enviado', label: '🟢 WhatsApp Enviado' },
-      { value: 'encaminhado', label: '🟡 Encaminhado' },
+      { value: 'encaminhado', label: '🟡 Atribuído' },
       { value: 'novo', label: '🔴 Novo' },
     ],
     cancelado: [
       { value: 'novo', label: '🔴 Novo' },
-      { value: 'encaminhado', label: '🟡 Encaminhado' },
+      { value: 'encaminhado', label: '🟡 Atribuído' },
+    ],
+    encaminhado: [
+      { value: 'novo', label: '🔴 Novo' },
+    ],
+    whatsapp_enviado: [
+      { value: 'encaminhado', label: '🟡 Atribuído' },
+      { value: 'novo', label: '🔴 Novo' },
     ],
   };
   const opts = optsMap[statusAtual] || [];
   const optionsHtml = opts.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+  // Oculta select de destino se só há uma opção
+  const statusSelectHtml = opts.length > 1
+    ? `<label style="font-weight:600;font-size:13px;color:#475569">Novo status *</label>
+       <select id="revertNovoStatus" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;margin:6px 0 10px;font-size:14px">${optionsHtml}</select>`
+    : `<input type="hidden" id="revertNovoStatus" value="${opts[0]?.value || 'novo'}">`;
+
+  // Motivos adaptados por status
+  const motivosAtribuido = [
+    '<option value="">— Selecione —</option>',
+    '<option value="Entregador indisponível">Entregador indisponível</option>',
+    '<option value="Atribuição incorreta">Atribuição incorreta</option>',
+    '<option value="Pedido precisa ser reagendado">Pedido precisa ser reagendado</option>',
+    '<option value="outro">Outro (especificar)</option>',
+  ].join('');
+  const motivosPadrao = [
+    '<option value="">— Selecione —</option>',
+    '<option value="Erro humano ao marcar status">Erro humano ao marcar status</option>',
+    '<option value="Entrega não confirmada pelo cliente">Entrega não confirmada pelo cliente</option>',
+    '<option value="Pedido precisa ser refeito">Pedido precisa ser refeito</option>',
+    '<option value="Cancelamento indevido">Cancelamento indevido</option>',
+    '<option value="outro">Outro (especificar)</option>',
+  ].join('');
+  const motivosHtml = isAtribuido ? motivosAtribuido : motivosPadrao;
 
   const html = `
     <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center" id="revertModal">
       <div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
         <h3 style="margin:0 0 16px;color:${cor}">${titulo} #${orderId}</h3>
-        <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#92400e">
-          <strong>ℹ️</strong> Status atual: <strong>${statusAtual.toUpperCase()}</strong>. Selecione o novo status e informe o motivo.
+        <div style="background:${isAtribuido ? '#fef2f2' : '#fffbeb'};border:2px solid ${isAtribuido ? '#fca5a5' : '#f59e0b'};border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:${isAtribuido ? '#991b1b' : '#92400e'}">
+          <strong>ℹ️</strong> ${isAtribuido ? 'O pedido voltará para <strong>🔴 Novo</strong>, sem entregador atribuído.' : `Status atual: <strong>${statusAtual.toUpperCase()}</strong>. Selecione o novo status e informe o motivo.`}
         </div>
-        <label style="font-weight:600;font-size:13px;color:#475569">Novo status *</label>
-        <select id="revertNovoStatus" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;margin:6px 0 10px;font-size:14px">
-          ${optionsHtml}
-        </select>
+        ${statusSelectHtml}
         <label style="font-weight:600;font-size:13px;color:#475569">Motivo *</label>
         <select id="revertMotivoSelect" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;margin:6px 0 10px;font-size:14px" onchange="document.getElementById('revertMotivoText').style.display = this.value==='outro' ? 'block' : 'none'">
-          <option value="">— Selecione —</option>
-          <option value="Erro humano ao marcar status">Erro humano ao marcar status</option>
-          <option value="Entrega não confirmada pelo cliente">Entrega não confirmada pelo cliente</option>
-          <option value="Pedido precisa ser refeito">Pedido precisa ser refeito</option>
-          <option value="Cancelamento indevido">Cancelamento indevido</option>
-          <option value="outro">Outro (especificar)</option>
+          ${motivosHtml}
         </select>
         <textarea id="revertMotivoText" style="display:none;width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical;min-height:60px;box-sizing:border-box" placeholder="Descreva o motivo..."></textarea>
         <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('revertModal').remove()" style="padding:10px 20px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-weight:600">✖ Voltar</button>
-          <button onclick="confirmRevert(${orderId})" style="padding:10px 20px;border:none;border-radius:8px;background:${cor};color:#fff;cursor:pointer;font-weight:600">↩️ Confirmar Reabertura</button>
+          <button onclick="confirmRevert(${orderId})" style="padding:10px 20px;border:none;border-radius:8px;background:${cor};color:#fff;cursor:pointer;font-weight:600">${isAtribuido ? '🔴 Voltar para Novo' : '↩️ Confirmar Reabertura'}</button>
         </div>
       </div>
     </div>`;
@@ -682,7 +705,7 @@ async function sendWa() {
       body: JSON.stringify({ driver_id: parseInt(driverId), observation: obs }),
     });
     if (res.whatsapp_skipped) {
-      toast('📋 Pedido encaminhado (sem WhatsApp)');
+      toast('📋 Pedido atribuído (sem WhatsApp enviado)');
     } else {
       toast('✅ WhatsApp enviado!');
     }
@@ -746,10 +769,23 @@ function openEditModal(orderId) {
 
   // Mostrar/esconder botões de ação conforme status
   const canCancel = o.status !== 'cancelado';
-  const canRevert = ['entregue','cancelado'].includes(o.status);
+  const canRevert = ['entregue','cancelado','encaminhado','whatsapp_enviado'].includes(o.status);
   const btnRevert = document.getElementById('edit-btn-revert');
   const btnCancel = document.getElementById('edit-btn-cancel');
-  if (btnRevert) btnRevert.style.display = canRevert ? '' : 'none';
+  if (btnRevert) {
+    btnRevert.style.display = canRevert ? '' : 'none';
+    // Ajustar label do botão conforme status
+    if (o.status === 'encaminhado') {
+      btnRevert.textContent = '↩️ Voltar para Novo';
+      btnRevert.title = 'Remover atribuição e voltar para fila de pedidos novos';
+    } else if (o.status === 'whatsapp_enviado') {
+      btnRevert.textContent = '↩️ Reverter Status';
+      btnRevert.title = 'Reverter para status anterior';
+    } else {
+      btnRevert.textContent = '↩️ Reabrir';
+      btnRevert.title = 'Reabrir pedido';
+    }
+  }
   if (btnCancel) btnCancel.style.display = canCancel ? '' : 'none';
   // Guardar status atual para os modais
   window._editOrderStatus = o.status;

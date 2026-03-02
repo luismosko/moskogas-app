@@ -1,4 +1,4 @@
-// v2.49.9
+// v2.49.10
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
 // v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
@@ -3212,22 +3212,29 @@ export default {
       });
       await logStatusChange(env, id, currentOrder?.status || 'novo', 'encaminhado', `Entregador: ${driver.nome}${isSwap ? ` (antes: ${oldDriverName})` : ''}`, user);
 
-      // v2.30.0: WhatsApp na troca de entregador
+      // v2.49.10: WhatsApp na troca de entregador
+      // Só notifica se o pedido já tinha WhatsApp enviado (status whatsapp_enviado)
+      // Se estava só "encaminhado" (sem WhatsApp ainda), não avisa entregador antigo
       let whatsappResults = { old: null, new: null };
       if (isSwap) {
-        // Notificar entregador ANTIGO (cancelamento)
-        if (oldDriverPhone) {
+        const jaFoiEnviado = currentOrder?.status === 'whatsapp_enviado';
+
+        // Notificar entregador ANTIGO (cancelamento) — SÓ se WhatsApp já foi enviado
+        if (jaFoiEnviado && oldDriverPhone) {
           const oldDriverUser = await env.DB.prepare('SELECT recebe_whatsapp FROM app_users WHERE id=?').bind(oldDriverId).first();
           if (oldDriverUser?.recebe_whatsapp) {
-            const cancelMsg = `⚠️ *ENTREGA REATRIBUÍDA* — Pedido #${id}\n\nEsta entrega foi transferida para outro entregador. Por favor, *desconsidere* este pedido.\n\nEm caso de dúvidas, ligue para o administrativo ou confira suas entregas:\n📲 https://moskogas-app.pages.dev/entregador.html`;
+            const orderFull = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
+            const nomeCliente = orderFull?.customer_name || 'Cliente';
+            const enderecoCliente = `${orderFull?.address_line || ''}${orderFull?.bairro ? ', ' + orderFull.bairro : ''}`;
+            const cancelMsg = `⚠️ *ENTREGA REATRIBUÍDA* — Pedido #${id}\n\n👤 Cliente: *${nomeCliente}*\n📍 ${enderecoCliente}\n\nEsta entrega foi transferida para outro entregador. Por favor, *desconsidere* este pedido.\n\nEm caso de dúvidas, ligue para o administrativo ou confira suas entregas:\n📲 https://moskogas-app.pages.dev/entregador.html`;
             const cancelResult = await sendWhatsApp(env, oldDriverPhone, cancelMsg, { category: 'entrega' });
             whatsappResults.old = { sent: cancelResult.ok, driver: oldDriverName };
             await logEvent(env, id, 'whatsapp_swap_cancel', { to: oldDriverPhone, driver: oldDriverName, ok: cancelResult.ok });
           }
         }
 
-        // Notificar entregador NOVO (entrega)
-        if (driver.recebe_whatsapp && driver.telefone) {
+        // Notificar entregador NOVO (entrega) — SÓ se o pedido já estava com WhatsApp enviado
+        if (jaFoiEnviado && driver.recebe_whatsapp && driver.telefone) {
           const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
           const newMsg = buildDeliveryMessage(order, '⚠️ REATRIBUIÇÃO — Esta entrega estava com ' + oldDriverName);
           const newResult = await sendWhatsApp(env, driver.telefone, newMsg, { category: 'entrega' });
@@ -3583,6 +3590,10 @@ export default {
       // Se voltando de cancelado, limpar canceled_at e cancel_motivo
       if (statusAnterior === 'cancelado') {
         sql += ', canceled_at=NULL, cancel_motivo=NULL';
+      }
+      // v2.49.10: Se voltando para novo a partir de encaminhado ou whatsapp_enviado, limpar entregador
+      if (novoStatus === 'novo' && ['encaminhado', 'whatsapp_enviado'].includes(statusAnterior)) {
+        sql += ', driver_id=NULL, driver_name_cache=NULL, driver_phone_cache=NULL';
       }
 
       sql += ' WHERE id=?';
