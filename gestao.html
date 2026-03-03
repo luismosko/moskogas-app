@@ -789,6 +789,7 @@ function openEditModal(orderId) {
   if (btnCancel) btnCancel.style.display = canCancel ? '' : 'none';
   window._editOrderStatus = o.status;
   // v2.9.5: data do pedido
+  const isEntregue = o.status === 'entregue';
   const _dtInp = document.getElementById('edit-data-pedido');
   const _dtBloq = document.getElementById('edit-data-pedido-bloqueada');
   if (_dtInp) {
