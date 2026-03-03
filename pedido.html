@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.31</title>
+<title>Novo Pedido — MoskoGás v2.11.32</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.31 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.32 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.31</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.32</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -197,7 +197,7 @@
       <textarea id="notes" placeholder="Urgente, troco para..." style="height:40px"></textarea>
     </div>
 
-    <!-- v2.11.31: DATA DO PEDIDO -->
+    <!-- v2.11.32: DATA DO PEDIDO -->
     <div style="margin-bottom:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1.5px solid #e2e8f0">
       <label style="font-size:12px;font-weight:800;color:#374151;letter-spacing:.4px;margin-bottom:6px;display:block">📅 DATA DO PEDIDO</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -432,7 +432,7 @@ function clearSearch(inputId) {
 
 async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
-  // v2.11.31: Reset imediato ao trocar cliente — evita endereços do cliente anterior
+  // v2.11.32: Reset imediato ao trocar cliente — evita endereços do cliente anterior
   currentPhone = '';
   allAddresses = [];
   const _addrBadge = document.getElementById('addr-count-badge');
@@ -545,7 +545,7 @@ let currentPhone = '';
 let allAddresses = [];
 let _lastOrderData = null;
 
-// ── Data do Pedido (v2.11.31) ────────────────────────────────
+// ── Data do Pedido (v2.11.32) ────────────────────────────────
 function dataCGOffset(offset) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -561,7 +561,7 @@ function onDataPedidoInput() {
   const hoje = dataCGOffset(0);
   const amanha = dataCGOffset(1);
   const doisDias = dataCGOffset(2);
-  // v2.11.31: datas passadas liberadas para lançamento retroativo
+  // v2.11.32: datas passadas liberadas para lançamento retroativo
   const ontem = dataCGOffset(-1);
   let offset = null;
   if (val === ontem) offset = -1;
@@ -1088,7 +1088,7 @@ function setConsumidorFinal() {
   document.getElementById('empenho-aviso').style.display = 'none';
   document.getElementById('empenho-selecionado-info').style.display = 'none';
   toast('👤 Consumidor Final — endereço não obrigatório', 'ok');
-  // v2.11.31: Auto-atribuir entregador Venda Portaria (id=10)
+  // v2.11.32: Auto-atribuir entregador Venda Portaria (id=10)
   window._consumidorFinalDriverId = 10;
 }
 
@@ -1262,7 +1262,7 @@ async function saveOrder() {
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
 
-    // v2.11.31: popup finalização rápida
+    // v2.11.32: popup finalização rápida
     // Consumidor final OU data passada/hoje → perguntar se quer marcar entregue
     const _dataSalva = getDataPedido();
     const _hoje = dataCGOffset(0);
@@ -1271,7 +1271,7 @@ async function saveOrder() {
       setTimeout(() => openQuickDeliver(result.id, isConsumidorFinal, tipoPgto), 400);
     }
 
-    // v2.11.31: Não redireciona — limpa form para novo pedido
+    // v2.11.32: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1290,11 +1290,11 @@ async function saveOrder() {
       // Reativar botão
       btn.disabled = false;
       btn.textContent = '✅ SALVAR PEDIDO';
-      // v2.11.31: Reset data pedido para hoje
+      // v2.11.32: Reset data pedido para hoje
       setDataPedido(0);
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.31: Restaurar favoritos originais
+      // v2.11.32: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1311,7 +1311,7 @@ async function saveOrder() {
 }
 
 renderItems();
-// v2.11.31: Inicializa data do pedido como hoje
+// v2.11.32: Inicializa data do pedido como hoje
 setDataPedido(0);
 // Bloquear seleção de data passada
 const _dpInput = document.getElementById('data-pedido-input');
@@ -1461,7 +1461,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.31 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.32 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
@@ -2004,7 +2004,9 @@ async function saveCadastro() {
     btn.textContent = '✅ Cadastrar no Bling';
   }
 }
-<!-- MODAL FINALIZAÇÃO RÁPIDA v2.11.31 -->
+</script>
+
+<!-- MODAL FINALIZAÇÃO RÁPIDA v2.11.32 -->
 <div id="modal-quick-deliver" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="text-align:center;margin-bottom:20px">
@@ -2099,7 +2101,7 @@ async function openQuickDeliver(orderId, isConsumidorFinal, tipoPgto) {
       });
     } catch(e) {}
   } else {
-    // v2.11.31: Consumidor Final → Venda Portaria (id=10) automático
+    // v2.11.32: Consumidor Final → Venda Portaria (id=10) automático
     driverWrap.style.display = 'none';
     portariaInfo.style.display = 'block';
   }
@@ -2128,7 +2130,7 @@ async function confirmQuickDeliver() {
 
   try {
     const body = {};
-    // v2.11.31: Consumidor Final → Venda Portaria id=10 automático
+    // v2.11.32: Consumidor Final → Venda Portaria id=10 automático
     if (_qdIsConsumidorFinal) {
       body.driver_id = 10;
     } else if (driverId) {
