@@ -1,4 +1,4 @@
-// v2.49.16
+// v2.49.17
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -2527,7 +2527,8 @@ export default {
       const blingBody = {
         nome: nome,
         fantasia: fantasia || '',
-        tipoPessoa: tipoPessoa || 'F',
+        tipo: tipoPessoa || 'F',          // v2.49.17: Bling v3 usa "tipo", não "tipoPessoa"
+        tipoPessoa: tipoPessoa || 'F',    // enviamos os dois para compatibilidade
         contribuinte: contribuinte || 9,
         situacao: 'A',
         numeroDocumento: (numeroDocumento || '').replace(/[^\d]/g, ''),
