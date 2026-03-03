@@ -1,4 +1,4 @@
-// v2.49.13
+// v2.49.14
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -3357,6 +3357,13 @@ export default {
         const body = await request.json();
         tipoPagamento = body.tipo_pagamento || null;
         obsEntregador = body.observacao_entregador || null;
+        // v2.49.14: aceita driver_id no JSON (finalização rápida do pedido.html)
+        if (body.driver_id) {
+          const drv = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=? AND ativo=1').bind(parseInt(body.driver_id)).first();
+          if (drv) {
+            await env.DB.prepare('UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=? WHERE id=?').bind(drv.id, drv.nome, drv.telefone||'', id).run();
+          }
+        }
         // Admin e atendente podem marcar sem foto (gestao.html)
         if (!['admin', 'atendente'].includes(user?.role)) {
           return err('Foto do comprovante é obrigatória para entregadores', 400);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.27</title>
+<title>Novo Pedido — MoskoGás v2.11.28</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.27 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.28 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.27</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.28</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -197,7 +197,7 @@
       <textarea id="notes" placeholder="Urgente, troco para..." style="height:40px"></textarea>
     </div>
 
-    <!-- v2.11.27: DATA DO PEDIDO -->
+    <!-- v2.11.28: DATA DO PEDIDO -->
     <div style="margin-bottom:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1.5px solid #e2e8f0">
       <label style="font-size:12px;font-weight:800;color:#374151;letter-spacing:.4px;margin-bottom:6px;display:block">📅 DATA DO PEDIDO</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -431,7 +431,7 @@ function clearSearch(inputId) {
 
 async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
-  // v2.11.27: Reset imediato ao trocar cliente — evita endereços do cliente anterior
+  // v2.11.28: Reset imediato ao trocar cliente — evita endereços do cliente anterior
   currentPhone = '';
   allAddresses = [];
   const _addrBadge = document.getElementById('addr-count-badge');
@@ -544,7 +544,7 @@ let currentPhone = '';
 let allAddresses = [];
 let _lastOrderData = null;
 
-// ── Data do Pedido (v2.11.27) ────────────────────────────────
+// ── Data do Pedido (v2.11.28) ────────────────────────────────
 function dataCGOffset(offset) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -560,7 +560,7 @@ function onDataPedidoInput() {
   const hoje = dataCGOffset(0);
   const amanha = dataCGOffset(1);
   const doisDias = dataCGOffset(2);
-  // v2.11.27: datas passadas liberadas para lançamento retroativo
+  // v2.11.28: datas passadas liberadas para lançamento retroativo
   const ontem = dataCGOffset(-1);
   let offset = null;
   if (val === ontem) offset = -1;
@@ -1257,7 +1257,17 @@ async function saveOrder() {
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
-    // v2.11.27: Não redireciona — limpa form para novo pedido
+
+    // v2.11.28: popup finalização rápida
+    // Consumidor final OU data passada/hoje → perguntar se quer marcar entregue
+    const _dataSalva = getDataPedido();
+    const _hoje = dataCGOffset(0);
+    const _devePerguntar = isConsumidorFinal || _dataSalva <= _hoje;
+    if (_devePerguntar) {
+      setTimeout(() => openQuickDeliver(result.id, isConsumidorFinal, tipoPgto), 400);
+    }
+
+    // v2.11.28: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1276,11 +1286,11 @@ async function saveOrder() {
       // Reativar botão
       btn.disabled = false;
       btn.textContent = '✅ SALVAR PEDIDO';
-      // v2.11.27: Reset data pedido para hoje
+      // v2.11.28: Reset data pedido para hoje
       setDataPedido(0);
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.27: Restaurar favoritos originais
+      // v2.11.28: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1297,7 +1307,7 @@ async function saveOrder() {
 }
 
 renderItems();
-// v2.11.27: Inicializa data do pedido como hoje
+// v2.11.28: Inicializa data do pedido como hoje
 setDataPedido(0);
 // Bloquear seleção de data passada
 const _dpInput = document.getElementById('data-pedido-input');
@@ -1447,7 +1457,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.27 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.28 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
@@ -1988,6 +1998,109 @@ async function saveCadastro() {
     hideLoading();
     btn.disabled = false;
     btn.textContent = '✅ Cadastrar no Bling';
+  }
+}
+<!-- MODAL FINALIZAÇÃO RÁPIDA v2.11.28 -->
+<div id="modal-quick-deliver" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:48px;margin-bottom:8px">🚀</div>
+      <h2 style="margin:0;font-size:20px;color:#1e293b" id="qd-title">Finalizar entrega agora?</h2>
+      <p style="color:#64748b;font-size:14px;margin-top:8px" id="qd-subtitle">Pedido já foi entregue?</p>
+    </div>
+    <div id="qd-driver-wrap" style="display:none;margin-bottom:16px">
+      <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px">ENTREGADOR QUE FEZ A ENTREGA *</label>
+      <select id="qd-driver" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px">
+        <option value="">— Selecionar entregador —</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeQuickDeliver()" style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#64748b;font-size:14px;font-weight:700;cursor:pointer">Não, depois</button>
+      <button onclick="confirmQuickDeliver()" id="qd-btn-confirm" style="flex:1;padding:12px;border:none;border-radius:8px;background:#10b981;color:#fff;font-size:14px;font-weight:700;cursor:pointer">✅ Sim, marcar entregue!</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── FINALIZAÇÃO RÁPIDA ─────────────────────────────────────────────
+let _qdOrderId = null;
+let _qdIsConsumidorFinal = false;
+
+async function openQuickDeliver(orderId, isConsumidorFinal, tipoPgto) {
+  _qdOrderId = orderId;
+  _qdIsConsumidorFinal = isConsumidorFinal;
+
+  const dataPedido = getDataPedido();
+  const hoje = dataCGOffset(0);
+  const isPast = dataPedido < hoje;
+
+  // Montar texto do popup
+  const subtitle = isPast
+    ? `📅 Pedido de <strong>${dataPedido}</strong> — entrega já aconteceu?`
+    : `Quer já finalizar esse pedido como entregue agora?`;
+  document.getElementById('qd-subtitle').innerHTML = subtitle;
+
+  if (isConsumidorFinal) {
+    document.getElementById('qd-title').textContent = '🏢 Finalizar entrega — Portaria';
+    document.getElementById('qd-driver-wrap').style.display = 'none';
+  } else {
+    document.getElementById('qd-title').textContent = '🚚 Finalizar entrega agora?';
+    document.getElementById('qd-driver-wrap').style.display = 'block';
+    // Carregar entregadores
+    const sel = document.getElementById('qd-driver');
+    sel.innerHTML = '<option value="">— Selecionar entregador —</option>';
+    try {
+      const drivers = await api('/api/drivers');
+      (drivers || []).forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.nome;
+        sel.appendChild(opt);
+      });
+    } catch(e) {}
+  }
+
+  document.getElementById('modal-quick-deliver').style.display = 'flex';
+}
+
+function closeQuickDeliver() {
+  document.getElementById('modal-quick-deliver').style.display = 'none';
+  _qdOrderId = null;
+}
+
+async function confirmQuickDeliver() {
+  if (!_qdOrderId) return;
+
+  // Validar entregador se não for consumidor final
+  const driverId = document.getElementById('qd-driver')?.value;
+  if (!_qdIsConsumidorFinal && !driverId) {
+    toast('Selecione o entregador que fez a entrega', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('qd-btn-confirm');
+  btn.disabled = true;
+  btn.textContent = '⏳ Finalizando...';
+  showLoading('Marcando como entregue...');
+
+  try {
+    const body = {};
+    if (!_qdIsConsumidorFinal && driverId) body.driver_id = parseInt(driverId);
+
+    await api(`/api/order/${_qdOrderId}/mark-delivered`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    closeQuickDeliver();
+    hideLoading();
+    toast('✅ Pedido marcado como ENTREGUE! Bling gerado.', 'success');
+  } catch(e) {
+    hideLoading();
+    btn.disabled = false;
+    btn.textContent = '✅ Sim, marcar entregue!';
+    toast('Erro ao finalizar: ' + (e.message || e), 'error');
   }
 }
 </script>
