@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.5 — MoskoGás</title>
+<title>Config v2.13.6 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -33,8 +33,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.5 — config</div>
-  <h1>⚙️ Configurações v2.13.5</h1>
+  <div class="version-badge">v2.13.6 — config</div>
+  <h1>⚙️ Configurações v2.13.6</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -150,7 +150,39 @@
     <div id="perm-status"></div>
   </div>
 
-  <!-- WhatsApp Safety Layer (admin only) -->
+  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.6) -->
+  <div class="card" id="timezoneSection">
+    <h2>🕐 Fuso Horário da Empresa</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:12px">
+      Define o fuso horário usado em datas de pedidos, relatórios e filtros.<br>
+      <strong>Importante:</strong> pedidos de meia-noite são classificados no dia certo conforme este fuso.
+    </p>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">FUSO HORÁRIO</label>
+        <select id="tzSelect" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
+          <option value="America/Campo_Grande">America/Campo_Grande (MS/MT — UTC-4)</option>
+          <option value="America/Sao_Paulo">America/Sao_Paulo (SP/RJ/MG/PR/RS — UTC-3)</option>
+          <option value="America/Manaus">America/Manaus (AM — UTC-4)</option>
+          <option value="America/Belem">America/Belem (PA/MA — UTC-3)</option>
+          <option value="America/Fortaleza">America/Fortaleza (CE/BA — UTC-3)</option>
+          <option value="America/Recife">America/Recife (PE — UTC-3)</option>
+          <option value="America/Cuiaba">America/Cuiaba (MT — UTC-4)</option>
+          <option value="America/Porto_Velho">America/Porto_Velho (RO — UTC-4)</option>
+          <option value="America/Boa_Vista">America/Boa_Vista (RR — UTC-4)</option>
+          <option value="America/Rio_Branco">America/Rio_Branco (AC — UTC-5)</option>
+        </select>
+      </div>
+      <button class="btn btn-green" onclick="saveTz()">💾 Salvar</button>
+    </div>
+    <div id="tzStatus" style="margin-top:8px;font-size:12px;color:#64748b"></div>
+    <div style="margin-top:10px;padding:8px 12px;background:#fef9c3;border-radius:6px;border:1px solid #fbbf24;font-size:12px;color:#92400e">
+      ⚠️ <strong>Meia-noite:</strong> pedidos entre 22h30–00h00 podem cair no dia seguinte sem fuso correto.
+      Pedidos inseridos retroativamente aparecem com hora 22:30 do dia informado (ficam por último naquele dia).
+    </div>
+  </div>
+
+  <!-- Safety Layer (admin only) -->
   <div class="card" id="safetySection">
     <h2>🛡️ WhatsApp Safety Layer</h2>
     <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Proteção anti-ban do WhatsApp. Desative restrições apenas para testes.</p>
@@ -564,6 +596,9 @@
 <script>
 checkAuth(['admin', 'atendente']);
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+
+// v2.13.6: Carregar timezone e outras configs na inicialização
+loadTz();
 
 // Esconder seções admin-only para atendente
 const _cfgUser = getCurrentUser();
@@ -1646,6 +1681,27 @@ function mktReplyReview(reviewId) {
     if (r && r.ok) { toast('Resposta enviada!', 'success'); mktLoadReviews(); }
     else toast('Erro ao responder', 'error');
   });
+}
+
+// ── Fuso Horário ────────────────────────────────────────────────
+async function loadTz() {
+  try {
+    const r = await api('/api/config?key=empresa_timezone');
+    const val = r?.value || 'America/Campo_Grande';
+    const sel = document.getElementById('tzSelect');
+    if (sel) sel.value = val;
+    document.getElementById('tzStatus').textContent = `Fuso atual: ${val}`;
+  } catch(e) {}
+}
+async function saveTz() {
+  const val = document.getElementById('tzSelect').value;
+  try {
+    await api('/api/config', { method:'POST', body: JSON.stringify({ key:'empresa_timezone', value: val }) });
+    document.getElementById('tzStatus').innerHTML = `<span style="color:#10b981">✅ Salvo: ${val}</span>`;
+    toast('✅ Fuso horário salvo!', 'success');
+  } catch(e) {
+    toast('Erro ao salvar fuso', 'error');
+  }
 }
 </script>
 </body>

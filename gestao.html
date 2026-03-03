@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.9.7 — MoskoGás</title>
+<title>Gestão v2.9.8 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.7</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.8</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -147,7 +147,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.7
+// v2.9.8
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -160,6 +160,12 @@ let autoTimer = null;
 
 // ── Init ──────────────────────────────────────────────────────
 async function init() {
+  // v2.9.8: carregar timezone da empresa do config
+  try {
+    const tzCfg = await api('/api/config?key=empresa_timezone');
+    window._appTimezone = tzCfg?.value || 'America/Campo_Grande';
+  } catch(e) { window._appTimezone = 'America/Campo_Grande'; }
+
   drivers = await api('/api/drivers').catch(() => []);
   const sel = document.getElementById('fDriver');
   sel.innerHTML = '<option value="">Todos entregadores</option>';
@@ -179,11 +185,12 @@ async function load() {
 }
 
 function todayCG() {
-  return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+  return new Date().toLocaleDateString('sv-SE', { timeZone: window._appTimezone || 'America/Campo_Grande' });
 }
 function yesterdayCG() {
   const d = new Date(); d.setDate(d.getDate() - 1);
-  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+  return d.toLocaleDateString('sv-SE', { timeZone: window._appTimezone || 'America/Campo_Grande' });
+}
 }
 
 function setDateFilter(mode) {
@@ -256,7 +263,7 @@ async function _load() {
   if (dateFrom || dateTo) {
     rows = rows.filter(r => {
       if (!r.created_at) return true;
-      // v2.9.7: usa data_pedido se disponível, senão created_at
+      // v2.9.8: usa data_pedido se disponível, senão created_at
       const d = r.data_pedido || new Date(r.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
       if (dateFrom && d < dateFrom) return false;
       if (dateTo   && d > dateTo)   return false;
@@ -268,11 +275,11 @@ async function _load() {
   rows.sort((a, b) => {
     const sd = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
     if (sd !== 0) return sd;
-    // v2.9.7: ordenar por data_pedido (data real), não created_at
-    const da = a.data_pedido || new Date(a.created_at*1000).toLocaleDateString('sv-SE',{timeZone:'America/Campo_Grande'});
-    const db = b.data_pedido || new Date(b.created_at*1000).toLocaleDateString('sv-SE',{timeZone:'America/Campo_Grande'});
+    // v2.9.8: ordenar por data_pedido (data real) + _sortTs (retroativos às 22:30)
+    const da = a.data_pedido || new Date(a.created_at*1000).toLocaleDateString('sv-SE',{timeZone:window._appTimezone||'America/Campo_Grande'});
+    const db = b.data_pedido || new Date(b.created_at*1000).toLocaleDateString('sv-SE',{timeZone:window._appTimezone||'America/Campo_Grande'});
     if (da !== db) return db < da ? -1 : 1;
-    return b.created_at - a.created_at;
+    return (b._sortTs||b.created_at) - (a._sortTs||a.created_at);
   });
 
   lastRows = rows;
@@ -293,21 +300,33 @@ function renderTable(rows) {
     const items = JSON.parse(o.items_json || '[]');
     const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
     const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
-    // v2.9.7: data_pedido é a data principal — created_at só como hora de inserção
+    // v2.9.8: data_pedido é a data principal — created_at só como hora de inserção
     const _dataPedido = o.data_pedido || null;
     const _hoje = todayCG();
+    const _tz = window._appTimezone || 'America/Campo_Grande';
 
     // Data a exibir na coluna: data_pedido se definida, senão created_at
-    let dataExib, horaExib;
+    let dataExib, horaExib, _sortTs;
     if (_dataPedido) {
       const [y,m,d] = _dataPedido.split('-');
       dataExib = `${d}/${m}`;
-      // Hora: hora real de inserção (informação secundária)
-      horaExib = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+      if (_dataPedido < _hoje) {
+        // Pedido retroativo: hora fixa 22:30 daquele dia
+        // → fica por último no dia, sem embaralhar com pedidos em tempo real
+        horaExib = '22:30';
+        // Para ordenação: timestamp = aquele dia às 22:30 BRT
+        _sortTs = new Date(`${_dataPedido}T22:30:00`).getTime() / 1000;
+      } else {
+        // Hoje ou futuro: usa hora real de inserção
+        horaExib = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:_tz}) : '—';
+        _sortTs = o.created_at;
+      }
     } else {
-      dataExib = o.created_at ? new Date(o.created_at * 1000).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
-      horaExib = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+      dataExib = o.created_at ? new Date(o.created_at * 1000).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:_tz}) : '—';
+      horaExib = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:_tz}) : '—';
+      _sortTs = o.created_at;
     }
+    o._sortTs = _sortTs; // usado no sort abaixo
     const dataHora = `${dataExib} ${horaExib}`;
     const hora = horaExib;
 
@@ -806,7 +825,7 @@ function openEditModal(orderId) {
   }
   if (btnCancel) btnCancel.style.display = canCancel ? '' : 'none';
   window._editOrderStatus = o.status;
-  // v2.9.7: data do pedido
+  // v2.9.8: data do pedido
   const isEntregue = o.status === 'entregue';
   const _dtInp = document.getElementById('edit-data-pedido');
   const _dtBloq = document.getElementById('edit-data-pedido-bloqueada');
@@ -837,7 +856,7 @@ function closeEditModal() {
   document.getElementById('modal-edit').style.display = 'none';
 }
 
-// v2.9.7: helpers data modal edicao
+// v2.9.8: helpers data modal edicao
 function _editDataCG(offset) {
   const d = new Date(); d.setDate(d.getDate() + offset);
   return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
@@ -1129,7 +1148,7 @@ setInterval(autoCheckPixGestao, 20000);
       <button onclick="closeEditModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px" title="Fechar">&times;</button>
     </div>
 
-    <!-- DATA DO PEDIDO topo modal v2.9.7 -->
+    <!-- DATA DO PEDIDO topo modal v2.9.8 -->
     <div id="edit-data-pedido-wrap" style="margin-bottom:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:2px solid #e2e8f0">
       <label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:6px">&#x1F4C5; DATA DO PEDIDO</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
