@@ -1,4 +1,4 @@
-// v2.49.14
+// v2.49.15
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -2910,7 +2910,7 @@ export default {
 
       // 1) Criar pedido como ENTREGUE direto
       const items = JSON.parse(itemsJson);
-      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas'];
       const pago = TIPOS_PAGO_IMEDIATO.includes(tipoPagamento) ? 1 : 0;
 
       const result = await env.DB.prepare(`
@@ -3061,7 +3061,7 @@ export default {
       }
 
       const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
-      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas'];
 
       const oldTipo = currentOrder.tipo_pagamento || '';
       const newTipo = tipo_pagamento !== undefined ? tipo_pagamento : oldTipo;
@@ -3309,6 +3309,7 @@ export default {
       let photoKey = null;
       let tipoPagamento = null;
       let obsEntregador = null;
+      let skipBling = false;
 
       const ct = request.headers.get('Content-Type') || '';
 
@@ -3357,6 +3358,7 @@ export default {
         const body = await request.json();
         tipoPagamento = body.tipo_pagamento || null;
         obsEntregador = body.observacao_entregador || null;
+        skipBling = body.skip_bling === true; // v2.49.14: Vale Gás com NF já emitida
         // v2.49.14: aceita driver_id no JSON (finalização rápida do pedido.html)
         if (body.driver_id) {
           const drv = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=? AND ativo=1').bind(parseInt(body.driver_id)).first();
@@ -3405,9 +3407,10 @@ export default {
 
       // ── v2.17.0: Criar venda no Bling AGORA (ao entregar) ──
       // v2.28.7: Boleto/Mensalista NÃO criam Bling aqui — só via criar-vendas-bling (agrupado)
-      const TIPOS_BLING_ENTREGA = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
+      const TIPOS_BLING_ENTREGA = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito', 'vale_gas'];
       let blingResult = null;
-      if (!order.bling_pedido_id && TIPOS_BLING_ENTREGA.includes(tipoFinal)) {
+      // v2.49.14: skip_bling=true → Vale Gás com NF já emitida, não cria no Bling
+      if (!order.bling_pedido_id && TIPOS_BLING_ENTREGA.includes(tipoFinal) && !skipBling) {
         try {
           const custData = order.phone_digits
             ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()

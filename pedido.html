@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.28</title>
+<title>Novo Pedido — MoskoGás v2.11.29</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -49,9 +49,9 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.28 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.29 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.28</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.29</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -197,7 +197,7 @@
       <textarea id="notes" placeholder="Urgente, troco para..." style="height:40px"></textarea>
     </div>
 
-    <!-- v2.11.28: DATA DO PEDIDO -->
+    <!-- v2.11.29: DATA DO PEDIDO -->
     <div style="margin-bottom:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1.5px solid #e2e8f0">
       <label style="font-size:12px;font-weight:800;color:#374151;letter-spacing:.4px;margin-bottom:6px;display:block">📅 DATA DO PEDIDO</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -221,6 +221,7 @@
       <button type="button" class="tipo-pgto-btn" data-tipo="mensalista"   data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📅 Mensalista</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="boleto"       data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">🧾 Boleto</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="nfe"          data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📄 NFe</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="vale_gas"      data-key="dinheiro" onclick="selTipoPgto(this)" title="Vale Gás — pago adiantado. Pergunta sobre NF ao entregar.">🎫 Vale Gás</button>
     </div>
     <input type="hidden" id="tipo_pagamento" value="">
     <input type="hidden" id="forma_pagamento_key" value="">
@@ -431,7 +432,7 @@ function clearSearch(inputId) {
 
 async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
-  // v2.11.28: Reset imediato ao trocar cliente — evita endereços do cliente anterior
+  // v2.11.29: Reset imediato ao trocar cliente — evita endereços do cliente anterior
   currentPhone = '';
   allAddresses = [];
   const _addrBadge = document.getElementById('addr-count-badge');
@@ -544,7 +545,7 @@ let currentPhone = '';
 let allAddresses = [];
 let _lastOrderData = null;
 
-// ── Data do Pedido (v2.11.28) ────────────────────────────────
+// ── Data do Pedido (v2.11.29) ────────────────────────────────
 function dataCGOffset(offset) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -560,7 +561,7 @@ function onDataPedidoInput() {
   const hoje = dataCGOffset(0);
   const amanha = dataCGOffset(1);
   const doisDias = dataCGOffset(2);
-  // v2.11.28: datas passadas liberadas para lançamento retroativo
+  // v2.11.29: datas passadas liberadas para lançamento retroativo
   const ontem = dataCGOffset(-1);
   let offset = null;
   if (val === ontem) offset = -1;
@@ -1251,14 +1252,15 @@ async function saveOrder() {
       credito: 'Crédito',
       mensalista: 'Mensalista 📋',
       boleto: 'Boleto/Órgão 🧾',
-      nfe: 'NFe 📄'
+      nfe: 'NFe 📄',
+      vale_gas: 'Vale Gás 🎫 (pago adiantado)'
     };
     const statusMsg = msgs[tipoPgto] || '';
     
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
 
-    // v2.11.28: popup finalização rápida
+    // v2.11.29: popup finalização rápida
     // Consumidor final OU data passada/hoje → perguntar se quer marcar entregue
     const _dataSalva = getDataPedido();
     const _hoje = dataCGOffset(0);
@@ -1267,7 +1269,7 @@ async function saveOrder() {
       setTimeout(() => openQuickDeliver(result.id, isConsumidorFinal, tipoPgto), 400);
     }
 
-    // v2.11.28: Não redireciona — limpa form para novo pedido
+    // v2.11.29: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1286,11 +1288,11 @@ async function saveOrder() {
       // Reativar botão
       btn.disabled = false;
       btn.textContent = '✅ SALVAR PEDIDO';
-      // v2.11.28: Reset data pedido para hoje
+      // v2.11.29: Reset data pedido para hoje
       setDataPedido(0);
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.28: Restaurar favoritos originais
+      // v2.11.29: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1307,7 +1309,7 @@ async function saveOrder() {
 }
 
 renderItems();
-// v2.11.28: Inicializa data do pedido como hoje
+// v2.11.29: Inicializa data do pedido como hoje
 setDataPedido(0);
 // Bloquear seleção de data passada
 const _dpInput = document.getElementById('data-pedido-input');
@@ -1457,7 +1459,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.28 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.29 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
@@ -2000,7 +2002,7 @@ async function saveCadastro() {
     btn.textContent = '✅ Cadastrar no Bling';
   }
 }
-<!-- MODAL FINALIZAÇÃO RÁPIDA v2.11.28 -->
+<!-- MODAL FINALIZAÇÃO RÁPIDA v2.11.29 -->
 <div id="modal-quick-deliver" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="text-align:center;margin-bottom:20px">
@@ -2014,6 +2016,21 @@ async function saveCadastro() {
         <option value="">— Selecionar entregador —</option>
       </select>
     </div>
+    <!-- Vale Gás: pergunta sobre NF -->
+    <div id="qd-nf-wrap" style="display:none;margin-bottom:16px;padding:12px;background:#fef9c3;border-radius:8px;border:2px solid #fbbf24">
+      <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#92400e">🧾 Nota Fiscal já foi emitida?</p>
+      <p style="margin:0 0 10px;font-size:12px;color:#78350f">Na venda do lote de Vale Gás normalmente a NF já foi emitida. Se sim, <strong>não criaremos nova venda no Bling</strong>.</p>
+      <div style="display:flex;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:6px;background:#fff">
+          <input type="radio" name="qd-nf" id="qd-nf-sim" value="sim" checked style="width:16px;height:16px;accent-color:#10b981">
+          <span style="font-size:13px;font-weight:700;color:#065f46">✅ Sim, NF já emitida<br><small style="font-weight:400;color:#6b7280">Não criar no Bling</small></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:6px;background:#fff">
+          <input type="radio" name="qd-nf" id="qd-nf-nao" value="nao" style="width:16px;height:16px;accent-color:#f97316">
+          <span style="font-size:13px;font-weight:700;color:#c2410c">📄 Não, emitir agora<br><small style="font-weight:400;color:#6b7280">Cria venda no Bling</small></span>
+        </label>
+      </div>
+    </div>
     <div style="display:flex;gap:10px">
       <button onclick="closeQuickDeliver()" style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#64748b;font-size:14px;font-weight:700;cursor:pointer">Não, depois</button>
       <button onclick="confirmQuickDeliver()" id="qd-btn-confirm" style="flex:1;padding:12px;border:none;border-radius:8px;background:#10b981;color:#fff;font-size:14px;font-weight:700;cursor:pointer">✅ Sim, marcar entregue!</button>
@@ -2025,28 +2042,40 @@ async function saveCadastro() {
 // ── FINALIZAÇÃO RÁPIDA ─────────────────────────────────────────────
 let _qdOrderId = null;
 let _qdIsConsumidorFinal = false;
+let _qdTipoPgto = null;
 
 async function openQuickDeliver(orderId, isConsumidorFinal, tipoPgto) {
   _qdOrderId = orderId;
   _qdIsConsumidorFinal = isConsumidorFinal;
+  _qdTipoPgto = tipoPgto;
 
   const dataPedido = getDataPedido();
   const hoje = dataCGOffset(0);
   const isPast = dataPedido < hoje;
+  const isValeGas = tipoPgto === 'vale_gas';
 
-  // Montar texto do popup
+  // Subtitle
   const subtitle = isPast
     ? `📅 Pedido de <strong>${dataPedido}</strong> — entrega já aconteceu?`
     : `Quer já finalizar esse pedido como entregue agora?`;
   document.getElementById('qd-subtitle').innerHTML = subtitle;
 
-  if (isConsumidorFinal) {
+  // Vale Gás: mostrar pergunta de NF
+  const nfWrap = document.getElementById('qd-nf-wrap');
+  nfWrap.style.display = isValeGas ? 'block' : 'none';
+  if (isValeGas) {
+    document.getElementById('qd-nf-sim').checked = true; // default: NF já emitida
+    document.getElementById('qd-title').textContent = '🎫 Finalizar entrega — Vale Gás';
+  } else if (isConsumidorFinal) {
     document.getElementById('qd-title').textContent = '🏢 Finalizar entrega — Portaria';
-    document.getElementById('qd-driver-wrap').style.display = 'none';
   } else {
     document.getElementById('qd-title').textContent = '🚚 Finalizar entrega agora?';
-    document.getElementById('qd-driver-wrap').style.display = 'block';
-    // Carregar entregadores
+  }
+
+  // Driver: mostrar se não for consumidor final
+  const driverWrap = document.getElementById('qd-driver-wrap');
+  if (!isConsumidorFinal) {
+    driverWrap.style.display = 'block';
     const sel = document.getElementById('qd-driver');
     sel.innerHTML = '<option value="">— Selecionar entregador —</option>';
     try {
@@ -2058,6 +2087,8 @@ async function openQuickDeliver(orderId, isConsumidorFinal, tipoPgto) {
         sel.appendChild(opt);
       });
     } catch(e) {}
+  } else {
+    driverWrap.style.display = 'none';
   }
 
   document.getElementById('modal-quick-deliver').style.display = 'flex';
@@ -2071,7 +2102,7 @@ function closeQuickDeliver() {
 async function confirmQuickDeliver() {
   if (!_qdOrderId) return;
 
-  // Validar entregador se não for consumidor final
+  // Validar entregador se necessário
   const driverId = document.getElementById('qd-driver')?.value;
   if (!_qdIsConsumidorFinal && !driverId) {
     toast('Selecione o entregador que fez a entrega', 'error');
@@ -2087,6 +2118,12 @@ async function confirmQuickDeliver() {
     const body = {};
     if (!_qdIsConsumidorFinal && driverId) body.driver_id = parseInt(driverId);
 
+    // Vale Gás: se NF já emitida, passar flag para não criar no Bling
+    if (_qdTipoPgto === 'vale_gas') {
+      const nfJaEmitida = document.getElementById('qd-nf-sim')?.checked;
+      if (nfJaEmitida) body.skip_bling = true;
+    }
+
     await api(`/api/order/${_qdOrderId}/mark-delivered`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2095,7 +2132,10 @@ async function confirmQuickDeliver() {
 
     closeQuickDeliver();
     hideLoading();
-    toast('✅ Pedido marcado como ENTREGUE! Bling gerado.', 'success');
+    const msg = _qdTipoPgto === 'vale_gas' && document.getElementById('qd-nf-sim')?.checked
+      ? '✅ Pedido entregue! Vale Gás — NF não gerada no Bling.'
+      : '✅ Pedido marcado como ENTREGUE! Bling gerado.';
+    toast(msg, 'success');
   } catch(e) {
     hideLoading();
     btn.disabled = false;
