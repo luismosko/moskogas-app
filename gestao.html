@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.9.2 — MoskoGás</title>
+<title>Gestão v2.9.5 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.2</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.5</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -147,7 +147,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.2
+// v2.9.5
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -787,15 +787,62 @@ function openEditModal(orderId) {
     }
   }
   if (btnCancel) btnCancel.style.display = canCancel ? '' : 'none';
-  // Guardar status atual para os modais
   window._editOrderStatus = o.status;
-
+  // v2.9.5: data do pedido
+  const _dtInp = document.getElementById('edit-data-pedido');
+  const _dtBloq = document.getElementById('edit-data-pedido-bloqueada');
+  if (_dtInp) {
+    const _dtVal = o.data_pedido || new Date(o.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+    _dtInp.value = _dtVal;
+    _dtInp.disabled = isEntregue;
+    _dtInp.style.background = isEntregue ? '#f1f5f9' : '';
+    _dtInp.style.color = isEntregue ? '#94a3b8' : '';
+    _dtInp.style.cursor = isEntregue ? 'not-allowed' : '';
+    _dtInp.removeAttribute('min');
+    let _off = null;
+    if (_dtVal === _editDataCG(-1)) _off = -1;
+    else if (_dtVal === _editDataCG(0)) _off = 0;
+    else if (_dtVal === _editDataCG(1)) _off = 1;
+    _editAtualizaBotoes(_off);
+    ['edit-btn-data-ontem','edit-btn-data-hoje','edit-btn-data-amanha'].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) { b.disabled = isEntregue; b.style.opacity = isEntregue ? '0.4' : '1'; b.style.cursor = isEntregue ? 'not-allowed' : 'pointer'; }
+    });
+  }
+  if (_dtBloq) _dtBloq.style.display = isEntregue ? 'block' : 'none';
   renderEditItems();
   document.getElementById('modal-edit').style.display = 'flex';
 }
 
 function closeEditModal() {
   document.getElementById('modal-edit').style.display = 'none';
+}
+
+// v2.9.5: helpers data modal edicao
+function _editDataCG(offset) {
+  const d = new Date(); d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
+}
+function editSetData(offset) {
+  const inp = document.getElementById('edit-data-pedido');
+  if (inp && !inp.disabled) { inp.value = _editDataCG(offset); _editAtualizaBotoes(offset); }
+}
+function editOnDataInput() {
+  const val = document.getElementById('edit-data-pedido').value;
+  let off = null;
+  if (val === _editDataCG(-1)) off = -1;
+  else if (val === _editDataCG(0)) off = 0;
+  else if (val === _editDataCG(1)) off = 1;
+  _editAtualizaBotoes(off);
+}
+function _editAtualizaBotoes(offset) {
+  [[-1,'edit-btn-data-ontem'],[0,'edit-btn-data-hoje'],[1,'edit-btn-data-amanha']].forEach(([off,id]) => {
+    const el = document.getElementById(id); if (!el) return;
+    const sel = off === offset;
+    el.style.borderColor = sel ? '#10b981' : '#e2e8f0';
+    el.style.background  = sel ? '#d1fae5' : '#f8fafc';
+    el.style.color       = sel ? '#065f46' : '#374151';
+  });
 }
 
 function renderEditItems() {
@@ -883,6 +930,7 @@ async function saveEditOrder(confirmBling = false) {
     total_value: total,
     notes: document.getElementById('edit-notes').value,
     tipo_pagamento: document.getElementById('edit-tipo-pgto').value,
+    data_pedido: (() => { const el = document.getElementById('edit-data-pedido'); return el && !el.disabled && el.value ? el.value : undefined; })(),
     driver_id: editDriverVal ? parseInt(editDriverVal) : undefined,
   };
   if (confirmBling) body.confirm_bling_change = true;
@@ -1061,6 +1109,20 @@ setInterval(autoCheckPixGestao, 20000);
       <h2 style="margin:0">✏️ Editar Pedido <span id="edit-order-id" style="color:#f97316"></span></h2>
       <button onclick="closeEditModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px" title="Fechar">&times;</button>
     </div>
+
+    <!-- DATA DO PEDIDO topo modal v2.9.5 -->
+    <div id="edit-data-pedido-wrap" style="margin-bottom:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:2px solid #e2e8f0">
+      <label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:6px">&#x1F4C5; DATA DO PEDIDO</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button type="button" id="edit-btn-data-ontem"  onclick="editSetData(-1)" style="padding:5px 10px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;color:#374151;font-size:11px;font-weight:700;cursor:pointer">&#x1F550; Ontem</button>
+        <button type="button" id="edit-btn-data-hoje"   onclick="editSetData(0)"  style="padding:5px 10px;border-radius:6px;border:2px solid #10b981;background:#d1fae5;color:#065f46;font-size:11px;font-weight:700;cursor:pointer">&#x1F4C5; Hoje</button>
+        <button type="button" id="edit-btn-data-amanha" onclick="editSetData(1)"  style="padding:5px 10px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;color:#374151;font-size:11px;font-weight:700;cursor:pointer">&#x1F305; Amanha</button>
+        <input type="date" id="edit-data-pedido" oninput="editOnDataInput()"
+          style="padding:5px 8px;border-radius:6px;border:2px solid #e2e8f0;font-size:12px;flex:1;min-width:130px;max-width:160px">
+      </div>
+      <div id="edit-data-pedido-bloqueada" style="display:none;font-size:11px;color:#94a3b8;margin-top:4px">&#x1F512; Nao e possivel alterar a data de pedidos ja entregues</div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <label style="font-size:12px;color:#64748b;font-weight:600">CLIENTE *</label>

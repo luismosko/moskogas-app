@@ -1,4 +1,4 @@
-// v2.49.12
+// v2.49.13
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -3043,7 +3043,7 @@ export default {
     if (method === 'POST' && /^\/api\/order\/\d+\/update$/.test(path)) {
       const orderId = parseInt(path.split('/')[3]);
       const body = await request.json();
-      const { customer_name, phone_digits, address_line, bairro, complemento, referencia, items, total_value, notes, tipo_pagamento, forma_pagamento_key, driver_id, confirm_bling_change } = body;
+      const { customer_name, phone_digits, address_line, bairro, complemento, referencia, items, total_value, notes, tipo_pagamento, forma_pagamento_key, driver_id, confirm_bling_change, data_pedido } = body;
 
       // Buscar pedido atual para detectar mudança de tipo_pagamento
       const currentOrder = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
@@ -3106,6 +3106,11 @@ export default {
           sql += `, driver_id=?, driver_name_cache=?, driver_phone_cache=?`;
           params.push(parseInt(driver_id), driver.nome, driver.telefone || '');
         }
+      }
+      // v2.49.13: data_pedido editavel — somente se pedido NAO entregue
+      if (data_pedido && !isDelivered) {
+        sql += `, data_pedido=?`;
+        params.push(data_pedido);
       }
 
       // ── Executar ação Bling ──
@@ -3605,18 +3610,7 @@ export default {
       await logStatusChange(env, id, statusAnterior, novoStatus, motivo, user);
       await logEvent(env, id, 'status_reverted', { de: statusAnterior, para: novoStatus, motivo, usuario: user?.nome, role: user?.role });
 
-      // Se não é admin, notificar admin via WhatsApp
-      if (!isAdmin) {
-        try {
-          const admins = await env.DB.prepare("SELECT telefone, nome FROM app_users WHERE role='admin' AND ativo=1 AND recebe_whatsapp=1 AND telefone IS NOT NULL").all().then(r => r.results || []);
-          for (const adm of admins) {
-            if (adm.telefone) {
-              await sendWhatsApp(env, adm.telefone, `⚠️ ${user.nome} reverteu pedido #${id}: ${statusAnterior.toUpperCase()} → ${novoStatus.toUpperCase()}\nMotivo: ${motivo}`, { category: 'admin_alerta', skipSafety: true });
-            }
-          }
-        } catch (_) { } // não bloqueia se WhatsApp falhar
-      }
-
+      // v2.49.13: alertas admin removidos do revert - apenas cancelamentos geram alerta
       return json({
         ok: true,
         status_anterior: statusAnterior,
