@@ -1,4 +1,4 @@
-// v2.49.15
+// v2.49.16
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -3169,6 +3169,8 @@ export default {
 
     if (method === 'GET' && path === '/api/orders/list') {
       const status = url.searchParams.get('status'); const driverId = url.searchParams.get('driver_id'); const q = url.searchParams.get('q'); const date = url.searchParams.get('date');
+      const dateFrom = url.searchParams.get('date_from');
+      const dateTo   = url.searchParams.get('date_to');
       let sql = `SELECT o.*, d.nome AS driver_name_db FROM orders o LEFT JOIN app_users d ON o.driver_id = d.id WHERE 1=1`;
       const params = [];
       if (status) {
@@ -3177,8 +3179,12 @@ export default {
         else if (statusList.length > 1) { sql += ` AND o.status IN (${statusList.map(() => '?').join(',')})`; params.push(...statusList); }
       }
       if (driverId) { sql += ` AND o.driver_id = ?`; params.push(driverId); }
-      if (date) {
-        // date=YYYY-MM-DD → filter by created_at (unix epoch) within that day in BRT (UTC-4)
+      // v2.49.16: date_from/date_to filtram por data_pedido (data real do pedido)
+      if (dateFrom || dateTo) {
+        if (dateFrom) { sql += ` AND COALESCE(o.data_pedido, date(o.created_at, 'unixepoch', '-4 hours')) >= ?`; params.push(dateFrom); }
+        if (dateTo)   { sql += ` AND COALESCE(o.data_pedido, date(o.created_at, 'unixepoch', '-4 hours')) <= ?`; params.push(dateTo); }
+      } else if (date) {
+        // retrocompatibilidade: filtra por created_at
         const dayStart = Math.floor(new Date(date + 'T00:00:00-04:00').getTime() / 1000);
         const dayEnd = dayStart + 86400;
         sql += ` AND o.created_at >= ? AND o.created_at < ?`;
