@@ -82,18 +82,30 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     await page.screenshot({ path: '/tmp/ultragaz-before-submit.png' }).catch(() => {});
     log(`URL antes de submeter: ${page.url()}`);
 
-    // Clica no botão Login
-    const loginBtn = await page.$('button[type="submit"]') ||
-                     await page.$('input[type="submit"]') ||
-                     await page.$('button');
-    if (loginBtn) {
-      const btnText = await loginBtn.evaluate(el => el.textContent || el.value || '').catch(() => '');
-      log(`Clicando botão: "${btnText.trim()}"`);
-      await loginBtn.click();
-    } else {
-      log('Sem botão — Enter no campo senha');
-      await senhaField.press('Enter');
-    }
+    // Inspeciona todos os botões da página para debug
+    const allBtns = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('button, input[type="submit"], a')).map(el => ({
+        tag: el.tagName,
+        type: el.type || '',
+        text: el.textContent?.trim() || el.value || '',
+        id: el.id || '',
+        cls: el.className || ''
+      }));
+    });
+    log(`Botões encontrados: ${JSON.stringify(allBtns)}`);
+
+    // Clica no botão Login via JS direto
+    const clicked = await page.evaluate(() => {
+      // Tenta por texto "Login"
+      const all = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
+      const loginBtn = all.find(el => /login/i.test(el.textContent) || /login/i.test(el.value));
+      if (loginBtn) { loginBtn.click(); return 'clicked:' + (loginBtn.textContent || loginBtn.value); }
+      // Fallback: qualquer botão visível
+      const anyBtn = all.find(el => el.offsetParent !== null);
+      if (anyBtn) { anyBtn.click(); return 'fallback:' + (anyBtn.textContent || anyBtn.value); }
+      return 'none';
+    });
+    log(`Resultado clique JS: ${clicked}`);
 
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(2000);
