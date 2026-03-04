@@ -12,6 +12,7 @@
     "ws": "^8.17.0",
     "better-sqlite3": "^9.6.0",
     "dotenv": "^16.4.5",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "imapflow": "^1.0.162"
   }
 }

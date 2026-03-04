@@ -1,5 +1,6 @@
 // browser.js — Playwright: login no Hub Ultragaz + captura URL assinada do WebSocket
 import { chromium } from 'playwright';
+import { buscarCodigo2FA } from './imap-reader.js';
 
 let browserInstance = null;
 let contextInstance = null;
@@ -153,31 +154,12 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       await page.waitForTimeout(2000);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
 
-      // ── AGUARDA CÓDIGO VIA API (Worker salva código recebido por email) ──
-      log('Aguardando código 2FA via email... (polling API por até 5min)');
-      const moskoApiUrl = process.env.MOSKOGAS_API_URL || 'https://moskogas.com.br';
-      const moskoApiKey = process.env.MOSKOGAS_API_KEY;
-      let codigo2fa = null;
-
-      for (let tentativa = 0; tentativa < 60; tentativa++) {
-        await page.waitForTimeout(5000);
-        try {
-          const resp = await fetch(`${moskoApiUrl}/api/ultragaz/2fa-code`, {
-            headers: { 'X-API-Key': moskoApiKey }
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data.codigo && data.codigo.length >= 4) {
-              codigo2fa = data.codigo;
-              log(`Código 2FA recebido: ${codigo2fa}`);
-              break;
-            }
-          }
-        } catch (e) { /* continua tentando */ }
-        if (tentativa % 6 === 0) log(`Aguardando código 2FA... (${tentativa * 5}s)`);
-      }
-
-      if (!codigo2fa) throw new Error('Timeout aguardando código 2FA via email');
+      // ── AGUARDA CÓDIGO 2FA VIA GMAIL IMAP ──
+      log('Aguardando código 2FA via Gmail IMAP...');
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailPass = process.env.GMAIL_APP_PASSWORD;
+      if (!gmailUser || !gmailPass) throw new Error('GMAIL_USER e GMAIL_APP_PASSWORD não configurados no .env');
+      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 300000);
 
       // Digita o código no campo
       await page.waitForSelector('input[type="text"], input[type="number"], input[maxlength]', { timeout: 10000 });
@@ -199,11 +181,7 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       });
       log(`Confirmação 2FA clicada: ${confirmarClicked}`);
 
-      // Limpa o código usado
-      await fetch(`${moskoApiUrl}/api/ultragaz/2fa-code`, {
-        method: 'DELETE',
-        headers: { 'X-API-Key': moskoApiKey }
-      }).catch(() => {});
+      // Código 2FA usado — email já marcado como lido no Gmail
 
       await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
       await page.waitForTimeout(2000);
