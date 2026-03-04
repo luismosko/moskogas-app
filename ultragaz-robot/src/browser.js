@@ -94,15 +94,15 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     });
     log(`Botões encontrados: ${JSON.stringify(allBtns)}`);
 
-    // Clica no botão Login via JS direto
+    // Clica no botão "Login" direto (id=b-login), NÃO no "Login Ultragaz" (SSO Microsoft)
     const clicked = await page.evaluate(() => {
-      // Tenta por texto "Login"
-      const all = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
-      const loginBtn = all.find(el => /login/i.test(el.textContent) || /login/i.test(el.value));
-      if (loginBtn) { loginBtn.click(); return 'clicked:' + (loginBtn.textContent || loginBtn.value); }
-      // Fallback: qualquer botão visível
-      const anyBtn = all.find(el => el.offsetParent !== null);
-      if (anyBtn) { anyBtn.click(); return 'fallback:' + (anyBtn.textContent || anyBtn.value); }
+      // Prioridade: id="b-login" (login direto)
+      const btnDireto = document.getElementById('b-login');
+      if (btnDireto) { btnDireto.click(); return 'clicked:b-login:' + btnDireto.textContent.trim(); }
+      // Fallback: botão com texto exato "Login" (não "Login Ultragaz")
+      const all = Array.from(document.querySelectorAll('button'));
+      const loginBtn = all.find(el => el.textContent.trim() === 'Login');
+      if (loginBtn) { loginBtn.click(); return 'clicked:text:' + loginBtn.textContent.trim(); }
       return 'none';
     });
     log(`Resultado clique JS: ${clicked}`);
