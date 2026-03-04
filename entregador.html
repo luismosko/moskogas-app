@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador v2.6.6 — MoskoGás</title>
+<title>Entregador 2.6.7 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -352,7 +352,7 @@ async function load() {
   const driverId = document.getElementById('fDriver').value;
   const todayStr = today();
 
-  let url = `/api/orders/list?date=${todayStr}`;
+  let url = `/api/orders/list?date_from=${todayStr}&date_to=${todayStr}`;
   if (driverId) url += `&driver_id=${driverId}`;
   url += '&status=encaminhado,whatsapp_enviado,entregue';
 
