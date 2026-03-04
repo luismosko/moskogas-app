@@ -136,48 +136,64 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       log('Modal 2FA detectado! Selecionando opção email...');
       await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
 
-      // Dump HTML do modal para debug
-      const modalHtml = await page.evaluate(() => {
-        const modal = document.querySelector('.t-Dialog, .ui-dialog, [role="dialog"], .modal');
-        return modal ? modal.innerHTML.substring(0, 2000) : document.body.innerHTML.substring(0, 2000);
-      });
-      log(`HTML modal 2FA: ${modalHtml}`);
+      // Modal 2FA está dentro de um IFRAME — precisa acessar o frame
+      log('Buscando iframe do modal 2FA...');
+      await page.waitForTimeout(1000);
 
-      // Seleciona radio "Receber no e-mail" — clica diretamente no segundo radio
-      const emailRadioClicked = await page.evaluate(() => {
+      // Pega o frame do modal MFA
+      let mfaFrame = null;
+      for (const frame of page.frames()) {
+        const url = frame.url();
+        if (url.includes('user-mfa') || url.includes('mfa')) {
+          mfaFrame = frame;
+          log(`Frame 2FA encontrado: ${url}`);
+          break;
+        }
+      }
+
+      if (!mfaFrame) {
+        log('Frame 2FA não encontrado — tentando via iframe selector');
+        const iframeEl = await page.$('iframe[src*="mfa"], iframe[title*="Autenticação"]');
+        if (iframeEl) mfaFrame = await iframeEl.contentFrame();
+      }
+
+      if (!mfaFrame) throw new Error('Frame do modal 2FA não encontrado');
+
+      // Aguarda conteúdo do frame carregar
+      await mfaFrame.waitForLoadState('domcontentloaded').catch(() => {});
+      await page.waitForTimeout(1000);
+      await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
+
+      // Seleciona radio email dentro do frame
+      const emailRadioClicked = await mfaFrame.evaluate(() => {
         const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
-        log && log('Radios encontrados: ' + radios.length);
-        // Procura radio com value ou label contendo "email" ou "mail"
         const emailRadio = radios.find(r => {
           const label = document.querySelector(`label[for="${r.id}"]`);
           return /mail/i.test(r.value) || (label && /mail/i.test(label.textContent));
-        }) || radios[1]; // fallback: segundo radio
+        }) || radios[1];
         if (emailRadio && !emailRadio.checked) {
           emailRadio.click();
           emailRadio.checked = true;
           emailRadio.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'radio:' + emailRadio.id + ':' + emailRadio.value;
+          return 'radio:' + emailRadio.id;
         }
-        return emailRadio ? 'ja-selecionado' : false;
+        return emailRadio ? 'ja-selecionado' : 'nao-encontrado';
       });
       log(`Radio email selecionado: ${emailRadioClicked}`);
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(800);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-radio.png' }).catch(() => {});
 
-      // Clica em "Enviar código de autenticação" — busca por texto exato
-      const enviarClicked = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('button'));
+      // Clica em "Enviar código de autenticação" dentro do frame
+      const enviarClicked = await mfaFrame.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
         const info = btns.map(b => `"${b.textContent.trim()}" id="${b.id}"`).join(' | ');
-        // Retorna info para log
-        window._btnInfo = info;
-        // Clica no botão com "Enviar" e "código" no texto (não help button)
-        const enviar = btns.find(el => 
-          el.id !== '' &&
-          /enviar/i.test(el.textContent) && 
-          /c.digo/i.test(el.textContent)
-        ) || btns.find(el => /enviar c.digo/i.test(el.textContent));
-        if (enviar) { enviar.click(); return 'OK:' + enviar.textContent.trim().substring(0,30); }
-        return 'nao-encontrado|' + info;
+        const enviar = btns.find(el =>
+          /enviar/i.test(el.textContent) ||
+          /enviar/i.test(el.value) ||
+          /submit/i.test(el.type)
+        );
+        if (enviar) { enviar.click(); return 'OK:' + (enviar.textContent || enviar.value).trim().substring(0, 30); }
+        return 'nao-encontrado | ' + info;
       });
       log(`Botão enviar clicado: ${enviarClicked}`);
       await page.waitForTimeout(3000);
