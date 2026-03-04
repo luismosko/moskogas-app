@@ -206,32 +206,36 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       const gmailUser = process.env.GMAIL_USER;
       const gmailPass = process.env.GMAIL_APP_PASSWORD;
       if (!gmailUser || !gmailPass) throw new Error('GMAIL_USER e GMAIL_APP_PASSWORD não configurados no .env');
-      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 300000);
 
-      // Digita o código no campo
-      await page.waitForSelector('input[type="text"], input[type="number"], input[maxlength]', { timeout: 10000 });
-      const codigoField = await page.$('input[maxlength]') ||
-                          await page.$('input[type="number"]') ||
-                          await page.$('input[type="text"]');
-      if (codigoField) {
-        await codigoField.fill(codigo2fa);
-        log(`Código ${codigo2fa} digitado`);
-      }
+      // Aguarda novo email (ignora emails anteriores ao momento atual)
+      const agora = Date.now();
+      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 300000, agora);
 
-      // Confirma o código
-      const confirmarClicked = await page.evaluate(() => {
+      // Digita o código no IFRAME do 2FA
+      await mfaFrame.waitForSelector('input', { timeout: 10000 }).catch(() => {});
+      const codigoField = await mfaFrame.$('input[maxlength]') ||
+                          await mfaFrame.$('input[type="number"]') ||
+                          await mfaFrame.$('input[type="text"]') ||
+                          await mfaFrame.$('input');
+      if (!codigoField) throw new Error('Campo de código 2FA não encontrado no iframe');
+      await codigoField.fill('');
+      await codigoField.fill(codigo2fa);
+      log(`Código ${codigo2fa} digitado no iframe`);
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: '/tmp/ultragaz-2fa-codigo.png' }).catch(() => {});
+
+      // Confirma o código dentro do iframe
+      const confirmarClicked = await mfaFrame.evaluate(() => {
         const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-        const confirmar = btns.find(el => /confirmar|validar|entrar|ok/i.test(el.textContent));
-        if (confirmar) { confirmar.click(); return confirmar.textContent; }
-        if (btns[0]) { btns[0].click(); return 'first-btn'; }
-        return false;
+        const confirmar = btns.find(el => /confirmar|validar|entrar|verificar|ok|enviar/i.test(el.textContent || el.value));
+        if (confirmar) { confirmar.click(); return confirmar.textContent || confirmar.value; }
+        if (btns[0]) { btns[0].click(); return 'first-btn:' + (btns[0].textContent || ''); }
+        return 'nenhum-botao';
       });
       log(`Confirmação 2FA clicada: ${confirmarClicked}`);
 
-      // Código 2FA usado — email já marcado como lido no Gmail
-
       await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(3000);
     }
 
     // Screenshot após login
