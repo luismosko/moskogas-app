@@ -1,4 +1,4 @@
-// v2.49.19
+// v2.49.20
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -8295,13 +8295,20 @@ async function keepBlingTokenFresh(env) {
     const expiresAt = (row.obtained_at || 0) + (row.expires_in || 3600);
     const minutesLeft = Math.floor((expiresAt - now) / 60);
     console.log(`[cron] Token Bling expira em ${minutesLeft} minutos.`);
-    if (minutesLeft < 120) {
-      const newToken = await refreshBlingToken(env, row.refresh_token);
-      console.log(`[cron] Token renovado com sucesso. Novo: ${newToken.substring(0, 10)}...`);
+    // v2.49.20: renovar quando restam menos de 240min (4h) — antes era 120min
+    // Cron a cada 30min garante que nunca chegamos perto de expirar
+    if (minutesLeft < 240) {
+      console.log('[cron] Renovando token Bling preventivamente...');
+      try {
+        const newToken = await refreshBlingToken(env, row.refresh_token);
+        console.log(`[cron] Token renovado. Expira em ~${Math.floor((newToken.expires_in||3600)/60)} min.`);
+      } catch(refreshErr) {
+        console.error('[cron] Falha ao renovar token Bling:', refreshErr.message);
+      }
     } else {
-      console.log('[cron] Token ainda válido.');
+      console.log('[cron] Token ainda válido, ' + minutesLeft + ' min restantes.');
     }
-  } catch (e) { console.error('[cron] Erro:', e.message); }
+  } catch (e) { console.error('[cron] Erro keepBlingTokenFresh:', e.message); }
 }
 
 async function dailyAuditSnapshot(env) {
