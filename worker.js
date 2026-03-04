@@ -1,4 +1,4 @@
-// v2.49.17
+// v2.49.18
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -2512,6 +2512,78 @@ export default {
         if (bid) seenId.add(bid); seenName.add(nome); merged.push(r);
       }
       return json(merged.slice(0, 12));
+    }
+
+    // ── GESTÃO DE CLIENTES ──────────────────────────────────────────────
+    // GET /api/clientes — lista paginada com stats de pedidos
+    if (request.method === 'GET' && path === '/api/clientes') {
+      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const q     = (url.searchParams.get('q') || '').trim();
+      const page  = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+      const limit = Math.min(50, parseInt(url.searchParams.get('limit') || '30'));
+      const offset = (page - 1) * limit;
+      const origem = url.searchParams.get('origem') || '';
+
+      let where = `WHERE cc.name IS NOT NULL AND cc.name != '' AND cc.phone_digits != ''`;
+      const params = [];
+      if (q) {
+        const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+        for (const w of words) {
+          where += ` AND (LOWER(cc.name) LIKE ? OR cc.phone_digits LIKE ? OR cc.cpf_cnpj LIKE ? OR LOWER(cc.address_line) LIKE ?)`;
+          params.push(`%${w}%`,`%${w}%`,`%${w}%`,`%${w}%`);
+        }
+      }
+      if (origem) { where += ` AND cc.origem = ?`; params.push(origem); }
+
+      const sql = `
+        SELECT cc.phone_digits, cc.name, cc.cpf_cnpj, cc.address_line, cc.bairro,
+          cc.bling_contact_id, cc.origem, cc.email, cc.updated_at,
+          COUNT(o.id) AS total_pedidos,
+          COALESCE(SUM(o.total_value),0) AS total_valor,
+          COALESCE(SUM(CASE WHEN o.status NOT IN ('entregue','cancelado') THEN 1 ELSE 0 END),0) AS pedidos_abertos,
+          COALESCE(SUM(CASE WHEN o.pago = 0 AND o.status = 'entregue' THEN o.total_value ELSE 0 END),0) AS valor_pendente,
+          MAX(o.created_at) AS ultimo_pedido_ts
+        FROM customers_cache cc
+        LEFT JOIN orders o ON o.phone_digits = cc.phone_digits
+        ${where}
+        GROUP BY cc.phone_digits
+        ORDER BY total_pedidos DESC, cc.name ASC
+        LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+
+      const countSql = `SELECT COUNT(DISTINCT cc.phone_digits) AS total FROM customers_cache cc ${where}`;
+      const [rows, countRes] = await Promise.all([
+        env.DB.prepare(sql).bind(...params).all(),
+        env.DB.prepare(countSql).bind(...params.slice(0, -2)).all(),
+      ]);
+      return json({ clientes: rows.results || [], total: countRes.results[0]?.total || 0, page, limit });
+    }
+
+    // GET /api/clientes/:phone — detalhe + histórico de pedidos
+    if (request.method === 'GET' && path.startsWith('/api/clientes/')) {
+      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const phone = decodeURIComponent(path.replace('/api/clientes/', ''));
+      if (!phone) return err('phone obrigatório');
+
+      const [cliente, pedidos] = await Promise.all([
+        env.DB.prepare(`SELECT * FROM customers_cache WHERE phone_digits = ?`).bind(phone).first(),
+        env.DB.prepare(`SELECT id, data_pedido, created_at, items_json, total_value, tipo_pagamento, status, pago, driver_name_cache, bling_pedido_num FROM orders WHERE phone_digits = ? ORDER BY created_at DESC LIMIT 100`).bind(phone).all(),
+      ]);
+      if (!cliente) return err('Cliente não encontrado', 404);
+
+      const ped = pedidos.results || [];
+      const stats = {
+        total_pedidos: ped.length,
+        total_valor: ped.reduce((s,p) => s + (p.total_value||0), 0),
+        pedidos_abertos: ped.filter(p => !['entregue','cancelado'].includes(p.status)).length,
+        valor_pendente: ped.filter(p => p.pago===0 && p.status==='entregue').reduce((s,p) => s+(p.total_value||0), 0),
+        ticket_medio: ped.filter(p=>p.status==='entregue').length
+          ? ped.filter(p=>p.status==='entregue').reduce((s,p)=>s+(p.total_value||0),0) / ped.filter(p=>p.status==='entregue').length
+          : 0,
+      };
+      return json({ cliente, pedidos: ped, stats });
     }
 
     // ── CADASTRO COMPLETO DE CLIENTE NO BLING (PF/PJ) ──────

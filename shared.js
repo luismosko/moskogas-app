@@ -1,5 +1,5 @@
 // shared.js — Utilitários compartilhados MoskoGás v1.22.1
-// v1.21.0: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
+// v1.21.1: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
 // v1.20.0: Banco de Posts adicionado ao menu Admin
 // v1.19.0: Brand Kits adicionado ao menu Config (admin root)
 // v1.19.0: Avaliações adicionado ao menu ADM
@@ -165,6 +165,7 @@ const NAV_DROPDOWNS = [
     id: 'adm', icon: '🏢', label: 'ADM', roles: ['admin', 'atendente'],
     children: [
       { href: 'contratos.html', icon: '📄', label: 'Contratos' },
+      { href: 'clientes.html', icon: '👥', label: 'Clientes' },
       { href: 'estoque.html', icon: '📦', label: 'Estoque' },
       { href: 'vales.html', icon: '🎟️', label: 'Vale Gás' },
       { href: 'avaliacoes.html', icon: '⭐', label: 'Avaliações' },
