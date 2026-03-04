@@ -1,4 +1,7 @@
 *.json
+!package.json
+!package-lock.json
+!wrangler.jsonc
 .wrangler/
 .dev.vars
 DOCUMENTAÇÃO/BKP - GoogleDrive API/
