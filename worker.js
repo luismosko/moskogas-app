@@ -7382,11 +7382,11 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
       // GET /api/ultragaz/hub-status — Retorna status de conexão do Hub (admin)
       if (path === '/api/ultragaz/hub-status' && method === 'GET') {
-        if (!isAdmin) return err('Não autorizado', 401);
+        const authHub = await requireAuth(request, env, ['admin','atendente']);
+        if (!authHub.ok) return err('Não autorizado', 401);
         const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_hub_status'").first();
         if (!row) return json({ conectado: false, status: 'desconectado', updated_at: null });
         const data = JSON.parse(row.value);
-        // Considera desconectado se não houve atualização há mais de 30 minutos
         const idade = Date.now() - new Date(data.updated_at).getTime();
         if (idade > 1800000) data.conectado = false;
         return json(data);
@@ -7396,7 +7396,10 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
       if (path === '/api/ultragaz/hub-status' && method === 'POST') {
         const apiKey = request.headers.get('X-API-Key') || request.headers.get('X-API-KEY') || '';
         const isRobot = apiKey && apiKey === env.APP_API_KEY;
-        if (!isAdmin && !isRobot) return err('Não autorizado', 401);
+        if (!isRobot) {
+          const authHub = await requireAuth(request, env, ['admin']);
+          if (!authHub.ok) return err('Não autorizado', 401);
+        }
         const body = await request.json();
         const { conectado, status, mensagem } = body;
         const data = { conectado: !!conectado, status: status || (conectado ? 'conectado' : 'desconectado'), mensagem: mensagem || '', updated_at: new Date().toISOString() };
@@ -7406,12 +7409,10 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
       // POST /api/ultragaz/start-login — Admin solicita início do login (abre fluxo 2FA)
       if (path === '/api/ultragaz/start-login' && method === 'POST') {
-        if (!isAdmin) return err('Não autorizado', 401);
-        // Limpa estado anterior
+        const authHub = await requireAuth(request, env, ['admin']);
+        if (!authHub.ok) return err('Não autorizado', 401);
         await env.DB.prepare("DELETE FROM app_config WHERE key IN ('ultragaz_2fa_code','ultragaz_login_request')").run();
-        // Sinaliza para o robô iniciar login
         await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_login_request', ?, datetime('now'))").bind(JSON.stringify({ requested_at: new Date().toISOString(), status: 'pending' })).run();
-        // Atualiza status hub
         await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_hub_status', ?, datetime('now'))").bind(JSON.stringify({ conectado: false, status: 'conectando', mensagem: 'Login iniciado...', updated_at: new Date().toISOString() })).run();
         return json({ ok: true, mensagem: 'Login solicitado. Aguarde o robô iniciar...' });
       }
