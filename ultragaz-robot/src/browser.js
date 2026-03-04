@@ -67,9 +67,15 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     await loginField.fill(login);
     await senhaField.fill(senha);
 
-    // Clica no botão de login
-    await page.click('button[type="submit"], input[type="submit"], #B3564791325482448, .t-Button--hot');
+    // Tenta clicar no botão — fallback: pressiona Enter no campo senha
+    const btnClicked = await page.click('button[type="submit"], input[type="submit"], .t-Button--hot', { timeout: 5000 }).catch(() => false);
+    if (btnClicked === false) {
+      log('Botao nao encontrado via click — pressionando Enter...');
+      await senhaField.press('Enter');
+    }
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+    // Screenshot para debug
+    await page.screenshot({ path: '/tmp/ultragaz-login.png' }).catch(() => {});
 
     // Verifica se logou (URL mudou ou elemento do dashboard apareceu)
     const currentUrl = page.url();
