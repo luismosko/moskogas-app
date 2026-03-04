@@ -1,4 +1,4 @@
-// v2.49.20
+// v2.49.21
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -3727,7 +3727,7 @@ export default {
       if (order.status !== 'entregue') return err('Pedido não está entregue', 400);
       if (order.bling_pedido_id) return json({ ok: true, msg: 'Já tem Bling #' + order.bling_pedido_num, already: true });
 
-      const TIPOS_BLING = ['dinheiro','pix_vista','pix_receber','debito','credito','vale_gas'];
+      const TIPOS_BLING = ['dinheiro','pix_vista','debito','credito','vale_gas'];
       if (!TIPOS_BLING.includes(order.tipo_pagamento)) return err(`Tipo ${order.tipo_pagamento} não gera Bling individual`, 400);
 
       const custData = order.phone_digits
@@ -3771,7 +3771,7 @@ export default {
         FROM orders
         WHERE status = 'entregue'
           AND bling_pedido_id IS NULL
-          AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
+          AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
         ORDER BY delivered_at DESC
       `).all();
       return json({ pedidos: rows.results || [], total: rows.results?.length || 0 });
