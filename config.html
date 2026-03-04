@@ -902,13 +902,6 @@ function abrirModalNovaConexao() {
   aplicarRestricoesCategorias(null); // null = nova conexão, bloqueia todas já usadas
   document.getElementById('conn-status').textContent = '';
   document.getElementById('modal-wa-conn').style.display = 'flex';
-}h(c => {
-    const el = document.getElementById('cat-'+c);
-    el.checked = false;
-    updateCatBorder(el);
-  });
-  document.getElementById('conn-status').textContent = '';
-  document.getElementById('modal-wa-conn').style.display = 'flex';
 }
 
 async function editarConexao(id) {
