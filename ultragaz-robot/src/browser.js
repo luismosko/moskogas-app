@@ -112,13 +112,20 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     await page.waitForTimeout(3000);
 
     // ── VERIFICA SE APARECEU MODAL DE 2FA ──
-    const modal2fa = await page.$('#enviarCodigo, [id*="codigo"], [class*="modal"]').catch(() => null);
-    const modal2faTexto = await page.evaluate(() => {
-      const el = document.querySelector('body');
-      return el ? el.innerText : '';
-    }).catch(() => '');
+    // Aguarda até 8s pelo modal de 2FA
+    const modal2faTexto = await Promise.race([
+      page.waitForSelector('text=Enviar código de autenticação', { timeout: 8000 })
+        .then(() => page.evaluate(() => document.body.innerText))
+        .catch(() => null),
+      page.evaluate(() => document.body.innerText)
+    ]).catch(() => '');
 
-    if (modal2faTexto.includes('Enviar') && modal2faTexto.includes('digo')) {
+    const tem2FA = modal2faTexto && (
+      modal2faTexto.includes('Enviar') && modal2faTexto.includes('digo')
+    );
+    log(`Texto modal 2FA detectado: ${tem2FA} — preview: ${(modal2faTexto||'').substring(0,100)}`);
+
+    if (tem2FA) {
       log('Modal 2FA detectado! Selecionando opção email...');
       await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
 
