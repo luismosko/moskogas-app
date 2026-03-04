@@ -244,6 +244,41 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
 }
 
 export function getContext() { return contextInstance; }
+
+export async function getWebsocketInfo(page) {
+  log('Buscando URL assinada do WebSocket...');
+  const result = await page.evaluate(async () => {
+    return new Promise((resolve, reject) => {
+      if (typeof apex === 'undefined') { reject(new Error('APEX não disponível na página')); return; }
+      apex.server.process('GET_WEBSOCKET_INFO', {}, {
+        success: (data) => resolve(data),
+        error: (err) => reject(new Error('GET_WEBSOCKET_INFO falhou: ' + JSON.stringify(err))),
+        dataType: 'json',
+      });
+    });
+  });
+  if (!result || (!result.url && !result.wss_url && !result.endpoint)) {
+    throw new Error('URL WSS não retornada: ' + JSON.stringify(result));
+  }
+  const wssUrl = result.url || result.wss_url || result.endpoint || result;
+  log(`URL WSS obtida: ${typeof wssUrl === 'string' ? wssUrl.substring(0, 60) : JSON.stringify(wssUrl)}...`);
+  return typeof wssUrl === 'string' ? wssUrl : JSON.stringify(wssUrl);
+}
+
+export async function getOrderDetails(page, orderId) {
+  log(`Buscando detalhes do pedido #${orderId}...`);
+  const result = await page.evaluate(async (id) => {
+    return new Promise((resolve, reject) => {
+      apex.server.process('GET_SELECTS', { x01: id }, {
+        success: (data) => resolve(data),
+        error: (err) => reject(new Error('GET_SELECTS falhou: ' + JSON.stringify(err))),
+        dataType: 'json',
+      });
+    });
+  }, String(orderId));
+  return result;
+}
+
 export async function closeBrowser() {
   if (contextInstance) { try { await contextInstance.close(); } catch {} contextInstance = null; }
   if (browserInstance) { try { await browserInstance.close(); } catch {} browserInstance = null; }
