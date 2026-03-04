@@ -1,6 +1,6 @@
 // browser.js — Playwright: login no Hub Ultragaz + captura URL assinada do WebSocket
 import { chromium } from 'playwright';
-import { buscarCodigo2FA } from './imap-reader.js';
+import { buscarCodigo2FA, limparEmailsUltragaz } from './imap-reader.js';
 
 let browserInstance = null;
 let contextInstance = null;
@@ -202,14 +202,16 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
 
       // ── AGUARDA CÓDIGO 2FA VIA GMAIL IMAP ──
-      log('Aguardando código 2FA via Gmail IMAP...');
       const gmailUser = process.env.GMAIL_USER;
       const gmailPass = process.env.GMAIL_APP_PASSWORD;
       if (!gmailUser || !gmailPass) throw new Error('GMAIL_USER e GMAIL_APP_PASSWORD não configurados no .env');
 
-      // Aguarda novo email (ignora emails anteriores ao momento atual)
-      const agora = Date.now();
-      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 300000, agora);
+      // Limpa emails antigos da Ultragaz antes de solicitar novo código
+      log('Limpando emails antigos da Ultragaz...');
+      await limparEmailsUltragaz(gmailUser, gmailPass);
+
+      log('Aguardando código 2FA via Gmail IMAP...');
+      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 300000);
 
       // Digita o código no IFRAME do 2FA
       await mfaFrame.waitForSelector('input', { timeout: 10000 }).catch(() => {});
