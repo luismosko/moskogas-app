@@ -1,4 +1,4 @@
-// v2.49.22
+// v2.49.23
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -671,6 +671,38 @@ function variarMensagem(msg) {
  *   skipSafety: true para bypasses (teste, admin direto)
  *   variar: true para aplicar variação automática (default true para lembretes)
  */
+
+// ── WhatsApp Multi-Conexão — seleciona token pela categoria ────────────────
+// Categorias: interno | financeiro | marketing | avaliacao | externo | geral
+async function getWATokenForCategory(env, category) {
+  try {
+    const cat = category || 'geral';
+    // Mapear categorias genéricas para as 5 principais
+    const catMap = {
+      'lembrete_pix': 'financeiro',
+      'cobranca':     'financeiro',
+      'avaliacao':    'avaliacao',
+      'marketing':    'marketing',
+      'sistema':      'interno',
+      'admin_alerta': 'interno',
+      'entregador':   'interno',
+      'geral':        'externo',
+    };
+    const catFinal = catMap[cat] || cat;
+
+    // Buscar conexão ativa para essa categoria
+    const rows = await env.DB.prepare(
+      `SELECT token FROM whatsapp_connections WHERE ativo=1 AND categorias LIKE ? ORDER BY id ASC LIMIT 1`
+    ).bind(`%"${catFinal}"%`).first();
+
+    if (rows?.token && rows.token !== 'TOKEN_DO_ENV') return rows.token;
+  } catch (e) {
+    console.warn('[WA] Erro ao buscar token por categoria:', e.message);
+  }
+  // Fallback: env token
+  return env.IZCHAT_TOKEN;
+}
+
 async function sendWhatsApp(env, to, message, opts = {}) {
   const { category = 'geral', skipSafety = false, variar } = opts;
 
@@ -723,12 +755,13 @@ async function sendWhatsApp(env, to, message, opts = {}) {
     message = variarMensagem(message);
   }
 
-  // ── ENVIO REAL ──
+  // ── ENVIO REAL — seleciona token pela categoria ──
+  const waToken = await getWATokenForCategory(env, category);
   const resp = await fetch('https://chatapi.izchat.com.br/api/messages/send', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.IZCHAT_TOKEN}`,
+      Authorization: `Bearer ${waToken}`,
     },
     body: JSON.stringify({ number: to, body: message }),
   });
@@ -3776,6 +3809,95 @@ export default {
         ORDER BY delivered_at DESC
       `).all();
       return json({ pedidos: rows.results || [], total: rows.results?.length || 0 });
+    }
+
+
+    // ── WHATSAPP CONEXÕES MÚLTIPLAS ────────────────────────────────────────
+    // GET /api/wa/conexoes
+    if (method === 'GET' && path === '/api/wa/conexoes') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const rows = await env.DB.prepare('SELECT id,nome,ativo,categorias,descricao,created_at,updated_at FROM whatsapp_connections ORDER BY id ASC').all();
+      return json(rows.results || []);
+    }
+
+    // POST /api/wa/conexoes
+    if (method === 'POST' && path === '/api/wa/conexoes') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body = await request.json();
+      const { nome, token, categorias = [], descricao = '' } = body;
+      if (!nome || !token) return err('nome e token são obrigatórios', 400);
+      const now = Math.floor(Date.now()/1000);
+      const r = await env.DB.prepare(
+        'INSERT INTO whatsapp_connections (nome,token,ativo,categorias,descricao,created_at,updated_at) VALUES (?,?,1,?,?,?,?)'
+      ).bind(nome, token, JSON.stringify(categorias), descricao, now, now).run();
+      return json({ ok: true, id: r.meta?.last_row_id });
+    }
+
+    // PUT /api/wa/conexoes/:id
+    const waConnMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)$/);
+    if (method === 'PUT' && waConnMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(waConnMatch[1]);
+      const body = await request.json();
+      const { nome, token, categorias, descricao, ativo } = body;
+      const now = Math.floor(Date.now()/1000);
+      await env.DB.prepare(
+        `UPDATE whatsapp_connections SET nome=COALESCE(?,nome), token=COALESCE(?,token),
+         categorias=COALESCE(?,categorias), descricao=COALESCE(?,descricao),
+         ativo=COALESCE(?,ativo), updated_at=? WHERE id=?`
+      ).bind(nome||null, token||null, categorias?JSON.stringify(categorias):null,
+             descricao||null, ativo!=null?ativo:null, now, id).run();
+      return json({ ok: true });
+    }
+
+    // PATCH /api/wa/conexoes/:id/toggle — liga/desliga
+    const waToggleMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)\/toggle$/);
+    if (method === 'POST' && waToggleMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(waToggleMatch[1]);
+      const now = Math.floor(Date.now()/1000);
+      await env.DB.prepare('UPDATE whatsapp_connections SET ativo=CASE WHEN ativo=1 THEN 0 ELSE 1 END, updated_at=? WHERE id=?').bind(now,id).run();
+      const row = await env.DB.prepare('SELECT ativo FROM whatsapp_connections WHERE id=?').bind(id).first();
+      return json({ ok: true, ativo: row?.ativo });
+    }
+
+    // DELETE /api/wa/conexoes/:id
+    const waDelMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)$/);
+    if (method === 'DELETE' && waDelMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(waDelMatch[1]);
+      await env.DB.prepare('DELETE FROM whatsapp_connections WHERE id=?').bind(id).run();
+      return json({ ok: true });
+    }
+
+    // POST /api/wa/conexoes/:id/testar — testa conexão
+    const waTestarMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)\/testar$/);
+    if (method === 'POST' && waTestarMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(waTestarMatch[1]);
+      const body = await request.json().catch(() => ({}));
+      const row = await env.DB.prepare('SELECT * FROM whatsapp_connections WHERE id=?').bind(id).first();
+      if (!row) return err('Conexão não encontrada', 404);
+      const token = row.token === 'TOKEN_DO_ENV' ? env.IZCHAT_TOKEN : row.token;
+      const toNum = body.phone || '5567992414371'; // fallback: admin
+      const testMsg = `✅ Teste de conexão *${row.nome}* — MoskoGás ${new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Campo_Grande'})}`;
+      try {
+        const resp = await fetch('https://chatapi.izchat.com.br/api/messages/send', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+          body: JSON.stringify({ number: toNum, body: testMsg }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        return json({ ok: resp.ok, status: resp.status, data });
+      } catch(e) {
+        return err('Erro ao testar: ' + e.message, 500);
+      }
     }
 
     // ── ENTREGADORES ────────────────────────────────────────

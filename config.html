@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.8 — MoskoGás</title>
+<title>Config v2.13.9 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,8 +125,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.8 — config</div>
-  <h1>⚙️ Configurações v2.13.8</h1>
+  <div class="version-badge">v2.13.9 — config</div>
+  <h1>⚙️ Configurações v2.13.9</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -153,14 +153,114 @@
 
   <!-- Entregadores: gerenciar em Usuários (app_users) -->
 
-  <!-- Teste IzChat -->
-  <div class="card">
-    <h2>📱 Teste IzChat WhatsApp</h2>
-    <label>Número para teste (ex: 5567999990000)</label>
-    <input id="testTo" placeholder="5567999990000">
-    <button class="btn btn-green" onclick="testIzChat()">📲 Enviar Mensagem Teste</button>
-    <div id="izchat-status"></div>
+  <!-- ── WHATSAPP MULTI-CONEXÃO ── -->
+  <div class="card" id="card-wa-conexoes">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <h2 style="margin:0">📱 WhatsApp — Conexões</h2>
+      <button class="btn btn-green" onclick="abrirModalNovaConexao()" style="font-size:13px">＋ Nova Conexão</button>
+    </div>
+
+    <!-- Legenda categorias -->
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      <span style="font-size:11px;color:#64748b;font-weight:700;align-self:center">Categorias:</span>
+      <span class="cat-badge cat-interno">🔒 Interno</span>
+      <span class="cat-badge cat-financeiro">💰 Financeiro</span>
+      <span class="cat-badge cat-marketing">📢 Marketing</span>
+      <span class="cat-badge cat-avaliacao">⭐ Avaliação</span>
+      <span class="cat-badge cat-externo">📤 Externo</span>
+    </div>
+
+    <div id="wa-conexoes-lista">
+      <div style="text-align:center;color:#94a3b8;padding:24px">⏳ Carregando...</div>
+    </div>
+
+    <!-- Teste IzChat (mantido) -->
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9">
+      <h3 style="font-size:14px;font-weight:700;margin:0 0 10px">📲 Enviar Mensagem de Teste</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="testTo" placeholder="5567999990000" style="flex:1;min-width:160px;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px">
+        <select id="testCat" style="padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px">
+          <option value="interno">🔒 Interno</option>
+          <option value="financeiro">💰 Financeiro</option>
+          <option value="marketing">📢 Marketing</option>
+          <option value="avaliacao">⭐ Avaliação</option>
+          <option value="externo">📤 Externo</option>
+        </select>
+        <button class="btn btn-green" onclick="testIzChat()" style="font-size:13px">📲 Testar</button>
+      </div>
+      <div id="izchat-status" style="margin-top:8px;font-size:13px"></div>
+    </div>
   </div>
+
+  <!-- Modal Nova/Editar Conexão -->
+  <div id="modal-wa-conn" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9900;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#fff;border-radius:14px;width:min(96vw,500px);box-shadow:0 20px 60px rgba(0,0,0,.3)" onclick="event.stopPropagation()">
+      <div style="background:#1e293b;padding:16px 20px;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center">
+        <h2 id="modal-wa-title" style="font-size:15px;font-weight:800;color:#fff;margin:0">📱 Nova Conexão WhatsApp</h2>
+        <button onclick="fecharModalConn()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:7px;font-size:16px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:20px;display:grid;gap:12px">
+        <input type="hidden" id="conn-edit-id">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">NOME DA CONEXÃO *</label>
+          <input id="conn-nome" placeholder="Ex: WhatsApp Cobranças" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">TOKEN IZCHAT *</label>
+          <input id="conn-token" type="password" placeholder="Bearer token da conexão" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none;font-family:monospace" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+          <div style="font-size:11px;color:#94a3b8;margin-top:3px">IzChat → Configurações → Token da instância</div>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:8px">CATEGORIAS (quais tipos de mensagem essa conexão envia)</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cat-interno" value="interno" onchange="updateCatBorder(this)"> 🔒 Interno
+              <span style="font-size:10px;color:#94a3b8">(entregadores, admin)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cat-financeiro" value="financeiro" onchange="updateCatBorder(this)"> 💰 Financeiro
+              <span style="font-size:10px;color:#94a3b8">(cobranças PIX)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cat-marketing" value="marketing" onchange="updateCatBorder(this)"> 📢 Marketing
+              <span style="font-size:10px;color:#94a3b8">(promoções, lembretes)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cat-avaliacao" value="avaliacao" onchange="updateCatBorder(this)"> ⭐ Avaliação
+              <span style="font-size:10px;color:#94a3b8">(pós-venda)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px" style="grid-column:span 2">
+              <input type="checkbox" id="cat-externo" value="externo" onchange="updateCatBorder(this)"> 📤 Externo
+              <span style="font-size:10px;color:#94a3b8">(mensagens gerais ao cliente)</span>
+            </label>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">DESCRIÇÃO (opcional)</label>
+          <input id="conn-descricao" placeholder="Ex: Chip da cobrança, número (67) 9xxxx-xxxx" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+        </div>
+        <div id="conn-status" style="font-size:12px;color:#64748b;min-height:16px"></div>
+        <div style="display:flex;gap:8px">
+          <button id="conn-save-btn" onclick="salvarConexao()" style="flex:1;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">💾 Salvar</button>
+          <button onclick="fecharModalConn()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+  .cat-badge { padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700; }
+  .cat-interno   { background:#dbeafe;color:#1e40af; }
+  .cat-financeiro{ background:#dcfce7;color:#166534; }
+  .cat-marketing { background:#fef3c7;color:#92400e; }
+  .cat-avaliacao { background:#fce7f3;color:#9d174d; }
+  .cat-externo   { background:#f1f5f9;color:#475569; }
+  .conn-card { background:#f8fafc;border:2px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;transition:border-color .2s }
+  .conn-card.desligado { opacity:.6;border-color:#fecaca;background:#fff5f5 }
+  .toggle-btn { border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s }
+  .toggle-on  { background:#dcfce7;color:#166534;border:1.5px solid #86efac }
+  .toggle-off { background:#fef2f2;color:#991b1b;border:1.5px solid #fca5a5 }
+  </style>
 
   <!-- Teste PushInPay PIX -->
   <div class="card">
@@ -242,7 +342,7 @@
     <div id="perm-status"></div>
   </div>
 
-  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.8) -->
+  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.9) -->
   <div class="card" id="timezoneSection">
     <h2>🕐 Fuso Horário da Empresa</h2>
     <p style="font-size:13px;color:#64748b;margin-bottom:12px">
@@ -689,7 +789,7 @@
 checkAuth(['admin', 'atendente']);
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 
-// v2.13.8: Carregar timezone e outras configs na inicialização
+// v2.13.9: Carregar timezone e outras configs na inicialização
 loadTz();
 
 // Esconder seções admin-only para atendente
@@ -735,8 +835,177 @@ async function testBling() {
   }
 }
 
+// ── WhatsApp Multi-Conexão ──────────────────────────────────────
+const CAT_LABELS = {
+  interno: '🔒 Interno', financeiro: '💰 Financeiro',
+  marketing: '📢 Marketing', avaliacao: '⭐ Avaliação', externo: '📤 Externo'
+};
+const CAT_CLASSES = {
+  interno:'cat-interno', financeiro:'cat-financeiro',
+  marketing:'cat-marketing', avaliacao:'cat-avaliacao', externo:'cat-externo'
+};
+
+async function loadConexoes() {
+  const lista = document.getElementById('wa-conexoes-lista');
+  try {
+    const rows = await api('/api/wa/conexoes');
+    if (!rows.length) {
+      lista.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:16px">Nenhuma conexão cadastrada</div>';
+      return;
+    }
+    lista.innerHTML = rows.map(r => {
+      const cats = JSON.parse(r.categorias || '[]');
+      const catBadges = cats.map(c => `<span class="cat-badge ${CAT_CLASSES[c]||''}">${CAT_LABELS[c]||c}</span>`).join('');
+      const ativo = r.ativo == 1;
+      return `<div class="conn-card ${ativo?'':'desligado'}" id="conn-card-${r.id}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:800;font-size:14px;color:#1e293b">${escHtml(r.nome)}</div>
+            ${r.descricao ? `<div style="font-size:12px;color:#64748b;margin-top:2px">${escHtml(r.descricao)}</div>` : ''}
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">${catBadges||'<span style="font-size:11px;color:#94a3b8">Sem categorias</span>'}</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+            <button onclick="testarConexao(${r.id},'${escHtml(r.nome)}')"
+              style="background:#f0f9ff;border:1.5px solid #bae6fd;color:#0369a1;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">
+              📲 Testar
+            </button>
+            <button onclick="editarConexao(${r.id})"
+              style="background:#f5f3ff;border:1.5px solid #c4b5fd;color:#6d28d9;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">
+              ✏️
+            </button>
+            <button id="toggle-btn-${r.id}" onclick="toggleConexao(${r.id})"
+              class="toggle-btn ${ativo?'toggle-on':'toggle-off'}">
+              ${ativo?'🟢 Ligada':'🔴 Desligada'}
+            </button>
+            <button onclick="excluirConexao(${r.id},'${escHtml(r.nome)}')"
+              style="background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;border-radius:7px;padding:5px 8px;font-size:12px;cursor:pointer">
+              🗑️
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    lista.innerHTML = `<div style="color:#dc2626;padding:12px">❌ ${e.message}</div>`;
+  }
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+let _connRows = [];
+function abrirModalNovaConexao() {
+  document.getElementById('conn-edit-id').value = '';
+  document.getElementById('modal-wa-title').textContent = '📱 Nova Conexão WhatsApp';
+  document.getElementById('conn-nome').value = '';
+  document.getElementById('conn-token').value = '';
+  document.getElementById('conn-descricao').value = '';
+  ['interno','financeiro','marketing','avaliacao','externo'].forEach(c => {
+    const el = document.getElementById('cat-'+c);
+    el.checked = false;
+    updateCatBorder(el);
+  });
+  document.getElementById('conn-status').textContent = '';
+  document.getElementById('modal-wa-conn').style.display = 'flex';
+}
+
+async function editarConexao(id) {
+  try {
+    const rows = await api('/api/wa/conexoes');
+    const r = rows.find(x => x.id === id);
+    if (!r) return toast('Conexão não encontrada', 'error');
+    document.getElementById('conn-edit-id').value = id;
+    document.getElementById('modal-wa-title').textContent = '✏️ Editar Conexão';
+    document.getElementById('conn-nome').value = r.nome || '';
+    document.getElementById('conn-token').value = '';  // não preenche token por segurança
+    document.getElementById('conn-descricao').value = r.descricao || '';
+    const cats = JSON.parse(r.categorias || '[]');
+    ['interno','financeiro','marketing','avaliacao','externo'].forEach(c => {
+      const el = document.getElementById('cat-'+c);
+      el.checked = cats.includes(c);
+      updateCatBorder(el);
+    });
+    document.getElementById('conn-status').textContent = '';
+    document.getElementById('modal-wa-conn').style.display = 'flex';
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function fecharModalConn() { document.getElementById('modal-wa-conn').style.display = 'none'; }
+
+function updateCatBorder(el) {
+  const label = el.closest('label');
+  if (label) label.style.borderColor = el.checked ? '#6366f1' : '#e2e8f0';
+}
+
+async function salvarConexao() {
+  const btn = document.getElementById('conn-save-btn');
+  const id = document.getElementById('conn-edit-id').value;
+  const nome = document.getElementById('conn-nome').value.trim();
+  const token = document.getElementById('conn-token').value.trim();
+  const descricao = document.getElementById('conn-descricao').value.trim();
+  const categorias = ['interno','financeiro','marketing','avaliacao','externo']
+    .filter(c => document.getElementById('cat-'+c).checked);
+  const status = document.getElementById('conn-status');
+
+  if (!nome) { status.innerHTML = '<span style="color:#dc2626">Nome obrigatório</span>'; return; }
+  if (!id && !token) { status.innerHTML = '<span style="color:#dc2626">Token obrigatório para nova conexão</span>'; return; }
+
+  btn.disabled = true; btn.textContent = '⏳ Salvando...';
+  try {
+    const body = { nome, categorias, descricao };
+    if (token) body.token = token;
+    if (id) {
+      await api(`/api/wa/conexoes/${id}`, { method:'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/wa/conexoes', { method:'POST', body: JSON.stringify(body) });
+    }
+    fecharModalConn();
+    toast('✅ Conexão salva!', 'ok');
+    loadConexoes();
+  } catch(e) {
+    status.innerHTML = `<span style="color:#dc2626">❌ ${e.message}</span>`;
+  } finally { btn.disabled = false; btn.textContent = '💾 Salvar'; }
+}
+
+async function toggleConexao(id) {
+  try {
+    const r = await api(`/api/wa/conexoes/${id}/toggle`, { method:'POST' });
+    const btn = document.getElementById('toggle-btn-'+id);
+    const card = document.getElementById('conn-card-'+id);
+    if (r.ativo) {
+      btn.className = 'toggle-btn toggle-on'; btn.textContent = '🟢 Ligada';
+      card.classList.remove('desligado');
+      toast('✅ Conexão ligada', 'ok');
+    } else {
+      btn.className = 'toggle-btn toggle-off'; btn.textContent = '🔴 Desligada';
+      card.classList.add('desligado');
+      toast('🔴 Conexão desligada', 'ok');
+    }
+  } catch(e) { toast('Erro: '+e.message, 'error'); }
+}
+
+async function testarConexao(id, nome) {
+  const phone = prompt(`Testar conexão "${nome}"\nNúmero para receber o teste (com DDD e 55):`, '5567992414371');
+  if (!phone) return;
+  toast('⏳ Enviando teste...', 'ok');
+  try {
+    const r = await api(`/api/wa/conexoes/${id}/testar`, { method:'POST', body: JSON.stringify({ phone }) });
+    if (r.ok) toast(`✅ Mensagem enviada por "${nome}"!`, 'ok');
+    else toast(`⚠️ Resposta ${r.status} — verifique o token`, 'error');
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+}
+
+async function excluirConexao(id, nome) {
+  if (!confirm(`Excluir a conexão "${nome}"?\nIsso não pode ser desfeito.`)) return;
+  try {
+    await api(`/api/wa/conexoes/${id}`, { method:'DELETE' });
+    toast('🗑️ Conexão excluída', 'ok');
+    loadConexoes();
+  } catch(e) { toast('Erro: '+e.message, 'error'); }
+}
+
 async function testIzChat() {
   const to = document.getElementById('testTo').value.trim();
+  const cat = document.getElementById('testCat').value;
   const el = document.getElementById('izchat-status');
   if (!to) { toast('Informe o número', 'error'); return; }
   el.innerHTML = '<div class="status">⏳ Enviando...</div>';
@@ -1942,6 +2211,9 @@ async function hubEnviarCodigo() {
 // Inicia polling de status a cada 30 segundos
 hubCheckStatus();
 hubPollInterval = setInterval(hubCheckStatus, 30000);
+
+// Carregar conexões WhatsApp
+loadConexoes();
 </script>
 </body>
 </html>
