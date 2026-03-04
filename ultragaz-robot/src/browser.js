@@ -108,8 +108,106 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     });
     log(`Resultado clique JS: ${clicked}`);
 
-    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
+
+    // ── VERIFICA SE APARECEU MODAL DE 2FA ──
+    const modal2fa = await page.$('#enviarCodigo, [id*="codigo"], [class*="modal"]').catch(() => null);
+    const modal2faTexto = await page.evaluate(() => {
+      const el = document.querySelector('body');
+      return el ? el.innerText : '';
+    }).catch(() => '');
+
+    if (modal2faTexto.includes('Enviar') && modal2faTexto.includes('digo')) {
+      log('Modal 2FA detectado! Selecionando opção email...');
+      await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
+
+      // Seleciona radio "Receber no e-mail"
+      const emailRadioClicked = await page.evaluate(() => {
+        const labels = Array.from(document.querySelectorAll('label, span, div'));
+        const emailLabel = labels.find(el => /e-mail/i.test(el.textContent));
+        if (emailLabel) {
+          // Clica no radio input associado
+          const radio = emailLabel.querySelector('input[type="radio"]') ||
+                        emailLabel.closest('label')?.querySelector('input') ||
+                        document.querySelector('input[type="radio"]:not(:checked)');
+          if (radio) { radio.click(); return true; }
+          emailLabel.click();
+          return 'label';
+        }
+        // Fallback: segundo radio da página
+        const radios = document.querySelectorAll('input[type="radio"]');
+        if (radios[1]) { radios[1].click(); return 'radio[1]'; }
+        return false;
+      });
+      log(`Radio email selecionado: ${emailRadioClicked}`);
+      await page.waitForTimeout(500);
+
+      // Clica em "Enviar código de autenticação"
+      const enviarClicked = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+        const enviar = btns.find(el => /enviar/i.test(el.textContent) || /enviar/i.test(el.value));
+        if (enviar) { enviar.click(); return enviar.textContent || enviar.value; }
+        return false;
+      });
+      log(`Botão enviar clicado: ${enviarClicked}`);
+      await page.waitForTimeout(2000);
+      await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
+
+      // ── AGUARDA CÓDIGO VIA API (Worker salva código recebido por email) ──
+      log('Aguardando código 2FA via email... (polling API por até 5min)');
+      const moskoApiUrl = process.env.MOSKOGAS_API_URL || 'https://moskogas.com.br';
+      const moskoApiKey = process.env.MOSKOGAS_API_KEY;
+      let codigo2fa = null;
+
+      for (let tentativa = 0; tentativa < 60; tentativa++) {
+        await page.waitForTimeout(5000);
+        try {
+          const resp = await fetch(`${moskoApiUrl}/api/ultragaz/2fa-code`, {
+            headers: { 'X-API-Key': moskoApiKey }
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.codigo && data.codigo.length >= 4) {
+              codigo2fa = data.codigo;
+              log(`Código 2FA recebido: ${codigo2fa}`);
+              break;
+            }
+          }
+        } catch (e) { /* continua tentando */ }
+        if (tentativa % 6 === 0) log(`Aguardando código 2FA... (${tentativa * 5}s)`);
+      }
+
+      if (!codigo2fa) throw new Error('Timeout aguardando código 2FA via email');
+
+      // Digita o código no campo
+      await page.waitForSelector('input[type="text"], input[type="number"], input[maxlength]', { timeout: 10000 });
+      const codigoField = await page.$('input[maxlength]') ||
+                          await page.$('input[type="number"]') ||
+                          await page.$('input[type="text"]');
+      if (codigoField) {
+        await codigoField.fill(codigo2fa);
+        log(`Código ${codigo2fa} digitado`);
+      }
+
+      // Confirma o código
+      const confirmarClicked = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+        const confirmar = btns.find(el => /confirmar|validar|entrar|ok/i.test(el.textContent));
+        if (confirmar) { confirmar.click(); return confirmar.textContent; }
+        if (btns[0]) { btns[0].click(); return 'first-btn'; }
+        return false;
+      });
+      log(`Confirmação 2FA clicada: ${confirmarClicked}`);
+
+      // Limpa o código usado
+      await fetch(`${moskoApiUrl}/api/ultragaz/2fa-code`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': moskoApiKey }
+      }).catch(() => {});
+
+      await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+      await page.waitForTimeout(2000);
+    }
 
     // Screenshot após login
     await page.screenshot({ path: '/tmp/ultragaz-login.png' }).catch(() => {});
@@ -118,9 +216,8 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     const currentUrl = page.url();
     log(`URL final: ${currentUrl}`);
 
-    if (currentUrl.includes('login') || currentUrl.includes('P101') || currentUrl.includes('signin') || currentUrl.includes('account') || currentUrl.includes('auth')) {
-      const errMsg = await page.$eval('.alert, .error, [class*="error"], [class*="alert"]', el => el.textContent.trim()).catch(() => null);
-      throw new Error('Login falhou' + (errMsg ? `: ${errMsg}` : ' — verifique as credenciais no config.html'));
+    if (currentUrl.includes('login') || currentUrl.includes('P101') || currentUrl.includes('signin')) {
+      throw new Error('Login falhou — verifique as credenciais no config.html');
     }
 
     log(`Login realizado! URL: ${currentUrl}`);

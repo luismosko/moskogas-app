@@ -7159,6 +7159,38 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         return json({ ok: true, login: cfg.login, configurado: true });
       }
 
+      // GET /api/ultragaz/2fa-code — Robot busca código 2FA recebido por email
+      if (path === '/api/ultragaz/2fa-code' && method === 'GET') {
+        const apiKey = request.headers.get('X-API-Key') || request.headers.get('X-API-KEY') || '';
+        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+        const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_2fa_code'").first();
+        if (!row) return json({ codigo: null });
+        const data = JSON.parse(row.value);
+        // Expira após 10 minutos
+        const idade = Date.now() - new Date(data.received_at).getTime();
+        if (idade > 600000) return json({ codigo: null });
+        return json({ codigo: data.codigo, received_at: data.received_at });
+      }
+
+      // POST /api/ultragaz/2fa-code — Email Worker salva código recebido
+      if (path === '/api/ultragaz/2fa-code' && method === 'POST') {
+        const apiKey = request.headers.get('X-Api-Key') || request.headers.get('X-API-Key') || request.headers.get('X-API-KEY') || '';
+        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+        const body = await request.json();
+        const { codigo } = body;
+        if (!codigo) return err('codigo obrigatório');
+        await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_2fa_code', ?, datetime('now'))").bind(JSON.stringify({ codigo, received_at: new Date().toISOString() })).run();
+        return json({ ok: true, codigo });
+      }
+
+      // DELETE /api/ultragaz/2fa-code — Robot limpa código após usar
+      if (path === '/api/ultragaz/2fa-code' && method === 'DELETE') {
+        const apiKey = request.headers.get('X-Api-Key') || request.headers.get('X-API-Key') || request.headers.get('X-API-KEY') || '';
+        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+        await env.DB.prepare("DELETE FROM app_config WHERE key='ultragaz_2fa_code'").run();
+        return json({ ok: true });
+      }
+
       // POST /api/ultragaz/pedido — Robot envia novo pedido capturado (só APP_API_KEY)
       if (path === '/api/ultragaz/pedido' && method === 'POST') {
         const apiKey = request.headers.get('X-API-KEY') || url.searchParams.get('api_key') || '';
