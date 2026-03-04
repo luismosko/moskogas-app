@@ -1,4 +1,4 @@
-// v2.49.21
+// v2.49.22
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -960,6 +960,7 @@ async function processarLembretesCron(env) {
       FROM orders o
       WHERE o.tipo_pagamento = 'pix_receber' AND o.pago = 0 AND o.status = 'entregue'
         AND o.phone_digits IS NOT NULL AND o.phone_digits != ''
+        AND (o.pix_data_prevista IS NULL OR o.pix_data_prevista <= date('now', '-4 hours'))
       ORDER BY o.created_at ASC
       LIMIT 50
     `).all().then(r => r.results || []);
@@ -2887,7 +2888,7 @@ export default {
 
     if (method === 'POST' && path === '/api/order/create') {
       const body = await request.json();
-      const { phone, name, address_line, bairro, complemento, referencia, items, total_value, notes, emitir_nfce, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, empenho_id, data_pedido } = body;
+      const { phone, name, address_line, bairro, complemento, referencia, items, total_value, notes, emitir_nfce, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, empenho_id, data_pedido, pix_data_prevista } = body;
       const digits = (phone || '').replace(/\D/g, '');
 
       const cols = ['forma_pagamento_id INTEGER', 'forma_pagamento_key TEXT', 'emitir_nfce INTEGER', 'nfce_gerada INTEGER', 'nfce_numero TEXT', 'nfce_chave TEXT', 'bling_pedido_id INTEGER', 'bling_pedido_num INTEGER', 'pago INTEGER DEFAULT 0', 'tipo_pagamento TEXT', 'vendedor_id INTEGER', 'vendedor_nome TEXT', 'foto_comprovante TEXT', 'observacao_entregador TEXT', 'tipo_pagamento_original TEXT', 'delivered_at TEXT', 'data_pedido TEXT'];
@@ -2910,9 +2911,9 @@ export default {
       const pago = 0; // Nunca pago ao criar — só ao entregar
 
       const result = await env.DB.prepare(`
-        INSERT INTO orders (phone_digits, customer_name, address_line, bairro, complemento, referencia, items_json, total_value, notes, status, sync_status, forma_pagamento_key, forma_pagamento_id, emitir_nfce, tipo_pagamento, pago, vendedor_id, vendedor_nome, data_pedido)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(digits || '', name || '', address_line || '', bairro || '', complemento || '', referencia || '', JSON.stringify(items || []), total_value != null ? total_value : null, notes || null, forma_pagamento_key || null, forma_pagamento_id != null ? Number(forma_pagamento_id) : null, emitir_nfce ? 1 : 0, tipoPg, pago, vendedorId, vendedorNome, data_pedido || null).run();
+        INSERT INTO orders (phone_digits, customer_name, address_line, bairro, complemento, referencia, items_json, total_value, notes, status, sync_status, forma_pagamento_key, forma_pagamento_id, emitir_nfce, tipo_pagamento, pago, vendedor_id, vendedor_nome, data_pedido, pix_data_prevista)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(digits || '', name || '', address_line || '', bairro || '', complemento || '', referencia || '', JSON.stringify(items || []), total_value != null ? total_value : null, notes || null, forma_pagamento_key || null, forma_pagamento_id != null ? Number(forma_pagamento_id) : null, emitir_nfce ? 1 : 0, tipoPg, pago, vendedorId, vendedorNome, data_pedido || null, (tipo_pagamento === 'pix_receber' && pix_data_prevista) ? pix_data_prevista : null).run();
 
       const orderId = result.meta?.last_row_id;
       try { await env.DB.prepare('INSERT OR IGNORE INTO payments (order_id, status, method) VALUES (?, ?, ?)').bind(orderId, 'pendente', forma_pagamento_key || null).run(); } catch (_) { }
