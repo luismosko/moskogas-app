@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.10 — MoskoGás</title>
+<title>Config v2.13.11 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,8 +125,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.10 — config</div>
-  <h1>⚙️ Configurações v2.13.10</h1>
+  <div class="version-badge">v2.13.11 — config</div>
+  <h1>⚙️ Configurações v2.13.11</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -342,7 +342,7 @@
     <div id="perm-status"></div>
   </div>
 
-  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.10) -->
+  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.11) -->
   <div class="card" id="timezoneSection">
     <h2>🕐 Fuso Horário da Empresa</h2>
     <p style="font-size:13px;color:#64748b;margin-bottom:12px">
@@ -789,7 +789,7 @@
 checkAuth(['admin', 'atendente']);
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 
-// v2.13.10: Carregar timezone e outras configs na inicialização
+// v2.13.11: Carregar timezone e outras configs na inicialização
 loadTz();
 
 // Esconder seções admin-only para atendente
@@ -899,7 +899,10 @@ function abrirModalNovaConexao() {
   document.getElementById('conn-nome').value = '';
   document.getElementById('conn-token').value = '';
   document.getElementById('conn-descricao').value = '';
-  ['interno','financeiro','marketing','avaliacao','externo'].forEach(c => {
+  aplicarRestricoesCategorias(null); // null = nova conexão, bloqueia todas já usadas
+  document.getElementById('conn-status').textContent = '';
+  document.getElementById('modal-wa-conn').style.display = 'flex';
+}h(c => {
     const el = document.getElementById('cat-'+c);
     el.checked = false;
     updateCatBorder(el);
@@ -916,13 +919,13 @@ async function editarConexao(id) {
     document.getElementById('conn-edit-id').value = id;
     document.getElementById('modal-wa-title').textContent = '✏️ Editar Conexão';
     document.getElementById('conn-nome').value = r.nome || '';
-    document.getElementById('conn-token').value = '';  // não preenche token por segurança
+    document.getElementById('conn-token').value = '';
     document.getElementById('conn-descricao').value = r.descricao || '';
     const cats = JSON.parse(r.categorias || '[]');
+    aplicarRestricoesCategorias(id);
     ['interno','financeiro','marketing','avaliacao','externo'].forEach(c => {
       const el = document.getElementById('cat-'+c);
-      el.checked = cats.includes(c);
-      updateCatBorder(el);
+      if (!el.disabled) { el.checked = cats.includes(c); updateCatBorder(el); }
     });
     document.getElementById('conn-status').textContent = '';
     document.getElementById('modal-wa-conn').style.display = 'flex';
@@ -934,6 +937,39 @@ function fecharModalConn() { document.getElementById('modal-wa-conn').style.disp
 function updateCatBorder(el) {
   const label = el.closest('label');
   if (label) label.style.borderColor = el.checked ? '#6366f1' : '#e2e8f0';
+}
+
+// Bloqueia categorias já usadas por outra conexão
+async function aplicarRestricoesCategorias(editandoId) {
+  const ALL_CATS = ['interno','financeiro','marketing','avaliacao','externo'];
+  // Reset tudo primeiro
+  ALL_CATS.forEach(cat => {
+    const el = document.getElementById('cat-'+cat);
+    el.disabled = false;
+    el.checked = false;
+    const label = el.closest('label');
+    if (label) { label.style.opacity='1'; label.style.borderColor='#e2e8f0'; label.title=''; }
+  });
+  try {
+    const rows = await api('/api/wa/conexoes');
+    const catsEmUso = {};
+    rows.forEach(r => {
+      if (editandoId && r.id == editandoId) return; // ignora a própria conexão
+      JSON.parse(r.categorias||'[]').forEach(cat => { catsEmUso[cat] = r.nome; });
+    });
+    ALL_CATS.forEach(cat => {
+      if (catsEmUso[cat]) {
+        const el = document.getElementById('cat-'+cat);
+        el.disabled = true; el.checked = false;
+        const label = el.closest('label');
+        if (label) {
+          label.style.opacity = '0.45';
+          label.style.borderColor = '#fca5a5';
+          label.title = `Já usado por: ${catsEmUso[cat]}`;
+        }
+      }
+    });
+  } catch(e) { /* silencia — não bloqueia o modal */ }
 }
 
 async function salvarConexao() {
@@ -948,6 +984,23 @@ async function salvarConexao() {
 
   if (!nome) { status.innerHTML = '<span style="color:#dc2626">Nome obrigatório</span>'; return; }
   if (!id && !token) { status.innerHTML = '<span style="color:#dc2626">Token obrigatório para nova conexão</span>'; return; }
+  if (!categorias.length) { status.innerHTML = '<span style="color:#dc2626">Selecione ao menos uma categoria</span>'; return; }
+
+  // Verificar conflito de categorias
+  try {
+    const rows = await api('/api/wa/conexoes');
+    const conflito = [];
+    rows.forEach(r => {
+      if (id && r.id == id) return;
+      JSON.parse(r.categorias||'[]').forEach(cat => {
+        if (categorias.includes(cat)) conflito.push(`${cat} → ${r.nome}`);
+      });
+    });
+    if (conflito.length) {
+      status.innerHTML = `<span style="color:#dc2626">⚠️ Categoria já em uso: ${conflito.join(', ')}</span>`;
+      return;
+    }
+  } catch(e) { /* continua */ }
 
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
