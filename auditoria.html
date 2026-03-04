@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auditoria v1.1.0 — MoskoGás</title>
+<title>Auditoria v1.1.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -52,7 +52,7 @@
 <body>
 <div id="nav-container"></div>
 <div class="container">
-  <h1>📊 Auditoria Bling v1.1.0</h1>
+  <h1>📊 Auditoria Bling v1.1.2</h1>
 
   <div class="toolbar">
     <input type="date" id="audit-date" title="Data da auditoria">
@@ -60,7 +60,7 @@
     <button class="btn btn-blue" id="btn-conciliar" onclick="conciliar()" disabled title="Conciliar pedidos com Bling (admin)">🔍 Conciliar Bling</button>
     <button class="btn btn-green" id="btn-csv" onclick="exportCSV()" disabled title="Exportar relatório CSV">📥 CSV</button>
     <button class="btn" onclick="loadSemBling()" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer" title="Ver pedidos entregues sem registro no Bling">⚠️ Sem Bling</button>
-    <span style="margin-left:auto;background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">v1.1.1</span>
+    <span style="margin-left:auto;background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">v1.1.2</span>
   </div>
 
   <div id="loading" class="loading" style="display:none;">⏳ Carregando auditoria...</div>
@@ -132,7 +132,7 @@
     </div>
   </div>
 
-  <div class="version-badge">v1.1.0 — auditoria</div>
+  <div class="version-badge">v1.1.2 — auditoria</div>
 </div>
 
 <script src="shared.js"></script>
@@ -243,7 +243,7 @@ function renderErros() {
     document.getElementById('tbl-erros').style.display = 'table';
     document.getElementById('erros-empty').style.display = 'none';
     document.getElementById('erros-body').innerHTML = erros.map(e => {
-      const hora = e.created_at ? e.created_at.split(' ')[1]?.substring(0,5) || '' : '';
+      const hora = e.created_at ? new Date(e.created_at*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '';
       return `<tr>
         <td><strong>#${e.order_id}</strong></td>
         <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.customer_name || '—'}</td>
@@ -268,7 +268,7 @@ function renderAuditLog() {
   document.getElementById('audit-body').innerHTML = logs.map(l => {
     const tagClass = l.status === 'success' ? 'tag-success' : l.status === 'error' ? 'tag-error' : 'tag-skipped';
     const statusLabel = l.status === 'success' ? '✅ OK' : l.status === 'error' ? '❌ Erro' : '⏭️ Pulado';
-    const hora = l.created_at ? l.created_at.split(' ')[1]?.substring(0,5) || '' : '';
+    const hora = l.created_at ? new Date(l.created_at*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '';
     const blingInfo = l.bling_pedido_num ? `nº ${l.bling_pedido_num}` : (l.bling_pedido_id ? `ID ${l.bling_pedido_id}` : '—');
     const tipoLabel = TIPO_LABELS[l.order_tipo] || l.order_tipo || '—';
     return `<tr>
@@ -293,7 +293,7 @@ function renderPedidos() {
       : '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fecaca;color:#dc2626;font-size:10px;font-weight:800;">B</span>';
     const blingNum = p.bling_num ? `<strong>${p.bling_num}</strong>` : '<span style="color:#94a3b8;">—</span>';
     const pagoBadge = p.pago ? '<span style="color:#16a34a;font-weight:700;">✅ Sim</span>' : '<span style="color:#f59e0b;font-weight:700;">⏳ Não</span>';
-    const hora = p.created_at ? (p.created_at.split(' ')[1] || p.created_at.split('T')[1] || '').substring(0,5) : '';
+    const hora = p.created_at ? new Date(p.created_at*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '';
     return `<tr>
       <td><strong>#${p.id}</strong></td>
       <td style="white-space:nowrap;">${hora}</td>
