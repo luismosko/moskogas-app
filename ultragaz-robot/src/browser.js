@@ -164,6 +164,13 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       await page.waitForTimeout(1000);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
 
+      // ── LIMPA EMAILS ANTIGOS ANTES DE PEDIR NOVO CÓDIGO ──
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailPass = process.env.GMAIL_APP_PASSWORD;
+      if (!gmailUser || !gmailPass) throw new Error('GMAIL_USER e GMAIL_APP_PASSWORD não configurados no .env');
+      log('Limpando emails antigos da Ultragaz...');
+      await limparEmailsUltragaz(gmailUser, gmailPass);
+
       // Seleciona radio email dentro do frame
       const emailRadioClicked = await mfaFrame.evaluate(() => {
         const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
@@ -201,17 +208,9 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       await page.waitForTimeout(2000);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
 
-      // ── AGUARDA CÓDIGO 2FA VIA GMAIL IMAP ──
-      const gmailUser = process.env.GMAIL_USER;
-      const gmailPass = process.env.GMAIL_APP_PASSWORD;
-      if (!gmailUser || !gmailPass) throw new Error('GMAIL_USER e GMAIL_APP_PASSWORD não configurados no .env');
-
-      // Limpa emails antigos da Ultragaz antes de solicitar novo código
-      log('Limpando emails antigos da Ultragaz...');
-      await limparEmailsUltragaz(gmailUser, gmailPass);
-
-      log('Aguardando código 2FA via Gmail IMAP...');
-      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 300000);
+      // ── AGUARDA CÓDIGO 2FA VIA GMAIL IMAP (polling a cada 10s por até 8 min) ──
+      log('Aguardando novo código 2FA via Gmail IMAP...');
+      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 480000);
 
       // Digita o código no IFRAME do 2FA
       await mfaFrame.waitForSelector('input', { timeout: 10000 }).catch(() => {});
