@@ -144,13 +144,28 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       await page.waitForTimeout(500);
 
       // Clica em "Enviar código de autenticação"
+      await page.waitForTimeout(500);
       const enviarClicked = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-        const enviar = btns.find(el => /enviar/i.test(el.textContent) || /enviar/i.test(el.value));
-        if (enviar) { enviar.click(); return enviar.textContent || enviar.value; }
+        const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
+        // Log todos os botões para debug
+        const info = btns.map(b => b.textContent.trim() + '|' + b.id).join(', ');
+        console.log('Botoes modal 2FA:', info);
+        // Clica em qualquer botão com "enviar" ou "codigo" ou "autenticacao"
+        const enviar = btns.find(el => 
+          /enviar/i.test(el.textContent) || 
+          /codigo/i.test(el.textContent) ||
+          /autenticac/i.test(el.textContent) ||
+          /send/i.test(el.textContent)
+        );
+        if (enviar) { enviar.click(); return enviar.textContent.trim(); }
+        // Fallback: clica no primeiro botão visível que não seja cancelar/fechar
+        const visivel = btns.find(el => el.offsetParent !== null && !/cancel|fechar|close/i.test(el.textContent));
+        if (visivel) { visivel.click(); return 'fallback:' + visivel.textContent.trim(); }
         return false;
       });
       log(`Botão enviar clicado: ${enviarClicked}`);
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
       await page.waitForTimeout(2000);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
 
