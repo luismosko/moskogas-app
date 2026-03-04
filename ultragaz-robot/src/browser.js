@@ -51,23 +51,31 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
   try {
     await page.goto(hubUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // Aguarda qualquer campo de input aparecer
-    await page.waitForSelector('input', { timeout: 15000 });
+    // Aguarda campo de email/texto VISÍVEL aparecer
+    await page.waitForSelector('input[type="text"]:visible, input[type="email"]:visible, input:not([type="hidden"]):not([type="submit"]):not([type="checkbox"]):visible', { timeout: 15000 });
     await page.waitForTimeout(1000);
 
-    // Preenche credenciais — seletores genéricos por ordem de prioridade
+    // Screenshot da página inicial para debug
+    await page.screenshot({ path: '/tmp/ultragaz-page-init.png' }).catch(() => {});
+
+    // Preenche credenciais — busca inputs visíveis
+    const allInputs = await page.$$('input:not([type="hidden"]):not([type="submit"]):not([type="checkbox"])');
+    log(`Total inputs visíveis encontrados: ${allInputs.length}`);
+
     const loginField = await page.$('input[name="P101_USERNAME"]') ||
                        await page.$('input[type="email"]') ||
                        await page.$('input[placeholder*="mail" i]') ||
                        await page.$('input[placeholder*="usu" i]') ||
                        await page.$('input[placeholder*="login" i]') ||
-                       (await page.$$('input[type="text"]'))[0] ||
-                       (await page.$$('input:not([type="password"])'))[0];
+                       allInputs[0] || null;
 
     const senhaField = await page.$('input[name="P101_PASSWORD"]') ||
                        await page.$('input[type="password"]') ||
                        await page.$('input[placeholder*="senha" i]') ||
-                       await page.$('input[placeholder*="pass" i]');
+                       await page.$('input[placeholder*="pass" i]') ||
+                       allInputs[1] || null;
+
+    log(`loginField: ${loginField ? 'encontrado' : 'NÃO encontrado'}, senhaField: ${senhaField ? 'encontrado' : 'NÃO encontrado'}`);
 
     log(`Campos encontrados — login: ${!!loginField}, senha: ${!!senhaField}`);
     if (!loginField || !senhaField) throw new Error('Campos de login não encontrados');
