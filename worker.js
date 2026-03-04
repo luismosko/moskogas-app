@@ -1,4 +1,4 @@
-// v2.49.24
+// v2.49.25
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -687,8 +687,12 @@ async function getWATokenForCategory(env, category) {
       'admin_alerta': 'interno',
       'entregador':   'interno',
       'geral':        'externo',
+      'externo':      'externo',
+      'interno':      'interno',
+      'financeiro':   'financeiro',
+      'marketing':    'marketing',
     };
-    const catFinal = catMap[cat] || cat;
+    const catFinal = catMap[cat] || 'externo';
 
     // Buscar conexão ativa para essa categoria
     const rows = await env.DB.prepare(
@@ -2018,8 +2022,9 @@ export default {
 
     if (method === 'GET' && path === '/izchat/teste') {
       const to = url.searchParams.get('to');
+      const cat = url.searchParams.get('cat') || 'externo';
       if (!to) return err('missing to');
-      const result = await sendWhatsApp(env, to, '✅ Teste MoskoGás — Sistema funcionando!', { category: 'teste', skipSafety: true });
+      const result = await sendWhatsApp(env, to, '✅ Teste MoskoGás — Sistema funcionando!', { category: cat, skipSafety: true });
       return json(result);
     }
 
