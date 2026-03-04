@@ -74,8 +74,9 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
                        await page.$('input[name="P101_PASSWORD"]');
     if (!senhaField) throw new Error('Campo de senha não encontrado');
     await senhaField.fill('');
-    await senhaField.fill(senha);
-    log('Senha preenchida');
+    await senhaField.click();
+    await page.keyboard.type(senha, { delay: 50 }); // digita tecla por tecla (melhor com chars especiais)
+    log('Senha preenchida (keyboard.type)');
     await page.waitForTimeout(300);
 
     // Screenshot antes de submeter
