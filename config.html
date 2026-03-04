@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.7 — MoskoGás</title>
+<title>Config v2.13.8 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -33,8 +33,8 @@
 <body>
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.7 — config</div>
-  <h1>⚙️ Configurações v2.13.7</h1>
+  <div class="version-badge">v2.13.8 — config</div>
+  <h1>⚙️ Configurações v2.13.8</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -150,7 +150,7 @@
     <div id="perm-status"></div>
   </div>
 
-  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.7) -->
+  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.8) -->
   <div class="card" id="timezoneSection">
     <h2>🕐 Fuso Horário da Empresa</h2>
     <p style="font-size:13px;color:#64748b;margin-bottom:12px">
@@ -597,7 +597,7 @@
 checkAuth(['admin', 'atendente']);
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 
-// v2.13.7: Carregar timezone e outras configs na inicialização
+// v2.13.8: Carregar timezone e outras configs na inicialização
 loadTz();
 
 // Esconder seções admin-only para atendente
@@ -1386,14 +1386,14 @@ async function saveUltragazConfig() {
   const ativo = document.getElementById('uz-ativo').checked;
   const fb = document.getElementById('uz-feedback');
 
-  if (!login) { showToast('Informe o login (e-mail)', 'error'); return; }
+  if (!login) { toast('Informe o login (e-mail)', 'error'); return; }
 
   try {
     const r = await api('/api/ultragaz/config', { method: 'POST', body: JSON.stringify({ login, senha, reseller_id, hub_url, ativo }) });
     fb.style.display = 'block';
     if (r.ok) {
       fb.innerHTML = '<span style="color:#16a34a">✅ Credenciais salvas! O robô usará essas informações no próximo ciclo.</span>';
-      showToast('Ultragaz configurado!', 'success');
+      toast('Ultragaz configurado!', 'success');
       loadUltragazConfig();
     } else {
       fb.innerHTML = '<span style="color:#dc2626">❌ Erro ao salvar: ' + (r.error || 'Tente novamente') + '</span>';
