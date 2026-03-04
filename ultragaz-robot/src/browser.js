@@ -44,14 +44,21 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
 
   const page = await contextInstance.newPage();
 
-  // Oculta sinais de automação
+  // Oculta sinais de automação (anti-bot detection)
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+    Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en'] });
+    window.chrome = { runtime: {} };
+    Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
   });
 
   try {
-    await page.goto(hubUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    // Aguarda um pouco antes de navegar (simula comportamento humano)
+    await page.waitForTimeout(1000 + Math.floor(Math.random() * 1000));
+    await page.goto(hubUrl, { waitUntil: 'networkidle', timeout: 30000 });
     log(`URL inicial: ${page.url()}`);
+    await page.waitForTimeout(1500);
 
     // Screenshot inicial
     await page.screenshot({ path: '/tmp/ultragaz-page-init.png' }).catch(() => {});
