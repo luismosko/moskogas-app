@@ -55,59 +55,44 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     // Screenshot inicial
     await page.screenshot({ path: '/tmp/ultragaz-page-init.png' }).catch(() => {});
 
-    // ── ETAPA 1: campo de email (pode ser SSO Microsoft ou formulário Hub) ──
+    // Formulário de UMA etapa: email + senha + botão Login
     await page.waitForSelector('input[type="email"], input[type="text"], input[name="P101_USERNAME"]', { timeout: 15000 });
     await page.waitForTimeout(1000);
 
+    // Preenche email
     const emailField = await page.$('input[type="email"]') ||
                        await page.$('input[name="P101_USERNAME"]') ||
                        await page.$('input[type="text"]');
-
     if (!emailField) throw new Error('Campo de email não encontrado');
-
     await emailField.fill('');
     await emailField.fill(login.toLowerCase().trim());
     log(`Email preenchido: ${login.toLowerCase().trim()}`);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(300);
 
-    // Clica em Avançar/Next/Submit (SSO tem botão "Avançar")
-    const btnEtapa1 = await page.$('input[type="submit"]') ||
-                      await page.$('button[type="submit"]');
-
-    if (btnEtapa1) {
-      await btnEtapa1.click();
-      log('Botão Avançar clicado');
-    } else {
-      await emailField.press('Enter');
-      log('Enter no campo email');
-    }
-
-    await page.waitForTimeout(3000);
-    await page.screenshot({ path: '/tmp/ultragaz-before-submit.png' }).catch(() => {});
-    log(`URL após email: ${page.url()}`);
-
-    // ── ETAPA 2: campo de senha ──
-    await page.waitForSelector('input[type="password"]', { timeout: 15000 });
-    await page.waitForTimeout(500);
-
-    const senhaField = await page.$('input[type="password"]');
+    // Preenche senha
+    const senhaField = await page.$('input[type="password"]') ||
+                       await page.$('input[name="P101_PASSWORD"]');
     if (!senhaField) throw new Error('Campo de senha não encontrado');
-
     await senhaField.fill('');
     await senhaField.fill(senha);
     log('Senha preenchida');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(300);
 
-    // Clica em Entrar/Login/Submit
-    const btnEtapa2 = await page.$('input[type="submit"]') ||
-                      await page.$('button[type="submit"]');
+    // Screenshot antes de submeter
+    await page.screenshot({ path: '/tmp/ultragaz-before-submit.png' }).catch(() => {});
+    log(`URL antes de submeter: ${page.url()}`);
 
-    if (btnEtapa2) {
-      await btnEtapa2.click();
-      log('Botão Entrar clicado');
+    // Clica no botão Login
+    const loginBtn = await page.$('button[type="submit"]') ||
+                     await page.$('input[type="submit"]') ||
+                     await page.$('button');
+    if (loginBtn) {
+      const btnText = await loginBtn.evaluate(el => el.textContent || el.value || '').catch(() => '');
+      log(`Clicando botão: "${btnText.trim()}"`);
+      await loginBtn.click();
     } else {
+      log('Sem botão — Enter no campo senha');
       await senhaField.press('Enter');
-      log('Enter no campo senha');
     }
 
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
