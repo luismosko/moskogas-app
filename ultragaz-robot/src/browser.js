@@ -122,46 +122,48 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       log('Modal 2FA detectado! Selecionando opção email...');
       await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
 
-      // Seleciona radio "Receber no e-mail"
+      // Dump HTML do modal para debug
+      const modalHtml = await page.evaluate(() => {
+        const modal = document.querySelector('.t-Dialog, .ui-dialog, [role="dialog"], .modal');
+        return modal ? modal.innerHTML.substring(0, 2000) : document.body.innerHTML.substring(0, 2000);
+      });
+      log(`HTML modal 2FA: ${modalHtml}`);
+
+      // Seleciona radio "Receber no e-mail" — clica diretamente no segundo radio
       const emailRadioClicked = await page.evaluate(() => {
-        const labels = Array.from(document.querySelectorAll('label, span, div'));
-        const emailLabel = labels.find(el => /e-mail/i.test(el.textContent));
-        if (emailLabel) {
-          // Clica no radio input associado
-          const radio = emailLabel.querySelector('input[type="radio"]') ||
-                        emailLabel.closest('label')?.querySelector('input') ||
-                        document.querySelector('input[type="radio"]:not(:checked)');
-          if (radio) { radio.click(); return true; }
-          emailLabel.click();
-          return 'label';
+        const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
+        log && log('Radios encontrados: ' + radios.length);
+        // Procura radio com value ou label contendo "email" ou "mail"
+        const emailRadio = radios.find(r => {
+          const label = document.querySelector(`label[for="${r.id}"]`);
+          return /mail/i.test(r.value) || (label && /mail/i.test(label.textContent));
+        }) || radios[1]; // fallback: segundo radio
+        if (emailRadio && !emailRadio.checked) {
+          emailRadio.click();
+          emailRadio.checked = true;
+          emailRadio.dispatchEvent(new Event('change', { bubbles: true }));
+          return 'radio:' + emailRadio.id + ':' + emailRadio.value;
         }
-        // Fallback: segundo radio da página
-        const radios = document.querySelectorAll('input[type="radio"]');
-        if (radios[1]) { radios[1].click(); return 'radio[1]'; }
-        return false;
+        return emailRadio ? 'ja-selecionado' : false;
       });
       log(`Radio email selecionado: ${emailRadioClicked}`);
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
+      await page.screenshot({ path: '/tmp/ultragaz-2fa-radio.png' }).catch(() => {});
 
-      // Clica em "Enviar código de autenticação"
-      await page.waitForTimeout(500);
+      // Clica em "Enviar código de autenticação" — busca por texto exato
       const enviarClicked = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
-        // Log todos os botões para debug
-        const info = btns.map(b => b.textContent.trim() + '|' + b.id).join(', ');
-        console.log('Botoes modal 2FA:', info);
-        // Clica em qualquer botão com "enviar" ou "codigo" ou "autenticacao"
+        const btns = Array.from(document.querySelectorAll('button'));
+        const info = btns.map(b => `"${b.textContent.trim()}" id="${b.id}"`).join(' | ');
+        // Retorna info para log
+        window._btnInfo = info;
+        // Clica no botão com "Enviar" e "código" no texto (não help button)
         const enviar = btns.find(el => 
-          /enviar/i.test(el.textContent) || 
-          /codigo/i.test(el.textContent) ||
-          /autenticac/i.test(el.textContent) ||
-          /send/i.test(el.textContent)
-        );
-        if (enviar) { enviar.click(); return enviar.textContent.trim(); }
-        // Fallback: clica no primeiro botão visível que não seja cancelar/fechar
-        const visivel = btns.find(el => el.offsetParent !== null && !/cancel|fechar|close/i.test(el.textContent));
-        if (visivel) { visivel.click(); return 'fallback:' + visivel.textContent.trim(); }
-        return false;
+          el.id !== '' &&
+          /enviar/i.test(el.textContent) && 
+          /c.digo/i.test(el.textContent)
+        ) || btns.find(el => /enviar c.digo/i.test(el.textContent));
+        if (enviar) { enviar.click(); return 'OK:' + enviar.textContent.trim().substring(0,30); }
+        return 'nao-encontrado|' + info;
       });
       log(`Botão enviar clicado: ${enviarClicked}`);
       await page.waitForTimeout(3000);
