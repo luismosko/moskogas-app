@@ -90,14 +90,26 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
     // Screenshot antes de submeter para debug
     await page.screenshot({ path: '/tmp/ultragaz-before-submit.png' }).catch(() => {});
 
-    // Tenta clicar no botão Login por texto ou tipo submit
-    const btnClicked = await page.click('button:has-text("Login"), button[type="submit"], input[type="submit"], .t-Button--hot', { timeout: 5000 }).catch(() => false);
-    if (btnClicked === false) {
-      log('Botao nao encontrado via click — pressionando Enter...');
+    // Clica no botão Login usando locator (mais confiável)
+    try {
+      const btn = page.locator('button').filter({ hasText: /login/i }).first();
+      const btnCount = await btn.count();
+      log(`Botoes Login encontrados: ${btnCount}`);
+      if (btnCount > 0) {
+        await btn.click({ timeout: 8000 });
+        log('Clique no botao Login realizado!');
+      } else {
+        log('Nenhum botao Login - pressionando Enter...');
+        await senhaField.press('Enter');
+      }
+    } catch(btnErr) {
+      log(`Erro ao clicar botao: ${btnErr.message} - tentando Enter...`);
       await senhaField.press('Enter');
     }
+    await page.waitForTimeout(3000);
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-    // Screenshot após login
+    // Screenshot apos login
+    await page.screenshot({ path: '/tmp/ultragaz-login.png' }).catch(() => {});
     await page.screenshot({ path: '/tmp/ultragaz-login.png' }).catch(() => {});
 
     // Verifica se logou (URL mudou ou elemento do dashboard apareceu)
