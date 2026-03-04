@@ -171,20 +171,36 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       log('Limpando emails antigos da Ultragaz...');
       await limparEmailsUltragaz(gmailUser, gmailPass);
 
-      // Seleciona radio email dentro do frame
+      // Seleciona radio email dentro do frame — ID P442_MFA_CODE_2 é o email
       const emailRadioClicked = await mfaFrame.evaluate(() => {
         const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
+        const info = radios.map(r => {
+          const lbl = document.querySelector(`label[for="${r.id}"]`);
+          return r.id + '|' + r.value + '|' + (lbl ? lbl.textContent.trim() : '');
+        }).join(' || ');
+        
+        // Busca radio cujo label contém "mail" (e-mail)
         const emailRadio = radios.find(r => {
           const label = document.querySelector(`label[for="${r.id}"]`);
           return /mail/i.test(r.value) || (label && /mail/i.test(label.textContent));
-        }) || radios[1];
-        if (emailRadio && !emailRadio.checked) {
+        });
+        
+        if (emailRadio) {
           emailRadio.click();
           emailRadio.checked = true;
           emailRadio.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'radio:' + emailRadio.id;
+          return 'email-radio:' + emailRadio.id + ' | todos: ' + info;
         }
-        return emailRadio ? 'ja-selecionado' : 'nao-encontrado';
+        
+        // Fallback: último radio (email geralmente é o segundo)
+        const ultimo = radios[radios.length - 1];
+        if (ultimo) {
+          ultimo.click();
+          ultimo.checked = true;
+          ultimo.dispatchEvent(new Event('change', { bubbles: true }));
+          return 'ultimo-radio:' + ultimo.id + ' | todos: ' + info;
+        }
+        return 'nao-encontrado | ' + info;
       });
       log(`Radio email selecionado: ${emailRadioClicked}`);
       await page.waitForTimeout(800);
