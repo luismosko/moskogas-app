@@ -87,6 +87,30 @@ async function startSession() {
 
     log(`Credenciais obtidas para: ${cfg.login}`);
 
+    // ── Aguarda solicitação de login do operador via painel ──
+    const apiUrl = process.env.MOSKOGAS_API_URL || 'https://moskogas.com.br';
+    const apiKey = process.env.MOSKOGAS_API_KEY;
+    log('🟡 Aguardando operador iniciar login pelo painel MoskoGás...');
+
+    let loginRequested = false;
+    while (!loginRequested) {
+      try {
+        const r = await fetch(`${apiUrl}/api/ultragaz/login-request`, {
+          headers: { 'X-API-Key': apiKey }
+        });
+        const data = await r.json();
+        if (data.pending) {
+          loginRequested = true;
+          // Consome a solicitação
+          await fetch(`${apiUrl}/api/ultragaz/login-request`, {
+            method: 'DELETE', headers: { 'X-API-Key': apiKey }
+          }).catch(() => {});
+          log('✅ Login solicitado pelo operador! Iniciando...');
+        }
+      } catch {}
+      if (!loginRequested) await new Promise(r => setTimeout(r, 5000));
+    }
+
     stopWebSocket();
 
     log('Fazendo login no Hub Ultragaz...');

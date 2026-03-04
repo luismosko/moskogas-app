@@ -1,35 +1,40 @@
-// browser.js — Playwright: login no Hub Ultragaz + captura URL assinada do WebSocket
 import { chromium } from 'playwright';
-import { buscarCodigo2FA, limparEmailsUltragaz } from './imap-reader.js';
 
 let browserInstance = null;
 let contextInstance = null;
 
 const log = (msg) => console.log(`[browser] ${new Date().toISOString()} ${msg}`);
 
-// Inicializa ou reutiliza browser/context
 async function getBrowser() {
-  if (browserInstance && browserInstance.isConnected()) return browserInstance;
+  if (browserInstance) {
+    try { await browserInstance.version(); return browserInstance; } catch {}
+    browserInstance = null;
+  }
   log('Iniciando Chromium headless...');
   browserInstance = await chromium.launch({
     headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-blink-features=AutomationControlled',
-    ],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled'],
   });
   return browserInstance;
+}
+
+// Atualiza status no Worker
+async function updateHubStatus(apiUrl, apiKey, conectado, status, mensagem = '') {
+  await fetch(`${apiUrl}/api/ultragaz/hub-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify({ conectado, status, mensagem })
+  }).catch(e => log(`Erro updateHubStatus: ${e.message}`));
 }
 
 // Faz login e retorna o context com cookies de sessão
 export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.br') {
   log(`Fazendo login como ${login}...`);
 
-  const browser = await getBrowser();
+  const apiUrl = process.env.MOSKOGAS_API_URL || 'https://moskogas.com.br';
+  const apiKey = process.env.MOSKOGAS_API_KEY;
 
-  // Fecha context anterior se existir
+  const browser = await getBrowser();
   if (contextInstance) {
     try { await contextInstance.close(); } catch {}
     contextInstance = null;
@@ -43,296 +48,202 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
   });
 
   const page = await contextInstance.newPage();
-
-  // Oculta sinais de automação (anti-bot detection)
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
-    Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en'] });
     window.chrome = { runtime: {} };
-    Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
   });
 
   try {
-    // Aguarda um pouco antes de navegar (simula comportamento humano)
-    await page.waitForTimeout(1000 + Math.floor(Math.random() * 1000));
+    await updateHubStatus(apiUrl, apiKey, false, 'conectando', 'Abrindo Hub Ultragaz...');
     await page.goto(hubUrl, { waitUntil: 'networkidle', timeout: 30000 });
-    log(`URL inicial: ${page.url()}`);
     await page.waitForTimeout(1500);
-
-    // Screenshot inicial
-    await page.screenshot({ path: '/tmp/ultragaz-page-init.png' }).catch(() => {});
-
-    // Formulário de UMA etapa: email + senha + botão Login
-    await page.waitForSelector('input[type="email"], input[type="text"], input[name="P101_USERNAME"]', { timeout: 15000 });
-    await page.waitForTimeout(1000);
+    log(`URL inicial: ${page.url()}`);
 
     // Preenche email
-    const emailField = await page.$('input[type="email"]') ||
-                       await page.$('input[name="P101_USERNAME"]') ||
-                       await page.$('input[type="text"]');
-    if (!emailField) throw new Error('Campo de email não encontrado');
-    await emailField.fill('');
-    await emailField.fill(login.toLowerCase().trim());
-    log(`Email preenchido: ${login.toLowerCase().trim()}`);
-    await page.waitForTimeout(300);
+    await page.waitForSelector('input[type="email"], input[name="P101_USERNAME"], input[id*="user"], input[id*="email"]', { timeout: 15000 });
+    const emailField = await page.$('input[type="email"]') || await page.$('input[name="P101_USERNAME"]') || await page.$('input');
+    await emailField.fill(login);
+    log(`Email preenchido: ${login}`);
 
     // Preenche senha
-    const senhaField = await page.$('input[type="password"]') ||
-                       await page.$('input[name="P101_PASSWORD"]');
-    if (!senhaField) throw new Error('Campo de senha não encontrado');
-    await senhaField.fill('');
-    await senhaField.click();
-    await page.keyboard.type(senha, { delay: 50 }); // digita tecla por tecla (melhor com chars especiais)
-    log('Senha preenchida (keyboard.type)');
-    await page.waitForTimeout(300);
+    const senhaField = await page.$('input[type="password"]');
+    if (senhaField) {
+      await senhaField.click();
+      await page.keyboard.type(senha, { delay: 50 });
+      log('Senha preenchida (keyboard.type)');
+    }
 
-    // Screenshot antes de submeter
-    await page.screenshot({ path: '/tmp/ultragaz-before-submit.png' }).catch(() => {});
     log(`URL antes de submeter: ${page.url()}`);
 
-    // Inspeciona todos os botões da página para debug
-    const allBtns = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('button, input[type="submit"], a')).map(el => ({
-        tag: el.tagName,
-        type: el.type || '',
-        text: el.textContent?.trim() || el.value || '',
-        id: el.id || '',
-        cls: el.className || ''
-      }));
-    });
-    log(`Botões encontrados: ${JSON.stringify(allBtns)}`);
+    // Log botões e clica em Login direto (não Azure SSO)
+    const botoesInfo = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button')).map(b => ({ tag: 'BUTTON', type: b.type, text: b.textContent.trim(), id: b.id, cls: b.className }))
+    );
+    log(`Botões encontrados: ${JSON.stringify(botoesInfo)}`);
 
-    // Clica no botão "Login" direto (id=b-login), NÃO no "Login Ultragaz" (SSO Microsoft)
-    const clicked = await page.evaluate(() => {
-      // Prioridade: id="b-login" (login direto)
-      const btnDireto = document.getElementById('b-login');
-      if (btnDireto) { btnDireto.click(); return 'clicked:b-login:' + btnDireto.textContent.trim(); }
-      // Fallback: botão com texto exato "Login" (não "Login Ultragaz")
-      const all = Array.from(document.querySelectorAll('button'));
-      const loginBtn = all.find(el => el.textContent.trim() === 'Login');
-      if (loginBtn) { loginBtn.click(); return 'clicked:text:' + loginBtn.textContent.trim(); }
-      return 'none';
+    const clicou = await page.evaluate(() => {
+      const btn = document.getElementById('b-login');
+      if (btn) { btn.click(); return `clicked:${btn.id}:${btn.textContent.trim()}`; }
+      const btns = Array.from(document.querySelectorAll('button'));
+      const login = btns.find(b => /^login$/i.test(b.textContent.trim()) && !b.id.includes('azure'));
+      if (login) { login.click(); return `clicked:${login.id}:${login.textContent.trim()}`; }
+      return 'nao-encontrado';
     });
-    log(`Resultado clique JS: ${clicked}`);
+    log(`Resultado clique JS: ${clicou}`);
 
+    // Aguarda resposta do Hub
     await page.waitForTimeout(3000);
 
-    // ── VERIFICA SE APARECEU MODAL DE 2FA ──
-    // Aguarda até 8s pelo modal de 2FA
-    const modal2faTexto = await Promise.race([
-      page.waitForSelector('text=Enviar código de autenticação', { timeout: 8000 })
-        .then(() => page.evaluate(() => document.body.innerText))
-        .catch(() => null),
-      page.evaluate(() => document.body.innerText)
-    ]).catch(() => '');
+    // Verifica se apareceu modal de 2FA
+    let modal2faTexto = '';
+    try {
+      await page.waitForSelector('text=Enviar código de autenticação', { timeout: 8000 });
+      modal2faTexto = await page.evaluate(() => document.body.innerText);
+    } catch {
+      modal2faTexto = await page.evaluate(() => document.body.innerText).catch(() => '');
+    }
 
-    const tem2FA = modal2faTexto && (
-      modal2faTexto.includes('Enviar') && modal2faTexto.includes('digo')
-    );
-    log(`Texto modal 2FA detectado: ${tem2FA} — preview: ${(modal2faTexto||'').substring(0,100)}`);
+    const tem2FA = modal2faTexto.includes('Enviar') && modal2faTexto.includes('digo');
+    log(`Texto modal 2FA detectado: ${tem2FA} — preview: ${modal2faTexto.substring(0, 80).replace(/\n/g, ' ')}`);
 
     if (tem2FA) {
       log('Modal 2FA detectado! Selecionando opção email...');
-      await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
+      await updateHubStatus(apiUrl, apiKey, false, 'aguardando_2fa', 'Informe o código 2FA no sistema MoskoGás');
 
-      // Modal 2FA está dentro de um IFRAME — precisa acessar o frame
-      log('Buscando iframe do modal 2FA...');
+      // Encontra o iframe do 2FA
       await page.waitForTimeout(1000);
-
-      // Pega o frame do modal MFA
       let mfaFrame = null;
       for (const frame of page.frames()) {
-        const url = frame.url();
-        if (url.includes('user-mfa') || url.includes('mfa')) {
+        if (frame.url().includes('user-mfa') || frame.url().includes('mfa')) {
           mfaFrame = frame;
-          log(`Frame 2FA encontrado: ${url}`);
+          log(`Frame 2FA encontrado: ${frame.url()}`);
           break;
         }
       }
-
       if (!mfaFrame) {
-        log('Frame 2FA não encontrado — tentando via iframe selector');
-        const iframeEl = await page.$('iframe[src*="mfa"], iframe[title*="Autenticação"]');
+        const iframeEl = await page.$('iframe[src*="mfa"]');
         if (iframeEl) mfaFrame = await iframeEl.contentFrame();
       }
-
       if (!mfaFrame) throw new Error('Frame do modal 2FA não encontrado');
 
-      // Aguarda conteúdo do frame carregar
       await mfaFrame.waitForLoadState('domcontentloaded').catch(() => {});
       await page.waitForTimeout(1000);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-modal.png' }).catch(() => {});
 
-      // ── LIMPA EMAILS ANTIGOS ANTES DE PEDIR NOVO CÓDIGO ──
-      const gmailUser = process.env.GMAIL_USER;
-      const gmailPass = process.env.GMAIL_APP_PASSWORD;
-      if (!gmailUser || !gmailPass) throw new Error('GMAIL_USER e GMAIL_APP_PASSWORD não configurados no .env');
-      log('Limpando emails antigos da Ultragaz...');
-      await limparEmailsUltragaz(gmailUser, gmailPass);
-
-      // Seleciona radio email dentro do frame — ID P442_MFA_CODE_2 é o email
+      // Seleciona radio email
       const emailRadioClicked = await mfaFrame.evaluate(() => {
         const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
         const info = radios.map(r => {
           const lbl = document.querySelector(`label[for="${r.id}"]`);
-          return r.id + '|' + r.value + '|' + (lbl ? lbl.textContent.trim() : '');
+          return r.id + '|' + (lbl ? lbl.textContent.trim() : '');
         }).join(' || ');
-        
-        // Busca radio cujo label contém "mail" (e-mail)
         const emailRadio = radios.find(r => {
           const label = document.querySelector(`label[for="${r.id}"]`);
           return /mail/i.test(r.value) || (label && /mail/i.test(label.textContent));
         });
-        
         if (emailRadio) {
-          emailRadio.click();
-          emailRadio.checked = true;
+          emailRadio.click(); emailRadio.checked = true;
           emailRadio.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'email-radio:' + emailRadio.id + ' | todos: ' + info;
+          return 'email:' + emailRadio.id + ' | todos: ' + info;
         }
-        
-        // Fallback: último radio (email geralmente é o segundo)
         const ultimo = radios[radios.length - 1];
-        if (ultimo) {
-          ultimo.click();
-          ultimo.checked = true;
-          ultimo.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'ultimo-radio:' + ultimo.id + ' | todos: ' + info;
-        }
+        if (ultimo) { ultimo.click(); ultimo.checked = true; return 'ultimo:' + ultimo.id + ' | todos: ' + info; }
         return 'nao-encontrado | ' + info;
       });
       log(`Radio email selecionado: ${emailRadioClicked}`);
       await page.waitForTimeout(800);
-      await page.screenshot({ path: '/tmp/ultragaz-2fa-radio.png' }).catch(() => {});
 
-      // Clica em "Enviar código de autenticação" dentro do frame
+      // Clica em Enviar código
       const enviarClicked = await mfaFrame.evaluate(() => {
         const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-        const info = btns.map(b => `"${b.textContent.trim()}" id="${b.id}"`).join(' | ');
-        const enviar = btns.find(el =>
-          /enviar/i.test(el.textContent) ||
-          /enviar/i.test(el.value) ||
-          /submit/i.test(el.type)
-        );
+        const enviar = btns.find(el => /enviar/i.test(el.textContent) || /enviar/i.test(el.value));
         if (enviar) { enviar.click(); return 'OK:' + (enviar.textContent || enviar.value).trim().substring(0, 30); }
-        return 'nao-encontrado | ' + info;
+        return 'nao-encontrado';
       });
       log(`Botão enviar clicado: ${enviarClicked}`);
-      await page.waitForTimeout(3000);
-      await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
       await page.waitForTimeout(2000);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
 
-      // ── AGUARDA CÓDIGO 2FA VIA GMAIL IMAP ──
-      // Polling com keepalive do browser (evita timeout da página)
-      log('Aguardando novo código 2FA via Gmail IMAP (até 8 min)...');
+      // ── AGUARDA OPERADOR INSERIR O CÓDIGO NO APP ──
+      log('Aguardando operador inserir código 2FA no painel MoskoGás...');
       let codigo2fa = null;
-      const imapInicio = Date.now();
-      const imapMax = 8 * 60 * 1000; // 8 minutos
-      while (!codigo2fa && Date.now() - imapInicio < imapMax) {
-        // Keepalive: move mouse para evitar que o browser feche
-        await page.mouse.move(100, 100).catch(() => {});
-        codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 15000).catch(() => null);
-        if (!codigo2fa) {
-          const elapsed = Math.round((Date.now() - imapInicio) / 1000);
-          log(`Sem código ainda... (${elapsed}s)`);
-          await new Promise(r => setTimeout(r, 10000));
-        }
-      }
-      if (!codigo2fa) throw new Error('Timeout aguardando código 2FA (8min)');
+      const inicio = Date.now();
+      const maxWait = 10 * 60 * 1000; // 10 minutos
 
-      // Digita o código no IFRAME do 2FA
+      // Limpa código anterior no Worker
+      await fetch(`${apiUrl}/api/ultragaz/2fa-code`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': apiKey }
+      }).catch(() => {});
+
+      while (!codigo2fa && Date.now() - inicio < maxWait) {
+        await page.mouse.move(200, 200).catch(() => {}); // keepalive
+        try {
+          const r = await fetch(`${apiUrl}/api/ultragaz/2fa-code`, {
+            headers: { 'X-API-Key': apiKey }
+          });
+          if (r.ok) {
+            const data = await r.json();
+            if (data.codigo) { codigo2fa = data.codigo; break; }
+          }
+        } catch {}
+        const elapsed = Math.round((Date.now() - inicio) / 1000);
+        if (elapsed % 30 === 0) log(`Aguardando código 2FA do operador... (${elapsed}s)`);
+        await new Promise(res => setTimeout(res, 5000));
+      }
+
+      if (!codigo2fa) throw new Error('Timeout aguardando código 2FA do operador (10min)');
+      log(`Código 2FA recebido do operador: ${codigo2fa}`);
+
+      // Digita o código no iframe
       await mfaFrame.waitForSelector('input', { timeout: 10000 }).catch(() => {});
-      const codigoField = await mfaFrame.$('input[maxlength]') ||
-                          await mfaFrame.$('input[type="number"]') ||
-                          await mfaFrame.$('input[type="text"]') ||
-                          await mfaFrame.$('input');
+      const codigoField = await mfaFrame.$('input[maxlength]') || await mfaFrame.$('input[type="number"]') || await mfaFrame.$('input[type="text"]') || await mfaFrame.$('input');
       if (!codigoField) throw new Error('Campo de código 2FA não encontrado no iframe');
       await codigoField.fill('');
       await codigoField.fill(codigo2fa);
       log(`Código ${codigo2fa} digitado no iframe`);
       await page.waitForTimeout(500);
-      await page.screenshot({ path: '/tmp/ultragaz-2fa-codigo.png' }).catch(() => {});
 
-      // Confirma o código dentro do iframe
+      // Confirma
       const confirmarClicked = await mfaFrame.evaluate(() => {
         const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
         const confirmar = btns.find(el => /confirmar|validar|entrar|verificar|ok|enviar/i.test(el.textContent || el.value));
         if (confirmar) { confirmar.click(); return confirmar.textContent || confirmar.value; }
-        if (btns[0]) { btns[0].click(); return 'first-btn:' + (btns[0].textContent || ''); }
-        return 'nenhum-botao';
+        if (btns[0]) { btns[0].click(); return 'first:' + btns[0].textContent; }
+        return 'nenhum';
       });
-      log(`Confirmação 2FA clicada: ${confirmarClicked}`);
+      log(`Confirmação 2FA: ${confirmarClicked}`);
+
+      // Limpa código usado
+      await fetch(`${apiUrl}/api/ultragaz/2fa-code`, { method: 'DELETE', headers: { 'X-API-Key': apiKey } }).catch(() => {});
 
       await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
       await page.waitForTimeout(3000);
     }
 
-    // Screenshot após login
     await page.screenshot({ path: '/tmp/ultragaz-login.png' }).catch(() => {});
-
-    // Verifica se logou
     const currentUrl = page.url();
     log(`URL final: ${currentUrl}`);
 
     if (currentUrl.includes('login') || currentUrl.includes('P101') || currentUrl.includes('signin')) {
+      await updateHubStatus(apiUrl, apiKey, false, 'erro', 'Login falhou — verifique credenciais');
       throw new Error('Login falhou — verifique as credenciais no config.html');
     }
 
-    log(`Login realizado! URL: ${currentUrl}`);
+    log(`✅ Login realizado! URL: ${currentUrl}`);
+    await updateHubStatus(apiUrl, apiKey, true, 'conectado', `Conectado em ${new Date().toLocaleString('pt-BR')}`);
     return { page, context: contextInstance };
+
   } catch (e) {
-    await page.close().catch(() => {});
+    await page.screenshot({ path: '/tmp/ultragaz-error.png' }).catch(() => {});
+    await updateHubStatus(apiUrl, apiKey, false, 'erro', e.message.substring(0, 100)).catch(() => {});
+    if (contextInstance) { try { await contextInstance.close(); } catch {} contextInstance = null; }
     throw e;
   }
 }
 
-// Chama processo APEX para obter URL WSS assinada
-export async function getWebsocketInfo(page) {
-  log('Buscando URL assinada do WebSocket...');
-
-  const result = await page.evaluate(async () => {
-    return new Promise((resolve, reject) => {
-      if (typeof apex === 'undefined') {
-        reject(new Error('APEX não disponível na página'));
-        return;
-      }
-      apex.server.process('GET_WEBSOCKET_INFO', {}, {
-        success: (data) => resolve(data),
-        error: (err) => reject(new Error('GET_WEBSOCKET_INFO falhou: ' + JSON.stringify(err))),
-        dataType: 'json',
-      });
-    });
-  });
-
-  if (!result || (!result.url && !result.wss_url && !result.endpoint)) {
-    throw new Error('URL WSS não retornada: ' + JSON.stringify(result));
-  }
-
-  const wssUrl = result.url || result.wss_url || result.endpoint || result;
-  log(`URL WSS obtida: ${typeof wssUrl === 'string' ? wssUrl.substring(0, 60) : JSON.stringify(wssUrl)}...`);
-  return typeof wssUrl === 'string' ? wssUrl : JSON.stringify(wssUrl);
-}
-
-// Busca detalhes completos de um pedido via GET_SELECTS
-export async function getOrderDetails(page, orderId) {
-  log(`Buscando detalhes do pedido #${orderId}...`);
-
-  const result = await page.evaluate(async (id) => {
-    return new Promise((resolve, reject) => {
-      apex.server.process('GET_SELECTS', { x01: id }, {
-        success: (data) => resolve(data),
-        error: (err) => reject(new Error('GET_SELECTS falhou: ' + JSON.stringify(err))),
-        dataType: 'json',
-      });
-    });
-  }, String(orderId));
-
-  return result;
-}
-
-// Fecha tudo
+export function getContext() { return contextInstance; }
 export async function closeBrowser() {
   if (contextInstance) { try { await contextInstance.close(); } catch {} contextInstance = null; }
   if (browserInstance) { try { await browserInstance.close(); } catch {} browserInstance = null; }

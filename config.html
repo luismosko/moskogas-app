@@ -28,9 +28,101 @@
   /* Entregadores removido v2.5.0 — gerenciar em Usuários */
   .version-badge { font-size: 10px; color: #94a3b8; text-align: right; padding: 4px 0 10px; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  /* ── Hub Status Bar ── */
+  #hub-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    padding: 10px 20px; display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; font-size: 13px; font-weight: 700; transition: background 0.4s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  #hub-bar.desconectado { background: #dc2626; color: #fff; animation: pulse 2s infinite; }
+  #hub-bar.conectando   { background: #f59e0b; color: #fff; }
+  #hub-bar.conectado    { background: #16a34a; color: #fff; animation: none; }
+  #hub-bar.erro         { background: #7c3aed; color: #fff; animation: pulse 2s infinite; }
+  #hub-bar.aguardando_2fa { background: #0284c7; color: #fff; animation: pulse 1s infinite; }
+  body { padding-top: 44px; }
+
+  /* ── Modal Hub Login ── */
+  #hub-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    z-index: 10000; align-items: center; justify-content: center;
+  }
+  #hub-modal-overlay.open { display: flex; }
+  #hub-modal {
+    background: #fff; border-radius: 16px; padding: 28px; width: 100%; max-width: 420px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3); margin: 16px;
+  }
+  #hub-modal h3 { font-size: 18px; color: #1e293b; margin-bottom: 6px; }
+  #hub-modal p  { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+  .hub-step { display: none; }
+  .hub-step.active { display: block; }
+  #hub-code-input {
+    width: 100%; padding: 16px; font-size: 28px; font-weight: 700; letter-spacing: 8px;
+    text-align: center; border: 3px solid #0284c7; border-radius: 10px; margin-bottom: 16px;
+  }
+  #hub-log { font-size: 11px; color: #64748b; background: #f8fafc; border-radius: 6px;
+    padding: 8px; max-height: 80px; overflow-y: auto; font-family: monospace; margin-bottom: 12px; }
 </style>
 </head>
 <body>
+
+<!-- ── Hub Ultragaz Status Bar ── -->
+<div id="hub-bar" class="desconectado" onclick="hubBarClick()">
+  <span id="hub-bar-text">⚪ Hub Ultragaz — Verificando...</span>
+  <span style="font-size:11px;opacity:0.8" id="hub-bar-hint">clique para conectar</span>
+</div>
+
+<!-- ── Hub Login Modal ── -->
+<div id="hub-modal-overlay">
+  <div id="hub-modal">
+    <h3>🔗 Conectar ao Hub Ultragaz</h3>
+    <p id="hub-modal-desc">O robô irá fazer login no Hub. Você precisará informar o código 2FA que chegar no seu e-mail.</p>
+
+    <!-- Step 1: Iniciar login -->
+    <div class="hub-step active" id="hub-step-1">
+      <div id="hub-log">Aguardando início...</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-orange" style="flex:1" onclick="hubIniciarLogin()">🚀 Iniciar Login</button>
+        <button class="btn btn-gray" onclick="hubModalFechar()">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Aguardando robô + código 2FA -->
+    <div class="hub-step" id="hub-step-2">
+      <div id="hub-log2" style="font-size:11px;color:#64748b;background:#f8fafc;border-radius:6px;padding:8px;max-height:80px;overflow-y:auto;font-family:monospace;margin-bottom:12px">Robô iniciando login...</div>
+      <label style="font-size:12px;font-weight:700;color:#0284c7;margin-bottom:6px;display:block">📧 CÓDIGO 2FA (recebido no e-mail)</label>
+      <input id="hub-code-input" type="tel" maxlength="8" placeholder="000000" oninput="this.value=this.value.replace(/\D/g,'')">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-green" style="flex:1" onclick="hubEnviarCodigo()" id="hub-btn-enviar" disabled>✅ Enviar Código</button>
+        <button class="btn btn-gray" onclick="hubModalFechar()">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Conectado -->
+    <div class="hub-step" id="hub-step-3">
+      <div style="text-align:center;padding:16px 0">
+        <div style="font-size:48px;margin-bottom:8px">✅</div>
+        <div style="font-size:16px;font-weight:700;color:#16a34a">Hub conectado com sucesso!</div>
+        <div id="hub-step3-msg" style="font-size:13px;color:#64748b;margin-top:6px"></div>
+      </div>
+      <button class="btn btn-green" style="width:100%" onclick="hubModalFechar()">Fechar</button>
+    </div>
+
+    <!-- Step erro -->
+    <div class="hub-step" id="hub-step-erro">
+      <div style="text-align:center;padding:16px 0">
+        <div style="font-size:48px;margin-bottom:8px">❌</div>
+        <div id="hub-erro-msg" style="font-size:14px;color:#dc2626;font-weight:600"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-orange" style="flex:1" onclick="hubVoltarStep1()">Tentar novamente</button>
+        <button class="btn btn-gray" onclick="hubModalFechar()">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="nav-placeholder"></div>
 <div class="container">
   <div class="version-badge">v2.13.8 — config</div>
@@ -1703,6 +1795,153 @@ async function saveTz() {
     toast('Erro ao salvar fuso', 'error');
   }
 }
+
+// ══════════════════════════════════════════════════════
+// ── HUB ULTRAGAZ — Barra de Status + Modal de Login ──
+// ══════════════════════════════════════════════════════
+let hubPollInterval = null;
+let hubStep2PollInterval = null;
+
+async function hubCheckStatus() {
+  try {
+    const r = await api('/api/ultragaz/hub-status');
+    hubAtualizarBarra(r);
+  } catch {}
+}
+
+function hubAtualizarBarra(data) {
+  const bar = document.getElementById('hub-bar');
+  const txt = document.getElementById('hub-bar-text');
+  const hint = document.getElementById('hub-bar-hint');
+  if (!bar) return;
+
+  bar.className = data.status || 'desconectado';
+
+  const icons = { conectado: '🟢', desconectado: '🔴', conectando: '🟡', erro: '🟣', aguardando_2fa: '🔵' };
+  const labels = { conectado: 'Hub Ultragaz — Conectado', desconectado: 'Hub Ultragaz — Desconectado', conectando: 'Hub Ultragaz — Conectando...', erro: 'Hub Ultragaz — Erro', aguardando_2fa: 'Hub Ultragaz — Aguardando código 2FA' };
+  const icon = icons[data.status] || '⚪';
+  const label = labels[data.status] || 'Hub Ultragaz';
+  txt.textContent = `${icon} ${label}`;
+  hint.textContent = data.conectado ? (data.mensagem || '') : 'clique para conectar';
+
+  // Se está aguardando 2FA e modal fechado, abre automaticamente no step 2
+  if (data.status === 'aguardando_2fa') {
+    const overlay = document.getElementById('hub-modal-overlay');
+    if (!overlay.classList.contains('open')) hubModalStep(2);
+    hubIniciarPoll2FA();
+  }
+}
+
+function hubBarClick() {
+  const bar = document.getElementById('hub-bar');
+  if (bar.classList.contains('conectado')) {
+    // Já conectado: só mostra info
+    const msg = document.getElementById('hub-bar-hint').textContent;
+    toast('🟢 ' + msg, 'success');
+    return;
+  }
+  hubModalAbrir();
+}
+
+function hubModalAbrir() {
+  hubVoltarStep1();
+  document.getElementById('hub-modal-overlay').classList.add('open');
+}
+
+function hubModalFechar() {
+  document.getElementById('hub-modal-overlay').classList.remove('open');
+  if (hubStep2PollInterval) { clearInterval(hubStep2PollInterval); hubStep2PollInterval = null; }
+}
+
+function hubModalStep(n) {
+  ['1','2','3','erro'].forEach(s => {
+    const el = document.getElementById(`hub-step-${s}`);
+    if (el) el.classList.toggle('active', s === String(n));
+  });
+  if (n === 2) {
+    document.getElementById('hub-modal-overlay').classList.add('open');
+    document.getElementById('hub-code-input').value = '';
+    document.getElementById('hub-btn-enviar').disabled = true;
+    document.getElementById('hub-code-input').addEventListener('input', function() {
+      document.getElementById('hub-btn-enviar').disabled = this.value.length < 4;
+    });
+  }
+}
+
+function hubVoltarStep1() {
+  hubModalStep(1);
+  document.getElementById('hub-log').textContent = 'Aguardando início...';
+}
+
+function hubLog(msg) {
+  const el = document.getElementById('hub-log');
+  if (el) { el.textContent = msg; el.scrollTop = el.scrollHeight; }
+  const el2 = document.getElementById('hub-log2');
+  if (el2) { el2.textContent = msg; el2.scrollTop = el2.scrollHeight; }
+}
+
+async function hubIniciarLogin() {
+  hubLog('Solicitando login ao robô...');
+  try {
+    const r = await api('/api/ultragaz/start-login', { method: 'POST', body: '{}' });
+    if (r.ok) {
+      hubLog('✅ Login solicitado! Aguardando robô iniciar...');
+      hubModalStep(2);
+      hubIniciarPoll2FA();
+    } else {
+      hubLog('Erro: ' + (r.error || 'Falha ao solicitar login'));
+    }
+  } catch(e) {
+    hubLog('Erro: ' + e.message);
+  }
+}
+
+function hubIniciarPoll2FA() {
+  if (hubStep2PollInterval) return; // já rodando
+  hubStep2PollInterval = setInterval(async () => {
+    try {
+      const data = await api('/api/ultragaz/hub-status');
+      const log2 = document.getElementById('hub-log2');
+      if (log2) log2.textContent = (data.mensagem || data.status || '...');
+      if (data.status === 'conectado') {
+        clearInterval(hubStep2PollInterval); hubStep2PollInterval = null;
+        document.getElementById('hub-step3-msg').textContent = data.mensagem || '';
+        hubModalStep(3);
+        hubAtualizarBarra(data);
+      } else if (data.status === 'erro') {
+        clearInterval(hubStep2PollInterval); hubStep2PollInterval = null;
+        document.getElementById('hub-erro-msg').textContent = data.mensagem || 'Erro no login';
+        hubModalStep('erro');
+      }
+    } catch {}
+  }, 4000);
+}
+
+async function hubEnviarCodigo() {
+  const codigo = document.getElementById('hub-code-input').value.trim();
+  if (!codigo || codigo.length < 4) return;
+  document.getElementById('hub-btn-enviar').disabled = true;
+  try {
+    const r = await api('/api/ultragaz/2fa-code', {
+      method: 'POST',
+      body: JSON.stringify({ codigo })
+    });
+    if (r.ok) {
+      hubLog('✅ Código enviado! Aguardando confirmação...');
+      document.getElementById('hub-log2').textContent = '✅ Código enviado! Aguardando robô confirmar...';
+    } else {
+      document.getElementById('hub-btn-enviar').disabled = false;
+      hubLog('Erro ao enviar código: ' + (r.error || ''));
+    }
+  } catch(e) {
+    document.getElementById('hub-btn-enviar').disabled = false;
+    hubLog('Erro: ' + e.message);
+  }
+}
+
+// Inicia polling de status a cada 30 segundos
+hubCheckStatus();
+hubPollInterval = setInterval(hubCheckStatus, 30000);
 </script>
 </body>
 </html>
