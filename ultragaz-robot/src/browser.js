@@ -224,9 +224,23 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
       await page.waitForTimeout(2000);
       await page.screenshot({ path: '/tmp/ultragaz-2fa-enviado.png' }).catch(() => {});
 
-      // ── AGUARDA CÓDIGO 2FA VIA GMAIL IMAP (polling a cada 10s por até 8 min) ──
-      log('Aguardando novo código 2FA via Gmail IMAP...');
-      const codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 480000);
+      // ── AGUARDA CÓDIGO 2FA VIA GMAIL IMAP ──
+      // Polling com keepalive do browser (evita timeout da página)
+      log('Aguardando novo código 2FA via Gmail IMAP (até 8 min)...');
+      let codigo2fa = null;
+      const imapInicio = Date.now();
+      const imapMax = 8 * 60 * 1000; // 8 minutos
+      while (!codigo2fa && Date.now() - imapInicio < imapMax) {
+        // Keepalive: move mouse para evitar que o browser feche
+        await page.mouse.move(100, 100).catch(() => {});
+        codigo2fa = await buscarCodigo2FA(gmailUser, gmailPass, 15000).catch(() => null);
+        if (!codigo2fa) {
+          const elapsed = Math.round((Date.now() - imapInicio) / 1000);
+          log(`Sem código ainda... (${elapsed}s)`);
+          await new Promise(r => setTimeout(r, 10000));
+        }
+      }
+      if (!codigo2fa) throw new Error('Timeout aguardando código 2FA (8min)');
 
       // Digita o código no IFRAME do 2FA
       await mfaFrame.waitForSelector('input', { timeout: 10000 }).catch(() => {});
