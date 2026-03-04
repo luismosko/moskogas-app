@@ -51,30 +51,45 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
   try {
     await page.goto(hubUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // Aguarda campo de login
-    await page.waitForSelector('input[type="text"], input[name="P101_USERNAME"], input[name="p_username"]', { timeout: 15000 });
+    // Aguarda qualquer campo de input aparecer
+    await page.waitForSelector('input', { timeout: 15000 });
+    await page.waitForTimeout(1000);
 
-    // Preenche credenciais
+    // Preenche credenciais — seletores genéricos por ordem de prioridade
     const loginField = await page.$('input[name="P101_USERNAME"]') ||
-                       await page.$('input[type="text"]') ||
-                       await page.$('input[name="p_username"]');
+                       await page.$('input[type="email"]') ||
+                       await page.$('input[placeholder*="mail" i]') ||
+                       await page.$('input[placeholder*="usu" i]') ||
+                       await page.$('input[placeholder*="login" i]') ||
+                       (await page.$$('input[type="text"]'))[0] ||
+                       (await page.$$('input:not([type="password"])'))[0];
+
     const senhaField = await page.$('input[name="P101_PASSWORD"]') ||
                        await page.$('input[type="password"]') ||
-                       await page.$('input[name="p_password"]');
+                       await page.$('input[placeholder*="senha" i]') ||
+                       await page.$('input[placeholder*="pass" i]');
 
+    log(`Campos encontrados — login: ${!!loginField}, senha: ${!!senhaField}`);
     if (!loginField || !senhaField) throw new Error('Campos de login não encontrados');
 
+    await loginField.fill('');
     await loginField.fill(login);
+    await page.waitForTimeout(500);
+    await senhaField.fill('');
     await senhaField.fill(senha);
+    await page.waitForTimeout(500);
 
-    // Tenta clicar no botão — fallback: pressiona Enter no campo senha
-    const btnClicked = await page.click('button[type="submit"], input[type="submit"], .t-Button--hot', { timeout: 5000 }).catch(() => false);
+    // Screenshot antes de submeter para debug
+    await page.screenshot({ path: '/tmp/ultragaz-before-submit.png' }).catch(() => {});
+
+    // Tenta clicar no botão Login por texto ou tipo submit
+    const btnClicked = await page.click('button:has-text("Login"), button[type="submit"], input[type="submit"], .t-Button--hot', { timeout: 5000 }).catch(() => false);
     if (btnClicked === false) {
       log('Botao nao encontrado via click — pressionando Enter...');
       await senhaField.press('Enter');
     }
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-    // Screenshot para debug
+    // Screenshot após login
     await page.screenshot({ path: '/tmp/ultragaz-login.png' }).catch(() => {});
 
     // Verifica se logou (URL mudou ou elemento do dashboard apareceu)
