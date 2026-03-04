@@ -1,4 +1,4 @@
-// v2.49.18
+// v2.49.19
 // v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
 // v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -3714,6 +3714,67 @@ export default {
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
       if (!order) return err('not found', 404);
       return json(order);
+    }
+
+    // ── RECRIAR BLING — reprocessa pedido entregue sem bling_pedido_id ────────
+    const recriaBlingMatch = path.match(/^\/api\/order\/(\d+)\/recriar-bling$/);
+    if (method === 'POST' && recriaBlingMatch) {
+      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const id = parseInt(recriaBlingMatch[1]);
+      const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      if (order.status !== 'entregue') return err('Pedido não está entregue', 400);
+      if (order.bling_pedido_id) return json({ ok: true, msg: 'Já tem Bling #' + order.bling_pedido_num, already: true });
+
+      const TIPOS_BLING = ['dinheiro','pix_vista','pix_receber','debito','credito','vale_gas'];
+      if (!TIPOS_BLING.includes(order.tipo_pagamento)) return err(`Tipo ${order.tipo_pagamento} não gera Bling individual`, 400);
+
+      const custData = order.phone_digits
+        ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
+        : null;
+      const vendedorRow = order.vendedor_id
+        ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(order.vendedor_id).first()
+        : null;
+
+      try {
+        const items = JSON.parse(order.items_json || '[]');
+        const blingData = await criarPedidoBling(env, id, {
+          name: order.customer_name,
+          items,
+          total_value: order.total_value,
+          forma_pagamento_key: order.forma_pagamento_key,
+          forma_pagamento_id: order.forma_pagamento_id,
+          tipo_pagamento: order.tipo_pagamento,
+          bling_contact_id: custData?.bling_contact_id || null,
+          cpf_cnpj: custData?.cpf_cnpj || null,
+          bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+          vendedor_nome: vendedorRow?.bling_vendedor_nome || order.vendedor_nome || '',
+        });
+        await env.DB.prepare(`UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status='synced' WHERE id=?`)
+          .bind(blingData.bling_pedido_id, blingData.bling_pedido_num, id).run();
+        await logEvent(env, id, 'bling_recriado', { bling_id: blingData.bling_pedido_id, num: blingData.bling_pedido_num });
+        return json({ ok: true, bling_pedido_id: blingData.bling_pedido_id, bling_pedido_num: blingData.bling_pedido_num });
+      } catch(e) {
+        await logEvent(env, id, 'bling_recriar_error', { error: e.message });
+        return err('Erro ao criar no Bling: ' + e.message, 500);
+      }
+    }
+
+    // GET /api/auditoria/sem-bling — pedidos entregues sem bling que deveriam ter
+    if (method === 'GET' && path === '/api/auditoria/sem-bling') {
+      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const rows = await env.DB.prepare(`
+        SELECT id, customer_name, phone_digits, tipo_pagamento, total_value, pago,
+          delivered_at, created_at, bling_pedido_id, vendedor_nome, items_json
+        FROM orders
+        WHERE status = 'entregue'
+          AND bling_pedido_id IS NULL
+          AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
+        ORDER BY delivered_at DESC
+      `).all();
+      return json({ pedidos: rows.results || [], total: rows.results?.length || 0 });
     }
 
     // ── ENTREGADORES ────────────────────────────────────────
