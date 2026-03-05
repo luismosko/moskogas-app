@@ -56,13 +56,40 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
 
   try {
     await updateHubStatus(apiUrl, apiKey, false, 'conectando', 'Abrindo Hub Ultragaz...');
-    await page.goto(hubUrl, { waitUntil: 'networkidle', timeout: 30000 });
-    await page.waitForTimeout(1500);
+    await page.goto(hubUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(3000);
     log(`URL inicial: ${page.url()}`);
 
-    // Preenche email
-    await page.waitForSelector('input[type="email"], input[name="P101_USERNAME"], input[id*="user"], input[id*="email"]', { timeout: 15000 });
-    const emailField = await page.$('input[type="email"]') || await page.$('input[name="P101_USERNAME"]') || await page.$('input');
+    // Log todos os inputs encontrados para diagnóstico
+    const inputsInfo = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('input')).map(i => ({
+        type: i.type, name: i.name, id: i.id, placeholder: i.placeholder, cls: i.className.substring(0,40)
+      }))
+    );
+    log(`Inputs na página: ${JSON.stringify(inputsInfo)}`);
+    await page.screenshot({ path: '/tmp/ultragaz-login-page.png' }).catch(() => {});
+
+    // Preenche email/usuário — tenta múltiplos seletores
+    let emailField = null;
+    const emailSelectors = [
+      'input[type="email"]',
+      'input[name="P101_USERNAME"]',
+      'input[id="P101_USERNAME"]',
+      'input[name="username"]',
+      'input[name="email"]',
+      'input[id*="user"]',
+      'input[id*="email"]',
+      'input[id*="login"]',
+      'input:not([type="password"]):not([type="hidden"]):not([type="submit"])',
+    ];
+    for (const sel of emailSelectors) {
+      try {
+        await page.waitForSelector(sel, { timeout: 3000 });
+        emailField = await page.$(sel);
+        if (emailField) { log(`Campo email encontrado: ${sel}`); break; }
+      } catch {}
+    }
+    if (!emailField) throw new Error('Campo de usuário/email não encontrado na página de login');
     await emailField.fill(login);
     log(`Email preenchido: ${login}`);
 
