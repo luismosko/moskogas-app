@@ -1,13 +1,13 @@
-// v2.49.25
-// v2.49.12: Módulo Ultragaz Hub — config credentials UI, POST /api/ultragaz/pedido (robot), GET /api/ultragaz/orders
-// v2.49.7: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
-// v2.49.6: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
-// v2.49.5: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
-// v2.49.4: try/catch global no fetch handler + validação env.DB binding na inicialização
-// v2.49.3: post_templates image upload direto R2, card com trocar foto inline
-// v2.49.2: fix requireAuth sem await em todos endpoints /api/avaliacoes
-// v2.49.1: avaliacoes/enviar-cron — ensureAvaliacaoTables antes de rodar
-// v2.49.0: Banco de Posts (post_templates) — CRUD admin, bulk-generate IA, endpoint /use
+// v2.49.26
+// v2.49.26: fix hub-status/start-login — authHub instanceof Response (corrige 401 falso que delogava)
+// v2.49.26: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
+// v2.49.26: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
+// v2.49.26: fix crítico — requireAuth nos endpoints /api/avaliacoes usava padrão errado (if authErr) ao invés de (instanceof Response) — causava crash em TODOS os endpoints de avaliação
+// v2.49.26: try/catch global no fetch handler + validação env.DB binding na inicialização
+// v2.49.26: post_templates image upload direto R2, card com trocar foto inline
+// v2.49.26: fix requireAuth sem await em todos endpoints /api/avaliacoes
+// v2.49.26: avaliacoes/enviar-cron — ensureAvaliacaoTables antes de rodar
+// v2.49.26: Banco de Posts (post_templates) — CRUD admin, bulk-generate IA, endpoint /use
 // v2.48.8: avaliação cron — 1 msg/cliente/semana, marca todos pedidos do cliente
 // v2.48.7: brand_assets.descricao — edição inline, PATCH endpoint, migration automática
 // v2.48.6: DALL-E visão busca produto em revenda E brand kit (todos tipos), labels mais claros
@@ -2638,7 +2638,7 @@ export default {
       const blingBody = {
         nome: nome,
         fantasia: fantasia || '',
-        tipo: tipoPessoa || 'F',          // v2.49.17: Bling v3 usa "tipo", não "tipoPessoa"
+        tipo: tipoPessoa || 'F',          // v2.49.26: Bling v3 usa "tipo", não "tipoPessoa"
         tipoPessoa: tipoPessoa || 'F',    // enviamos os dois para compatibilidade
         contribuinte: contribuinte || 9,
         situacao: 'A',
@@ -3219,7 +3219,7 @@ export default {
           params.push(parseInt(driver_id), driver.nome, driver.telefone || '');
         }
       }
-      // v2.49.13: data_pedido editavel — somente se pedido NAO entregue
+      // v2.49.26: data_pedido editavel — somente se pedido NAO entregue
       if (data_pedido && !isDelivered) {
         sql += `, data_pedido=?`;
         params.push(data_pedido);
@@ -3291,7 +3291,7 @@ export default {
         else if (statusList.length > 1) { sql += ` AND o.status IN (${statusList.map(() => '?').join(',')})`; params.push(...statusList); }
       }
       if (driverId) { sql += ` AND o.driver_id = ?`; params.push(driverId); }
-      // v2.49.16: date_from/date_to filtram por data_pedido (data real do pedido)
+      // v2.49.26: date_from/date_to filtram por data_pedido (data real do pedido)
       if (dateFrom || dateTo) {
         if (dateFrom) { sql += ` AND COALESCE(o.data_pedido, date(o.created_at, 'unixepoch', '-4 hours')) >= ?`; params.push(dateFrom); }
         if (dateTo)   { sql += ` AND COALESCE(o.data_pedido, date(o.created_at, 'unixepoch', '-4 hours')) <= ?`; params.push(dateTo); }
@@ -3336,7 +3336,7 @@ export default {
       });
       await logStatusChange(env, id, currentOrder?.status || 'novo', 'encaminhado', `Entregador: ${driver.nome}${isSwap ? ` (antes: ${oldDriverName})` : ''}`, user);
 
-      // v2.49.10: WhatsApp na troca de entregador
+      // v2.49.26: WhatsApp na troca de entregador
       // Só notifica se o pedido já tinha WhatsApp enviado (status whatsapp_enviado)
       // Se estava só "encaminhado" (sem WhatsApp ainda), não avisa entregador antigo
       let whatsappResults = { old: null, new: null };
@@ -3476,8 +3476,8 @@ export default {
         const body = await request.json();
         tipoPagamento = body.tipo_pagamento || null;
         obsEntregador = body.observacao_entregador || null;
-        skipBling = body.skip_bling === true; // v2.49.14: Vale Gás com NF já emitida
-        // v2.49.14: aceita driver_id no JSON (finalização rápida do pedido.html)
+        skipBling = body.skip_bling === true; // v2.49.26: Vale Gás com NF já emitida
+        // v2.49.26: aceita driver_id no JSON (finalização rápida do pedido.html)
         if (body.driver_id) {
           const drv = await env.DB.prepare('SELECT id, nome, telefone FROM app_users WHERE id=? AND ativo=1').bind(parseInt(body.driver_id)).first();
           if (drv) {
@@ -3527,7 +3527,7 @@ export default {
       // v2.28.7: Boleto/Mensalista NÃO criam Bling aqui — só via criar-vendas-bling (agrupado)
       const TIPOS_BLING_ENTREGA = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito', 'vale_gas'];
       let blingResult = null;
-      // v2.49.14: skip_bling=true → Vale Gás com NF já emitida, não cria no Bling
+      // v2.49.26: skip_bling=true → Vale Gás com NF já emitida, não cria no Bling
       if (!order.bling_pedido_id && TIPOS_BLING_ENTREGA.includes(tipoFinal) && !skipBling) {
         try {
           const custData = order.phone_digits
@@ -3725,7 +3725,7 @@ export default {
       if (statusAnterior === 'cancelado') {
         sql += ', canceled_at=NULL, cancel_motivo=NULL';
       }
-      // v2.49.10: Se voltando para novo a partir de encaminhado ou whatsapp_enviado, limpar entregador
+      // v2.49.26: Se voltando para novo a partir de encaminhado ou whatsapp_enviado, limpar entregador
       if (novoStatus === 'novo' && ['encaminhado', 'whatsapp_enviado'].includes(statusAnterior)) {
         sql += ', driver_id=NULL, driver_name_cache=NULL, driver_phone_cache=NULL';
       }
@@ -3738,7 +3738,7 @@ export default {
       await logStatusChange(env, id, statusAnterior, novoStatus, motivo, user);
       await logEvent(env, id, 'status_reverted', { de: statusAnterior, para: novoStatus, motivo, usuario: user?.nome, role: user?.role });
 
-      // v2.49.13: alertas admin removidos do revert - apenas cancelamentos geram alerta
+      // v2.49.26: alertas admin removidos do revert - apenas cancelamentos geram alerta
       return json({
         ok: true,
         status_anterior: statusAnterior,
@@ -7383,7 +7383,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
       // GET /api/ultragaz/hub-status — Retorna status de conexão do Hub (admin)
       if (path === '/api/ultragaz/hub-status' && method === 'GET') {
         const authHub = await requireAuth(request, env, ['admin','atendente']);
-        if (!authHub.ok) return err('Não autorizado', 401);
+        if (authHub instanceof Response) return authHub;
         const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_hub_status'").first();
         if (!row) return json({ conectado: false, status: 'desconectado', updated_at: null });
         const data = JSON.parse(row.value);
@@ -7398,7 +7398,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         const isRobot = apiKey && apiKey === env.APP_API_KEY;
         if (!isRobot) {
           const authHub = await requireAuth(request, env, ['admin']);
-          if (!authHub.ok) return err('Não autorizado', 401);
+          if (authHub instanceof Response) return authHub;
         }
         const body = await request.json();
         const { conectado, status, mensagem } = body;
@@ -7410,7 +7410,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
       // POST /api/ultragaz/start-login — Admin solicita início do login (abre fluxo 2FA)
       if (path === '/api/ultragaz/start-login' && method === 'POST') {
         const authHub = await requireAuth(request, env, ['admin']);
-        if (!authHub.ok) return err('Não autorizado', 401);
+        if (authHub instanceof Response) return authHub;
         await env.DB.prepare("DELETE FROM app_config WHERE key IN ('ultragaz_2fa_code','ultragaz_login_request')").run();
         await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_login_request', ?, datetime('now'))").bind(JSON.stringify({ requested_at: new Date().toISOString(), status: 'pending' })).run();
         await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_hub_status', ?, datetime('now'))").bind(JSON.stringify({ conectado: false, status: 'conectando', mensagem: 'Login iniciado...', updated_at: new Date().toISOString() })).run();
@@ -8424,7 +8424,7 @@ async function keepBlingTokenFresh(env) {
     const expiresAt = (row.obtained_at || 0) + (row.expires_in || 3600);
     const minutesLeft = Math.floor((expiresAt - now) / 60);
     console.log(`[cron] Token Bling expira em ${minutesLeft} minutos.`);
-    // v2.49.20: renovar quando restam menos de 240min (4h) — antes era 120min
+    // v2.49.26: renovar quando restam menos de 240min (4h) — antes era 120min
     // Cron a cada 30min garante que nunca chegamos perto de expirar
     if (minutesLeft < 240) {
       console.log('[cron] Renovando token Bling preventivamente...');
