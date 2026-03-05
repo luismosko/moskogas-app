@@ -1,6 +1,6 @@
 // websocket.js — Conexão WebSocket com Hub Ultragaz + listener de eventos
 import { WebSocket } from 'ws';
-import { getOrderDetails } from './browser.js';
+import { getOrderDetails, getPendingOrders } from './browser.js';
 
 const log  = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
 const warn = (msg) => console.warn(`[ws] ${new Date().toISOString()} ${msg}`);
@@ -31,10 +31,42 @@ export function connectWebSocket(wssUrl, page) {
   log(`Conectando WSS...`);
   wsInstance = new WebSocket(wssUrl);
 
-  wsInstance.on('open', () => {
+  wsInstance.on('open', async () => {
     log('✅ WebSocket conectado!');
     reconnectDelay = 5000; // reset backoff
     startPing(wssUrl, page);
+
+    // Varredura inicial — processa pedidos em aberto que chegaram antes da conexão
+    log('🔍 Varrendo pedidos em aberto no Hub...');
+    try {
+      const pending = await getPendingOrders(page);
+      if (pending && Array.isArray(pending) && pending.length > 0) {
+        log(`📋 ${pending.length} pedido(s) em aberto encontrado(s) — processando...`);
+        for (const order of pending) {
+          const orderId = order.id || order.ID_ORDER_LINK || order.order_id;
+          if (!orderId) continue;
+          log(`↪ Processando pedido em aberto #${orderId}`);
+          try {
+            let details = {};
+            try { details = await getOrderDetails(page, orderId) || {}; } catch {}
+            if (onNewOrder) {
+              await onNewOrder({
+                ultragaz_order_id: String(orderId),
+                event_type: 'pendingOrder',
+                raw_payload: order,
+                ...parseDetails(details, order),
+              });
+            }
+          } catch (e) {
+            warn(`Erro ao processar pedido em aberto #${orderId}: ${e.message}`);
+          }
+        }
+      } else {
+        log('✅ Nenhum pedido em aberto encontrado na varredura inicial');
+      }
+    } catch (e) {
+      warn(`Varredura inicial falhou: ${e.message}`);
+    }
   });
 
   wsInstance.on('message', async (raw) => {

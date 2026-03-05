@@ -317,6 +317,50 @@ export async function getOrderDetails(page, orderId) {
   return result;
 }
 
+// Busca pedidos em aberto no Hub (varredura inicial ao conectar)
+export async function getPendingOrders(page) {
+  const log = (msg) => console.log(`[browser] ${new Date().toISOString()} ${msg}`);
+  try {
+    // Tenta via APEX process GET_ORDERS_OPEN ou similar
+    const result = await page.evaluate(() => new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timeout GET_ORDERS_OPEN')), 10000);
+      // Tenta GET_ORDERS_OPEN
+      apex.server.process('GET_ORDERS_OPEN', {}, {
+        success: (data) => { clearTimeout(timeout); resolve(data); },
+        error: (err) => { clearTimeout(timeout); reject(new Error('GET_ORDERS_OPEN: ' + JSON.stringify(err))); }
+      });
+    })).catch(() => null);
+
+    if (result) {
+      log(`Pedidos em aberto via GET_ORDERS_OPEN: ${JSON.stringify(result).substring(0, 200)}`);
+      return result;
+    }
+
+    // Fallback: lê o DOM da tabela de pedidos em aberto
+    const orders = await page.evaluate(() => {
+      const rows = document.querySelectorAll('table tr, .t-Report-wrap tr');
+      const data = [];
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 3) {
+          const text = Array.from(cells).map(c => c.innerText.trim());
+          // Procura célula com ID numérico grande (ID do pedido Ultragaz)
+          const idCell = text.find(t => /^\d{7,}$/.test(t));
+          if (idCell) data.push({ raw: text, id: idCell });
+        }
+      });
+      return data;
+    });
+
+    log(`Pedidos via DOM: ${orders.length} encontrados`);
+    return orders.length > 0 ? orders : null;
+
+  } catch (e) {
+    log(`getPendingOrders falhou: ${e.message}`);
+    return null;
+  }
+}
+
 export async function closeBrowser() {
   if (contextInstance) { try { await contextInstance.close(); } catch {} contextInstance = null; }
   if (browserInstance) { try { await browserInstance.close(); } catch {} browserInstance = null; }
