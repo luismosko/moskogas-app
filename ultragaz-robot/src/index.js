@@ -121,7 +121,7 @@ async function startSession() {
     const wssUrl = await getWebsocketInfo(page);
 
     log('Iniciando WebSocket listener...');
-    startWebSocket(wssUrl, page);
+    startWebSocket(wssUrl, page, apiUrl, apiKey);
 
     // Agenda renovação de sessão
     if (sessionTimer) clearTimeout(sessionTimer);

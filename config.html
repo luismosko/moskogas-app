@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.14 — MoskoGás</title>
+<title>Config v2.13.15 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -71,6 +71,12 @@
 <div id="hub-bar" class="desconectado" onclick="hubBarClick()">
   <span id="hub-bar-text">⚪ Hub Ultragaz — Verificando...</span>
   <span style="font-size:11px;opacity:0.8" id="hub-bar-hint">clique para conectar</span>
+  <button id="hub-scan-btn" onclick="event.stopPropagation();hubScanOrders()" 
+    style="display:none;margin-left:16px;padding:3px 12px;font-size:12px;font-weight:600;
+    background:rgba(255,255,255,0.25);color:#fff;border:1px solid rgba(255,255,255,0.5);
+    border-radius:20px;cursor:pointer;" title="Varrer pedidos em aberto agora">
+    🔍 Varrer Pedidos
+  </button>
 </div>
 
 <!-- ── Hub Login Modal ── -->
@@ -125,8 +131,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.14 — config</div>
-  <h1>⚙️ Configurações v2.13.14</h1>
+  <div class="version-badge">v2.13.15 — config</div>
+  <h1>⚙️ Configurações v2.13.15</h1>
 
   <!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
@@ -789,7 +795,7 @@
 checkAuth(['admin', 'atendente']);
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 
-// v2.13.14: Carregar timezone só para admin
+// v2.13.15: Carregar timezone só para admin
 const _cfgUserEarly = getCurrentUser();
 if (_cfgUserEarly && _cfgUserEarly.role === 'admin') loadTz();
 
@@ -2131,6 +2137,22 @@ async function saveTz() {
 let hubPollInterval = null;
 let hubStep2PollInterval = null;
 
+async function hubScanOrders() {
+  const btn = document.getElementById('hub-scan-btn');
+  if (btn) { btn.textContent = '⏳ Varrendo...'; btn.disabled = true; }
+  try {
+    const r = await api('/api/ultragaz/scan-orders', { method: 'POST' });
+    if (r.ok) toast('Varredura solicitada! O robô vai processar os pedidos em aberto.', 'success');
+    else toast('Erro ao solicitar varredura: ' + (r.error || ''), 'error');
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  } finally {
+    setTimeout(() => {
+      if (btn) { btn.textContent = '🔍 Varrer Pedidos'; btn.disabled = false; }
+    }, 3000);
+  }
+}
+
 async function hubCheckStatus() {
   try {
     const r = await api('/api/ultragaz/hub-status');
@@ -2152,6 +2174,8 @@ function hubAtualizarBarra(data) {
   const label = labels[data.status] || 'Hub Ultragaz';
   txt.textContent = `${icon} ${label}`;
   hint.textContent = data.conectado ? (data.mensagem || '') : 'clique para conectar';
+  const scanBtn = document.getElementById('hub-scan-btn');
+  if (scanBtn) scanBtn.style.display = data.conectado ? 'inline-block' : 'none';
 
   // Se está aguardando 2FA e modal fechado, abre automaticamente no step 2
   if (data.status === 'aguardando_2fa') {

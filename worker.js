@@ -1,4 +1,4 @@
-// v2.49.28
+// v2.49.29
 // v2.49.26: fix hub-status/start-login — authHub instanceof Response (corrige 401 falso que delogava)
 // v2.49.26: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.26: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -7441,6 +7441,25 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
         await env.DB.prepare("DELETE FROM app_config WHERE key='ultragaz_login_request'").run();
         return json({ ok: true });
+      }
+
+      // POST /api/ultragaz/scan-orders — Admin solicita varredura de pedidos em aberto
+      if (path === '/api/ultragaz/scan-orders' && method === 'POST') {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+        await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_scan_request', ?, datetime('now'))")
+          .bind(JSON.stringify({ requested_at: new Date().toISOString(), requested_by: authCheck.nome })).run();
+        return json({ ok: true, msg: 'Varredura solicitada' });
+      }
+
+      // GET /api/ultragaz/scan-orders — Robot verifica se há solicitação de varredura
+      if (path === '/api/ultragaz/scan-orders' && method === 'GET') {
+        const apiKey = request.headers.get('X-API-Key') || request.headers.get('X-API-KEY') || '';
+        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+        const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_scan_request'").first();
+        if (!row) return json({ ok: false, pending: false });
+        await env.DB.prepare("DELETE FROM app_config WHERE key='ultragaz_scan_request'").run();
+        return json({ ok: true, pending: true, ...JSON.parse(row.value) });
       }
 
       // POST /api/ultragaz/robot-log — Robot salva log de diagnóstico (inputs, url, etc)

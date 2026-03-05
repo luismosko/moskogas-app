@@ -13,6 +13,8 @@ let pingInterval = null;
 let reconnectTimer = null;
 let reconnectDelay = 5000;
 let running = false;
+let scanInterval = null;
+const SCAN_INTERVAL_MS = 5 * 60 * 1000; // varredura automática a cada 5 minutos
 
 // Callback chamado quando chega pedido novo — definido pelo index.js
 let onNewOrder = null;
@@ -22,7 +24,7 @@ export function setNewOrderHandler(fn) {
 }
 
 // Conecta ao WebSocket com URL assinada
-export function connectWebSocket(wssUrl, page) {
+export function connectWebSocket(wssUrl, page, apiUrl = '', apiKey = '') {
   if (wsInstance) {
     try { wsInstance.terminate(); } catch {}
     wsInstance = null;
@@ -35,6 +37,7 @@ export function connectWebSocket(wssUrl, page) {
     log('✅ WebSocket conectado!');
     reconnectDelay = 5000; // reset backoff
     startPing(wssUrl, page);
+    startPeriodicScan(apiUrl, apiKey, page);
 
     // Varredura inicial — processa pedidos em aberto que chegaram antes da conexão
     log('🔍 Varrendo pedidos em aberto no Hub...');
@@ -106,7 +109,8 @@ export function connectWebSocket(wssUrl, page) {
   wsInstance.on('close', (code, reason) => {
     log(`🔌 WebSocket fechado (${code}). Reconectando em ${reconnectDelay / 1000}s...`);
     stopPing();
-    scheduleReconnect(wssUrl, page);
+    stopPeriodicScan();
+    scheduleReconnect(wssUrl, page, apiUrl, apiKey);
   });
 
   wsInstance.on('error', (err) => {
@@ -129,14 +133,14 @@ function stopPing() {
   if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
 }
 
-function scheduleReconnect(wssUrl, page) {
+function scheduleReconnect(wssUrl, page, apiUrl, apiKey) {
   if (reconnectTimer) return;
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     if (!running) return;
     try {
       // Tenta reconectar com a mesma URL (pode ter expirado — index.js vai renovar se falhar)
-      connectWebSocket(wssUrl, page);
+      connectWebSocket(wssUrl, page, apiUrl, apiKey);
     } catch (e) {
       warn(`Reconexão falhou: ${e.message}`);
       reconnectDelay = Math.min(reconnectDelay * 2, 60000);
@@ -147,14 +151,80 @@ function scheduleReconnect(wssUrl, page) {
   reconnectDelay = Math.min(reconnectDelay * 1.5, 60000);
 }
 
-export function startWebSocket(wssUrl, page) {
+export function startWebSocket(wssUrl, page, apiUrl, apiKey) {
   running = true;
-  connectWebSocket(wssUrl, page);
+  connectWebSocket(wssUrl, page, apiUrl, apiKey);
+}
+
+// Verifica no Worker se há solicitação de varredura manual (botão na UI)
+async function checkScanRequest(apiUrl, apiKey, page) {
+  try {
+    const res = await fetch(`${apiUrl}/api/ultragaz/scan-orders`, {
+      headers: { 'X-API-Key': apiKey }
+    });
+    const data = await res.json();
+    if (data.pending) {
+      log(`🔍 Varredura solicitada pelo operador — iniciando...`);
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+// Executa varredura e processa pedidos encontrados
+async function runScan(page, source = 'auto') {
+  const log  = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
+  const warn = (msg) => console.warn(`[ws] ${new Date().toISOString()} ${msg}`);
+  log(`🔍 Varredura [${source}] — buscando pedidos em aberto...`);
+  try {
+    const pending = await getPendingOrders(page);
+    if (pending && Array.isArray(pending) && pending.length > 0) {
+      log(`📋 ${pending.length} pedido(s) em aberto — processando...`);
+      for (const order of pending) {
+        const orderId = order.id || order.ID_ORDER_LINK || order.order_id;
+        if (!orderId) continue;
+        try {
+          let details = {};
+          try { details = await getOrderDetails(page, orderId) || {}; } catch {}
+          if (onNewOrder) {
+            await onNewOrder({
+              ultragaz_order_id: String(orderId),
+              event_type: 'pendingOrder',
+              raw_payload: order,
+              ...parseDetails(details, order),
+            });
+          }
+        } catch (e) {
+          warn(`Erro ao processar #${orderId}: ${e.message}`);
+        }
+      }
+    } else {
+      log(`✅ Nenhum pedido em aberto [${source}]`);
+    }
+  } catch (e) {
+    warn(`Varredura [${source}] falhou: ${e.message}`);
+  }
+}
+
+function startPeriodicScan(apiUrl, apiKey, page) {
+  stopPeriodicScan();
+  const log = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
+  log(`⏱ Varredura automática a cada ${SCAN_INTERVAL_MS / 60000} minutos ativada`);
+  scanInterval = setInterval(async () => {
+    // Verifica solicitação manual primeiro
+    const manual = await checkScanRequest(apiUrl, apiKey, page);
+    await runScan(page, manual ? 'manual' : 'auto');
+  }, SCAN_INTERVAL_MS);
+}
+
+function stopPeriodicScan() {
+  if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
 }
 
 export function stopWebSocket() {
   running = false;
   stopPing();
+  stopPeriodicScan();
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (wsInstance) { try { wsInstance.terminate(); } catch {} wsInstance = null; }
 }
