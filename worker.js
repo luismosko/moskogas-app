@@ -1,4 +1,4 @@
-// v2.49.27
+// v2.49.28
 // v2.49.26: fix hub-status/start-login — authHub instanceof Response (corrige 401 falso que delogava)
 // v2.49.26: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.26: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -7361,10 +7361,15 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         return json({ codigo: data.codigo, received_at: data.received_at });
       }
 
-      // POST /api/ultragaz/2fa-code — Email Worker salva código recebido
+      // POST /api/ultragaz/2fa-code — Admin envia código 2FA OU Email Worker salva código
       if (path === '/api/ultragaz/2fa-code' && method === 'POST') {
+        // Aceita APP_API_KEY (robô/email worker) OU sessão admin
         const apiKey = request.headers.get('X-Api-Key') || request.headers.get('X-API-Key') || request.headers.get('X-API-KEY') || '';
-        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+        const isApiKey = apiKey && apiKey === env.APP_API_KEY;
+        if (!isApiKey) {
+          const authCheck = await requireAuth(request, env, ['admin']);
+          if (authCheck instanceof Response) return authCheck;
+        }
         const body = await request.json();
         const { codigo } = body;
         if (!codigo) return err('codigo obrigatório');
