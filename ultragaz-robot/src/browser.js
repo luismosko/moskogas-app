@@ -317,43 +317,90 @@ export async function getOrderDetails(page, orderId) {
   return result;
 }
 
-// Busca pedidos em aberto no Hub (varredura inicial ao conectar)
+// Busca pedidos pendentes no Hub — varre abas: Agendados, Em Aberto, Em Andamento
 export async function getPendingOrders(page) {
   const log = (msg) => console.log(`[browser] ${new Date().toISOString()} ${msg}`);
-  try {
-    // Tenta via APEX process GET_ORDERS_OPEN ou similar
-    const result = await page.evaluate(() => new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Timeout GET_ORDERS_OPEN')), 10000);
-      // Tenta GET_ORDERS_OPEN
-      apex.server.process('GET_ORDERS_OPEN', {}, {
-        success: (data) => { clearTimeout(timeout); resolve(data); },
-        error: (err) => { clearTimeout(timeout); reject(new Error('GET_ORDERS_OPEN: ' + JSON.stringify(err))); }
-      });
-    })).catch(() => null);
+  const allOrders = [];
+  const seen = new Set();
 
-    if (result) {
-      log(`Pedidos em aberto via GET_ORDERS_OPEN: ${JSON.stringify(result).substring(0, 200)}`);
-      return result;
+  // Seletores das abas que contêm pedidos a processar
+  const TABS = [
+    { label: 'Pedidos Agendados',    selector: null },  // primeira aba ativa por padrão
+    { label: 'Pedidos em Aberto',    selector: null },
+    { label: 'Pedidos em Andamento', selector: null },
+  ];
+
+  try {
+    // Encontra os botões de aba pelo texto
+    const tabButtons = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.t-Tabs__item, .t-TabsRegion-tab, [role="tab"], .t-Tabs a, .tabs a, button'))
+        .filter(el => /Agendad|Em Aberto|Andamento/i.test(el.textContent))
+        .map(el => ({ text: el.textContent.trim(), id: el.id, cls: el.className }))
+    );
+    log(`Abas encontradas: ${JSON.stringify(tabButtons)}`);
+
+    // Função para extrair IDs de pedidos da tabela visível
+    const extractOrdersFromDOM = async (tabLabel) => {
+      const orders = await page.evaluate(() => {
+        const rows = document.querySelectorAll('tr.t-Report-wrap, table tbody tr, .a-IRR-table tbody tr');
+        const found = [];
+        rows.forEach(row => {
+          // Procura link com ID numérico (ex: <a>21106736</a> ou célula com número 8+ dígitos)
+          const links = row.querySelectorAll('a');
+          let orderId = null;
+          links.forEach(a => {
+            const txt = a.textContent.trim();
+            if (/^\d{7,}$/.test(txt)) orderId = txt;
+          });
+          if (!orderId) {
+            const cells = row.querySelectorAll('td');
+            cells.forEach(td => {
+              const txt = td.textContent.trim();
+              if (/^\d{7,}$/.test(txt)) orderId = txt;
+            });
+          }
+          if (orderId) {
+            const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
+            found.push({ id: orderId, cells });
+          }
+        });
+        return found;
+      });
+      log(`Aba [${tabLabel}]: ${orders.length} pedido(s) encontrado(s)`);
+      return orders;
+    };
+
+    // Primeiro extrai da aba atual (sem clicar)
+    const current = await extractOrdersFromDOM('atual');
+    current.forEach(o => { if (!seen.has(o.id)) { seen.add(o.id); allOrders.push(o); } });
+
+    // Clica em cada aba e extrai
+    for (const tabText of ['Pedidos em Aberto', 'Pedidos Agendados', 'Pedidos em Andamento']) {
+      try {
+        // Tenta clicar na aba pelo texto
+        const clicked = await page.evaluate((text) => {
+          const els = document.querySelectorAll('.t-Tabs__item a, [role="tab"], .t-TabsRegion-tab, a, button');
+          for (const el of els) {
+            if (el.textContent.trim().includes(text)) {
+              el.click();
+              return true;
+            }
+          }
+          return false;
+        }, tabText);
+
+        if (clicked) {
+          await page.waitForTimeout(800); // aguarda carregar
+          const orders = await extractOrdersFromDOM(tabText);
+          orders.forEach(o => { if (!seen.has(o.id)) { seen.add(o.id); allOrders.push(o); } });
+        }
+      } catch (e) {
+        log(`Erro ao clicar aba ${tabText}: ${e.message}`);
+      }
     }
 
-    // Fallback: lê o DOM da tabela de pedidos em aberto
-    const orders = await page.evaluate(() => {
-      const rows = document.querySelectorAll('table tr, .t-Report-wrap tr');
-      const data = [];
-      rows.forEach(row => {
-        const cells = row.querySelectorAll('td');
-        if (cells.length >= 3) {
-          const text = Array.from(cells).map(c => c.innerText.trim());
-          // Procura célula com ID numérico grande (ID do pedido Ultragaz)
-          const idCell = text.find(t => /^\d{7,}$/.test(t));
-          if (idCell) data.push({ raw: text, id: idCell });
-        }
-      });
-      return data;
-    });
-
-    log(`Pedidos via DOM: ${orders.length} encontrados`);
-    return orders.length > 0 ? orders : null;
+    log(`Total geral varredura: ${allOrders.length} pedido(s) único(s)`);
+    return allOrders.length > 0 ? allOrders : null;
 
   } catch (e) {
     log(`getPendingOrders falhou: ${e.message}`);
