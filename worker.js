@@ -1192,14 +1192,8 @@ async function ensureEmpenhoTables(env) {
 }
 
 async function alertarSaldoBaixo(env, empenho, item) {
-  const saldo = item.quantidade_total - item.quantidade_usada;
-  const pct = item.quantidade_total > 0 ? Math.round(saldo / item.quantidade_total * 100) : 0;
-  if (pct > 10 && saldo > 10) return;
-  const msg = `⚠️ ALERTA EMPENHO GOV\nEmpenho: ${empenho.numero}\nCliente: ${empenho.cliente_nome}\nProduto: ${item.produto_nome}\nSaldo restante: ${saldo} unidades (${pct}% do total)\n\nAcesse o sistema para verificar.`;
-  const admins = await env.DB.prepare(`SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1`).all().then(r => r.results || []);
-  for (const adm of admins) {
-    if (adm.telefone) await sendWhatsApp(env, adm.telefone, msg, { category: 'admin_alerta' }).catch(() => { });
-  }
+  // [v2.49.26] Alerta WhatsApp de empenho baixo removido — redução de mensagens
+  return;
   try {
     const emailCfg = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_email'").first();
     if (emailCfg?.value) {
@@ -3638,31 +3632,7 @@ export default {
       // ── Alerta WhatsApp pro admin ──
       // Se cancelou pós-entrega OU se quem cancelou não é admin
       let whatsappResult = null;
-      if (foiEntregue || !isAdmin) {
-        try {
-          await ensureAuthTables(env);
-          const admins = await env.DB.prepare(
-            "SELECT nome, telefone FROM app_users WHERE role='admin' AND ativo=1 AND recebe_whatsapp=1 AND telefone IS NOT NULL AND telefone != ''"
-          ).all();
-          const adminList = admins.results || [];
-
-          if (adminList.length > 0) {
-            const risco = foiEntregue ? '🔴 *ALTO RISCO — Pós-entrega*' : '🟡 Cancelamento';
-            const msg = `⚠️ ${risco}\n\n` +
-              `📦 Pedido #${id}\n` +
-              `👤 Cliente: ${order.customer_name}\n` +
-              `💰 Valor: R$ ${(order.total_value || 0).toFixed(2)}\n` +
-              `📋 Motivo: ${motivo}\n` +
-              `👷 Cancelado por: ${user?.nome || 'desconhecido'}\n` +
-              `🕐 ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })}`;
-
-            for (const adm of adminList) {
-              const waResult = await sendWhatsApp(env, adm.telefone, msg, { category: 'admin_alerta', skipSafety: true });
-              if (!whatsappResult) whatsappResult = waResult;
-            }
-          }
-        } catch (e) { console.error('[cancelamento WhatsApp admin]', e.message); }
-      }
+      // [v2.49.26] Alerta WhatsApp admin de cancelamento removido — redução de mensagens
 
       return json({
         ok: true,
@@ -4977,12 +4947,7 @@ export default {
         try {
           const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1").all();
           const adminPhones = (admins.results || []).map(a => a.telefone).filter(Boolean);
-          const fullOrder = await env.DB.prepare('SELECT customer_name, total_value FROM orders WHERE id=?').bind(order.id).first();
-          const valor = parseFloat(fullOrder?.total_value || 0).toFixed(2);
-          const msg = `✅ *PIX CONFIRMADO* — Pedido #${order.id}\n\n💰 R$ ${valor} — ${fullOrder?.customer_name || 'Cliente'}\n\nPagamento PIX recebido com sucesso.`;
-          for (const phone of adminPhones) {
-            await sendWhatsApp(env, phone, msg, { category: 'admin_alerta' });
-          }
+          // [v2.49.26] Notificação WA admin de PIX confirmado removida
         } catch (we) {
           console.error('[pushinpay-webhook] WhatsApp admin error:', we.message);
         }
@@ -7575,14 +7540,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
           const itemsArr = JSON.parse(itemsStr);
           const produtoStr = itemsArr.map(i => `${i.quantidade || 1}x ${i.produto || i.name || 'item'}`).join(', ');
           const msg = `🔔 *NOVO PEDIDO ULTRAGAZ*\n\n📋 *#${ultragaz_order_id}*\n👤 ${customer_name || 'N/D'}\n📦 ${produtoStr}\n📍 ${address_line || 'N/D'}\n💰 R$ ${parseFloat(total_value || 0).toFixed(2).replace('.', ',')}\n\nAcesse o sistema para encaminhar.`;
-          for (const u of (driversRow?.results || [])) {
-            if (u.telefone) {
-              const to = u.telefone.replace(/\D/g, '');
-              if (to.length >= 10) {
-                await sendWhatsApp(env, to, msg, { category: 'notificacao_interna' });
-              }
-            }
-          }
+          // [v2.49.26] Aviso WA para entregadores sobre pedido Ultragaz removido
         } catch (e) {
           console.warn('[ultragaz] Aviso WhatsApp falhou:', e.message);
         }
@@ -8066,12 +8024,7 @@ async function checkPendingPixPayments(env) {
           // WhatsApp admin
           try {
             const admins = await env.DB.prepare("SELECT telefone FROM app_users WHERE role='admin' AND recebe_whatsapp=1 AND ativo=1").all();
-            const phones = (admins.results || []).map(a => a.telefone).filter(Boolean);
-            const valor = parseFloat(order.total_value || 0).toFixed(2);
-            const msg = `✅ *PIX CONFIRMADO (auto-check)* — Pedido #${order.id}\n\n💰 R$ ${valor} — ${order.customer_name || 'Cliente'}`;
-            for (const ph of phones) {
-              await sendWhatsApp(env, ph, msg, { category: 'admin_alerta' });
-            }
+            // [v2.49.26] Notificação WA admin de PIX auto-check removida
           } catch (we) { console.error('[pix-autocheck] WhatsApp error:', we.message); }
 
           // Criar Bling se necessário
