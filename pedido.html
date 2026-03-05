@@ -2179,7 +2179,7 @@ async function openQuickDeliver(orderId, isConsumidorFinal, tipoPgto) {
       (drivers || []).forEach(d => {
         const opt = document.createElement('option');
         opt.value = d.id;
-        opt.textContent = d.nome;
+        opt.textContent = d.name || d.nome;  // API retorna 'name'
         sel.appendChild(opt);
       });
     } catch(e) {}
