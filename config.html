@@ -1934,16 +1934,17 @@ async function salvarReviewUrl() {
   finally { hideLoading(); }
 }
 
+const _isAdmin = _cfgUser && _cfgUser.role === 'admin';
 checkStreetsCount();
-carregarFotoConfig();
-carregarPermissoes();
 loadAppProducts();
 carregarSafetyConfig();
 carregarLembreteConfig();
-carregarRelatorioConfig();
-loadUltragazConfig();
-carregarReviewConfig();
-initMarketing();
+if (_isAdmin) carregarFotoConfig();
+if (_isAdmin) carregarPermissoes();
+if (_isAdmin) carregarRelatorioConfig();
+if (_isAdmin) loadUltragazConfig();
+if (_isAdmin) carregarReviewConfig();
+if (_isAdmin) initMarketing();
 
 // ===== MARKETING MODULE =====
 function mktTab(tab) {
