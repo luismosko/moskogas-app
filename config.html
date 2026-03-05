@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.13.15 — MoskoGás</title>
+<title>Config v2.14.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -63,6 +63,15 @@
   }
   #hub-log { font-size: 11px; color: #64748b; background: #f8fafc; border-radius: 6px;
     padding: 8px; max-height: 80px; overflow-y: auto; font-family: monospace; margin-bottom: 12px; }
+  /* ── Config Tabs ── */
+  .cfg-tab {
+    padding: 8px 14px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700;
+    cursor: pointer; background: #f1f5f9; color: #64748b; transition: all 0.15s; white-space: nowrap;
+  }
+  .cfg-tab:hover { background: #e2e8f0; color: #1e293b; }
+  .cfg-tab.active { background: #f97316; color: #fff; }
+  .cfg-panel { display: none; }
+  .cfg-panel.active { display: block; }
 </style>
 </head>
 <body>
@@ -131,10 +140,88 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.13.15 — config</div>
-  <h1>⚙️ Configurações v2.13.15</h1>
+  <div class="version-badge">v2.14.0 — config</div>
+  <h1>⚙️ Configurações v2.14.0</h1>
 
-  <!-- API Key (admin only) -->
+  <!-- ── ABAS DE CONFIGURAÇÃO ── -->
+  <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
+    <button class="cfg-tab active" data-tab="empresa"     onclick="cfgTab(this)">🏢 Empresa</button>
+    <button class="cfg-tab"        data-tab="acesso"      onclick="cfgTab(this)">🔐 Acesso</button>
+    <button class="cfg-tab"        data-tab="integracoes" onclick="cfgTab(this)">🔗 Integrações</button>
+    <button class="cfg-tab"        data-tab="whatsapp"    onclick="cfgTab(this)">📱 WhatsApp</button>
+    <button class="cfg-tab"        data-tab="catalogo"    onclick="cfgTab(this)">📦 Catálogo</button>
+    <button class="cfg-tab"        data-tab="operacional" onclick="cfgTab(this)">📊 Operacional</button>
+    <button class="cfg-tab"        data-tab="marketing"   onclick="cfgTab(this)">🎯 Marketing</button>
+  </div>
+  <!-- ═══ EMPRESA ═══ -->
+  <div class="cfg-panel active" id="panel-empresa">
+  <!-- Dados da Revenda -->
+  <div class="card">
+    <h2>🏢 Dados da Revenda</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <label>CNPJ</label>
+        <input type="text" id="rev-cnpj" placeholder="00.000.000/0001-00" oninput="maskCNPJRev(this)">
+      </div>
+      <div>
+        <label>Razão Social</label>
+        <input type="text" id="rev-razao" placeholder="Mosko Ltda">
+      </div>
+      <div>
+        <label>Nome Fantasia</label>
+        <input type="text" id="rev-fantasia" placeholder="Mosko Gás">
+      </div>
+      <div>
+        <label>Telefone Principal</label>
+        <input type="tel" id="rev-telefone" placeholder="(67) 99333-0303">
+      </div>
+      <div>
+        <label>WhatsApp</label>
+        <input type="tel" id="rev-whatsapp" placeholder="(67) 99333-0303">
+      </div>
+      <div>
+        <label>E-mail</label>
+        <input type="email" id="rev-email" placeholder="contato@moskogas.com.br">
+      </div>
+      <div>
+        <label>Site</label>
+        <input type="url" id="rev-site" placeholder="https://moskogas.com.br">
+      </div>
+      <div>
+        <label>Instagram</label>
+        <input type="text" id="rev-instagram" placeholder="@moskogascg">
+      </div>
+    </div>
+    <label style="margin-top:4px">Endereço Completo</label>
+    <input type="text" id="rev-endereco" placeholder="Av. Panamericana, 295 — Estrela Dalva, Campo Grande/MS">
+    <label>CEP</label>
+    <input type="text" id="rev-cep" placeholder="79000-000" maxlength="9" style="max-width:140px" oninput="maskCEPRev(this)">
+    <div style="margin-top:4px;padding:14px;background:#f0f9ff;border-radius:8px;border:1.5px solid #7dd3fc">
+      <label style="color:#0369a1;margin-bottom:6px">🕐 FUSO HORÁRIO DA EMPRESA</label>
+      <select id="empresa-timezone" style="margin-bottom:0">
+        <option value="America/Campo_Grande">America/Campo_Grande (GMT-4)</option>
+        <option value="America/Sao_Paulo">America/Sao_Paulo (GMT-3)</option>
+        <option value="America/Manaus">America/Manaus (GMT-4)</option>
+        <option value="America/Cuiaba">America/Cuiaba (GMT-4)</option>
+        <option value="America/Belem">America/Belem (GMT-3)</option>
+        <option value="America/Fortaleza">America/Fortaleza (GMT-3)</option>
+        <option value="America/Recife">America/Recife (GMT-3)</option>
+        <option value="America/Bahia">America/Bahia (GMT-3)</option>
+        <option value="America/Porto_Velho">America/Porto_Velho (GMT-4)</option>
+        <option value="America/Boa_Vista">America/Boa_Vista (GMT-4)</option>
+        <option value="America/Rio_Branco">America/Rio_Branco (GMT-5)</option>
+        <option value="America/Noronha">America/Noronha (GMT-2)</option>
+      </select>
+      <p style="font-size:11px;color:#0369a1;margin-top:4px">⚠️ Afeta cálculos de data/hora em todo o sistema</p>
+    </div>
+    <button class="btn btn-orange" style="margin-top:14px" onclick="saveDadosRevenda()">💾 Salvar Dados da Revenda</button>
+    <div id="rev-status"></div>
+  </div>
+  </div>
+
+  <!-- ═══ ACESSO ═══ -->
+  <div class="cfg-panel" id="panel-acesso">
+<!-- API Key (admin only) -->
   <div class="card" id="apiKeySection">
     <h2>🔑 Chave de Acesso (APP_API_KEY)</h2>
     <label>Chave configurada no Cloudflare Worker</label>
@@ -145,8 +232,40 @@
     </div>
     <div id="health-status"></div>
   </div>
+<!-- Permissões Atendente (admin only) -->
+  <div class="card" id="permissoesSection">
+    <h2>🔐 Permissões do Atendente</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Defina o que atendentes podem fazer. Admin sempre tem acesso total.</p>
 
-  <!-- Bling OAuth -->
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permReabrirEntregue" checked style="width:auto;margin:0"> Reabrir pedido <strong>entregue</strong>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permReabrirCancelado" style="width:auto;margin:0"> Reabrir pedido <strong>cancelado</strong>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permCancelar" checked style="width:auto;margin:0"> Cancelar pedido
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
+        <input type="checkbox" id="permEditarEntregue" style="width:auto;margin:0"> Editar pedido <strong>entregue</strong>
+      </label>
+    </div>
+
+    <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-top:12px">
+      ⚠️ Quando atendente reabrir/cancelar, admin recebe alerta WhatsApp automático.
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-orange" onclick="salvarPermissoes()" style="flex:1">💾 Salvar Permissões</button>
+    </div>
+    <div id="perm-status"></div>
+  </div>
+  </div>
+
+  <!-- ═══ INTEGRAÇÕES ═══ -->
+  <div class="cfg-panel" id="panel-integracoes">
+<!-- Bling OAuth -->
   <div class="card">
     <h2>🔗 Autorização Bling</h2>
     <p style="font-size:13px;color:#64748b;margin-bottom:12px">Conecte sua conta Bling para sincronizar contatos e pedidos. Você precisa ter o APP configurado no Bling com a URL de callback apontando para <code>https://api.moskogas.com.br/bling/oauth/callback</code></p>
@@ -158,8 +277,62 @@
   </div>
 
   <!-- Entregadores: gerenciar em Usuários (app_users) -->
+<!-- Teste PushInPay PIX -->
+  <div class="card">
+    <h2>💠 PushInPay PIX</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Teste a integração PIX PushInPay. Verifique conexão, crie cobrança teste e veja logs de webhook.</p>
 
-  <!-- ── WHATSAPP MULTI-CONEXÃO ── -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn" style="background:#0891b2;color:#fff" onclick="testPixConexao()">📡 Testar Conexão</button>
+      <button class="btn" style="background:#7c3aed;color:#fff" onclick="testPixCobranca()">💠 Cobrança Teste (R$1,01)</button>
+      <button class="btn" style="background:#059669;color:#fff" onclick="testPixWebhook()">🔔 Verificar Webhooks</button>
+      <button class="btn btn-gray" onclick="testPixStats()">📊 Estatísticas</button>
+    </div>
+    <div id="pix-status" style="margin-top:10px"></div>
+  </div>
+<!-- Ultragaz Hub Integration -->
+  <div class="card" id="ultragazSection">
+    <h2>🔗 Ultragaz Hub — Integração Automática</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:16px">Credenciais para o robô de captura automática de pedidos do Hub Ultragaz. Os pedidos chegam em tempo real via WebSocket e são criados automaticamente no sistema.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Login (e-mail)</label>
+        <input type="email" id="uz-login" placeholder="seu@email.com" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Senha</label>
+        <input type="password" id="uz-senha" placeholder="••••••••" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">ID da Revenda (opcional)</label>
+        <input type="text" id="uz-reseller-id" placeholder="ex: 52526" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">URL do Hub</label>
+        <input type="text" id="uz-hub-url" placeholder="https://hub.ultragaz.com.br" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="uz-ativo" checked style="width:16px;height:16px">
+        <span style="font-size:13px;font-weight:600">Robô ativo</span>
+      </label>
+      <span id="uz-status-badge" style="font-size:11px;padding:3px 10px;border-radius:12px;background:#f1f5f9;color:#64748b">⏳ Verificando...</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="saveUltragazConfig()" style="background:#2563eb;color:#fff">💾 Salvar Credenciais</button>
+      <button class="btn" onclick="testUltragazConfig()" style="background:#e2e8f0;color:#374151">🔍 Testar Conexão</button>
+    </div>
+    <div id="uz-feedback" style="margin-top:10px;font-size:12px;display:none"></div>
+    <div style="margin-top:16px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+      <p style="font-size:11px;color:#64748b;margin:0">🤖 <strong>Robô no servidor:</strong> Após salvar, o robô no VPS buscará essas credenciais automaticamente. Os pedidos capturados aparecerão na gestão com status <span style="color:#ef4444;font-weight:600">NOVO</span> e você receberá alerta via WhatsApp.</p>
+    </div>
+  </div>
+  </div>
+
+  <!-- ═══ WHATSAPP ═══ -->
+  <div class="cfg-panel" id="panel-whatsapp">
+<!-- ── WHATSAPP MULTI-CONEXÃO ── -->
   <div class="card" id="card-wa-conexoes">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
       <h2 style="margin:0">📱 WhatsApp — Conexões</h2>
@@ -267,120 +440,7 @@
   .toggle-on  { background:#dcfce7;color:#166534;border:1.5px solid #86efac }
   .toggle-off { background:#fef2f2;color:#991b1b;border:1.5px solid #fca5a5 }
   </style>
-
-  <!-- Teste PushInPay PIX -->
-  <div class="card">
-    <h2>💠 PushInPay PIX</h2>
-    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Teste a integração PIX PushInPay. Verifique conexão, crie cobrança teste e veja logs de webhook.</p>
-
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-      <button class="btn" style="background:#0891b2;color:#fff" onclick="testPixConexao()">📡 Testar Conexão</button>
-      <button class="btn" style="background:#7c3aed;color:#fff" onclick="testPixCobranca()">💠 Cobrança Teste (R$1,01)</button>
-      <button class="btn" style="background:#059669;color:#fff" onclick="testPixWebhook()">🔔 Verificar Webhooks</button>
-      <button class="btn btn-gray" onclick="testPixStats()">📊 Estatísticas</button>
-    </div>
-    <div id="pix-status" style="margin-top:10px"></div>
-  </div>
-
-  <!-- Config Foto Comprovante -->
-  <div class="card">
-    <h2>📸 Foto Comprovante (Entregador)</h2>
-    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Ajuste a compressão da foto tirada pelo entregador ao marcar entrega. Fotos são sempre de recibos/texto.</p>
-
-    <label>Formato de imagem</label>
-    <select id="fotoFormato" style="margin-bottom:12px">
-      <option value="webp">📄 WebP — Melhor para texto (recomendado)</option>
-      <option value="jpeg">📷 JPEG — Compatibilidade máxima</option>
-      <option value="png">🖼️ PNG — Sem perda (arquivo grande)</option>
-    </select>
-
-    <label>Dimensão máxima (px): <strong id="maxDimVal">1200</strong></label>
-    <input type="range" id="fotoMaxDim" min="400" max="1600" step="100" value="1200" oninput="document.getElementById('maxDimVal').textContent=this.value" style="padding:0;border:none">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>400px</span><span>800</span><span>1200</span><span>1600px</span></div>
-
-    <label>Qualidade (%): <strong id="qualityVal">85</strong> <span id="qualityHint" style="font-size:11px;color:#94a3b8">(ignorado para PNG)</span></label>
-    <input type="range" id="fotoQuality" min="20" max="95" step="5" value="85" oninput="document.getElementById('qualityVal').textContent=this.value" style="padding:0;border:none">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>20%</span><span>55%</span><span>85%</span><span>95%</span></div>
-
-    <label>Desaturação (%): <strong id="desatVal">50</strong></label>
-    <input type="range" id="fotoDesat" min="0" max="100" step="10" value="50" oninput="document.getElementById('desatVal').textContent=this.value" style="padding:0;border:none">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>0% (cor)</span><span>50%</span><span>100% (P&B)</span></div>
-
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
-      <label style="display:inline;cursor:pointer;margin:0"><input type="checkbox" id="fotoContraste" checked style="width:auto;margin-right:6px">Auto-contraste</label>
-      <label style="display:inline;cursor:pointer;margin:0"><input type="checkbox" id="fotoSharpen" checked style="width:auto;margin-right:6px">Nitidez (sharpen) — melhora legibilidade de texto</label>
-    </div>
-
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-orange" onclick="salvarFotoConfig()" style="flex:1">💾 Salvar</button>
-      <button class="btn btn-gray" onclick="resetFotoConfig()">🔄 Padrão</button>
-    </div>
-    <div id="foto-config-status"></div>
-  </div>
-
-  <!-- Permissões Atendente (admin only) -->
-  <div class="card" id="permissoesSection">
-    <h2>🔐 Permissões do Atendente</h2>
-    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Defina o que atendentes podem fazer. Admin sempre tem acesso total.</p>
-
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
-        <input type="checkbox" id="permReabrirEntregue" checked style="width:auto;margin:0"> Reabrir pedido <strong>entregue</strong>
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
-        <input type="checkbox" id="permReabrirCancelado" style="width:auto;margin:0"> Reabrir pedido <strong>cancelado</strong>
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
-        <input type="checkbox" id="permCancelar" checked style="width:auto;margin:0"> Cancelar pedido
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;text-transform:none;font-size:14px;font-weight:500;color:#334155">
-        <input type="checkbox" id="permEditarEntregue" style="width:auto;margin:0"> Editar pedido <strong>entregue</strong>
-      </label>
-    </div>
-
-    <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-top:12px">
-      ⚠️ Quando atendente reabrir/cancelar, admin recebe alerta WhatsApp automático.
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn-orange" onclick="salvarPermissoes()" style="flex:1">💾 Salvar Permissões</button>
-    </div>
-    <div id="perm-status"></div>
-  </div>
-
-  <!-- WhatsApp Safe  <!-- Fuso Horário da Empresa (v2.13.13) -->
-  <div class="card" id="timezoneSection">
-    <h2>🕐 Fuso Horário da Empresa</h2>
-    <p style="font-size:13px;color:#64748b;margin-bottom:12px">
-      Define o fuso horário usado em datas de pedidos, relatórios e filtros.<br>
-      <strong>Importante:</strong> pedidos de meia-noite são classificados no dia certo conforme este fuso.
-    </p>
-    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-      <div style="flex:1;min-width:220px">
-        <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">FUSO HORÁRIO</label>
-        <select id="tzSelect" style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px">
-          <option value="America/Campo_Grande">America/Campo_Grande (MS/MT — UTC-4)</option>
-          <option value="America/Sao_Paulo">America/Sao_Paulo (SP/RJ/MG/PR/RS — UTC-3)</option>
-          <option value="America/Manaus">America/Manaus (AM — UTC-4)</option>
-          <option value="America/Belem">America/Belem (PA/MA — UTC-3)</option>
-          <option value="America/Fortaleza">America/Fortaleza (CE/BA — UTC-3)</option>
-          <option value="America/Recife">America/Recife (PE — UTC-3)</option>
-          <option value="America/Cuiaba">America/Cuiaba (MT — UTC-4)</option>
-          <option value="America/Porto_Velho">America/Porto_Velho (RO — UTC-4)</option>
-          <option value="America/Boa_Vista">America/Boa_Vista (RR — UTC-4)</option>
-          <option value="America/Rio_Branco">America/Rio_Branco (AC — UTC-5)</option>
-        </select>
-      </div>
-      <button class="btn btn-green" onclick="saveTz()">💾 Salvar</button>
-    </div>
-    <div id="tzStatus" style="margin-top:8px;font-size:12px;color:#64748b"></div>
-    <div style="margin-top:10px;padding:8px 12px;background:#fef9c3;border-radius:6px;border:1px solid #fbbf24;font-size:12px;color:#92400e">
-      ⚠️ <strong>Meia-noite:</strong> pedidos entre 22h30–00h00 podem cair no dia seguinte sem fuso correto.
-      Pedidos inseridos retroativamente aparecem com hora 22:30 do dia informado (ficam por último naquele dia).
-    </div>
-  </div>
-
-  <!-- Safety Layer (admin only) -->
+<!-- Safety Layer (admin only) -->
   <div class="card" id="safetySection">
     <h2>🛡️ WhatsApp Safety Layer</h2>
     <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Proteção anti-ban do WhatsApp. Desative restrições apenas para testes.</p>
@@ -433,8 +493,7 @@
       <button class="btn" onclick="resetCircuitBreaker()" style="background:#dc2626;color:#fff" title="Desbloqueia o WhatsApp imediatamente se estiver travado por circuit breaker">🔓 Desbloquear WA</button>
     </div>
   </div>
-
-  <!-- Lembretes PIX (admin only) -->
+<!-- Lembretes PIX (admin only) -->
   <div class="card" id="lembreteSection">
     <h2>📱 Lembretes PIX (WhatsApp)</h2>
     <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Configuração de lembretes automáticos para PIX Aberto pendentes.</p>
@@ -489,8 +548,130 @@
     </div>
     <div id="lemb-status"></div>
   </div>
+  </div>
 
-  <!-- QR Code Avaliação Google -->
+  <!-- ═══ CATÁLOGO ═══ -->
+  <div class="cfg-panel" id="panel-catalogo">
+<!-- Produtos MoskoGás -->
+  <div class="card" id="productsSection">
+    <h2>📦 Produtos MoskoGás</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Cadastre produtos com preço sugerido. Marque ⭐ para aparecer como atalho rápido na tela de pedido.</p>
+
+    <!-- Importar do Bling -->
+    <div style="position:relative;margin-bottom:12px">
+      <input id="prodBlingSearch" placeholder="🔍 Importar produto do Bling..." oninput="searchBlingProduct(this.value)" autocomplete="off" style="margin-bottom:0">
+      <div id="prodBlingSuggestions" style="display:none;position:absolute;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
+    </div>
+
+    <!-- Lista de produtos -->
+    <div id="appProductsList" style="min-height:40px">
+      <div style="color:#94a3b8;text-align:center;padding:16px;font-size:13px">⏳ Carregando produtos...</div>
+    </div>
+
+    <!-- Adicionar manual -->
+    <div style="margin-top:10px;border-top:1px solid #e2e8f0;padding-top:10px">
+      <button onclick="showAddProductModal()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600;color:#334155">➕ Cadastrar Produto Manual</button>
+    </div>
+  </div>
+
+  <!-- Modal Editar Produto -->
+  <div id="productModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center">
+    <div style="background:#fff;border-radius:12px;padding:20px;width:90%;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 id="productModalTitle" style="margin:0;font-size:16px">Editar Produto</h3>
+        <button onclick="closeProductModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8">✕</button>
+      </div>
+      <input id="pm_id" type="hidden">
+      <input id="pm_bling_id" type="hidden">
+      <div style="margin-bottom:8px"><label style="font-size:12px;font-weight:600;color:#64748b">Nome</label><input id="pm_name" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px"></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div style="flex:1"><label style="font-size:12px;font-weight:600;color:#64748b">Código</label><input id="pm_code" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px"></div>
+        <div style="flex:1"><label style="font-size:12px;font-weight:600;color:#64748b">Preço Sugerido (R$)</label><input id="pm_price" type="text" inputmode="decimal" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-weight:700"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input id="pm_favorite" type="checkbox"> ⭐ Favorito (atalho no pedido)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input id="pm_ativo" type="checkbox" checked> Ativo</label>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="closeProductModal()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">Cancelar</button>
+        <button onclick="saveProduct()" style="background:#f97316;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">💾 Salvar</button>
+      </div>
+    </div>
+  </div>
+<!-- Autocomplete de Ruas -->
+  <div class="card">
+    <h2>🗺️ Autocomplete de Endereço</h2>
+
+    <div id="streetsStatus" style="font-size:13px;color:#64748b;margin-bottom:12px">⏳ Verificando banco local...</div>
+
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:13px;color:#1e40af;margin-bottom:14px">
+      ✅ <strong>Nominatim ao vivo ativado</strong> — autocomplete já funciona sem importar nada!<br>
+      <span style="font-size:12px;color:#3b82f6">O Worker busca ruas via OpenStreetMap em tempo real. O banco local (import) é opcional e torna a busca mais rápida.</span>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="streetTestInput" placeholder="Teste: digite 'Rio Branco' ou 'Afonso Pena'" style="flex:1;margin-bottom:0">
+      <button onclick="testStreetSearch()" class="btn btn-green" style="white-space:nowrap;padding:10px 16px">🔍 Testar</button>
+    </div>
+    <div id="streetTestResult" style="font-size:13px;min-height:20px"></div>
+
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:13px;color:#64748b;font-weight:600;user-select:none">⚙️ Import local (opcional — busca instantânea)</summary>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">
+        <p style="font-size:12px;color:#94a3b8;margin-bottom:10px">Importa todas as ruas de Campo Grande para o banco D1. Pode demorar 2–3 minutos.</p>
+        <button onclick="importStreets()" id="btnImportStreets"
+          style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">
+          ⬇️ Importar Ruas de CG
+        </button>
+        <div id="streetsProgress" style="display:none;margin-top:12px">
+          <div style="background:#e2e8f0;border-radius:99px;height:8px;overflow:hidden">
+            <div id="streetsBar" style="background:#6366f1;height:100%;width:0%;transition:width 0.5s"></div>
+          </div>
+          <div id="streetsMsg" style="font-size:12px;color:#64748b;margin-top:6px">Aguardando...</div>
+        </div>
+      </div>
+    </details>
+  </div>
+  </div>
+
+  <!-- ═══ OPERACIONAL ═══ -->
+  <div class="cfg-panel" id="panel-operacional">
+<!-- Config Foto Comprovante -->
+  <div class="card">
+    <h2>📸 Foto Comprovante (Entregador)</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Ajuste a compressão da foto tirada pelo entregador ao marcar entrega. Fotos são sempre de recibos/texto.</p>
+
+    <label>Formato de imagem</label>
+    <select id="fotoFormato" style="margin-bottom:12px">
+      <option value="webp">📄 WebP — Melhor para texto (recomendado)</option>
+      <option value="jpeg">📷 JPEG — Compatibilidade máxima</option>
+      <option value="png">🖼️ PNG — Sem perda (arquivo grande)</option>
+    </select>
+
+    <label>Dimensão máxima (px): <strong id="maxDimVal">1200</strong></label>
+    <input type="range" id="fotoMaxDim" min="400" max="1600" step="100" value="1200" oninput="document.getElementById('maxDimVal').textContent=this.value" style="padding:0;border:none">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>400px</span><span>800</span><span>1200</span><span>1600px</span></div>
+
+    <label>Qualidade (%): <strong id="qualityVal">85</strong> <span id="qualityHint" style="font-size:11px;color:#94a3b8">(ignorado para PNG)</span></label>
+    <input type="range" id="fotoQuality" min="20" max="95" step="5" value="85" oninput="document.getElementById('qualityVal').textContent=this.value" style="padding:0;border:none">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>20%</span><span>55%</span><span>85%</span><span>95%</span></div>
+
+    <label>Desaturação (%): <strong id="desatVal">50</strong></label>
+    <input type="range" id="fotoDesat" min="0" max="100" step="10" value="50" oninput="document.getElementById('desatVal').textContent=this.value" style="padding:0;border:none">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin:-8px 0 12px"><span>0% (cor)</span><span>50%</span><span>100% (P&B)</span></div>
+
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+      <label style="display:inline;cursor:pointer;margin:0"><input type="checkbox" id="fotoContraste" checked style="width:auto;margin-right:6px">Auto-contraste</label>
+      <label style="display:inline;cursor:pointer;margin:0"><input type="checkbox" id="fotoSharpen" checked style="width:auto;margin-right:6px">Nitidez (sharpen) — melhora legibilidade de texto</label>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-orange" onclick="salvarFotoConfig()" style="flex:1">💾 Salvar</button>
+      <button class="btn btn-gray" onclick="resetFotoConfig()">🔄 Padrão</button>
+    </div>
+    <div id="foto-config-status"></div>
+  </div>
+<!-- QR Code Avaliação Google -->
   <div class="card">
     <h2>⭐ QR Code — Avaliação Google</h2>
     <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Após cada entrega, o entregador vê um QR Code para o cliente avaliar no Google. Configure a URL da sua página de avaliação.</p>
@@ -504,47 +685,7 @@
       <img id="review-qr-preview" style="width:150px;height:150px;border-radius:8px;border:2px solid #f97316">
     </div>
   </div>
-
-  <!-- Ultragaz Hub Integration -->
-  <div class="card" id="ultragazSection">
-    <h2>🔗 Ultragaz Hub — Integração Automática</h2>
-    <p style="font-size:12px;color:#94a3b8;margin-bottom:16px">Credenciais para o robô de captura automática de pedidos do Hub Ultragaz. Os pedidos chegam em tempo real via WebSocket e são criados automaticamente no sistema.</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Login (e-mail)</label>
-        <input type="email" id="uz-login" placeholder="seu@email.com" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
-      </div>
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Senha</label>
-        <input type="password" id="uz-senha" placeholder="••••••••" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
-      </div>
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">ID da Revenda (opcional)</label>
-        <input type="text" id="uz-reseller-id" placeholder="ex: 52526" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
-      </div>
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">URL do Hub</label>
-        <input type="text" id="uz-hub-url" placeholder="https://hub.ultragaz.com.br" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="uz-ativo" checked style="width:16px;height:16px">
-        <span style="font-size:13px;font-weight:600">Robô ativo</span>
-      </label>
-      <span id="uz-status-badge" style="font-size:11px;padding:3px 10px;border-radius:12px;background:#f1f5f9;color:#64748b">⏳ Verificando...</span>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="saveUltragazConfig()" style="background:#2563eb;color:#fff">💾 Salvar Credenciais</button>
-      <button class="btn" onclick="testUltragazConfig()" style="background:#e2e8f0;color:#374151">🔍 Testar Conexão</button>
-    </div>
-    <div id="uz-feedback" style="margin-top:10px;font-size:12px;display:none"></div>
-    <div style="margin-top:16px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
-      <p style="font-size:11px;color:#64748b;margin:0">🤖 <strong>Robô no servidor:</strong> Após salvar, o robô no VPS buscará essas credenciais automaticamente. Os pedidos capturados aparecerão na gestão com status <span style="color:#ef4444;font-weight:600">NOVO</span> e você receberá alerta via WhatsApp.</p>
-    </div>
-  </div>
-
-  <!-- Relatório Diário por Email -->
+<!-- Relatório Diário por Email -->
   <div class="card" id="relatorioSection">
     <h2>📧 Relatório Diário por E-mail</h2>
     <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Envia resumo dos pedidos do dia anterior por e-mail (HTML + CSV anexo) automaticamente via cron.</p>
@@ -593,91 +734,11 @@
     </div>
     <div id="rel-status" style="margin-top:8px"></div>
   </div>
-
-  <!-- Produtos MoskoGás -->
-  <div class="card" id="productsSection">
-    <h2>📦 Produtos MoskoGás</h2>
-    <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Cadastre produtos com preço sugerido. Marque ⭐ para aparecer como atalho rápido na tela de pedido.</p>
-
-    <!-- Importar do Bling -->
-    <div style="position:relative;margin-bottom:12px">
-      <input id="prodBlingSearch" placeholder="🔍 Importar produto do Bling..." oninput="searchBlingProduct(this.value)" autocomplete="off" style="margin-bottom:0">
-      <div id="prodBlingSuggestions" style="display:none;position:absolute;left:0;right:0;z-index:50;border:2px solid #f97316;border-top:none;border-radius:0 0 8px 8px;background:#fff;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
-    </div>
-
-    <!-- Lista de produtos -->
-    <div id="appProductsList" style="min-height:40px">
-      <div style="color:#94a3b8;text-align:center;padding:16px;font-size:13px">⏳ Carregando produtos...</div>
-    </div>
-
-    <!-- Adicionar manual -->
-    <div style="margin-top:10px;border-top:1px solid #e2e8f0;padding-top:10px">
-      <button onclick="showAddProductModal()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600;color:#334155">➕ Cadastrar Produto Manual</button>
-    </div>
   </div>
 
-  <!-- Modal Editar Produto -->
-  <div id="productModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center">
-    <div style="background:#fff;border-radius:12px;padding:20px;width:90%;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.2)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <h3 id="productModalTitle" style="margin:0;font-size:16px">Editar Produto</h3>
-        <button onclick="closeProductModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8">✕</button>
-      </div>
-      <input id="pm_id" type="hidden">
-      <input id="pm_bling_id" type="hidden">
-      <div style="margin-bottom:8px"><label style="font-size:12px;font-weight:600;color:#64748b">Nome</label><input id="pm_name" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px"></div>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <div style="flex:1"><label style="font-size:12px;font-weight:600;color:#64748b">Código</label><input id="pm_code" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px"></div>
-        <div style="flex:1"><label style="font-size:12px;font-weight:600;color:#64748b">Preço Sugerido (R$)</label><input id="pm_price" type="text" inputmode="decimal" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-weight:700"></div>
-      </div>
-      <div style="display:flex;gap:12px;margin-bottom:12px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input id="pm_favorite" type="checkbox"> ⭐ Favorito (atalho no pedido)</label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input id="pm_ativo" type="checkbox" checked> Ativo</label>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="closeProductModal()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">Cancelar</button>
-        <button onclick="saveProduct()" style="background:#f97316;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">💾 Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Autocomplete de Ruas -->
-  <div class="card">
-    <h2>🗺️ Autocomplete de Endereço</h2>
-
-    <div id="streetsStatus" style="font-size:13px;color:#64748b;margin-bottom:12px">⏳ Verificando banco local...</div>
-
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:13px;color:#1e40af;margin-bottom:14px">
-      ✅ <strong>Nominatim ao vivo ativado</strong> — autocomplete já funciona sem importar nada!<br>
-      <span style="font-size:12px;color:#3b82f6">O Worker busca ruas via OpenStreetMap em tempo real. O banco local (import) é opcional e torna a busca mais rápida.</span>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input id="streetTestInput" placeholder="Teste: digite 'Rio Branco' ou 'Afonso Pena'" style="flex:1;margin-bottom:0">
-      <button onclick="testStreetSearch()" class="btn btn-green" style="white-space:nowrap;padding:10px 16px">🔍 Testar</button>
-    </div>
-    <div id="streetTestResult" style="font-size:13px;min-height:20px"></div>
-
-    <details style="margin-top:16px">
-      <summary style="cursor:pointer;font-size:13px;color:#64748b;font-weight:600;user-select:none">⚙️ Import local (opcional — busca instantânea)</summary>
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">
-        <p style="font-size:12px;color:#94a3b8;margin-bottom:10px">Importa todas as ruas de Campo Grande para o banco D1. Pode demorar 2–3 minutos.</p>
-        <button onclick="importStreets()" id="btnImportStreets"
-          style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">
-          ⬇️ Importar Ruas de CG
-        </button>
-        <div id="streetsProgress" style="display:none;margin-top:12px">
-          <div style="background:#e2e8f0;border-radius:99px;height:8px;overflow:hidden">
-            <div id="streetsBar" style="background:#6366f1;height:100%;width:0%;transition:width 0.5s"></div>
-          </div>
-          <div id="streetsMsg" style="font-size:12px;color:#64748b;margin-top:6px">Aguardando...</div>
-        </div>
-      </div>
-    </details>
-  </div>
-
-
-  <!-- ===== MARKETING ===== -->
+  <!-- ═══ MARKETING ═══ -->
+  <div class="cfg-panel" id="panel-marketing">
+<!-- ===== MARKETING ===== -->
   <div class="card" id="marketingSection">
     <h2>🎯 Marketing Digital</h2>
 
@@ -786,6 +847,7 @@
       </div>
     </div>
   </div>
+  </div>
 
 </div><!-- /container -->
 
@@ -795,7 +857,7 @@
 checkAuth(['admin', 'atendente']);
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 
-// v2.13.15: Carregar timezone só para admin
+// v2.14.0: Carregar timezone só para admin
 const _cfgUserEarly = getCurrentUser();
 if (_cfgUserEarly && _cfgUserEarly.role === 'admin') loadTz();
 
@@ -2298,6 +2360,92 @@ hubPollInterval = setInterval(hubCheckStatus, 30000);
 
 // Carregar conexões WhatsApp
 loadConexoes();
+
+// ── Config Tabs ──────────────────────────────────────────
+function cfgTab(btn) {
+  document.querySelectorAll('.cfg-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.cfg-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  localStorage.setItem('cfg_tab', btn.dataset.tab);
+}
+// Restaura última aba visitada
+(function() {
+  const saved = localStorage.getItem('cfg_tab');
+  if (saved) {
+    const btn = document.querySelector(`.cfg-tab[data-tab="${saved}"]`);
+    if (btn) cfgTab(btn);
+  }
+})();
+
+// ── Dados da Revenda ──────────────────────────────────────
+function maskCNPJRev(el) {
+  let v = el.value.replace(/\D/g,'').substring(0,14);
+  v = v.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3')
+       .replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2');
+  el.value = v;
+}
+function maskCEPRev(el) {
+  let v = el.value.replace(/\D/g,'').substring(0,8);
+  v = v.replace(/(\d{5})(\d)/,'$1-$2');
+  el.value = v;
+}
+
+async function loadDadosRevenda() {
+  try {
+    const r = await api('/api/config?key=dados_revenda');
+    if (!r?.value) return;
+    const d = JSON.parse(r.value);
+    const set = (id, val) => { const el = document.getElementById(id); if(el && val) el.value = val; };
+    set('rev-cnpj', d.cnpj);
+    set('rev-razao', d.razao);
+    set('rev-fantasia', d.fantasia);
+    set('rev-telefone', d.telefone);
+    set('rev-whatsapp', d.whatsapp);
+    set('rev-email', d.email);
+    set('rev-site', d.site);
+    set('rev-instagram', d.instagram);
+    set('rev-endereco', d.endereco);
+    set('rev-cep', d.cep);
+    // Fuso
+    if (d.timezone) {
+      const sel = document.getElementById('empresa-timezone');
+      if (sel) sel.value = d.timezone;
+    }
+  } catch(e) { console.log('loadDadosRevenda:', e.message); }
+}
+
+async function saveDadosRevenda() {
+  const get = id => document.getElementById(id)?.value?.trim() || '';
+  const payload = {
+    cnpj: get('rev-cnpj'),
+    razao: get('rev-razao'),
+    fantasia: get('rev-fantasia'),
+    telefone: get('rev-telefone'),
+    whatsapp: get('rev-whatsapp'),
+    email: get('rev-email'),
+    site: get('rev-site'),
+    instagram: get('rev-instagram'),
+    endereco: get('rev-endereco'),
+    cep: get('rev-cep'),
+    timezone: document.getElementById('empresa-timezone')?.value || 'America/Campo_Grande',
+  };
+  const st = document.getElementById('rev-status');
+  st.innerHTML = '<div class="status">⏳ Salvando...</div>';
+  try {
+    await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'dados_revenda', value: JSON.stringify(payload) }) });
+    // Salva timezone separado (compatibilidade com código existente)
+    await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'empresa_timezone', value: payload.timezone }) });
+    st.innerHTML = '<div class="status ok">✅ Dados salvos com sucesso!</div>';
+    setTimeout(() => st.innerHTML = '', 3000);
+  } catch(e) {
+    st.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+// Carrega dados da revenda ao abrir
+loadDadosRevenda();
+
 </script>
 </body>
 </html>
