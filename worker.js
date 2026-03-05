@@ -1,4 +1,4 @@
-// v2.49.26
+// v2.49.27
 // v2.49.26: fix hub-status/start-login — authHub instanceof Response (corrige 401 falso que delogava)
 // v2.49.26: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
 // v2.49.26: /bling/ping usa timestamp local (sem chamar API Bling) se token válido — resolve banner vermelho piscando
@@ -7436,6 +7436,25 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
         await env.DB.prepare("DELETE FROM app_config WHERE key='ultragaz_login_request'").run();
         return json({ ok: true });
+      }
+
+      // POST /api/ultragaz/robot-log — Robot salva log de diagnóstico (inputs, url, etc)
+      if (path === '/api/ultragaz/robot-log' && method === 'POST') {
+        const apiKey = request.headers.get('X-API-Key') || request.headers.get('X-API-KEY') || '';
+        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+        const body = await request.json();
+        await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('ultragaz_robot_log', ?, datetime('now'))")
+          .bind(JSON.stringify({ ...body, saved_at: new Date().toISOString() })).run();
+        return json({ ok: true });
+      }
+
+      // GET /api/ultragaz/robot-log — Admin lê último log do robô
+      if (path === '/api/ultragaz/robot-log' && method === 'GET') {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+        const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_robot_log'").first();
+        if (!row) return json({ ok: false, msg: 'Nenhum log disponível' });
+        return json({ ok: true, ...JSON.parse(row.value) });
       }
 
       // POST /api/ultragaz/pedido — Robot envia novo pedido capturado (só APP_API_KEY)

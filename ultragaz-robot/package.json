@@ -1,7 +1,7 @@
 {
   "name": "ultragaz-robot",
   "version": "1.0.0",
-  "description": "Robô de captura automática de pedidos do Hub Ultragaz para MoskoGás",
+  "description": "Rob\u00f4 de captura autom\u00e1tica de pedidos do Hub Ultragaz para MoskoG\u00e1s",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -14,5 +14,6 @@
     "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2",
     "imapflow": "^1.0.162"
-  }
+  },
+  "type": "module"
 }

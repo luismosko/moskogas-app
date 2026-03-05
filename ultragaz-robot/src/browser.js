@@ -66,7 +66,18 @@ export async function loginHub(login, senha, hubUrl = 'https://hub.ultragaz.com.
         type: i.type, name: i.name, id: i.id, placeholder: i.placeholder, cls: i.className.substring(0,40)
       }))
     );
-    log(`Inputs na página: ${JSON.stringify(inputsInfo)}`);
+    const pageUrl = page.url();
+    const pageTitle = await page.title().catch(() => '');
+    log(`Inputs na página (${inputsInfo.length}): ${JSON.stringify(inputsInfo)}`);
+    log(`URL: ${pageUrl} | Title: ${pageTitle}`);
+
+    // Envia diagnóstico para o Worker (visível no config.html)
+    await fetch(`${apiUrl}/api/ultragaz/robot-log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      body: JSON.stringify({ url: pageUrl, title: pageTitle, inputs: inputsInfo, step: 'login-page' })
+    }).catch(() => {});
+
     await page.screenshot({ path: '/tmp/ultragaz-login-page.png' }).catch(() => {});
 
     // Preenche email/usuário — tenta múltiplos seletores
