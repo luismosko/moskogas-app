@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão v2.9.10 — MoskoGás</title>
+<title>Gestão 2.9.11 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -397,7 +397,7 @@ function renderSummary(rows) {
     <span>🟢 WhatsApp: <strong>${counts.whatsapp_enviado}</strong></span>
     <span>🔵 Entregues: <strong>${counts.entregue}</strong></span>
     <span>⚫ Cancelados: <strong>${counts.cancelado}</strong></span>
-    <span style="margin-left:auto">💰 Total: <strong>R$ ${total.toFixed(2)}</strong></span>`;
+    <span style="margin-left:auto">📦 <strong>${rows.filter(r=>r.status!=='cancelado').length}</strong> pedidos &nbsp;·&nbsp; 💰 Total: <strong>R$ ${total.toFixed(2)}</strong></span>`;
 
   // ── Resumo por produto (exclui cancelados) ──
   const prodMap = {};
