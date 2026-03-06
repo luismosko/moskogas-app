@@ -97,6 +97,12 @@ async function startSession() {
       autoRelogin = false;
     } else {
       log('🟡 Aguardando operador iniciar login pelo painel MoskoGás...');
+      // Marca como desconectado no D1 enquanto aguarda login
+      fetch(`${apiUrl}/api/ultragaz/hub-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify({ conectado: false, status: 'aguardando_login', mensagem: 'Aguardando login do operador...', updated_at: new Date().toISOString() })
+      }).catch(() => {});
       let loginRequested = false;
       while (!loginRequested) {
         try {
