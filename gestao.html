@@ -766,7 +766,6 @@ function toggleAuto() {
 }
 
 // ── Alerta Pedido Ultragaz ─────────────────────────────────────
-let lastKnownOrderId = 0;
 let ultragazAlertShown = new Set();
 
 async function checkUltragazOrders() {
@@ -774,21 +773,28 @@ async function checkUltragazOrders() {
     const res = await apiCall('/api/orders/list?status=NOVO&limit=5');
     if (!res.ok) return;
     const data = await res.json();
-    const novos = (data.orders || []).filter(o => o.vendedor_nome === 'Ultragaz Hub');
+    const novos = (data.orders || []).filter(function(o){ return o.vendedor_nome === 'Ultragaz Hub'; });
     for (const order of novos) {
       if (!ultragazAlertShown.has(order.id)) {
         ultragazAlertShown.add(order.id);
         showUltragazAlert(order);
       }
     }
-  } catch {}
+  } catch(e) {}
+}
+
+function formatItemsUltra(items_json) {
+  try {
+    const items = typeof items_json === 'string' ? JSON.parse(items_json) : (items_json || []);
+    return items.map(function(i){ return i.quantidade + 'x ' + i.produto; }).join(', ');
+  } catch(e) { return 'N/D'; }
 }
 
 function showUltragazAlert(order) {
   // Som de notificação
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [440, 550, 660].forEach((freq, i) => {
+    [440, 550, 660].forEach(function(freq, i) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain); gain.connect(ctx.destination);
@@ -798,65 +804,53 @@ function showUltragazAlert(order) {
       osc.start(ctx.currentTime + i * 0.15);
       osc.stop(ctx.currentTime + i * 0.15 + 0.3);
     });
-  } catch {}
+  } catch(e) {}
 
-  // Banner de alerta
   const banner = document.createElement('div');
   banner.id = 'ultragaz-alert-' + order.id;
-  banner.style.cssText = `
-    position:fixed;top:20px;right:20px;z-index:99999;
-    background:linear-gradient(135deg,#1565C0,#0D47A1);
-    color:#fff;border-radius:16px;padding:20px 24px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.4);
-    max-width:360px;animation:slideInRight .4s ease;
-    border:2px solid #42A5F5;
-  `;
-  banner.innerHTML = \`
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-      <span style="font-size:32px">🔵</span>
-      <div>
-        <div style="font-weight:800;font-size:16px">PEDIDO ULTRAGAZ!</div>
-        <div style="font-size:11px;opacity:.8">Hub Ultragaz → MoskoGás</div>
-      </div>
-      <button onclick="document.getElementById('ultragaz-alert-\${order.id}').remove()"
-        style="margin-left:auto;background:rgba(255,255,255,0.2);border:none;color:#fff;
-               border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:16px">×</button>
-    </div>
-    <div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:10px;font-size:13px">
-      <div><b>Cliente:</b> \${order.customer_name || 'N/D'}</div>
-      <div><b>Endereço:</b> \${order.address_line || 'N/D'}</div>
-      <div><b>Produtos:</b> \${formatItems(order.items_json)}</div>
-      <div><b>Total:</b> R$ \${parseFloat(order.total_value||0).toFixed(2)}</div>
-    </div>
-    <button onclick="document.getElementById('ultragaz-alert-\${order.id}').remove();load();"
-      style="margin-top:10px;width:100%;background:#42A5F5;border:none;color:#fff;
-             border-radius:8px;padding:8px;cursor:pointer;font-weight:700;font-size:13px">
-      ✓ Ver na Gestão
-    </button>
-  \`;
+  banner.style.cssText = 'position:fixed;top:20px;right:20px;z-index:99999;background:linear-gradient(135deg,#1565C0,#0D47A1);color:#fff;border-radius:16px;padding:20px 24px;box-shadow:0 8px 32px rgba(0,0,0,0.4);max-width:360px;animation:slideInRight .4s ease;border:2px solid #42A5F5;font-family:sans-serif;';
+
+  const items = formatItemsUltra(order.items_json);
+  const total = parseFloat(order.total_value || 0).toFixed(2);
+
+  banner.innerHTML = '<div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:10px;font-size:13px">'
+    + '<div><b>Cliente:</b> ' + (order.customer_name || 'N/D') + '</div>'
+    + '<div><b>Endere\u00e7o:</b> ' + (order.address_line || 'N/D') + '</div>'
+    + '<div><b>Produtos:</b> ' + items + '</div>'
+    + '<div><b>Total:</b> R$ ' + total + '</div>'
+    + '</div>';
+
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px';
+  hdr.innerHTML = '<span style="font-size:32px">\uD83D\uDD35</span>'
+    + '<div><div style="font-weight:800;font-size:16px">PEDIDO ULTRAGAZ!</div>'
+    + '<div style="font-size:11px;opacity:.8">Hub Ultragaz \u2192 MoskoG\u00e1s</div></div>';
+  const xBtn = document.createElement('button');
+  xBtn.textContent = '\u00d7';
+  xBtn.style.cssText = 'margin-left:auto;background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:16px';
+  xBtn.onclick = function(){ banner.remove(); };
+  hdr.appendChild(xBtn);
+  banner.insertBefore(hdr, banner.firstChild);
+
+  const verBtn = document.createElement('button');
+  verBtn.textContent = '\u2713 Ver na Gest\u00e3o';
+  verBtn.style.cssText = 'margin-top:10px;width:100%;background:#42A5F5;border:none;color:#fff;border-radius:8px;padding:8px;cursor:pointer;font-weight:700;font-size:13px';
+  verBtn.onclick = function(){ banner.remove(); load(); };
+  banner.appendChild(verBtn);
+
   document.body.appendChild(banner);
-
-  // Remove automaticamente após 30s
-  setTimeout(() => banner.remove(), 30000);
+  setTimeout(function(){ if(banner.parentNode) banner.remove(); }, 30000);
 }
 
-function formatItems(items_json) {
-  try {
-    const items = typeof items_json === 'string' ? JSON.parse(items_json) : items_json;
-    return items.map(i => \`\${i.quantidade}x \${i.produto}\`).join(', ');
-  } catch { return 'N/D'; }
-}
+// Estilo animação
+(function(){
+  const s = document.createElement('style');
+  s.textContent = '@keyframes slideInRight { from { transform:translateX(120%);opacity:0; } to { transform:translateX(0);opacity:1; } }';
+  document.head.appendChild(s);
+})();
 
-// Verifica a cada 15 segundos (mais rápido que o auto-refresh de 30s)
+// Verifica a cada 15 segundos
 setInterval(checkUltragazOrders, 15000);
-
-// Adiciona estilo de animação
-const styleEl = document.createElement('style');
-styleEl.textContent = \`@keyframes slideInRight {
-  from { transform: translateX(120%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
-}\`;
-document.head.appendChild(styleEl);
 
 // ── Fechar modal clicando fora ────────────────────────────────
 document.getElementById('modal-wa').addEventListener('click', function(e) {
