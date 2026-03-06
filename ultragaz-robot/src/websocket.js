@@ -282,22 +282,50 @@ export function stopWebSocket() {
 }
 
 // Parseia os detalhes retornados pelo GET_SELECTS para o formato MoskoGás
+// Layout das colunas da tabela Hub Ultragaz (confirmado em 06/03/2026):
+// [0]=ícone, [1]=pedidoID, [2]=data, [3]=cliente, [4]=produto, [5]=qtd,
+// [6]=formaPgto, [7]=endereço, [8]=vlrUnit, [9]=desconto, [10]=total,
+// [11]=modoReembolso, [12]=entregador
 function parseDetails(details, rawData) {
-  // O GET_SELECTS retorna estrutura que pode variar — tenta extrair campos comuns
   const d = details || {};
 
-  // Campos possíveis retornados pelo APEX GET_SELECTS
-  const customer_name  = d.NAME_CUSTOMER || d.customer_name || d.NOME_CLIENTE || rawData.NAME_CUSTOMER || '';
-  const address_line   = d.ADDRESS || d.address_line || d.ENDERECO || d.LOGRADOURO || '';
-  const bairro         = d.BAIRRO || d.bairro || '';
-  const complemento    = d.COMPLEMENTO || d.complemento || '';
-  const referencia     = d.REFERENCIA || d.referencia || '';
-  const phone_digits   = (d.PHONE || d.phone || d.TELEFONE || '').replace(/\D/g, '');
-  const produto        = d.PRODUCT || d.produto || d.PRODUTO || d.DESCRICAO_PRODUTO || 'P13';
-  const quantidade     = parseInt(d.QUANTITY || d.quantidade || d.QTD || 1) || 1;
-  const valor_unit     = parseFloat(d.UNIT_VALUE || d.valor_unit || d.VALOR_UNIT || 0) || 0;
-  const total_value    = parseFloat(d.TOTAL || d.total_value || d.VALOR_TOTAL || d.TOTAL_VALUE || 0) || 0;
-  const forma_pagamento = d.PAYMENT_FORM || d.forma_pagamento || d.FORMA_PAGAMENTO || '';
+  // Extrai dados do DOM cells (fonte principal — capturados pelo getPendingOrders)
+  const cells = rawData.cells || [];
+  const domCliente  = cells[3] || '';
+  const domProduto  = cells[4] || '';
+  const domQtd      = cells[5] || '1';
+  const domPgto     = cells[6] || '';
+  const domEndereco = cells[7] || '';
+  const domVlrUnit  = cells[8] || '0';
+  const domTotal    = cells[10] || '0';
+
+  // Normaliza valor (ex: "111,00" → 111.00)
+  const parseValor = (v) => parseFloat(String(v).replace(/\./g, '').replace(',', '.')) || 0;
+
+  // Mapeia produto Hub para código interno
+  const mapProduto = (p) => {
+    const pu = String(p).toUpperCase();
+    if (/P45|45KG/.test(pu)) return 'P45';
+    if (/P20|20KG/.test(pu)) return 'P20';
+    if (/P13|13KG/.test(pu)) return 'P13';
+    if (/ÁGUA|AGUA|20L|WATER/.test(pu)) return 'AGUA20L';
+    return p || 'P13';
+  };
+
+  const customer_name   = d.NAME_CUSTOMER || d.NOME_CLIENTE || domCliente || '';
+  const address_line    = d.ADDRESS || d.ENDERECO || domEndereco || '';
+  const bairro          = d.BAIRRO || d.bairro || '';
+  const complemento     = d.COMPLEMENTO || d.complemento || '';
+  const referencia      = d.REFERENCIA || d.referencia || '';
+  const phone_digits    = (d.PHONE || d.TELEFONE || '').replace(/\D/g, '');
+  const produto         = mapProduto(d.PRODUCT || d.PRODUTO || domProduto);
+  const quantidade      = parseInt(d.QUANTITY || d.QTD || domQtd) || 1;
+  const valor_unit      = parseValor(d.UNIT_VALUE || d.VALOR_UNIT || domVlrUnit);
+  const total_value     = parseValor(d.TOTAL || d.VALOR_TOTAL || domTotal);
+  const forma_pagamento = d.PAYMENT_FORM || d.FORMA_PAGAMENTO || domPgto || '';
+
+  const log = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
+  log(`parseDetails — cliente:"${customer_name}" prod:"${produto}" qtd:${quantidade} total:${total_value} pgto:"${forma_pagamento}" end:"${address_line.substring(0,40)}"`);
 
   return {
     customer_name, address_line, bairro, complemento, referencia,
