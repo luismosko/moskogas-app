@@ -15,7 +15,9 @@ let reconnectDelay = 5000;
 let running = false;
 let consecutive401 = 0;
 let scanInterval = null;
+let heartbeatInterval = null;
 const SCAN_INTERVAL_MS = 5 * 60 * 1000; // varredura automática a cada 5 minutos
+const HEARTBEAT_MS = 3 * 60 * 1000; // heartbeat a cada 3 minutos (worker expira em 30min)
 
 // Callback chamado quando chega pedido novo — definido pelo index.js
 let onNewOrder = null;
@@ -45,6 +47,7 @@ export function connectWebSocket(wssUrl, page, apiUrl = '', apiKey = '') {
     consecutive401 = 0; // reset contador de erros 401
     startPing(wssUrl, page);
     startPeriodicScan(apiUrl, apiKey, page);
+    startHeartbeat(apiUrl, apiKey);
 
     // Varredura inicial — processa pedidos em aberto que chegaram antes da conexão
     log('🔍 Varrendo pedidos em aberto no Hub...');
@@ -117,6 +120,7 @@ export function connectWebSocket(wssUrl, page, apiUrl = '', apiKey = '') {
     log(`🔌 WebSocket fechado (${code}). Reconectando em ${reconnectDelay / 1000}s...`);
     stopPing();
     stopPeriodicScan();
+    stopHeartbeat();
     scheduleReconnect(wssUrl, page, apiUrl, apiKey);
   });
 
@@ -239,6 +243,31 @@ function startPeriodicScan(apiUrl, apiKey, page) {
   }, SCAN_INTERVAL_MS);
 }
 
+// Heartbeat — atualiza timestamp do status a cada 3min para evitar falso "desconectado"
+function startHeartbeat(apiUrl, apiKey) {
+  stopHeartbeat();
+  const log = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
+  heartbeatInterval = setInterval(async () => {
+    try {
+      await fetch(`${apiUrl}/api/ultragaz/hub-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify({
+          conectado: true,
+          status: 'conectado',
+          mensagem: `Conectado (heartbeat ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })})`,
+          updated_at: new Date().toISOString()
+        })
+      });
+    } catch {}
+  }, HEARTBEAT_MS);
+  log(`💓 Heartbeat ativado (a cada ${HEARTBEAT_MS / 60000} min)`);
+}
+
+function stopHeartbeat() {
+  if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+}
+
 function stopPeriodicScan() {
   if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
 }
@@ -247,6 +276,7 @@ export function stopWebSocket() {
   running = false;
   stopPing();
   stopPeriodicScan();
+  stopHeartbeat();
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (wsInstance) { try { wsInstance.terminate(); } catch {} wsInstance = null; }
 }
