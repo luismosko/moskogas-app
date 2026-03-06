@@ -305,16 +305,42 @@ export async function getWebsocketInfo(page) {
 
 export async function getOrderDetails(page, orderId) {
   log(`Buscando detalhes do pedido #${orderId}...`);
-  const result = await page.evaluate(async (id) => {
-    return new Promise((resolve, reject) => {
-      apex.server.process('GET_SELECTS', { x01: id }, {
-        success: (data) => resolve(data),
-        error: (err) => reject(new Error('GET_SELECTS falhou: ' + JSON.stringify(err))),
-        dataType: 'json',
+  try {
+    const result = await page.evaluate(async (id) => {
+      return new Promise((resolve, reject) => {
+        apex.server.process('GET_SELECTS', { x01: id }, {
+          success: (data) => resolve(data),
+          error: (err) => reject(new Error('GET_SELECTS falhou: ' + JSON.stringify(err))),
+          dataType: 'json',
+        });
       });
-    });
-  }, String(orderId));
-  return result;
+    }, String(orderId));
+    // Log completo da resposta para mapear os campos corretamente
+    log(`GET_SELECTS #${orderId} → ${JSON.stringify(result).substring(0, 500)}`);
+    return result;
+  } catch(e) {
+    log(`GET_SELECTS #${orderId} falhou: ${e.message} — tentando via DOM...`);
+    // Fallback: extrai dados diretamente do DOM da linha do pedido
+    try {
+      const domData = await page.evaluate((id) => {
+        // Procura linha com o ID do pedido
+        const allRows = document.querySelectorAll('tr, .a-IRR-table tbody tr');
+        for (const row of allRows) {
+          const rowText = row.textContent;
+          if (rowText.includes(id)) {
+            const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
+            return { cells, html: row.innerHTML.substring(0, 300) };
+          }
+        }
+        return null;
+      }, String(orderId));
+      if (domData) log(`DOM fallback #${orderId} → cells: ${JSON.stringify(domData.cells)}`);
+      return domData;
+    } catch(e2) {
+      log(`DOM fallback também falhou: ${e2.message}`);
+      return null;
+    }
+  }
 }
 
 // Busca pedidos pendentes no Hub — varre abas: Agendados, Em Aberto, Em Andamento
