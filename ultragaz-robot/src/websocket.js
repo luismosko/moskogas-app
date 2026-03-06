@@ -13,14 +13,20 @@ let pingInterval = null;
 let reconnectTimer = null;
 let reconnectDelay = 5000;
 let running = false;
+let consecutive401 = 0;
 let scanInterval = null;
 const SCAN_INTERVAL_MS = 5 * 60 * 1000; // varredura automática a cada 5 minutos
 
 // Callback chamado quando chega pedido novo — definido pelo index.js
 let onNewOrder = null;
+let onSessionExpired = null; // chamado quando WSS retorna 401 (sessão expirada)
 
 export function setNewOrderHandler(fn) {
   onNewOrder = fn;
+}
+
+export function setSessionExpiredHandler(fn) {
+  onSessionExpired = fn;
 }
 
 // Conecta ao WebSocket com URL assinada
@@ -36,6 +42,7 @@ export function connectWebSocket(wssUrl, page, apiUrl = '', apiKey = '') {
   wsInstance.on('open', async () => {
     log('✅ WebSocket conectado!');
     reconnectDelay = 5000; // reset backoff
+    consecutive401 = 0; // reset contador de erros 401
     startPing(wssUrl, page);
     startPeriodicScan(apiUrl, apiKey, page);
 
@@ -115,6 +122,21 @@ export function connectWebSocket(wssUrl, page, apiUrl = '', apiKey = '') {
 
   wsInstance.on('error', (err) => {
     warn(`Erro WebSocket: ${err.message}`);
+    if (err.message && err.message.includes('401')) {
+      consecutive401++;
+      warn(`WSS 401 (${consecutive401}x) — URL expirada. ${consecutive401 >= 2 ? 'Disparando re-login...' : 'Aguardando...'}`);
+      if (consecutive401 >= 2) {
+        consecutive401 = 0;
+        running = false;
+        stopPing();
+        stopPeriodicScan();
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        if (onSessionExpired) onSessionExpired();
+        return;
+      }
+    } else {
+      consecutive401 = 0;
+    }
   });
 }
 

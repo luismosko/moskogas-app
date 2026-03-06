@@ -2,7 +2,7 @@
 // Captura pedidos em tempo real via WebSocket e envia para o sistema
 import 'dotenv/config';
 import { loginHub, getWebsocketInfo, closeBrowser } from './browser.js';
-import { startWebSocket, stopWebSocket, setNewOrderHandler } from './websocket.js';
+import { startWebSocket, stopWebSocket, setNewOrderHandler, setSessionExpiredHandler } from './websocket.js';
 import { getUltragazConfig, enviarPedido } from './moskogas.js';
 import { isProcessed, markProcessed, addToRetryQueue, getPendingRetries, updateRetry, logEvent } from './db.js';
 
@@ -15,6 +15,7 @@ const err  = (msg)  => console.error(`[ERROR] ${new Date().toISOString()} ${msg}
 
 let currentPage      = null;
 let sessionTimer     = null;
+let autoRelogin      = false; // true = renova sem esperar operador
 let isRestarting     = false;
 
 // ─── Handler de novo pedido ──────────────────────────────────────────────────
@@ -90,25 +91,29 @@ async function startSession() {
     // ── Aguarda solicitação de login do operador via painel ──
     const apiUrl = process.env.MOSKOGAS_API_URL || 'https://moskogas.com.br';
     const apiKey = process.env.MOSKOGAS_API_KEY;
-    log('🟡 Aguardando operador iniciar login pelo painel MoskoGás...');
-
-    let loginRequested = false;
-    while (!loginRequested) {
-      try {
-        const r = await fetch(`${apiUrl}/api/ultragaz/login-request`, {
-          headers: { 'X-API-Key': apiKey }
-        });
-        const data = await r.json();
-        if (data.pending) {
-          loginRequested = true;
-          // Consome a solicitação
-          await fetch(`${apiUrl}/api/ultragaz/login-request`, {
-            method: 'DELETE', headers: { 'X-API-Key': apiKey }
-          }).catch(() => {});
-          log('✅ Login solicitado pelo operador! Iniciando...');
-        }
-      } catch {}
-      if (!loginRequested) await new Promise(r => setTimeout(r, 5000));
+    // Se for renovação automática (WSS 401), pula espera do operador
+    if (autoRelogin) {
+      log('🔄 Renovação automática de sessão (WSS expirado)...');
+      autoRelogin = false;
+    } else {
+      log('🟡 Aguardando operador iniciar login pelo painel MoskoGás...');
+      let loginRequested = false;
+      while (!loginRequested) {
+        try {
+          const r = await fetch(`${apiUrl}/api/ultragaz/login-request`, {
+            headers: { 'X-API-Key': apiKey }
+          });
+          const data = await r.json();
+          if (data.pending) {
+            loginRequested = true;
+            await fetch(`${apiUrl}/api/ultragaz/login-request`, {
+              method: 'DELETE', headers: { 'X-API-Key': apiKey }
+            }).catch(() => {});
+            log('✅ Login solicitado pelo operador! Iniciando...');
+          }
+        } catch {}
+        if (!loginRequested) await new Promise(r => setTimeout(r, 5000));
+      }
     }
 
     stopWebSocket();
