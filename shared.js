@@ -1,5 +1,6 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.22.1
-// v1.21.1: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
+// shared.js — Utilitários compartilhados MoskoGás v1.22.2
+// v1.22.2: Bling badge — onclick direto ao OAuth quando desconectado; tooltip mais claro; texto "🔴 Bling OFF — clique"
+// v1.22.1: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
 // v1.20.0: Banco de Posts adicionado ao menu Admin
 // v1.19.0: Brand Kits adicionado ao menu Config (admin root)
 // v1.19.0: Avaliações adicionado ao menu ADM
@@ -1039,14 +1040,28 @@ function initBlingMonitor(badgeId = 'bling-indicator') {
   // Garantir cursor pointer
   el.style.cursor = 'pointer';
 
-  // Click no badge → ensureBling (OAuth se necessário)
+  // Click no badge:
+  // - Se desconectado: abre OAuth direto (sem modal intermediário)
+  // - Se conectado: abre ensureBling para verificar/renovar
   el.onclick = async (e) => {
     e.preventDefault();
-    const ok = await ensureBling();
-    if (ok) {
-      _blingConnected = true;
-      _updateBlingBadge(el, true);
-      _hideBlingDisconnectBanner();
+    if (_blingConnected === false) {
+      // Desconectado: ir direto para reconexão OAuth
+      const ok = await ensureBling();
+      if (ok) {
+        _blingConnected = true;
+        _updateBlingBadge(el, true);
+        _hideBlingDisconnectBanner();
+        showToast('✅ Bling reconectado!', 'success');
+      }
+    } else {
+      // Conectado (ou desconhecido): verificar e reconectar se necessário
+      const ok = await ensureBling();
+      if (ok) {
+        _blingConnected = true;
+        _updateBlingBadge(el, true);
+        _hideBlingDisconnectBanner();
+      }
     }
   };
 
@@ -1081,12 +1096,12 @@ function _updateBlingBadge(el, ok) {
     // Dashboard usa classes CSS
     el.className = ok ? 'bling-badge bling-ok' : 'bling-badge bling-err';
     el.textContent = ok ? '✅ Bling OK' : '❌ Bling OFF';
-    el.title = ok ? 'Bling conectado — clique para verificar' : 'Clique para reconectar o Bling';
+    el.title = ok ? 'Bling conectado — clique para verificar' : '⚠️ Bling desconectado — clique para reconectar agora';
   } else {
     // Pedido/Gestao usa inline styles
     el.style.background = ok ? '#16a34a' : '#dc2626';
-    el.textContent = ok ? '🟢 Bling OK' : '🔴 Bling OFF';
-    el.title = ok ? 'Bling conectado — clique para verificar' : 'Clique para reconectar o Bling';
+    el.textContent = ok ? '🟢 Bling OK' : '🔴 Bling OFF — clique';
+    el.title = ok ? 'Bling conectado — clique para verificar' : '⚠️ Bling desconectado — clique aqui para reconectar agora';
   }
 }
 

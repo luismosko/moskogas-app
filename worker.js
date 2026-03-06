@@ -1,3 +1,5 @@
+// v2.49.30
+// v2.49.30: /bling/ping — verificação real cacheada (5min) elimina falso positivo. blingFetch e saveToken atualizam cache imediatamente
 // v2.49.29
 // v2.49.26: fix hub-status/start-login — authHub instanceof Response (corrige 401 falso que delogava)
 // v2.49.26: criarOportunidadeCRM usa pipelineId=4 direto (sem buscar por nome) + remove follow-up ao cliente (nota<5 só alerta admin)
@@ -229,6 +231,11 @@ async function saveToken(env, data) {
       access_token=?, refresh_token=?, expires_in=?, obtained_at=?
     WHERE id=1
   `).bind(data.access_token, data.refresh_token, data.expires_in || 3600, now).run();
+  // Marca verificação real como OK para que /bling/ping reflita estado real
+  try {
+    await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','true',datetime('now'))`).run();
+    await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
+  } catch(_) {}
 }
 
 async function refreshBlingToken(env, refreshToken) {
@@ -281,6 +288,8 @@ async function blingFetch(path, options = {}, env) {
     token = await getValidAccessToken(env);
   } catch (e) {
     if (e.message === 'no_token' || e.message?.includes('reauth')) {
+      // Marca cache como desconectado para que /bling/ping reflita imediatamente
+      try { await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','false',datetime('now'))`).run(); } catch(_) {}
       return new Response(JSON.stringify({ error: 'bling_reauth_required', message: 'Token Bling expirado. Reautorize em Config → Conectar Bling.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
     throw e;
@@ -294,6 +303,8 @@ async function blingFetch(path, options = {}, env) {
       token = await refreshBlingToken(env, row.refresh_token);
       resp = await doRequest(token);
     } catch (e) {
+      // Marca cache como desconectado para que /bling/ping reflita imediatamente
+      try { await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','false',datetime('now'))`).run(); } catch(_) {}
       return new Response(JSON.stringify({ error: 'bling_reauth_required', message: 'Sessão Bling expirada. Reautorize em Config → Conectar Bling.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
   }
@@ -1969,15 +1980,58 @@ export default {
         const now = Math.floor(Date.now() / 1000);
         const expiresAt = (row.obtained_at || 0) + (row.expires_in || 3600);
         const minutesLeft = Math.floor((expiresAt - now) / 60);
-        // Se ainda tem mais de 10 min, retorna ok SEM chamar API Bling (evita barra vermelha por rate limit/latência)
-        if (minutesLeft > 10) return json({ ok: true, minutesLeft });
-        // Próximo de vencer: valida e tenta renovar
+
+        // Token expirado ou próximo: tenta refresh
+        if (minutesLeft <= 10) {
+          try {
+            const newToken = await refreshBlingToken(env, row.refresh_token);
+            const newRow = await getTokenRow(env);
+            const ml2 = Math.floor(((newRow.obtained_at || 0) + (newRow.expires_in || 3600) - now) / 60);
+            return json({ ok: true, minutesLeft: ml2, refreshed: true });
+          } catch (re) {
+            try { await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','false',datetime('now'))`).run(); } catch(_) {}
+            return json({ ok: false, error: 'refresh_failed: ' + re.message });
+          }
+        }
+
+        // Token parece válido localmente — verificar cache de validação real
+        const cachedOk = await env.DB.prepare(`SELECT value FROM app_config WHERE key='bling_real_ok'`).first();
+        const cachedAt = await env.DB.prepare(`SELECT value FROM app_config WHERE key='bling_real_checked_at'`).first();
+        const lastChecked = cachedAt ? parseInt(cachedAt.value || '0') : 0;
+        const cacheAge = now - lastChecked;
+
+        // Cache válido (< 5 min) — usa resultado cacheado (evita flickering)
+        if (cacheAge < 300 && cachedOk) {
+          const isOk = cachedOk.value === 'true';
+          return json({ ok: isOk, minutesLeft, cached: true, cacheAgeSeconds: cacheAge });
+        }
+
+        // Cache expirado ou ausente — faz chamada real à API Bling
         try {
-          const newToken = await refreshBlingToken(env, row.refresh_token);
-          const newRow = await getTokenRow(env);
-          const ml2 = Math.floor(((newRow.obtained_at || 0) + (newRow.expires_in || 3600) - now) / 60);
-          return json({ ok: true, minutesLeft: ml2, refreshed: true });
-        } catch (re) { return json({ ok: false, error: 'refresh_failed: ' + re.message }); }
+          const testResp = await fetch('https://www.bling.com.br/Api/v3/situacoes/modulos', {
+            headers: { Authorization: `Bearer ${row.access_token}`, 'Content-Type': 'application/json', 'enable-jwt': '1' },
+          });
+          if (testResp.status === 401) {
+            // Token revogado — tenta refresh uma vez
+            try {
+              await refreshBlingToken(env, row.refresh_token);
+              await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','true',datetime('now'))`).run();
+              await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
+              return json({ ok: true, minutesLeft, refreshed: true });
+            } catch (_) {
+              await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','false',datetime('now'))`).run();
+              await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
+              return json({ ok: false, error: 'token_revoked' });
+            }
+          }
+          // API respondeu OK (qualquer status não-401 significa token aceito)
+          await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','true',datetime('now'))`).run();
+          await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
+          return json({ ok: true, minutesLeft, verified: true });
+        } catch (apiErr) {
+          // Erro de rede — usa timestamp local mas não atualiza cache
+          return json({ ok: true, minutesLeft, networkError: true });
+        }
       } catch (e) { return json({ ok: false, error: e.message }); }
     }
 
