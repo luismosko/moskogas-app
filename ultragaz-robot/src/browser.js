@@ -349,6 +349,16 @@ export async function getPendingOrders(page) {
   const allOrders = [];
   const seen = new Set();
 
+  // Recarrega a página para garantir dados atualizados
+  try {
+    log('Recarregando página do Hub para dados frescos...');
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForTimeout(1500);
+    log('Página recarregada!');
+  } catch(e) {
+    log(`Aviso: reload falhou (${e.message}) — continuando com página atual`);
+  }
+
   // Seletores das abas que contêm pedidos a processar
   const TABS = [
     { label: 'Pedidos Agendados',    selector: null },  // primeira aba ativa por padrão
