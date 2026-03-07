@@ -7564,12 +7564,14 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
         let moskogas_order_id = null;
         try {
+          // data_pedido = hoje no horário de Brasília (UTC-4)
+          const hoje_brt = new Date(now * 1000 - 4 * 3600 * 1000).toISOString().slice(0, 10);
           const r = await env.DB.prepare(`
             INSERT INTO orders (
               phone_digits, customer_name, address_line, bairro, complemento, referencia,
               items_json, total_value, notes, status, sync_status,
-              tipo_pagamento, pago, vendedor_nome, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOVO', 'pendente', ?, 0, 'Ultragaz Hub', ?, ?)
+              tipo_pagamento, pago, vendedor_nome, data_pedido, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOVO', 'pendente', ?, 0, 'Ultragaz Hub', ?, ?, ?)
           `).bind(
             phone_digits || '',
             customer_name || 'Cliente Ultragaz',
@@ -7581,7 +7583,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
             parseFloat(total_value) || 0,
             `Pedido Ultragaz #${ultragaz_order_id}`,
             tipo_pagamento || 'boleto_orgao',
-            now, now
+            hoje_brt, now, now
           ).run();
           moskogas_order_id = r.meta?.last_row_id || null;
         } catch (e) {
