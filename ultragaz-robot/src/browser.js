@@ -375,13 +375,12 @@ export async function getPendingOrders(page) {
     );
     log(`Abas encontradas: ${JSON.stringify(tabButtons)}`);
 
-    // Função para extrair IDs de pedidos da tabela visível
+    // Função para extrair IDs de pedidos da tabela visível — taga com a aba de origem
     const extractOrdersFromDOM = async (tabLabel) => {
-      const orders = await page.evaluate(() => {
+      const orders = await page.evaluate((tab) => {
         const rows = document.querySelectorAll('tr.t-Report-wrap, table tbody tr, .a-IRR-table tbody tr');
         const found = [];
         rows.forEach(row => {
-          // Procura link com ID numérico (ex: <a>21106736</a> ou célula com número 8+ dígitos)
           const links = row.querySelectorAll('a');
           let orderId = null;
           links.forEach(a => {
@@ -397,11 +396,11 @@ export async function getPendingOrders(page) {
           }
           if (orderId) {
             const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
-            found.push({ id: orderId, cells });
+            found.push({ id: orderId, cells, tab });
           }
         });
         return found;
-      });
+      }, tabLabel);
       log(`Aba [${tabLabel}]: ${orders.length} pedido(s) encontrado(s)`);
       return orders;
     };

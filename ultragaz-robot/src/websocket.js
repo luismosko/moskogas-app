@@ -282,22 +282,20 @@ export function stopWebSocket() {
 }
 
 // Parseia os detalhes retornados pelo GET_SELECTS para o formato MoskoGás
-// Layout das colunas da tabela Hub Ultragaz (confirmado em 06/03/2026):
-// [0]=ícone, [1]=pedidoID, [2]=data, [3]=cliente, [4]=produto, [5]=qtd,
-// [6]=formaPgto, [7]=endereço, [8]=vlrUnit, [9]=desconto, [10]=total,
-// [11]=modoReembolso, [12]=entregador
+//
+// Layout confirmado em 07/03/2026:
+// Aba "Em Aberto" / "Em Andamento":
+//   [0]=ícone, [1]=pedidoID, [2]=data, [3]=cliente, [4]=produto, [5]=qtd,
+//   [6]=formaPgto, [7]=endereço, [8]=vlrUnit, [9]=desconto, [10]=total, [11]=reembolso, [12]=entregador
+//
+// Aba "Agendados":
+//   [0]=pedidoID, [1]=modalidade, [2]=dataAgendada, [3]=horário, [4]=endereço,
+//   [5]=produto, [6]=qtd, [7]=vlrUnit, [8]=desconto, [9]=total, [10]=cliente
+//
 function parseDetails(details, rawData) {
   const d = details || {};
-
-  // Extrai dados do DOM cells (fonte principal — capturados pelo getPendingOrders)
   const cells = rawData.cells || [];
-  const domCliente  = cells[3] || '';
-  const domProduto  = cells[4] || '';
-  const domQtd      = cells[5] || '1';
-  const domPgto     = cells[6] || '';
-  const domEndereco = cells[7] || '';
-  const domVlrUnit  = cells[8] || '0';
-  const domTotal    = cells[10] || '0';
+  const tab   = rawData.tab  || '';
 
   // Normaliza valor (ex: "111,00" → 111.00)
   const parseValor = (v) => parseFloat(String(v).replace(/\./g, '').replace(',', '.')) || 0;
@@ -312,6 +310,28 @@ function parseDetails(details, rawData) {
     return p || 'P13';
   };
 
+  let domCliente, domProduto, domQtd, domPgto, domEndereco, domVlrUnit, domTotal;
+
+  if (/Agendad/i.test(tab)) {
+    // Aba Pedidos Agendados
+    domCliente  = cells[10] || '';
+    domProduto  = cells[5]  || '';
+    domQtd      = cells[6]  || '1';
+    domPgto     = cells[1]  || '';   // modalidade de entrega
+    domEndereco = cells[4]  || '';
+    domVlrUnit  = cells[7]  || '0';
+    domTotal    = cells[9]  || '0';
+  } else {
+    // Aba Em Aberto / Em Andamento
+    domCliente  = cells[3]  || '';
+    domProduto  = cells[4]  || '';
+    domQtd      = cells[5]  || '1';
+    domPgto     = cells[6]  || '';
+    domEndereco = cells[7]  || '';
+    domVlrUnit  = cells[8]  || '0';
+    domTotal    = cells[10] || '0';
+  }
+
   const customer_name   = d.NAME_CUSTOMER || d.NOME_CLIENTE || domCliente || '';
   const address_line    = d.ADDRESS || d.ENDERECO || domEndereco || '';
   const bairro          = d.BAIRRO || d.bairro || '';
@@ -325,7 +345,7 @@ function parseDetails(details, rawData) {
   const forma_pagamento = d.PAYMENT_FORM || d.FORMA_PAGAMENTO || domPgto || '';
 
   const log = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
-  log(`parseDetails — cliente:"${customer_name}" prod:"${produto}" qtd:${quantidade} total:${total_value} pgto:"${forma_pagamento}" end:"${address_line.substring(0,40)}"`);
+  log(`parseDetails [${tab}] — cliente:"${customer_name}" prod:"${produto}" qtd:${quantidade} total:${total_value} pgto:"${forma_pagamento}" end:"${address_line.substring(0,40)}"`);
 
   return {
     customer_name, address_line, bairro, complemento, referencia,
