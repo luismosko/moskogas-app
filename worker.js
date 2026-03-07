@@ -1,4 +1,5 @@
-// v2.49.30
+// v2.49.31
+// v2.49.31: busca clientes filtra phone_digits IS NOT NULL + saveContactsCache só salva com telefone
 // v2.49.30: /bling/ping — verificação real cacheada (5min) elimina falso positivo. blingFetch e saveToken atualizam cache imediatamente
 // v2.49.29
 // v2.49.26: fix hub-status/start-login — authHub instanceof Response (corrige 401 falso que delogava)
@@ -1641,7 +1642,7 @@ async function saveContactsCache(result, env) {
     await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => { });
   }
   for (const r of result) {
-    if (r.phone_digits || r.bling_contact_id) {
+    if (r.phone_digits) { // Só salva se tem telefone — sem telefone é inútil para pedidos
       try {
         await env.DB.prepare(`
           INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, tipo_pessoa, email, updated_at)
@@ -2471,7 +2472,7 @@ export default {
       // v2.28.0: busca multi-palavra — cada palavra vira um AND LIKE separado
       const nameWords = qName ? qName.split(/\s+/).filter(Boolean) : [];
       {
-        let sql = 'SELECT * FROM customers_cache WHERE 1=1'; const p = [];
+        let sql = 'SELECT * FROM customers_cache WHERE phone_digits IS NOT NULL'; const p = [];
         if (qPhone) { sql += ' AND phone_digits LIKE ?'; p.push(`%${qPhone}%`); }
         for (const w of nameWords) { sql += ' AND name LIKE ?'; p.push(`%${w}%`); }
         if (qAddr) { sql += ' AND (address_line LIKE ? OR bairro LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`); }
