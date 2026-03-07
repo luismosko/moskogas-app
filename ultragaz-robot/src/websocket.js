@@ -313,14 +313,16 @@ function parseDetails(details, rawData) {
   let domCliente, domProduto, domQtd, domPgto, domEndereco, domVlrUnit, domTotal;
 
   if (/Agendad/i.test(tab)) {
-    // Aba Pedidos Agendados
-    domCliente  = cells[10] || '';
-    domProduto  = cells[5]  || '';
-    domQtd      = cells[6]  || '1';
-    domPgto     = cells[1]  || '';   // modalidade de entrega
-    domEndereco = cells[4]  || '';
-    domVlrUnit  = cells[7]  || '0';
-    domTotal    = cells[9]  || '0';
+    // Aba Pedidos Agendados — layout confirmado 07/03/2026:
+    // [0]=ícone [1]=pedidoID [2]=modalidade [3]=data [4]=horário
+    // [5]=endereço [6]=produto [7]=qtd [8]=vlrUnit [9]=desconto [10]=total [11]=cliente [12]=Cancelar
+    domCliente  = cells[11] || '';
+    domProduto  = cells[6]  || '';
+    domQtd      = cells[7]  || '1';
+    domPgto     = cells[2]  || '';   // modalidade de entrega
+    domEndereco = cells[5]  || '';
+    domVlrUnit  = cells[8]  || '0';
+    domTotal    = cells[10] || '0';
   } else {
     // Aba Em Aberto / Em Andamento
     domCliente  = cells[3]  || '';
