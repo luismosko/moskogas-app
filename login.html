@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login — MoskoApp v1.2.0</title>
+<title>Login — MoskoApp v1.3.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -43,9 +43,151 @@
     <button type="submit" class="btn-login" id="btn-submit">🔐 Entrar</button>
   </form>
 
-  <div class="version-badge">v1.2.0 — login</div>
+  <div style="text-align:center;margin-top:12px">
+    <a href="#" onclick="abrirRecuperacao();return false;" style="font-size:13px;color:#f97316;text-decoration:none;font-weight:600">🔑 Esqueci minha senha</a>
+  </div>
 
-  <!-- Bling Status -->
+  <div class="version-badge">v1.3.0 — login</div>
+
+  <!-- Modal Recuperação de Senha -->
+<div id="modal-recuperar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:32px 28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="margin:0;font-size:18px;color:#1e293b">🔑 Recuperar Senha</h2>
+      <button onclick="fecharRecuperacao()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;line-height:1">&times;</button>
+    </div>
+
+    <!-- Etapa 1: Login -->
+    <div id="rec-step1">
+      <p style="font-size:14px;color:#64748b;margin-bottom:16px">Digite seu login para receber o código de verificação por WhatsApp e/ou e-mail.</p>
+      <label style="display:block;font-size:12px;font-weight:700;color:#64748b;margin-bottom:4px;text-transform:uppercase">Login</label>
+      <input type="text" id="rec-login" autocapitalize="off" autocomplete="off" placeholder="seu.login"
+        style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;margin-bottom:16px">
+      <div id="rec-err1" style="background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:12px;display:none"></div>
+      <button onclick="enviarCodigo()" id="rec-btn1" style="width:100%;padding:13px;background:#f97316;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">📨 Enviar Código</button>
+    </div>
+
+    <!-- Etapa 2: Código + Nova Senha -->
+    <div id="rec-step2" style="display:none">
+      <div id="rec-canais" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#166534"></div>
+      <label style="display:block;font-size:12px;font-weight:700;color:#64748b;margin-bottom:4px;text-transform:uppercase">Código recebido</label>
+      <input type="text" id="rec-codigo" maxlength="6" placeholder="000000" autocomplete="off"
+        style="width:100%;padding:14px;border:2px solid #e2e8f0;border-radius:8px;font-size:28px;font-weight:800;letter-spacing:10px;text-align:center;margin-bottom:16px;font-family:monospace"
+        oninput="this.value=this.value.replace(/\D/g,'')">
+      <label style="display:block;font-size:12px;font-weight:700;color:#64748b;margin-bottom:4px;text-transform:uppercase">Nova Senha</label>
+      <input type="password" id="rec-nova" placeholder="Mínimo 6 caracteres"
+        style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;margin-bottom:12px">
+      <label style="display:block;font-size:12px;font-weight:700;color:#64748b;margin-bottom:4px;text-transform:uppercase">Confirmar Nova Senha</label>
+      <input type="password" id="rec-confirma" placeholder="Repita a senha"
+        style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;margin-bottom:16px">
+      <div id="rec-err2" style="background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:12px;display:none"></div>
+      <button onclick="confirmarCodigo()" id="rec-btn2" style="width:100%;padding:13px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">✅ Redefinir Senha</button>
+      <button onclick="voltarEtapa1()" style="width:100%;padding:10px;background:none;border:none;color:#94a3b8;font-size:13px;cursor:pointer;margin-top:8px">← Voltar</button>
+    </div>
+
+    <!-- Etapa 3: Sucesso -->
+    <div id="rec-step3" style="display:none;text-align:center;padding:16px 0">
+      <div style="font-size:56px;margin-bottom:12px">🎉</div>
+      <h3 style="color:#16a34a;margin:0 0 8px">Senha redefinida!</h3>
+      <p style="color:#64748b;font-size:14px;margin-bottom:20px">Sua senha foi atualizada com sucesso. Faça login com a nova senha.</p>
+      <button onclick="fecharRecuperacao()" style="padding:12px 32px;background:#f97316;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🔐 Ir para Login</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _recLogin = '';
+
+function abrirRecuperacao() {
+  document.getElementById('modal-recuperar').style.display = 'flex';
+  document.getElementById('rec-login').focus();
+}
+function fecharRecuperacao() {
+  document.getElementById('modal-recuperar').style.display = 'none';
+  voltarEtapa1();
+}
+function voltarEtapa1() {
+  document.getElementById('rec-step1').style.display = 'block';
+  document.getElementById('rec-step2').style.display = 'none';
+  document.getElementById('rec-step3').style.display = 'none';
+  document.getElementById('rec-err1').style.display = 'none';
+  document.getElementById('rec-codigo').value = '';
+  document.getElementById('rec-nova').value = '';
+  document.getElementById('rec-confirma').value = '';
+}
+
+async function enviarCodigo() {
+  const login = document.getElementById('rec-login').value.trim().toLowerCase();
+  const err1 = document.getElementById('rec-err1');
+  const btn = document.getElementById('rec-btn1');
+  err1.style.display = 'none';
+  if (!login) { err1.textContent = 'Digite seu login'; err1.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '⏳ Enviando...';
+  try {
+    const r = await fetch(API_BASE + '/api/auth/recuperar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login })
+    });
+    const data = await r.json();
+    if (!data.ok) { err1.textContent = data.error || 'Erro ao enviar código'; err1.style.display = 'block'; return; }
+    _recLogin = login;
+    // Monta mensagem de canais
+    const canais = [];
+    if (data.sent?.whatsapp) canais.push('📱 WhatsApp');
+    if (data.sent?.email) canais.push('📧 E-mail');
+    const canaisEl = document.getElementById('rec-canais');
+    if (canais.length) {
+      canaisEl.innerHTML = `✅ Código enviado via ${canais.join(' e ')}`;
+    } else {
+      canaisEl.style.background = '#fefce8'; canaisEl.style.borderColor = '#fef08a'; canaisEl.style.color = '#854d0e';
+      canaisEl.innerHTML = '⚠️ Código gerado. Se não receber, fale com o administrador.';
+    }
+    document.getElementById('rec-step1').style.display = 'none';
+    document.getElementById('rec-step2').style.display = 'block';
+    setTimeout(() => document.getElementById('rec-codigo').focus(), 100);
+  } catch(e) {
+    err1.textContent = 'Erro de conexão: ' + e.message; err1.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '📨 Enviar Código';
+  }
+}
+
+async function confirmarCodigo() {
+  const codigo = document.getElementById('rec-codigo').value.trim();
+  const nova = document.getElementById('rec-nova').value;
+  const confirma = document.getElementById('rec-confirma').value;
+  const err2 = document.getElementById('rec-err2');
+  const btn = document.getElementById('rec-btn2');
+  err2.style.display = 'none';
+  if (!codigo || codigo.length !== 6) { err2.textContent = 'Digite o código de 6 dígitos'; err2.style.display = 'block'; return; }
+  if (!nova || nova.length < 6) { err2.textContent = 'Senha mínima: 6 caracteres'; err2.style.display = 'block'; return; }
+  if (nova !== confirma) { err2.textContent = 'As senhas não coincidem'; err2.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = '⏳ Verificando...';
+  try {
+    const r = await fetch(API_BASE + '/api/auth/recuperar/verificar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: _recLogin, token: codigo, nova_senha: nova })
+    });
+    const data = await r.json();
+    if (!data.ok) { err2.textContent = data.error || 'Código inválido ou expirado'; err2.style.display = 'block'; return; }
+    document.getElementById('rec-step2').style.display = 'none';
+    document.getElementById('rec-step3').style.display = 'block';
+  } catch(e) {
+    err2.textContent = 'Erro de conexão: ' + e.message; err2.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Redefinir Senha';
+  }
+}
+
+// Enter nos campos
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  if (document.getElementById('rec-step1').style.display !== 'none' && document.activeElement === document.getElementById('rec-login')) enviarCodigo();
+  if (document.getElementById('rec-step2').style.display !== 'none' && (document.activeElement === document.getElementById('rec-confirma') || document.activeElement === document.getElementById('rec-nova'))) confirmarCodigo();
+});
+</script>
+
+
   <div id="bling-section" style="margin-top:16px;padding:14px;background:#f8fafc;border-radius:10px;border:2px solid #e2e8f0;display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="display:flex;align-items:center;gap:8px">

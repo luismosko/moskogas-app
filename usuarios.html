@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Usuários — MoskoApp v1.4.1</title>
+<title>Usuários — MoskoApp v1.5.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -43,7 +43,7 @@
 <div id="nav-container"></div>
 
 <div class="container">
-  <h1>👥 Gestão de Usuários v1.4.1</h1>
+  <h1>👥 Gestão de Usuários v1.5.0</h1>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
@@ -64,7 +64,7 @@
     <div id="empty-msg" style="display:none;text-align:center;padding:20px;color:#94a3b8;">Nenhum usuário cadastrado</div>
   </div>
 
-  <div class="version-badge">v1.4.1 — usuários</div>
+  <div class="version-badge">v1.5.0 — usuários</div>
 </div>
 
 <!-- Modal Criar/Editar -->
@@ -98,6 +98,9 @@
 
     <label>Telefone</label>
     <input type="tel" id="m-telefone" placeholder="67999999999">
+
+    <label>E-mail <span style="font-size:11px;font-weight:400;color:#94a3b8">(para recuperação de senha)</span></label>
+    <input type="email" id="m-email" placeholder="usuario@email.com">
 
     <div style="display:flex;gap:20px;margin:8px 0 12px;">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;font-size:14px;">
@@ -267,6 +270,7 @@ function openModal(user = null) {
   document.getElementById('m-role').value = user?.role || 'entregador';
   document.getElementById('m-vendedor').value = user?.bling_vendedor_id || '';
   document.getElementById('m-telefone').value = user?.telefone || '';
+  document.getElementById('m-email').value = user?.email || '';
   document.getElementById('m-ativo').value = user ? (user.ativo ? '1' : '0') : '1';
 
   // Flags entrega/whatsapp — default: entregador=ambos ligados, outros=desligados
@@ -307,12 +311,13 @@ async function saveUser() {
     const selectedOpt = vendedorSel.options[vendedorSel.selectedIndex];
     const bling_vendedor_nome = vendedorSel.value ? (selectedOpt.dataset.nome || selectedOpt.textContent.trim()) : null;
     const telefone = document.getElementById('m-telefone').value.trim();
+    const email = document.getElementById('m-email').value.trim();
     const ativo = parseInt(document.getElementById('m-ativo').value);
 
     if (!nome || !login) { toast('Nome e login obrigatórios', 'error'); return; }
     if (!id && !senha) { toast('Senha obrigatória para novo usuário', 'error'); return; }
 
-    const payload = { nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, ativo,
+    const payload = { nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, ativo,
       pode_entregar: document.getElementById('m-pode-entregar').checked ? 1 : 0,
       recebe_whatsapp: document.getElementById('m-recebe-whatsapp').checked ? 1 : 0
     };

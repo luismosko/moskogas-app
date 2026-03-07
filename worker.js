@@ -1,4 +1,5 @@
-// v2.49.34
+// v2.49.35
+// v2.49.35: Recuperação de senha por WhatsApp+Email (OTP 6 dígitos, 15min) + campo email em app_users
 // v2.49.34: busca endereço inclui complemento; frontend normaliza "rua 933" → "rua, 933"; complemento visível na listagem
 // v2.49.32: search-bling-nome multi-estratégia: por palavra individual + CNPJ fallback
 // v2.49.31: busca clientes filtra phone_digits IS NOT NULL + saveContactsCache só salva com telefone
@@ -161,6 +162,16 @@ async function ensureAuthTables(env) {
   // Migrate: add columns if missing
   await env.DB.prepare("ALTER TABLE app_users ADD COLUMN pode_entregar INTEGER DEFAULT 0").run().catch(() => { });
   await env.DB.prepare("ALTER TABLE app_users ADD COLUMN recebe_whatsapp INTEGER DEFAULT 0").run().catch(() => { });
+  // v2.49.35: email em app_users + tabela reset senha
+  await env.DB.prepare("ALTER TABLE app_users ADD COLUMN email TEXT DEFAULT ''").run().catch(() => { });
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch())
+  )`).run().catch(() => { });
   // Set defaults: entregadores existentes ganham pode_entregar=1, recebe_whatsapp=1
   await env.DB.prepare("UPDATE app_users SET pode_entregar=1, recebe_whatsapp=1 WHERE role='entregador' AND pode_entregar=0 AND recebe_whatsapp=0 AND ativo=1").run().catch(() => { });
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -2198,6 +2209,81 @@ export default {
 
     // ── AUTH: Login / Sessão / Logout (SEM autenticação prévia) ──
 
+    // v2.49.35: Recuperação de senha por WhatsApp e/ou Email
+    if (method === 'POST' && path === '/api/auth/recuperar') {
+      await ensureAuthTables(env);
+      const body = await request.json();
+      const { login } = body;
+      if (!login) return err('Login obrigatório');
+      const user = await env.DB.prepare('SELECT * FROM app_users WHERE login = ? AND ativo = 1').bind(login.toLowerCase().trim()).first();
+      // Retorna ok mesmo se usuário não existir (evita enumeração)
+      if (!user || (!user.email && !user.telefone)) return json({ ok: true, sent: { whatsapp: false, email: false } });
+      // Gera OTP 6 dígitos
+      const otp = String(Math.floor(100000 + Math.random() * 900000));
+      const expires = Math.floor(Date.now() / 1000) + 900; // 15 min
+      await env.DB.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').bind(user.id).run();
+      await env.DB.prepare('INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').bind(user.id, otp, expires).run();
+      const sent = { whatsapp: false, email: false };
+      // Envia por WhatsApp
+      if (user.telefone) {
+        const phone = user.telefone.replace(/\D/g, '');
+        const to = phone.startsWith('55') ? phone : '55' + phone;
+        const msg = `🔐 *MoskoApp — Recuperação de Senha*\n\nOlá, ${user.nome}!\n\nSeu código de verificação:\n\n*${otp}*\n\nVálido por 15 minutos.\nNão compartilhe este código.`;
+        const r = await sendWhatsApp(env, to, msg, { category: 'sistema' });
+        sent.whatsapp = !!r.ok;
+      }
+      // Envia por Email
+      if (user.email) {
+        try {
+          const resendKey = env.RESEND_API_KEY || (await env.DB.prepare("SELECT value FROM app_config WHERE key='resend_api_key'").first())?.value;
+          if (resendKey) {
+            const er = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                from: 'MoskoApp <noreply@moskogas.com.br>',
+                to: [user.email],
+                subject: '🔐 Código de recuperação de senha — MoskoApp',
+                html: `<div style="font-family:sans-serif;max-width:420px;margin:0 auto;padding:32px;background:#fff">
+                  <div style="text-align:center;margin-bottom:24px">
+                    <h2 style="color:#1e293b;margin:0">🔐 Recuperação de Senha</h2>
+                    <p style="color:#64748b;margin:8px 0 0">MoskoApp — Sistema de Gestão</p>
+                  </div>
+                  <p style="color:#334155">Olá, <strong>${user.nome}</strong>!</p>
+                  <p style="color:#334155">Seu código de verificação para redefinir a senha:</p>
+                  <div style="background:#f1f5f9;border-radius:12px;padding:28px;text-align:center;margin:20px 0;border:2px dashed #e2e8f0">
+                    <span style="font-size:42px;font-weight:800;letter-spacing:10px;color:#f97316;font-family:monospace">${otp}</span>
+                  </div>
+                  <p style="color:#94a3b8;font-size:13px;text-align:center">⏰ Válido por <strong>15 minutos</strong>. Não compartilhe este código.</p>
+                </div>`
+              })
+            });
+            sent.email = er.ok;
+          }
+        } catch (_) { }
+      }
+      return json({ ok: true, sent });
+    }
+
+    if (method === 'POST' && path === '/api/auth/recuperar/verificar') {
+      await ensureAuthTables(env);
+      const body = await request.json();
+      const { login, token, nova_senha } = body;
+      if (!login || !token || !nova_senha) return err('Dados incompletos');
+      if (nova_senha.length < 6) return err('Senha mínima: 6 caracteres');
+      const user = await env.DB.prepare('SELECT * FROM app_users WHERE login = ? AND ativo = 1').bind(login.toLowerCase().trim()).first();
+      if (!user) return json({ ok: false, error: 'Código inválido ou expirado' }, 400);
+      const now = Math.floor(Date.now() / 1000);
+      const rec = await env.DB.prepare('SELECT * FROM password_reset_tokens WHERE user_id = ? AND token = ? AND used = 0 AND expires_at > ?').bind(user.id, token.trim(), now).first();
+      if (!rec) return json({ ok: false, error: 'Código inválido ou expirado' }, 400);
+      const salt = generateToken().slice(0, 32);
+      const hash = await hashPassword(nova_senha, salt);
+      await env.DB.prepare('UPDATE app_users SET senha_hash=?, senha_salt=?, updated_at=unixepoch() WHERE id=?').bind(hash, salt, user.id).run();
+      await env.DB.prepare('UPDATE password_reset_tokens SET used=1 WHERE id=?').bind(rec.id).run();
+      await env.DB.prepare('DELETE FROM auth_sessions WHERE user_id=?').bind(user.id).run();
+      return json({ ok: true });
+    }
+
     if (method === 'POST' && path === '/api/auth/login') {
       await ensureAuthTables(env);
       const body = await request.json();
@@ -2302,8 +2388,8 @@ export default {
       await ensureAuthTables(env);
       const isAdmin = authCheck.role === 'admin';
       const sql = isAdmin
-        ? 'SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users ORDER BY nome'
-        : "SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users WHERE role IN ('atendente','entregador') ORDER BY nome";
+        ? 'SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users ORDER BY nome'
+        : "SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users WHERE role IN ('atendente','entregador') ORDER BY nome";
       const rows = await env.DB.prepare(sql).all();
       return json(rows.results || []);
     }
@@ -2314,7 +2400,7 @@ export default {
       await ensureAuthTables(env);
       const isAdmin = authCheck.role === 'admin';
       const body = await request.json();
-      const { id, nome, login, senha, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo } = body;
+      const { id, nome, login, senha, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo } = body;
       if (!nome || !login) return err('Nome e login obrigatórios');
       if (!['admin', 'atendente', 'entregador'].includes(role || 'entregador')) return err('Role inválido');
 
@@ -2334,11 +2420,11 @@ export default {
         if (senha) {
           const salt = crypto.randomUUID();
           const hash = await hashPassword(senha, salt);
-          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, senha_hash=?, senha_salt=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
-            .bind(nome, login.toLowerCase().trim(), hash, salt, role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1, id).run();
+          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, senha_hash=?, senha_salt=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, email=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
+            .bind(nome, login.toLowerCase().trim(), hash, salt, role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, email || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1, id).run();
         } else {
-          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
-            .bind(nome, login.toLowerCase().trim(), role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1, id).run();
+          await env.DB.prepare('UPDATE app_users SET nome=?, login=?, role=?, bling_vendedor_id=?, bling_vendedor_nome=?, telefone=?, email=?, pode_entregar=?, recebe_whatsapp=?, ativo=?, updated_at=unixepoch() WHERE id=?')
+            .bind(nome, login.toLowerCase().trim(), role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, email || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1, id).run();
         }
         if (ativo !== undefined && !ativo) {
           await env.DB.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(id).run().catch(() => { });
@@ -2350,8 +2436,8 @@ export default {
         if (dup) return err('Login já existe');
         const salt = crypto.randomUUID();
         const hash = await hashPassword(senha, salt);
-        const result = await env.DB.prepare('INSERT INTO app_users (nome, login, senha_hash, senha_salt, role, bling_vendedor_id, bling_vendedor_nome, telefone, pode_entregar, recebe_whatsapp, ativo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(nome, login.toLowerCase().trim(), hash, salt, role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1).run();
+        const result = await env.DB.prepare('INSERT INTO app_users (nome, login, senha_hash, senha_salt, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(nome, login.toLowerCase().trim(), hash, salt, role || 'entregador', bling_vendedor_id || null, bling_vendedor_nome || null, telefone || null, email || null, pode_entregar ? 1 : 0, recebe_whatsapp ? 1 : 0, ativo !== undefined ? (ativo ? 1 : 0) : 1).run();
         return json({ ok: true, id: result.meta?.last_row_id });
       }
     }
