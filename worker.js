@@ -1,5 +1,5 @@
-// v2.49.33
-// v2.49.33: Ultragaz INSERT — data_pedido em BRT (pedidos aparecem na gestão no dia correto)
+// v2.49.34
+// v2.49.34: busca endereço inclui complemento; frontend normaliza "rua 933" → "rua, 933"; complemento visível na listagem
 // v2.49.32: search-bling-nome multi-estratégia: por palavra individual + CNPJ fallback
 // v2.49.31: busca clientes filtra phone_digits IS NOT NULL + saveContactsCache só salva com telefone
 // v2.49.30: /bling/ping — verificação real cacheada (5min) elimina falso positivo. blingFetch e saveToken atualizam cache imediatamente
@@ -2477,7 +2477,7 @@ export default {
         let sql = 'SELECT * FROM customers_cache WHERE phone_digits IS NOT NULL'; const p = [];
         if (qPhone) { sql += ' AND phone_digits LIKE ?'; p.push(`%${qPhone}%`); }
         for (const w of nameWords) { sql += ' AND name LIKE ?'; p.push(`%${w}%`); }
-        if (qAddr) { sql += ' AND (address_line LIKE ? OR bairro LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`); }
+        if (qAddr) { sql += ' AND (address_line LIKE ? OR bairro LIKE ? OR complemento LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`, `%${qAddr}%`); }
         sql += ' ORDER BY name ASC LIMIT 15';
         const rows = await env.DB.prepare(sql).bind(...p).all().then(r => r.results || []);
         for (const r of rows) {
@@ -2490,13 +2490,13 @@ export default {
       }
 
       if (qAddr || nameWords.length > 0) {
-        const addrCond = qAddr ? '(ca.address_line LIKE ? OR ca.bairro LIKE ? OR ca.obs LIKE ?)' : null;
+        const addrCond = qAddr ? '(ca.address_line LIKE ? OR ca.bairro LIKE ? OR ca.obs LIKE ? OR ca.complemento LIKE ?)' : null;
         // multi-palavra: cada palavra vira (cc.name LIKE ? OR ca.obs LIKE ?)
         const nameCondParts = nameWords.map(() => '(cc.name LIKE ? OR ca.obs LIKE ?)');
         const conditions = [addrCond, ...nameCondParts].filter(Boolean).join(' AND ');
         let sql2 = `SELECT cc.*, ca.address_line AS ca_addr, ca.bairro AS ca_bairro, ca.complemento AS ca_comp, ca.referencia AS ca_ref, ca.obs AS ca_obs FROM customer_addresses ca JOIN customers_cache cc ON cc.phone_digits = ca.phone_digits WHERE ${conditions}`;
         const p2 = [];
-        if (qAddr) p2.push(`%${qAddr}%`, `%${qAddr}%`, `%${qAddr}%`);
+        if (qAddr) p2.push(`%${qAddr}%`, `%${qAddr}%`, `%${qAddr}%`, `%${qAddr}%`);
         for (const w of nameWords) p2.push(`%${w}%`, `%${w}%`);
         if (qPhone) { sql2 += ' AND ca.phone_digits LIKE ?'; p2.push(`%${qPhone}%`); }
         sql2 += ' ORDER BY cc.name ASC LIMIT 15';
