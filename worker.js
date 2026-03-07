@@ -1,4 +1,5 @@
-// v2.49.31
+// v2.49.32
+// v2.49.32: search-bling-nome multi-estratégia: por palavra individual + CNPJ fallback
 // v2.49.31: busca clientes filtra phone_digits IS NOT NULL + saveContactsCache só salva com telefone
 // v2.49.30: /bling/ping — verificação real cacheada (5min) elimina falso positivo. blingFetch e saveToken atualizam cache imediatamente
 // v2.49.29
@@ -2910,22 +2911,40 @@ export default {
     }
 
     // ── Busca contato Bling por nome (para vincular cliente) ──
+    // v2.49.32: busca multi-estratégia — nome completo → cada palavra → CNPJ
     if (method === 'GET' && path === '/api/customer/search-bling-nome') {
       const q = (url.searchParams.get('q') || '').trim();
       if (!q || q.length < 2) return json([]);
+      const mapContato = c => ({ id: c.id, nome: c.nome, fantasia: c.fantasia || '', numeroDocumento: c.numeroDocumento || '', telefone: c.telefone || c.celular || '', email: c.email || '' });
+      const blingBuscar = async (termo) => {
+        try {
+          const r = await blingFetch(`/contatos?pagina=1&limite=10&pesquisa=${encodeURIComponent(termo)}&situacao=A`, {}, env);
+          if (!r.ok) return [];
+          const d = await r.json();
+          return (d.data || []).map(mapContato);
+        } catch { return []; }
+      };
       try {
-        const resp = await blingFetch(`/contatos?pagina=1&limite=10&pesquisa=${encodeURIComponent(q)}&situacao=A`, {}, env);
-        if (!resp.ok) return json([]);
-        const data = await resp.json();
-        const results = (data.data || []).map(c => ({
-          id: c.id,
-          nome: c.nome,
-          fantasia: c.fantasia || '',
-          numeroDocumento: c.numeroDocumento || '',
-          telefone: c.telefone || c.celular || '',
-          email: c.email || '',
-        }));
-        return json(results);
+        // 1) Busca pelo termo completo
+        let results = await blingBuscar(q);
+        // 2) Se não achou: tenta cada palavra individualmente (≥4 chars) — ex: "GIRELLI" acha "EDUARDO GIRELLI..."
+        if (!results.length) {
+          const palavras = q.split(/\s+/).filter(p => p.length >= 4);
+          const seen = new Set();
+          for (const palavra of palavras) {
+            const parcial = await blingBuscar(palavra);
+            for (const c of parcial) {
+              if (!seen.has(c.id)) { seen.add(c.id); results.push(c); }
+            }
+            if (results.length >= 10) break;
+          }
+        }
+        // 3) Se ainda não achou: tenta só números (possível CNPJ/CPF)
+        if (!results.length) {
+          const soNumeros = q.replace(/\D/g, '');
+          if (soNumeros.length >= 8) results = await blingBuscar(soNumeros);
+        }
+        return json(results.slice(0, 10));
       } catch (e) { return json([]); }
     }
 
