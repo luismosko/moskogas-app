@@ -1,4 +1,5 @@
-// v2.49.32
+// v2.49.33
+// v2.49.33: Ultragaz INSERT — data_pedido em BRT (pedidos aparecem na gestão no dia correto)
 // v2.49.32: search-bling-nome multi-estratégia: por palavra individual + CNPJ fallback
 // v2.49.31: busca clientes filtra phone_digits IS NOT NULL + saveContactsCache só salva com telefone
 // v2.49.30: /bling/ping — verificação real cacheada (5min) elimina falso positivo. blingFetch e saveToken atualizam cache imediatamente
