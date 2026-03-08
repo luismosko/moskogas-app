@@ -1,4 +1,5 @@
-// v2.49.36
+// v2.49.37
+// v2.49.37: checkPermRole() — permissões dinâmicas do Gerente lidas do banco (cancelar, reabrir, editar entregue)
 // v2.49.36: role 'gerente' — hierarquia admin>gerente>atendente>entregador; acessa whatsapp safety, auditoria, cria atendente/entregador
 // v2.49.35: Recuperação de senha por WhatsApp+Email (OTP 6 dígitos, 15min) + campo email em app_users
 // v2.49.34: busca endereço inclui complemento; frontend normaliza "rua 933" → "rua, 933"; complemento visível na listagem
@@ -218,6 +219,39 @@ async function getSessionUser(request, env) {
   const now = Math.floor(Date.now() / 1000);
   const session = await env.DB.prepare('SELECT s.*, u.* FROM auth_sessions s JOIN app_users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ? AND u.ativo = 1').bind(token, now).first();
   return session || null;
+}
+
+// ── v2.49.37: Leitura dinâmica de permissões por role ─────────
+// Retorna true se o usuário tem a permissão, false caso contrário.
+// Admin sempre tem tudo. Gerente usa chaves gerente_*. Atendente usa atendente_*.
+async function checkPermRole(env, user, permKey) {
+  if (!user || user.role === 'admin') return true;
+  const role = user.role; // 'gerente' | 'atendente' | 'entregador'
+  const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
+  let perms = {};
+  try { if (permRow?.value) perms = JSON.parse(permRow.value); } catch { }
+  // Monta a chave correta para o role: ex. permKey='reabrir_entregue' → 'gerente_reabrir_entregue'
+  const fullKey = `${role}_${permKey}`;
+  // Se a chave não existir no banco, usa defaults sensatos por permissão
+  const defaults = {
+    atendente_reabrir_entregue:  true,
+    atendente_reabrir_cancelado: false,
+    atendente_cancelar:          true,
+    atendente_editar_entregue:   false,
+    atendente_relatorio:         true,
+    atendente_dashboard:         true,
+    atendente_auditoria:         true,
+    gerente_reabrir_entregue:    true,
+    gerente_reabrir_cancelado:   true,
+    gerente_cancelar:            true,
+    gerente_editar_entregue:     true,
+    gerente_criar_usuarios:      true,
+    gerente_relatorio:           true,
+    gerente_dashboard:           true,
+    gerente_auditoria:           true,
+    gerente_whatsapp_safety:     true,
+  };
+  return fullKey in perms ? perms[fullKey] : (defaults[fullKey] ?? false);
 }
 
 async function requireAuth(request, env, allowedRoles = null) {
@@ -3326,10 +3360,8 @@ export default {
       if (currentOrder.status === 'entregue') {
         const editUser = await getSessionUser(request, env);
         if (editUser && editUser.role !== 'admin') {
-          const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
-          let perms = { atendente_editar_entregue: false };
-          try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch { }
-          if (!perms.atendente_editar_entregue) return err('Sem permissão para editar pedido entregue. Peça ao admin.', 403);
+          const allowed = await checkPermRole(env, editUser, 'editar_entregue');
+          if (!allowed) return err('Sem permissão para editar pedido entregue. Peça ao admin.', 403);
         }
       }
 
@@ -3770,10 +3802,8 @@ export default {
       // Verificar permissão atendente para cancelar
       const isAdmin = user.role === 'admin';
       if (!isAdmin) {
-        const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
-        let perms = { atendente_cancelar: true };
-        try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch { }
-        if (!perms.atendente_cancelar) return err('Sem permissão para cancelar pedido. Peça ao admin.', 403);
+        const allowed = await checkPermRole(env, user, 'cancelar');
+        if (!allowed) return err('Sem permissão para cancelar pedido. Peça ao admin.', 403);
       }
 
       // Motivo obrigatório
@@ -3833,21 +3863,17 @@ export default {
       const statusAnterior = order.status;
       if (statusAnterior === novoStatus) return err('Pedido já está com status: ' + novoStatus, 400);
 
-      // Carregar permissões dinâmicas
-      const permRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='permissoes'").first().catch(() => null);
-      let perms = { atendente_reabrir_entregue: true, atendente_reabrir_cancelado: false };
-      try { if (permRow?.value) perms = { ...perms, ...JSON.parse(permRow.value) }; } catch { }
-
       const isAdmin = user.role === 'admin';
 
-      // Verificar permissão para reverter cancelado
-      if (statusAnterior === 'cancelado' && !isAdmin && !perms.atendente_reabrir_cancelado) {
-        return err('Sem permissão para reabrir pedido cancelado. Peça ao admin.', 403);
+      // Verificar permissão dinâmica por role para reverter
+      if (statusAnterior === 'cancelado' && !isAdmin) {
+        const allowed = await checkPermRole(env, user, 'reabrir_cancelado');
+        if (!allowed) return err('Sem permissão para reabrir pedido cancelado. Peça ao admin.', 403);
       }
 
-      // Verificar permissão para reverter entregue
-      if (statusAnterior === 'entregue' && !isAdmin && !perms.atendente_reabrir_entregue) {
-        return err('Sem permissão para reverter pedido entregue. Peça ao admin.', 403);
+      if (statusAnterior === 'entregue' && !isAdmin) {
+        const allowed = await checkPermRole(env, user, 'reabrir_entregue');
+        if (!allowed) return err('Sem permissão para reverter pedido entregue. Peça ao admin.', 403);
       }
 
       // Reverter status
