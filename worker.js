@@ -1,4 +1,5 @@
-// v2.49.35
+// v2.49.36
+// v2.49.36: role 'gerente' — hierarquia admin>gerente>atendente>entregador; acessa whatsapp safety, auditoria, cria atendente/entregador
 // v2.49.35: Recuperação de senha por WhatsApp+Email (OTP 6 dígitos, 15min) + campo email em app_users
 // v2.49.34: busca endereço inclui complemento; frontend normaliza "rua 933" → "rua, 933"; complemento visível na listagem
 // v2.49.32: search-bling-nome multi-estratégia: por palavra individual + CNPJ fallback
@@ -2383,32 +2384,37 @@ export default {
     // ── AUTH: Gestão de Usuários (requer admin) ─────────────────
 
     if (method === 'GET' && path === '/api/auth/users') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuthTables(env);
       const isAdmin = authCheck.role === 'admin';
+      const roleOrder = "CASE role WHEN 'admin' THEN 1 WHEN 'gerente' THEN 2 WHEN 'atendente' THEN 3 WHEN 'entregador' THEN 4 ELSE 5 END";
       const sql = isAdmin
-        ? 'SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users ORDER BY nome'
-        : "SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users WHERE role IN ('atendente','entregador') ORDER BY nome";
+        ? `SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users ORDER BY ${roleOrder}, nome`
+        : `SELECT id, nome, login, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo, created_at FROM app_users WHERE role IN ('atendente','entregador') ORDER BY ${roleOrder}, nome`;
       const rows = await env.DB.prepare(sql).all();
       return json(rows.results || []);
     }
 
     if (method === 'POST' && path === '/api/auth/users') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuthTables(env);
       const isAdmin = authCheck.role === 'admin';
+      const isGerente = authCheck.role === 'gerente';
       const body = await request.json();
       const { id, nome, login, senha, role, bling_vendedor_id, bling_vendedor_nome, telefone, email, pode_entregar, recebe_whatsapp, ativo } = body;
       if (!nome || !login) return err('Nome e login obrigatórios');
-      if (!['admin', 'atendente', 'entregador'].includes(role || 'entregador')) return err('Role inválido');
+      if (!['admin', 'gerente', 'atendente', 'entregador'].includes(role || 'entregador')) return err('Role inválido');
 
-      // v2.21.0: Atendente NÃO pode criar/editar admin
-      if (!isAdmin && role === 'admin') return err('Sem permissão para criar/editar administradores', 403);
+      // Hierarquia de permissões:
+      // - Só admin pode criar/editar admin e gerente
+      // - Gerente pode criar/editar atendente e entregador
+      // - Atendente pode criar/editar atendente e entregador
+      if (!isAdmin && ['admin', 'gerente'].includes(role)) return err('Sem permissão para criar/editar este nível de acesso', 403);
       if (!isAdmin && id) {
         const target = await env.DB.prepare('SELECT role FROM app_users WHERE id=?').bind(id).first();
-        if (target && target.role === 'admin') return err('Sem permissão para editar administradores', 403);
+        if (target && ['admin', 'gerente'].includes(target.role)) return err('Sem permissão para editar este usuário', 403);
       }
 
       if (id) {
@@ -2504,7 +2510,7 @@ export default {
 
     // ── PRODUTOS FAVORITOS ────────────────────────────────────
     if (method === 'GET' && path === '/api/products/favorites') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env);
       const rows = await env.DB.prepare('SELECT * FROM product_favorites ORDER BY sort_order ASC, id ASC').all().then(r => r.results || []);
@@ -2693,7 +2699,7 @@ export default {
     // ── GESTÃO DE CLIENTES ──────────────────────────────────────────────
     // GET /api/clientes — lista paginada com stats de pedidos
     if (request.method === 'GET' && path === '/api/clientes') {
-      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
       if (authCheck instanceof Response) return authCheck;
       const q     = (url.searchParams.get('q') || '').trim();
       const page  = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
@@ -2738,7 +2744,7 @@ export default {
 
     // GET /api/clientes/:phone — detalhe + histórico de pedidos
     if (request.method === 'GET' && path.startsWith('/api/clientes/')) {
-      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
       if (authCheck instanceof Response) return authCheck;
       const phone = decodeURIComponent(path.replace('/api/clientes/', ''));
       if (!phone) return err('phone obrigatório');
@@ -2879,7 +2885,7 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/app-products') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const onlyFav = url.searchParams.get('favorites') === '1';
       const onlyActive = url.searchParams.get('active') !== '0';
@@ -3889,7 +3895,7 @@ export default {
     // ── RECRIAR BLING — reprocessa pedido entregue sem bling_pedido_id ────────
     const recriaBlingMatch = path.match(/^\/api\/order\/(\d+)\/recriar-bling$/);
     if (method === 'POST' && recriaBlingMatch) {
-      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(recriaBlingMatch[1]);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
@@ -3933,7 +3939,7 @@ export default {
 
     // GET /api/auditoria/sem-bling — pedidos entregues sem bling que deveriam ter
     if (method === 'GET' && path === '/api/auditoria/sem-bling') {
-      const authCheck = await requireAuth(request, env, ['admin','atendente']);
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
       if (authCheck instanceof Response) return authCheck;
       const rows = await env.DB.prepare(`
         SELECT id, customer_name, phone_digits, tipo_pagamento, total_value, pago,
@@ -4321,14 +4327,14 @@ export default {
     // ══════════════════════════════════════════════════════════
 
     if (method === 'GET' && path === '/api/whatsapp/safety-config') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const config = await getWhatsAppSafetyConfig(env);
       return json(config);
     }
 
     if (method === 'POST' && path === '/api/whatsapp/safety-config') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureWhatsAppTables(env);
       const body = await request.json();
@@ -4394,7 +4400,7 @@ export default {
     // POST /api/lembretes/enviar/:orderId — enviar lembrete individual
     const lembreteMatch = path.match(/^\/api\/lembretes\/enviar\/(\d+)$/);
     if (method === 'POST' && lembreteMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const user = await getSessionUser(request, env);
       const orderId = parseInt(lembreteMatch[1]);
@@ -4412,7 +4418,7 @@ export default {
 
     // POST /api/lembretes/enviar-bulk — enviar lembretes em lote
     if (method === 'POST' && path === '/api/lembretes/enviar-bulk') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const user = await getSessionUser(request, env);
       const { order_ids } = await request.json();
@@ -4454,7 +4460,7 @@ export default {
     // GET /api/lembretes/pedido/:orderId — histórico de lembretes
     const lembreteHistMatch = path.match(/^\/api\/lembretes\/pedido\/(\d+)$/);
     if (method === 'GET' && lembreteHistMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env);
       const orderId = parseInt(lembreteHistMatch[1]);
@@ -4466,7 +4472,7 @@ export default {
 
     // GET /api/lembretes/pendentes — pedidos PIX pendentes c/ info lembretes
     if (method === 'GET' && path === '/api/lembretes/pendentes') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env);
       const rows = await env.DB.prepare(`
@@ -4484,7 +4490,7 @@ export default {
 
     // ── CONSULTA DE PEDIDOS (admin/atendente) ─────────────────────
     if (method === 'GET' && path === '/api/consulta/pedidos') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
 
       // Índices (idempotente)
@@ -4618,7 +4624,7 @@ export default {
 
     // Dropdowns auxiliares para consulta
     if (method === 'GET' && path === '/api/consulta/opcoes') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
 
       const vendedores = await env.DB.prepare("SELECT DISTINCT vendedor_nome FROM orders WHERE vendedor_nome IS NOT NULL AND vendedor_nome != '' ORDER BY vendedor_nome").all();
@@ -4635,7 +4641,7 @@ export default {
     // ── DASHBOARD ───────────────────────────────────────────
 
     if (method === 'GET' && path === '/api/dashboard') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
@@ -4817,7 +4823,7 @@ export default {
     if (method === 'GET' && path === '/api/relatorio/download-csv') {
       const apiKeyParam = url.searchParams.get('key');
       if (apiKeyParam && apiKeyParam === env.APP_API_KEY) { /* ok */ }
-      else { const authCheck = await requireAuth(request, env, ['admin', 'atendente']); if (authCheck instanceof Response) return authCheck; }
+      else { const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']); if (authCheck instanceof Response) return authCheck; }
       const dateStr = url.searchParams.get('date') || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const report = await generateDailyReport(env, dateStr);
       if (report.total === 0) return json({ error: `Sem pedidos em ${dateStr}` }, 404);
@@ -4834,7 +4840,7 @@ export default {
     // ── AUDITORIA ─────────────────────────────────────────────
 
     if (method === 'GET' && path === '/api/auditoria/diaria') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env);
 
@@ -4915,7 +4921,7 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/auditoria/conciliacao-bling') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
@@ -4961,7 +4967,7 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/auditoria/log-detalhado') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env);
       const orderId = url.searchParams.get('order_id');
@@ -4975,7 +4981,7 @@ export default {
     // ── Histórico de status de um pedido ──────────────────────
     const statusLogMatch = path.match(/^\/api\/order\/(\d+)\/status-log$/);
     if (method === 'GET' && statusLogMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env);
       const orderId = parseInt(statusLogMatch[1]);
@@ -5137,7 +5143,7 @@ export default {
 
     // ── PushInPay: Diagnóstico de conexão ──────────────────────
     if (method === 'GET' && path === '/api/pix/diagnostico') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const configured = isPixConfigured(env);
       let api_reachable = false;
@@ -5164,7 +5170,7 @@ export default {
 
     // ── PushInPay: Logs de webhooks recebidos ──────────────────
     if (method === 'GET' && path === '/api/pix/webhook-logs') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const since = Math.floor(Date.now() / 1000) - 86400; // últimas 24h
       const rows = await env.DB.prepare(
@@ -5373,7 +5379,7 @@ export default {
       // Config GET/POST
       if (path === '/api/avaliacoes/config') {
         if (method === 'GET') {
-          const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+          const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
           if (authCheck instanceof Response) return authCheck;
           return json(await getAvaliacaoConfig(env));
         }
@@ -5388,7 +5394,7 @@ export default {
 
       // Listar avaliações com filtros
       if (method === 'GET' && path === '/api/avaliacoes') {
-        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
         if (authCheck instanceof Response) return authCheck;
         const qp = new URL(request.url).searchParams;
         const status = qp.get('status') || '';
@@ -5452,7 +5458,7 @@ export default {
 
       // Enviar avaliação manual para um pedido específico
       if (method === 'POST' && path === '/api/avaliacoes/enviar') {
-        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
         if (authCheck instanceof Response) return authCheck;
         const { order_id } = await request.json();
         if (!order_id) return json({ error: 'order_id obrigatório' }, 400);
@@ -5486,7 +5492,7 @@ export default {
 
       // Toggle sem_avaliacao por telefone
       if (method === 'PATCH' && path.match(/^\/api\/avaliacoes\/cliente\/(.+)\/toggle$/)) {
-        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
         if (authCheck instanceof Response) return authCheck;
         const phone = path.split('/')[4];
         const cc = await env.DB.prepare('SELECT sem_avaliacao FROM customers_cache WHERE phone_digits=?').bind(phone).first();
@@ -5600,7 +5606,7 @@ export default {
 
     // ── GET /api/contratos — Listar ──────────────────────────
     if (method === 'GET' && path === '/api/contratos') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
 
       const status = url.searchParams.get('status');
@@ -5633,7 +5639,7 @@ export default {
 
     // ── POST /api/contratos — Criar rascunho ─────────────────
     if (method === 'POST' && path === '/api/contratos') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
 
       const body = await request.json();
@@ -5677,7 +5683,7 @@ export default {
 
     // ── GET /api/contratos/config — Config do comodato ────────
     if (method === 'GET' && path === '/api/contratos/config') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env); // app_config table
 
@@ -5711,7 +5717,7 @@ export default {
     // ── GET /api/contratos/:id — Detalhe ─────────────────────
     const contratoDetailMatch = path.match(/^\/api\/contratos\/(\d+)$/);
     if (method === 'GET' && contratoDetailMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoDetailMatch[1]);
 
@@ -5728,7 +5734,7 @@ export default {
     // ── PATCH /api/contratos/:id — Editar rascunho ────────────
     const contratoEditMatch = path.match(/^\/api\/contratos\/(\d+)$/);
     if (method === 'PATCH' && contratoEditMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoEditMatch[1]);
 
@@ -5791,7 +5797,7 @@ export default {
     // ── POST /api/contratos/:id/anexos — Upload anexo ─────────
     const contratoAnexoMatch = path.match(/^\/api\/contratos\/(\d+)\/anexos$/);
     if (method === 'POST' && contratoAnexoMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoAnexoMatch[1]);
 
@@ -5822,7 +5828,7 @@ export default {
     // ── DELETE /api/contratos/:id/anexos/:aid — Remove anexo ──
     const contratoDelAnexoMatch = path.match(/^\/api\/contratos\/(\d+)\/anexos\/(\d+)$/);
     if (method === 'DELETE' && contratoDelAnexoMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const contractId = parseInt(contratoDelAnexoMatch[1]);
       const attachId = parseInt(contratoDelAnexoMatch[2]);
@@ -5839,7 +5845,7 @@ export default {
     // ── POST /api/contratos/:id/gerar-pdf — Salvar PDF no R2 ──
     const contratoGerarPdfMatch = path.match(/^\/api\/contratos\/(\d+)\/gerar-pdf$/);
     if (method === 'POST' && contratoGerarPdfMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoGerarPdfMatch[1]);
 
@@ -5871,7 +5877,7 @@ export default {
     // ── POST /api/contratos/:id/enviar-assinatura — Assinafy + WhatsApp ──
     const contratoEnviarMatch = path.match(/^\/api\/contratos\/(\d+)\/enviar-assinatura$/);
     if (method === 'POST' && contratoEnviarMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoEnviarMatch[1]);
 
@@ -5976,7 +5982,7 @@ export default {
     // ── POST /api/contratos/:id/reenviar-links — Reenviar WhatsApp ──
     const contratoReenviarMatch = path.match(/^\/api\/contratos\/(\d+)\/reenviar-links$/);
     if (method === 'POST' && contratoReenviarMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoReenviarMatch[1]);
 
@@ -6041,7 +6047,7 @@ export default {
     // ── GET /api/contratos/:id/status-assinatura — Poll Assinafy ──
     const contratoStatusMatch = path.match(/^\/api\/contratos\/(\d+)\/status-assinatura$/);
     if (method === 'GET' && contratoStatusMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoStatusMatch[1]);
 
@@ -6068,7 +6074,7 @@ export default {
     // ── GET /api/contratos/:id/pdf — Download PDF do R2 ───────
     const contratoPdfMatch = path.match(/^\/api\/contratos\/(\d+)\/pdf$/);
     if (method === 'GET' && contratoPdfMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(contratoPdfMatch[1]);
 
@@ -6096,7 +6102,7 @@ export default {
     // ════════════════════════════════════════════════════════
     if (path.startsWith('/api/empenhos')) {
       await ensureEmpenhoTables(env);
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const user = authCheck;
 
@@ -6339,7 +6345,7 @@ export default {
     // ═══════════════════════════════════════════════════════════
 
     if (path.startsWith('/api/estoque')) {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureStockTables(env);
       const userName = authCheck.nome || 'Sistema';
@@ -6511,7 +6517,7 @@ export default {
     // ══════════════════════════════════════════════════════════════
     if (path.startsWith('/api/vales')) {
       await ensureValesTables(env);
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
 
       // GET /api/vales/notas - Listar Notas criadas
@@ -6730,7 +6736,7 @@ export default {
     // ===== MARKETING MODULE (com auth) =====
     if (path.startsWith('/api/marketing/')) {
       try {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck.error) return authCheck.error;
 
       // --- Google OAuth ---
@@ -7264,7 +7270,7 @@ REGRAS:
     // ── BANCO DE POSTS — Templates curados pelo admin ─────────────────────────
     if (path.startsWith('/api/post-templates')) {
       await ensureMarketingTables(env);
-      const authT = await requireAuth(request, env, ['admin', 'atendente']);
+      const authT = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authT instanceof Response) return authT;
       const isAdmin = authT.role === 'admin';
 
@@ -7513,7 +7519,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
       // GET /api/ultragaz/hub-status — Retorna status de conexão do Hub (admin)
       if (path === '/api/ultragaz/hub-status' && method === 'GET') {
-        const authHub = await requireAuth(request, env, ['admin','atendente']);
+        const authHub = await requireAuth(request, env, ['admin','gerente','atendente']);
         if (authHub instanceof Response) return authHub;
         const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='ultragaz_hub_status'").first();
         if (!row) return json({ conectado: false, status: 'desconectado', updated_at: null });
@@ -7713,7 +7719,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
       // GET /api/ultragaz/orders — Lista pedidos recebidos via Hub (admin)
       if (path === '/api/ultragaz/orders' && method === 'GET') {
-        const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+        const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
         if (authCheck instanceof Response) return authCheck;
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ultragaz_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, ultragaz_order_id TEXT UNIQUE NOT NULL, moskogas_order_id INTEGER, event_type TEXT, customer_name TEXT, address_line TEXT, items_json TEXT, total_value REAL, tipo_pagamento TEXT, raw_payload TEXT, status TEXT DEFAULT 'recebido', created_at INTEGER DEFAULT (unixepoch()), processed_at INTEGER)`).run();
         const rows = await env.DB.prepare("SELECT id, ultragaz_order_id, moskogas_order_id, event_type, customer_name, address_line, total_value, status, created_at FROM ultragaz_orders ORDER BY created_at DESC LIMIT 100").all();
