@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Usuários — MoskoGás v1.6.0</title>
+<title>Usuários — MoskoGás v1.6.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -71,7 +71,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h1 style="font-size:20px;color:#1e293b;display:flex;align-items:center;gap:8px">
       👥 Gestão de Usuários
-      <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.6.0</span>
+      <span style="font-size:12px;color:#94a3b8;font-weight:400">v1.6.1</span>
     </h1>
     <button class="btn btn-orange" onclick="openModal()">➕ Novo Usuário</button>
   </div>
@@ -91,7 +91,7 @@
     <div id="no-results" style="display:none;text-align:center;padding:30px;color:#94a3b8;font-size:14px">Nenhum resultado encontrado</div>
   </div>
 
-  <div class="version-badge">v1.6.0 — usuários</div>
+  <div class="version-badge">v1.6.1 — usuários</div>
 </div>
 
 <!-- Modal -->
@@ -108,8 +108,13 @@
     <label>Login (usuário)</label>
     <input type="text" id="m-login" autocapitalize="off">
 
-    <label id="lbl-senha">Senha</label>
-    <input type="password" id="m-senha">
+    <div id="senha-wrap">
+      <label id="lbl-senha">Senha</label>
+      <input type="password" id="m-senha">
+    </div>
+    <div id="sistema-notice" style="display:none;background:#e0e7ff;border:1px solid #a5b4fc;border-radius:8px;padding:10px 14px;font-size:13px;color:#3730a3;margin-bottom:4px">
+      🔒 <strong>Usuário Sistema</strong> — Este usuário é usado internamente pelo sistema e não possui senha de acesso. Não é possível desativá-lo.
+    </div>
 
     <label>Função</label>
     <select id="m-role" onchange="onRoleChange()">
@@ -247,18 +252,19 @@ function renderUsers() {
     for (const u of group) {
       const ne = (u.nome||'').replace(/'/g,"\\'");
       const canEdit = myRole === 'admin' || ['atendente','entregador'].includes(u.role);
+      const isSistema = u.login === 'venda_portaria';
       const flags   = (u.pode_entregar   ? '<span title="Pode entregar" style="font-size:13px">🚚</span>' : '') +
                       (u.recebe_whatsapp ? '<span title="Recebe WhatsApp" style="font-size:13px">📱</span>' : '');
       const vendor  = u.bling_vendedor_nome ? `<span style="color:#16a34a">• ${u.bling_vendedor_nome}</span>` : '';
       html += `<div class="user-row${!u.ativo?' inactive':''}">
         <div class="user-avatar ${AV_CLS[u.role]}">${AV_ICON[u.role]}</div>
         <div class="user-info">
-          <div class="user-name">${u.nome} ${!u.ativo?'<span class="tag-inativo">INATIVO</span>':''} ${flags}</div>
+          <div class="user-name">${u.nome} ${isSistema ? '<span style="font-size:10px;background:#e0e7ff;color:#4338ca;padding:1px 7px;border-radius:8px;font-weight:700;margin-left:4px">🔒 SISTEMA</span>' : ''} ${!u.ativo?'<span class="tag-inativo">INATIVO</span>':''} ${flags}</div>
           <div class="user-sub">@${u.login} ${vendor}</div>
         </div>
         <div class="user-actions">
           ${canEdit ? `<button class="btn btn-gray" style="padding:5px 10px;font-size:11px" onclick="editUser(${u.id})" title="Editar">✏️ Editar</button>` : ''}
-          ${canEdit ? (u.ativo
+          ${canEdit && !isSistema ? (u.ativo
             ? `<button class="btn btn-red"   style="padding:5px 10px;font-size:11px" onclick="toggleAtivo(${u.id},'${ne}',false)" title="Desativar">⏸</button>`
             : `<button class="btn btn-green" style="padding:5px 10px;font-size:11px" onclick="toggleAtivo(${u.id},'${ne}',true)"  title="Reativar">▶</button>`
           ) : ''}
@@ -332,6 +338,11 @@ function openModal(user=null) {
   document.getElementById('m-pode-entregar').checked   = user ? !!user.pode_entregar   : role==='entregador';
   document.getElementById('m-recebe-whatsapp').checked = user ? !!user.recebe_whatsapp : role==='entregador';
   document.getElementById('lbl-senha').textContent = user ? 'Nova senha (deixe vazio para manter)' : 'Senha';
+
+  const isSistema = user?.login === 'venda_portaria';
+  document.getElementById('senha-wrap').style.display    = isSistema ? 'none' : '';
+  document.getElementById('sistema-notice').style.display = isSistema ? 'block' : 'none';
+  document.getElementById('m-ativo').disabled = isSistema;
 
   onRoleChange();
   document.getElementById('modal-overlay').classList.add('active');

@@ -1,4 +1,5 @@
-// v2.49.37
+// v2.49.38
+// v2.49.38: venda_portaria protegido (sem senha/desativar)
 // v2.49.37: checkPermRole() — permissões dinâmicas do Gerente lidas do banco (cancelar, reabrir, editar entregue)
 // v2.49.36: role 'gerente' — hierarquia admin>gerente>atendente>entregador; acessa whatsapp safety, auditoria, cria atendente/entregador
 // v2.49.35: Recuperação de senha por WhatsApp+Email (OTP 6 dígitos, 15min) + campo email em app_users
@@ -2454,6 +2455,13 @@ export default {
       if (id) {
         const existing = await env.DB.prepare('SELECT * FROM app_users WHERE id = ?').bind(id).first();
         if (!existing) return err('Usuário não encontrado');
+
+        // Usuário sistema: Venda Portaria não pode ser desativado nem ter senha alterada
+        if (existing.login === 'venda_portaria') {
+          if (ativo !== undefined && !ativo) return err('O usuário Venda Portaria é um usuário sistema e não pode ser desativado.', 403);
+          if (senha) return err('O usuário Venda Portaria não utiliza senha (usuário sistema).', 403);
+        }
+
         const dup = await env.DB.prepare('SELECT id FROM app_users WHERE login = ? AND id != ?').bind(login.toLowerCase().trim(), id).first();
         if (dup) return err('Login já em uso por outro usuário');
 
