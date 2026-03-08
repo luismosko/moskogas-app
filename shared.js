@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.22.2
+// shared.js — Utilitários compartilhados MoskoGás v1.22.3
+// v1.22.3: 'gerente' adicionado a todos os itens do menu de navegação (NAV_ITEMS + NAV_DROPDOWNS)
 // v1.22.2: Bling badge — onclick direto ao OAuth quando desconectado; tooltip mais claro; texto "🔴 Bling OFF — clique"
 // v1.22.1: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
 // v1.20.0: Banco de Posts adicionado ao menu Admin
@@ -156,14 +157,14 @@ const NAV_TEXT = '#ffffffcc';
 const NAV_ACTIVE = '#ffffff';
 
 const NAV_ITEMS = [
-  { href: 'pedido.html', icon: '➕', label: 'Novo Pedido', roles: ['admin', 'atendente'] },
-  { href: 'gestao.html', icon: '📋', label: 'Gestão', roles: ['admin', 'atendente'] },
+  { href: 'pedido.html', icon: '➕', label: 'Novo Pedido', roles: ['admin', 'gerente', 'atendente'] },
+  { href: 'gestao.html', icon: '📋', label: 'Gestão', roles: ['admin', 'gerente', 'atendente'] },
 ];
 
 // Dropdowns — cada um com ID único para abrir/fechar independente
 const NAV_DROPDOWNS = [
   {
-    id: 'adm', icon: '🏢', label: 'ADM', roles: ['admin', 'atendente'],
+    id: 'adm', icon: '🏢', label: 'ADM', roles: ['admin', 'gerente', 'atendente'],
     children: [
       { href: 'contratos.html', icon: '📄', label: 'Contratos' },
       { href: 'clientes.html', icon: '👥', label: 'Clientes' },
@@ -173,14 +174,14 @@ const NAV_DROPDOWNS = [
     ]
   },
   {
-    id: 'financeiro', icon: '💰', label: 'Financeiro', roles: ['admin', 'atendente'],
+    id: 'financeiro', icon: '💰', label: 'Financeiro', roles: ['admin', 'gerente', 'atendente'],
     children: [
       { href: 'pagamentos.html', icon: '💳', label: 'Pagamentos Pendentes' },
       { href: 'empenhos.html', icon: '🏛️', label: 'Empenhos GOV' },
     ]
   },
   {
-    id: 'marketing', icon: '🎯', label: 'Marketing', roles: ['admin', 'atendente'],
+    id: 'marketing', icon: '🎯', label: 'Marketing', roles: ['admin', 'gerente', 'atendente'],
     children: [
       { href: 'marketing-posts.html', icon: '🗓️', label: 'Central de Posts' },
       { href: 'marketing-gmb.html', icon: '📍', label: 'Google Meu Negócio' },
@@ -189,7 +190,7 @@ const NAV_DROPDOWNS = [
     ]
   },
   {
-    id: 'relatorio', icon: '📊', label: 'Relatório', roles: ['admin', 'atendente'],
+    id: 'relatorio', icon: '📊', label: 'Relatório', roles: ['admin', 'gerente', 'atendente'],
     children: [
       { href: 'relatorio.html', icon: '📊', label: 'Relatório do Dia' },
       { href: 'entregador.html', icon: '🚚', label: 'Painel Entregador' },
@@ -198,7 +199,7 @@ const NAV_DROPDOWNS = [
     ]
   },
   {
-    id: 'config', icon: '⚙️', label: 'Config', roles: ['admin', 'atendente'],
+    id: 'config', icon: '⚙️', label: 'Config', roles: ['admin', 'gerente', 'atendente'],
     children: [
       { href: 'config.html', icon: '⚙️', label: 'Configurações' },
       { href: 'usuarios.html', icon: '👥', label: 'Usuários' },
