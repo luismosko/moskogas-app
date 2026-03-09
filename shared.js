@@ -1,6 +1,7 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.2
-// v1.24.2: Banner Ultragaz — "Ver na Gestão" redireciona com ?ultragaz=1 para limpar filtro de data
+// shared.js — Utilitários compartilhados MoskoGás v1.24.3
+// v1.24.3: Banner Ultragaz — "Ver na Gestão" redireciona com ?ultragaz=1 para limpar filtro de data
 // v1.24.1: Fix alerta Ultragaz — orders/list retorna array direto, não { orders: [] }
+// v1.24.3: Fix alerta Ultragaz — status=NOVO → status=novo (case-sensitive no D1)
 // v1.24.0: Fix alerta Ultragaz — corrige apiCall → api() no _checkUltragazAlerts
 // v1.23.0: Alerta global Ultragaz Hub — polling 15s em todas as telas, banner laranja pulsante
 // v1.22.3: 'gerente' adicionado a todos os itens do menu de navegação (NAV_ITEMS + NAV_DROPDOWNS)
@@ -1310,7 +1311,7 @@ function checkBlingReauth(err) {
     if (!localStorage.getItem('mg_session_token')) return;
     try {
       // orders/list retorna array direto, não { orders: [] }
-      const data = await api('/api/orders/list?status=NOVO&limit=20');
+      const data = await api('/api/orders/list?status=novo&limit=20');
       const lista = Array.isArray(data) ? data : (data.orders || []);
       const novos = lista.filter(function(o) {
         return o.vendedor_nome === 'Ultragaz Hub' && !_ultragazSeen.has(o.id);
