@@ -1,4 +1,5 @@
 // shared.js — Utilitários compartilhados MoskoGás v1.24.9
+// v1.25.0: Hub Monitor desabilitado (badge H + banner desconectado) — migrado para Extensão Chrome
 // v1.24.9: Fix banner Hub no config.html (pathname /config, não /config.html)
 // v1.24.8: Hub badge azul=conectado/vermelho=desconectado; fix reload seenLS por ciclo
 // v1.24.7: Fix botões × banners UG — funções expostas no escopo global inline
@@ -1177,8 +1178,16 @@ function checkBlingReauth(err) {
 
 // ═══════════════════════════════════════════════════════════════
 // HUB ULTRAGAZ MONITOR — v1.24.5
-// Badge + banner automático em TODAS as telas
 // ═══════════════════════════════════════════════════════════════
+// HUB MONITOR — DESABILITADO v1.25.0 (09/03/2026)
+// Motivo: integração migrada para Extensão Chrome (ultragaz-extension)
+// O robô VPS foi substituído pela extensão — não é mais necessário
+// verificar conexão com o servidor VPS pelo frontend.
+// Para reabilitar: remover os comentários /* ... */ abaixo.
+// O alerta de PEDIDO NOVO (banner laranja) continua funcionando normalmente.
+// ═══════════════════════════════════════════════════════════════
+
+/* HUB_MONITOR_DISABLED_START
 
 let _hubConnected = null; // null=unknown, true/false
 
@@ -1220,7 +1229,7 @@ function _updateHubBadge(el, ok) {
 function _showHubDisconnectBanner() {
   if (document.getElementById('hub-disconnect-banner')) return;
   // Não mostrar no config.html (já tem seção completa)
-  if (window.location.pathname.includes('config')) return; // não mostrar no config
+  if (window.location.pathname.includes('config')) return;
   const b = document.createElement('div');
   b.id = 'hub-disconnect-banner';
   b.style.cssText = [
@@ -1244,17 +1253,12 @@ function _showHubDisconnectBanner() {
       '<span>HUB ULTRAGAZ DESCONECTADO — pedidos da Ultragaz NÃO serão recebidos!</span>' +
     '</span>' +
     '<a href="config.html#ultragaz" style="background:#fff;color:#c2410c;padding:6px 18px;border-radius:8px;font-weight:800;text-decoration:none;white-space:nowrap;font-size:13px;flex-shrink:0">🔑 Conectar Agora</a>';
-  // Ajusta padding para não sobrepor Bling banner se ambos estiverem
   const blingBanner = document.getElementById('bling-disconnect-banner');
-  if (blingBanner) {
-    b.style.top = '52px';
-  }
+  if (blingBanner) { b.style.top = '52px'; }
   document.body.prepend(b);
-  // Empurra conteúdo se não tiver o Bling banner (evita duplo padding)
   if (!blingBanner) {
     document.body.style.paddingTop = (parseInt(document.body.style.paddingTop||'0') + 46) + 'px';
   }
-  // Adicionar animação de piscar se não existir
   if (!document.getElementById('hub-blink-style')) {
     const s = document.createElement('style');
     s.id = 'hub-blink-style';
@@ -1267,7 +1271,6 @@ function _hideHubDisconnectBanner() {
   const b = document.getElementById('hub-disconnect-banner');
   if (b) {
     b.remove();
-    // Reduz padding apenas se não tiver bling banner também
     if (!document.getElementById('bling-disconnect-banner')) {
       const current = parseInt(document.body.style.paddingTop || '0');
       if (current >= 46) document.body.style.paddingTop = (current - 46) + 'px';
@@ -1276,14 +1279,13 @@ function _hideHubDisconnectBanner() {
   }
 }
 
-// ── Auto-init em TODAS as páginas se usuário estiver logado ──────────────────
+// Auto-init em TODAS as páginas se usuário estiver logado
 (function _autoInitHubMonitor() {
   function _start() {
-    if (!localStorage.getItem('mg_session_token')) return; // não logado
-    // Só admin e atendente precisam ver (entregador não usa Hub)
+    if (!localStorage.getItem('mg_session_token')) return;
     const user = (() => { try { return JSON.parse(localStorage.getItem('mg_user')||'null'); } catch { return null; } })();
     if (!user || user.role === 'entregador') return;
-    initHubMonitor(null); // sem badge — badge só em páginas que chamam initHubMonitor('hub-indicator')
+    initHubMonitor(null);
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _start);
@@ -1291,6 +1293,16 @@ function _hideHubDisconnectBanner() {
     _start();
   }
 })();
+
+HUB_MONITOR_DISABLED_END */
+
+// Stubs vazios para não quebrar páginas que chamam initHubMonitor('hub-indicator')
+function initHubMonitor(badgeId) {
+  // DESABILITADO — Extensão Chrome assume este papel
+  // Para reabilitar: remover estes stubs e descomentar bloco HUB_MONITOR_DISABLED acima
+  const el = badgeId ? document.getElementById(badgeId) : null;
+  if (el) el.style.display = 'none'; // esconde o badge H da navbar
+}
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTA GLOBAL ULTRAGAZ HUB — v1.23.0

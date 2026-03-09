@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard — MoskoApp v1.0.2</title>
+<title>Dashboard — MoskoApp v1.0.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
@@ -80,10 +80,12 @@
 <div id="nav-placeholder"></div>
 <div class="container">
   <div class="dash-header">
-    <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.2</div>
+    <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.3</div>
     <div class="dash-controls">
       <span class="bling-badge bling-warn" id="blingBadge">⏳ Bling...</span>
+      <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
       <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:4px 10px;font-size:11px;font-weight:800;cursor:pointer" onclick="window.location.href='config.html#ultragaz'">H</span>
+      -->
       <input type="date" id="dashDate">
       <button class="btn-refresh" id="btnRefresh" onclick="loadDashboard()" title="Atualizar dados">🔄 Atualizar</button>
     </div>
@@ -140,7 +142,7 @@
       </div>
     </div>
   </div>
-  <div class="version-badge">v1.0.2 — dashboard</div>
+  <div class="version-badge">v1.0.3 — dashboard</div>
 </div>
 
 <script src="shared.js"></script>
