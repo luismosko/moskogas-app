@@ -211,12 +211,27 @@ async function runScan(page, source = 'auto') {
   const warn = (msg) => console.warn(`[ws] ${new Date().toISOString()} ${msg}`);
   log(`🔍 Varredura [${source}] — buscando pedidos em aberto...`);
   try {
+    // Busca cancelados PRIMEIRO — para não criar pedido que já está cancelado
+    let canceladosIds = new Set();
+    try {
+      const cancelados = await getCanceledOrders(page);
+      if (cancelados && cancelados.length > 0) {
+        cancelados.forEach(o => canceladosIds.add(String(o.id)));
+        log(`🚫 ${canceladosIds.size} pedido(s) cancelado(s) — serão ignorados na criação`);
+      }
+    } catch {}
+
     const pending = await getPendingOrders(page);
     if (pending && Array.isArray(pending) && pending.length > 0) {
       log(`📋 ${pending.length} pedido(s) em aberto — processando...`);
       for (const order of pending) {
         const orderId = order.id || order.ID_ORDER_LINK || order.order_id;
         if (!orderId) continue;
+        // NUNCA criar pedido que já está na aba Cancelados
+        if (canceladosIds.has(String(orderId))) {
+          log(`⏭ #${orderId} ignorado — está na aba Cancelados`);
+          continue;
+        }
         try {
           let details = {};
           try { details = await getOrderDetails(page, orderId) || {}; } catch {}
@@ -235,8 +250,8 @@ async function runScan(page, source = 'auto') {
     } else {
       log(`✅ Nenhum pedido em aberto [${source}]`);
     }
-    // Verifica cancelamentos na aba "Pedidos Cancelados"
-    await runCancelScan(page, source);
+    // Verifica cancelamentos na aba "Pedidos Cancelados" e notifica MoskoGás
+    await runCancelScan(page, source, canceladosIds);
 
   } catch (e) {
     warn(`Varredura [${source}] falhou: ${e.message}`);
@@ -244,9 +259,12 @@ async function runScan(page, source = 'auto') {
 }
 
 // Varre aba de cancelados e notifica MoskoGás
-async function runCancelScan(page, source) {
+async function runCancelScan(page, source, canceladosIds = null) {
   try {
-    const cancelados = await getCanceledOrders(page);
+    // Reusa lista já buscada no runScan (evita double-fetch)
+    const cancelados = canceladosIds
+      ? Array.from(canceladosIds).map(id => ({ id }))
+      : await getCanceledOrders(page);
     if (!cancelados || cancelados.length === 0) return;
     for (const order of cancelados) {
       const orderId = String(order.id);
