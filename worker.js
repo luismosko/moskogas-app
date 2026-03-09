@@ -1,6 +1,7 @@
-// v2.49.45
+// v2.49.46
 
-// v2.49.45: Ultragaz — endpoint POST /api/ultragaz/cancelar — cancela pedido no sistema quando Hub cancela
+// v2.49.46: Fix ultragaz_orders.updated_at migration + filtro cancelados hoje
+// v2.49.46: Ultragaz — endpoint POST /api/ultragaz/cancelar — cancela pedido no sistema quando Hub cancela
 // v2.49.44: Ultragaz — total_value do Hub é sempre verdade (preço proporcional) — seed Água20L; preço do app_products; distribuição proporcional do total
 // v2.49.42: Ultragaz product-map table+CRUD+auto-seed; normalização pgto Hub; vale_gas_ultragaz
 // v2.49.41: Fix Ultragaz items_json — converte {produto,quantidade} → {name,qty}
@@ -7725,9 +7726,12 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
             raw_payload TEXT,
             status TEXT DEFAULT 'recebido',
             created_at INTEGER DEFAULT (unixepoch()),
+            updated_at INTEGER DEFAULT (unixepoch()),
             processed_at INTEGER
           )
-        `).run();
+        \`).run();
+        // Migração: adiciona updated_at se não existir (tabelas criadas antes da v2.49.45)
+        await env.DB.prepare(\`ALTER TABLE ultragaz_orders ADD COLUMN updated_at INTEGER DEFAULT (unixepoch())\`).run().catch(() => {});
 
         const existing = await env.DB.prepare("SELECT id, moskogas_order_id FROM ultragaz_orders WHERE ultragaz_order_id=?").bind(String(ultragaz_order_id)).first();
         if (existing) {
