@@ -236,6 +236,82 @@ pm2 save
 
 ---
 
+---
+
+## 🔔 Alerta no MoskoGás (shared.js + gestao.html)
+
+> Esta seção documenta o lado **frontend** da integração — o alerta laranja que aparece em todas as telas quando chega um pedido do Hub.
+
+### Como funciona
+
+Um IIFE (função auto-executável isolada) injeta um loop de polling em **todas as páginas** do MoskoGás via `shared.js`. Não precisa de código extra em cada HTML — basta importar o shared.js.
+
+```
+shared.js (carregado em todas as páginas)
+  └─ IIFE auto-inicia no DOMContentLoaded
+       └─ startUltragazPolling(15000ms)
+            └─ _checkUltragazAlerts() a cada 15s
+                 └─ GET /api/orders/list?status=NOVO&limit=20
+                      └─ filtra vendedor_nome === 'Ultragaz Hub'
+                           └─ pedidos novos → _showUGBanner(order)
+```
+
+### Comportamento do Banner
+
+- **Posição:** `position:fixed; top:0; z-index:999999` — empurra a página 52px para baixo
+- **Visual:** fundo laranja pulsante (#ea580c), animação slide-in + shake no ícone
+- **Conteúdo:** nome do cliente, produtos, total, endereço
+- **Botões:** "✅ Ver na Gestão" + "×" fechar
+- **Sons:** 3 beeps via AudioContext (440, 550, 660 Hz)
+- **Auto-remove:** após 45 segundos
+- **Anti-duplicata:** `Set` de sessão (`_ultragazSeen`) — não repete o mesmo pedido na mesma aba
+
+### Botão "Ver na Gestão"
+
+Redireciona para `gestao.html?ultragaz=1`
+
+**O `?ultragaz=1` faz o gestao.html:**
+1. Limpar o filtro de data (mostra pedidos de qualquer dia, não só hoje)
+2. Ativar apenas o filtro de status `NOVO`
+3. Exibir toast "Mostrando pedidos NOVO do Hub Ultragaz"
+
+Sem esse comportamento, o pedido "sumia" da gestão porque o filtro padrão era "hoje" e pedidos antigos não apareciam.
+
+### Variável global exposta
+
+```javascript
+window._ultragazGlobal = {
+  start: startUltragazPolling,   // inicia polling
+  check: _checkUltragazAlerts,   // força checagem imediata
+  seen: _ultragazSeen             // Set com IDs já exibidos
+}
+```
+
+---
+
+### ⚠️ Bugs históricos corrigidos (para não repetir)
+
+| # | Bug | Causa | Fix aplicado |
+|---|-----|-------|-------------|
+| 1 | Polling falhava silenciosamente | `apiCall()` não existe — função correta é `api()` | `shared.js` v1.24.0 |
+| 2 | `data.orders` undefined | `orders/list` retorna array direto, não `{orders:[]}` | `Array.isArray(data) ? data : (data.orders \|\| [])` |
+| 3 | "Ver na Gestão" abria e o pedido sumia | Filtro "Hoje" escondia pedidos do dia anterior | `?ultragaz=1` limpa filtro de data — `gestao.html` v2.9.13 |
+| 4 | Pedidos não apareciam no filtro NOVO | `status='NOVO'` maiúsculo vs `activeStatuses.has('novo')` minúsculo | Normalizado para minúsculo no worker v2.49.40 |
+| 5 | Items com nome/qty errados | Hub envia `{produto, quantidade}`, sistema esperava `{name, qty}` | Conversão automática no worker v2.49.41 |
+| 6 | `boleto_orgao` inválido como pagamento | Hub envia nomes diferentes | Mapa de normalização `PG_MAP_HUB` no worker v2.49.42 |
+| 7 | Preço R$0,00 nos itens | Hub não manda preço unitário | Busca no `app_products`; fallback distribuição proporcional — worker v2.49.43 |
+
+---
+
+### Regras importantes para NÃO quebrar
+
+1. **NUNCA substituir `api()` por `apiCall()` ou `fetch()` direto** no IIFE do alerta — `api()` é a função do shared.js que já tem auth + base URL
+2. **`orders/list` retorna array direto** — não tem wrapper `{orders: []}`. Sempre usar: `Array.isArray(data) ? data : (data.orders || [])`
+3. **`?ultragaz=1` é obrigatório** no link "Ver na Gestão" — sem ele o atendente não vê o pedido
+4. O IIFE usa `_ultragazSeen` (Set) para anti-duplicata — o Set se perde ao recarregar a página, mas isso é intencional (novo load = novo alerta se pedido ainda NOVO)
+
+---
+
 ## 📋 Tabelas D1 Relacionadas
 
 ```sql
