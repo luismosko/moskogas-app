@@ -375,31 +375,67 @@ export async function getPendingOrders(page) {
     );
     log(`Abas encontradas: ${JSON.stringify(tabButtons)}`);
 
-    // Função para extrair IDs de pedidos da tabela visível — taga com a aba de origem
+    // Função para extrair IDs de pedidos da tabela visível — tag com a aba de origem
     const extractOrdersFromDOM = async (tabLabel) => {
+      // Debug: logar o que está visível no DOM
+      const domDebug = await page.evaluate(() => {
+        const allText = document.body.innerText || '';
+        const pedidoNums = allText.match(/\b2\d{7}\b/g) || [];
+        return {
+          tables: document.querySelectorAll('table').length,
+          trs: document.querySelectorAll('tr').length,
+          pedidoNums: [...new Set(pedidoNums)]
+        };
+      });
+      log(`DOM [${tabLabel}]: ${domDebug.tables} tabelas, ${domDebug.trs} linhas, pedidos visíveis: ${JSON.stringify(domDebug.pedidoNums)}`);
+
       const orders = await page.evaluate((tab) => {
-        const rows = document.querySelectorAll('tr.t-Report-wrap, table tbody tr, .a-IRR-table tbody tr');
+        // Seletores amplos — Oracle APEX usa várias estruturas de tabela
+        const rows = document.querySelectorAll([
+          'tr.t-Report-wrap',
+          'table tbody tr',
+          '.a-IRR-table tbody tr',
+          '.t-Report-tableWrap tbody tr',
+          'tr[class*="report"]',
+          'tr[id*="row"]',
+          'tr',
+        ].join(', '));
+
         const found = [];
         rows.forEach(row => {
-          const links = row.querySelectorAll('a');
+          // Ignora linhas de cabeçalho
+          if (row.querySelector('th')) return;
+          if (row.closest('thead')) return;
+
           let orderId = null;
+
+          // Procura por número de pedido nos links (ex: <a>21164275</a>)
+          const links = row.querySelectorAll('a');
           links.forEach(a => {
             const txt = a.textContent.trim();
             if (/^\d{7,}$/.test(txt)) orderId = txt;
           });
+
+          // Procura em qualquer célula td
           if (!orderId) {
             const cells = row.querySelectorAll('td');
             cells.forEach(td => {
-              const txt = td.textContent.trim();
+              const txt = (td.innerText || td.textContent || '').trim();
               if (/^\d{7,}$/.test(txt)) orderId = txt;
             });
           }
+
           if (orderId) {
-            const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
+            const cells = Array.from(row.querySelectorAll('td')).map(c => (c.innerText || c.textContent || '').trim());
             found.push({ id: orderId, cells, tab });
           }
         });
-        return found;
+
+        // Remove duplicatas por id
+        const unique = [];
+        const seenIds = new Set();
+        found.forEach(o => { if (!seenIds.has(o.id)) { seenIds.add(o.id); unique.push(o); } });
+        return unique;
       }, tabLabel);
       log(`Aba [${tabLabel}]: ${orders.length} pedido(s) encontrado(s)`);
       return orders;
