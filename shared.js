@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.1
+// shared.js — Utilitários compartilhados MoskoGás v1.24.2
+// v1.24.2: Banner Ultragaz — "Ver na Gestão" redireciona com ?ultragaz=1 para limpar filtro de data
 // v1.24.1: Fix alerta Ultragaz — orders/list retorna array direto, não { orders: [] }
 // v1.24.0: Fix alerta Ultragaz — corrige apiCall → api() no _checkUltragazAlerts
 // v1.23.0: Alerta global Ultragaz Hub — polling 15s em todas as telas, banner laranja pulsante
@@ -1287,7 +1288,7 @@ function checkBlingReauth(err) {
           '<strong>PEDIDO ULTRAGAZ — ' + (order.customer_name || 'Cliente N/D').toUpperCase() + '</strong>' +
           '<span>' + items + ' · ' + total + ' · ' + (order.address_line || 'Endereço N/D') + '</span>' +
         '</div>' +
-        '<button class="ug-btn ug-btn-ok" title="Ver pedido na Gestão" onclick="window.location.href=\'gestao.html\'">✅ Ver na Gestão</button>' +
+        '<button class="ug-btn ug-btn-ok" title="Ver pedido na Gestão" onclick="window.location.href=\'gestao.html?ultragaz=1\'">✅ Ver na Gestão</button>' +
         '<button class="ug-btn ug-btn-x" title="Fechar alerta" onclick="document.getElementById(\'' + existingId + '\').remove();document.body.style.paddingTop=\'\';">×</button>' +
       '</div>';
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão 2.9.11 — MoskoGás</title>
+<title>Gestão 2.9.13 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -75,7 +75,7 @@
   <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.12</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.13</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -147,6 +147,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
+// v2.9.13: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
 // v2.9.12
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
@@ -160,6 +161,10 @@ let autoTimer = null;
 
 // ── Init ──────────────────────────────────────────────────────
 async function init() {
+  // v2.9.13: Se veio do banner Ultragaz (?ultragaz=1), limpa filtro de data e mostra só NOVO
+  const params = new URLSearchParams(window.location.search);
+  const viaUltragaz = params.get('ultragaz') === '1';
+
   // v2.9.12: carregar timezone da empresa do config
   try {
     const tzCfg = await api('/api/config?key=empresa_timezone');
@@ -175,6 +180,18 @@ async function init() {
     sel.appendChild(opt);
   });
   setDateFilter('hoje');
+  // v2.9.13: veio do banner Ultragaz — limpa filtro de data para mostrar pedidos de qualquer dia
+  if (viaUltragaz) {
+    setDateFilter('limpar');
+    // Ativa só status NOVO
+    activeStatuses = new Set(['novo']);
+    document.querySelectorAll('[data-status]').forEach(el => {
+      const s = el.dataset.status;
+      el.classList.toggle('active', s === 'novo');
+    });
+    // Toast de contexto
+    if (typeof toast === 'function') toast('Mostrando pedidos NOVO do Hub Ultragaz', 'info', 4000);
+  }
   load();
 }
 
