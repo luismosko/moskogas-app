@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.43</title>
+<title>Novo Pedido — MoskoGás v2.11.44</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,9 +51,10 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.43 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.44 — pedido</div>
 <div class="container">
-  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.43</span></h1>
+  <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
+    <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.44</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -199,7 +200,7 @@
       <textarea id="notes" placeholder="Urgente, troco para..." style="height:40px"></textarea>
     </div>
 
-    <!-- v2.11.43: DATA DO PEDIDO -->
+    <!-- v2.11.44: DATA DO PEDIDO -->
     <div style="margin-bottom:12px;padding:10px;background:#f8fafc;border-radius:8px;border:1.5px solid #e2e8f0">
       <label style="font-size:12px;font-weight:800;color:#374151;letter-spacing:.4px;margin-bottom:6px;display:block">📅 DATA DO PEDIDO</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -353,7 +354,7 @@
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
-// v2.11.43: Carregar timezone e telefone da empresa
+// v2.11.44: Carregar timezone e telefone da empresa
 (async function() {
   try {
     const r = await api('/api/config?key=empresa_timezone');
@@ -369,6 +370,7 @@ checkApiKey();
 
 // ── Bling Status Monitor (centralizado via shared.js) ──
 initBlingMonitor('bling-indicator');
+initHubMonitor('hub-indicator');
 
 let items = [];
 let searchTimer;
@@ -491,7 +493,7 @@ function clearSearch(inputId) {
 
 async function selectCustomer(i) {
   const c = document.getElementById('suggestions')._data[i];
-  // v2.11.43: Reset imediato ao trocar cliente — evita endereços do cliente anterior
+  // v2.11.44: Reset imediato ao trocar cliente — evita endereços do cliente anterior
   currentPhone = '';
   allAddresses = [];
   const _addrBadge = document.getElementById('addr-count-badge');
@@ -607,7 +609,7 @@ let currentPhone = '';
 let allAddresses = [];
 let _lastOrderData = null;
 
-// ── Data do Pedido (v2.11.43) ────────────────────────────────
+// ── Data do Pedido (v2.11.44) ────────────────────────────────
 function dataCGOffset(offset) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -825,7 +827,7 @@ async function streetAC(input, bairroId, dropId) {
 
   _acTimer = setTimeout(async () => {
     drop.innerHTML = '<div style="padding:8px 12px;color:#94a3b8;font-size:12px">🔍 Buscando...</div>';
-    // v2.11.43: position:fixed baseado no input para funcionar dentro de modais com overflow
+    // v2.11.44: position:fixed baseado no input para funcionar dentro de modais com overflow
     const rect = input.getBoundingClientRect();
     drop.style.cssText = `
       display:block;
@@ -1166,7 +1168,7 @@ function setConsumidorFinal() {
   document.getElementById('empenho-aviso').style.display = 'none';
   document.getElementById('empenho-selecionado-info').style.display = 'none';
   toast('👤 Consumidor Final — endereço não obrigatório', 'ok');
-  // v2.11.43: Auto-atribuir entregador Venda Portaria (id=10)
+  // v2.11.44: Auto-atribuir entregador Venda Portaria (id=10)
   window._consumidorFinalDriverId = 10;
 }
 
@@ -1277,7 +1279,7 @@ function selTipoPgto(btn) {
   btn.classList.add('sel');
   document.getElementById('tipo_pagamento').value = btn.dataset.tipo;
   document.getElementById('forma_pagamento_key').value = btn.dataset.key;
-  // v2.11.43: mostra campo data prevista só para pix_receber
+  // v2.11.44: mostra campo data prevista só para pix_receber
   const isPix = btn.dataset.tipo === 'pix_receber';
   document.getElementById('pix-receber-data').style.display = isPix ? 'block' : 'none';
   if (isPix && !document.getElementById('pix-data-input').value) setPixData(1); // default amanhã
@@ -1353,7 +1355,7 @@ async function saveOrder() {
         bling_contact_id: isConsumidorFinal ? CONSUMIDOR_FINAL_BLING_ID : (window._lastBlingContactId || null),
         empenho_id: window._empenhoSelecionado?.id || null,
         data_pedido: getDataPedido(),
-        pix_data_prevista: getPixDataPrevista(), // v2.11.43
+        pix_data_prevista: getPixDataPrevista(), // v2.11.44
       }),
     });
 
@@ -1388,7 +1390,7 @@ async function saveOrder() {
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
 
-    // v2.11.43: popup finalização rápida
+    // v2.11.44: popup finalização rápida
     // Consumidor final OU data passada/hoje → perguntar se quer marcar entregue
     const _dataSalva = getDataPedido();
     const _hoje = dataCGOffset(0);
@@ -1397,7 +1399,7 @@ async function saveOrder() {
       setTimeout(() => openQuickDeliver(result.id, isConsumidorFinal, tipoPgto), 400);
     }
 
-    // v2.11.43: Não redireciona — limpa form para novo pedido
+    // v2.11.44: Não redireciona — limpa form para novo pedido
     setTimeout(() => {
       // Limpar cliente
       ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1419,11 +1421,11 @@ async function saveOrder() {
       // Reativar botão
       btn.disabled = false;
       btn.textContent = '✅ SALVAR PEDIDO';
-      // v2.11.43: Reset data pedido para hoje
+      // v2.11.44: Reset data pedido para hoje
       setDataPedido(0);
       // Foco no telefone para próximo pedido
       document.getElementById('cPhone').focus();
-      // v2.11.43: Restaurar favoritos originais
+      // v2.11.44: Restaurar favoritos originais
       restaurarFavoritosOriginais();
       window._empenhosCliente = [];
       window._empenhoSelecionado = null;
@@ -1440,7 +1442,7 @@ async function saveOrder() {
 }
 
 renderItems();
-// v2.11.43: Inicializa data do pedido como hoje
+// v2.11.44: Inicializa data do pedido como hoje
 setDataPedido(0);
 // Data livre — sem restrição de mínimo (permite lançar pedidos retroativos)
 
@@ -1602,7 +1604,7 @@ async function vincularAoBling(blingId, blingNome) {
   } finally { hideLoading(); }
 }
 
-// ── Empenhos GOV v2.11.43 ──────────────────────────────────────────
+// ── Empenhos GOV v2.11.44 ──────────────────────────────────────────
 // Salva HTML original dos favoritos para restaurar ao trocar de cliente
 let _favOrigHTML    = null;
 let _favOrigVisible = false;
@@ -2150,7 +2152,7 @@ async function saveCadastro() {
 }
 </script>
 
-<!-- MODAL FINALIZAÇÃO RÁPIDA v2.11.43 -->
+<!-- MODAL FINALIZAÇÃO RÁPIDA v2.11.44 -->
 <div id="modal-quick-deliver" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="text-align:center;margin-bottom:20px">
@@ -2245,7 +2247,7 @@ async function openQuickDeliver(orderId, isConsumidorFinal, tipoPgto) {
       });
     } catch(e) {}
   } else {
-    // v2.11.43: Consumidor Final → Venda Portaria (id=10) automático
+    // v2.11.44: Consumidor Final → Venda Portaria (id=10) automático
     driverWrap.style.display = 'none';
     portariaInfo.style.display = 'block';
   }
@@ -2274,7 +2276,7 @@ async function confirmQuickDeliver() {
 
   try {
     const body = {};
-    // v2.11.43: Consumidor Final → Venda Portaria id=10 automático
+    // v2.11.44: Consumidor Final → Venda Portaria id=10 automático
     if (_qdIsConsumidorFinal) {
       body.driver_id = 10;
     } else if (driverId) {

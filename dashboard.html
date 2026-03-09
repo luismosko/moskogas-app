@@ -83,6 +83,7 @@
     <div class="dash-title">📊 Dashboard <span>do Dia</span> v1.0.2</div>
     <div class="dash-controls">
       <span class="bling-badge bling-warn" id="blingBadge">⏳ Bling...</span>
+      <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:4px 10px;font-size:11px;font-weight:800;cursor:pointer" onclick="window.location.href='config.html#ultragaz'">H</span>
       <input type="date" id="dashDate">
       <button class="btn-refresh" id="btnRefresh" onclick="loadDashboard()" title="Atualizar dados">🔄 Atualizar</button>
     </div>
@@ -152,6 +153,7 @@ document.getElementById('dashDate').value = hoje;
 
 // Bling monitor (centralizado via shared.js)
 initBlingMonitor('blingBadge');
+initHubMonitor('hub-indicator');
 
 const ST = {
   novo:             { cor: '#ef4444', label: 'Novo',             icon: '🔴' },

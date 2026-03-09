@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.5
+// shared.js — Utilitários compartilhados MoskoGás v1.24.6
+// v1.24.6: Hub Monitor — banner automático em todas as telas quando Hub desconecta
 // v1.24.5: Alerta UG — persistência "já visto" no localStorage; cancelados só hoje+ontem; badge Hub na gestão
 // v1.24.4: Alerta de cancelamento Ultragaz — banner vermelho + polling /cancelamentos-recentes
 // v1.24.3: Banner Ultragaz — "Ver na Gestão" redireciona com ?ultragaz=1 para limpar filtro de data
@@ -1170,6 +1171,123 @@ function checkBlingReauth(err) {
   }
   return false;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// HUB ULTRAGAZ MONITOR — v1.24.5
+// Badge + banner automático em TODAS as telas
+// ═══════════════════════════════════════════════════════════════
+
+let _hubConnected = null; // null=unknown, true/false
+
+function initHubMonitor(badgeId) {
+  const el = badgeId ? document.getElementById(badgeId) : null;
+  // Check imediato + interval + visibilidade
+  _hubPingCheck(el);
+  setInterval(() => _hubPingCheck(el), 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) _hubPingCheck(el);
+  });
+}
+
+async function _hubPingCheck(el) {
+  try {
+    const r = await api('/api/ultragaz/hub-status');
+    const ok = r && r.conectado === true;
+    _hubConnected = ok;
+    if (el) _updateHubBadge(el, ok);
+    if (ok) _hideHubDisconnectBanner();
+    else _showHubDisconnectBanner();
+  } catch(e) {
+    _hubConnected = false;
+    if (el) _updateHubBadge(el, false);
+    _showHubDisconnectBanner();
+  }
+}
+
+function _updateHubBadge(el, ok) {
+  if (!el) return;
+  el.style.background = ok ? '#ea580c' : '#dc2626';
+  el.style.opacity = ok ? '1' : '1';
+  el.textContent = ok ? '🟠 H' : '🔴 H';
+  el.title = ok ? 'Hub Ultragaz conectado' : '⚠️ Hub Ultragaz DESCONECTADO — clique para conectar';
+  el.style.cursor = 'pointer';
+  el.onclick = () => { window.location.href = 'config.html#ultragaz'; };
+}
+
+function _showHubDisconnectBanner() {
+  if (document.getElementById('hub-disconnect-banner')) return;
+  // Não mostrar no config.html (já tem seção completa)
+  if (window.location.pathname.endsWith('config.html')) return;
+  const b = document.createElement('div');
+  b.id = 'hub-disconnect-banner';
+  b.style.cssText = [
+    'position:fixed',
+    'top:0','left:0','right:0',
+    'z-index:99997',
+    'background:linear-gradient(90deg,#c2410c,#ea580c)',
+    'color:#fff',
+    'padding:10px 16px',
+    'display:flex',
+    'align-items:center',
+    'justify-content:space-between',
+    'font-size:13px',
+    'font-weight:700',
+    'box-shadow:0 3px 10px rgba(0,0,0,0.4)',
+    'gap:12px'
+  ].join(';');
+  b.innerHTML =
+    '<span style="display:flex;align-items:center;gap:8px">' +
+      '<span style="font-size:18px;animation:blink 1s step-end infinite">🔴</span>' +
+      '<span>HUB ULTRAGAZ DESCONECTADO — pedidos da Ultragaz NÃO serão recebidos!</span>' +
+    '</span>' +
+    '<a href="config.html#ultragaz" style="background:#fff;color:#c2410c;padding:6px 18px;border-radius:8px;font-weight:800;text-decoration:none;white-space:nowrap;font-size:13px;flex-shrink:0">🔑 Conectar Agora</a>';
+  // Ajusta padding para não sobrepor Bling banner se ambos estiverem
+  const blingBanner = document.getElementById('bling-disconnect-banner');
+  if (blingBanner) {
+    b.style.top = '52px';
+  }
+  document.body.prepend(b);
+  // Empurra conteúdo se não tiver o Bling banner (evita duplo padding)
+  if (!blingBanner) {
+    document.body.style.paddingTop = (parseInt(document.body.style.paddingTop||'0') + 46) + 'px';
+  }
+  // Adicionar animação de piscar se não existir
+  if (!document.getElementById('hub-blink-style')) {
+    const s = document.createElement('style');
+    s.id = 'hub-blink-style';
+    s.textContent = '@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }';
+    document.head.appendChild(s);
+  }
+}
+
+function _hideHubDisconnectBanner() {
+  const b = document.getElementById('hub-disconnect-banner');
+  if (b) {
+    b.remove();
+    // Reduz padding apenas se não tiver bling banner também
+    if (!document.getElementById('bling-disconnect-banner')) {
+      const current = parseInt(document.body.style.paddingTop || '0');
+      if (current >= 46) document.body.style.paddingTop = (current - 46) + 'px';
+      if (parseInt(document.body.style.paddingTop||'0') <= 0) document.body.style.paddingTop = '';
+    }
+  }
+}
+
+// ── Auto-init em TODAS as páginas se usuário estiver logado ──────────────────
+(function _autoInitHubMonitor() {
+  function _start() {
+    if (!localStorage.getItem('mg_session_token')) return; // não logado
+    // Só admin e atendente precisam ver (entregador não usa Hub)
+    const user = (() => { try { return JSON.parse(localStorage.getItem('mg_user')||'null'); } catch { return null; } })();
+    if (!user || user.role === 'entregador') return;
+    initHubMonitor(null); // sem badge — badge só em páginas que chamam initHubMonitor('hub-indicator')
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _start);
+  } else {
+    _start();
+  }
+})();
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTA GLOBAL ULTRAGAZ HUB — v1.23.0
