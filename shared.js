@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.8
+// shared.js — Utilitários compartilhados MoskoGás v1.24.9
+// v1.24.9: Fix banner Hub no config.html (pathname /config, não /config.html)
 // v1.24.8: Hub badge azul=conectado/vermelho=desconectado; fix reload seenLS por ciclo
 // v1.24.7: Fix botões × banners UG — funções expostas no escopo global inline
 // v1.24.6: Hub Monitor — banner automático em todas as telas quando Hub desconecta
@@ -1219,7 +1220,7 @@ function _updateHubBadge(el, ok) {
 function _showHubDisconnectBanner() {
   if (document.getElementById('hub-disconnect-banner')) return;
   // Não mostrar no config.html (já tem seção completa)
-  if (window.location.pathname.endsWith('config.html')) return;
+  if (window.location.pathname.includes('config')) return; // não mostrar no config
   const b = document.createElement('div');
   b.id = 'hub-disconnect-banner';
   b.style.cssText = [

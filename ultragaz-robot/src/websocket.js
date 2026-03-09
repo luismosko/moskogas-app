@@ -19,6 +19,8 @@ let reconnectDelay = 5000;
 let running = false;
 let consecutive401 = 0;
 let scanInterval = null;
+let _lastApiUrl = '';
+let _lastApiKey = '';
 let heartbeatInterval = null;
 const SCAN_INTERVAL_MS = 60 * 1000; // varredura automática a cada 60 segundos
 const HEARTBEAT_MS = 3 * 60 * 1000; // heartbeat a cada 3 minutos (worker expira em 30min)
@@ -203,6 +205,8 @@ async function checkScanRequest(apiUrl, apiKey, page) {
 
 // Executa varredura e processa pedidos encontrados
 async function runScan(page, source = 'auto') {
+  // Atualiza status conectado imediatamente a cada scan (todo minuto)
+  _sendHeartbeat(_lastApiUrl, _lastApiKey).catch(() => {});
   const log  = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
   const warn = (msg) => console.warn(`[ws] ${new Date().toISOString()} ${msg}`);
   log(`🔍 Varredura [${source}] — buscando pedidos em aberto...`);
@@ -266,6 +270,8 @@ async function runCancelScan(page, source) {
 }
 
 function startPeriodicScan(apiUrl, apiKey, page) {
+  _lastApiUrl = apiUrl;
+  _lastApiKey = apiKey;
   stopPeriodicScan();
   const log = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
   log(`⏱ Varredura automática a cada ${SCAN_INTERVAL_MS / 60000} minutos ativada`);
