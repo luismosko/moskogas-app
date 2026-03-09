@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.0
+// shared.js — Utilitários compartilhados MoskoGás v1.24.1
+// v1.24.1: Fix alerta Ultragaz — orders/list retorna array direto, não { orders: [] }
 // v1.24.0: Fix alerta Ultragaz — corrige apiCall → api() no _checkUltragazAlerts
 // v1.23.0: Alerta global Ultragaz Hub — polling 15s em todas as telas, banner laranja pulsante
 // v1.22.3: 'gerente' adicionado a todos os itens do menu de navegação (NAV_ITEMS + NAV_DROPDOWNS)
@@ -1307,8 +1308,10 @@ function checkBlingReauth(err) {
     // Só roda se o usuário está logado (token presente)
     if (!localStorage.getItem('mg_session_token')) return;
     try {
-      const data = await api('/api/orders/list?status=NOVO&limit=10');
-      const novos = (data.orders || []).filter(function(o) {
+      // orders/list retorna array direto, não { orders: [] }
+      const data = await api('/api/orders/list?status=NOVO&limit=20');
+      const lista = Array.isArray(data) ? data : (data.orders || []);
+      const novos = lista.filter(function(o) {
         return o.vendedor_nome === 'Ultragaz Hub' && !_ultragazSeen.has(o.id);
       });
       for (const order of novos) {
