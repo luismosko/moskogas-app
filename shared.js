@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.23.0
+// shared.js — Utilitários compartilhados MoskoGás v1.24.0
+// v1.24.0: Fix alerta Ultragaz — corrige apiCall → api() no _checkUltragazAlerts
 // v1.23.0: Alerta global Ultragaz Hub — polling 15s em todas as telas, banner laranja pulsante
 // v1.22.3: 'gerente' adicionado a todos os itens do menu de navegação (NAV_ITEMS + NAV_DROPDOWNS)
 // v1.22.2: Bling badge — onclick direto ao OAuth quando desconectado; tooltip mais claro; texto "🔴 Bling OFF — clique"
@@ -1306,9 +1307,7 @@ function checkBlingReauth(err) {
     // Só roda se o usuário está logado (token presente)
     if (!localStorage.getItem('mg_session_token')) return;
     try {
-      const res = await apiCall('/api/orders/list?status=NOVO&limit=10');
-      if (!res || !res.ok) return;
-      const data = await res.json();
+      const data = await api('/api/orders/list?status=NOVO&limit=10');
       const novos = (data.orders || []).filter(function(o) {
         return o.vendedor_nome === 'Ultragaz Hub' && !_ultragazSeen.has(o.id);
       });
@@ -1316,7 +1315,7 @@ function checkBlingReauth(err) {
         _ultragazSeen.add(order.id);
         _showUGBanner(order);
       }
-    } catch(e) { /* silencioso */ }
+    } catch(e) { /* silencioso — não interrompe o polling */ }
   }
 
   function startUltragazPolling(intervalMs) {

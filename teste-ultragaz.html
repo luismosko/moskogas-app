@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Teste — Alerta Ultragaz</title>
+<style>
+  body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+  h2 { color: #ea580c; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 4px; color: #444; }
+  input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+  .btn { margin-top: 16px; width: 100%; padding: 12px; background: #ea580c; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .btn:hover { background: #c2410c; }
+  .btn:disabled { background: #aaa; cursor: not-allowed; }
+  #resultado { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; font-family: monospace; display: none; }
+  .ok  { background: #d1fae5; color: #065f46; }
+  .err { background: #fee2e2; color: #991b1b; }
+  .info { background: #fff3cd; color: #856404; font-size: 12px; padding: 10px; border-radius: 6px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<h2>🔵 Teste — Pedido Ultragaz Hub</h2>
+<div class="info">
+  ⚠️ Esta página envia um pedido fake para a API.<br>
+  O alerta laranja deve aparecer em <strong>qualquer tela do MoskoGás</strong> aberta no browser em até 15 segundos.<br>
+  Abra outra aba com <code>pedido.html</code>, <code>pagamentos.html</code>, etc. antes de disparar.
+</div>
+
+<label>API URL</label>
+<input id="api" value="https://api.moskogas.com.br/api/ultragaz/pedido">
+
+<label>API Key</label>
+<input id="apikey" value="Moskogas0909">
+
+<label>ID único do pedido (mude para re-testar)</label>
+<input id="order_id" value="">
+
+<label>Nome do cliente</label>
+<input id="customer" value="SEMED — Teste Alerta">
+
+<label>Endereço</label>
+<input id="address" value="Av. Panamericana, 295 — Jardim dos Estados">
+
+<label>Produtos (JSON)</label>
+<input id="items" value='[{"produto":"P13","quantidade":2},{"produto":"Agua 20L","quantidade":1}]'>
+
+<label>Total (R$)</label>
+<input id="total" value="225.00" type="number" step="0.01">
+
+<button class="btn" id="btnEnviar" onclick="enviar()">🚀 Disparar Pedido Ultragaz</button>
+
+<div id="resultado"></div>
+
+<script>
+  // Gera ID único por padrão
+  document.getElementById('order_id').value = 'TEST-' + Date.now();
+
+  async function enviar() {
+    const btn = document.getElementById('btnEnviar');
+    const res = document.getElementById('resultado');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    res.style.display = 'none';
+
+    const body = {
+      ultragaz_order_id: document.getElementById('order_id').value.trim(),
+      customer_name:     document.getElementById('customer').value.trim(),
+      phone_digits:      '5567999990001',
+      address_line:      document.getElementById('address').value.trim(),
+      bairro:            'Centro',
+      items_json:        JSON.parse(document.getElementById('items').value),
+      total_value:       parseFloat(document.getElementById('total').value),
+      tipo_pagamento:    'boleto_orgao',
+      event_type:        'newOrder'
+    };
+
+    try {
+      const r = await fetch(document.getElementById('api').value, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-KEY': document.getElementById('apikey').value.trim()
+        },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      res.className = data.ok ? 'ok' : 'err';
+      res.textContent = JSON.stringify(data, null, 2);
+      res.style.display = 'block';
+
+      if (data.ok && data.criado) {
+        btn.textContent = '✅ Pedido criado! Aguarde o alerta aparecer (≤15s)';
+      } else if (data.duplicado) {
+        btn.textContent = '⚠️ ID duplicado — mude o ID e tente de novo';
+        btn.disabled = false;
+        document.getElementById('order_id').value = 'TEST-' + Date.now();
+      } else {
+        btn.textContent = '❌ Erro — veja o resultado';
+        btn.disabled = false;
+      }
+    } catch(e) {
+      res.className = 'err';
+      res.textContent = 'Erro de rede: ' + e.message;
+      res.style.display = 'block';
+      btn.textContent = '🚀 Disparar Pedido Ultragaz';
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
