@@ -1,5 +1,6 @@
-// v2.49.42
+// v2.49.43
 
+// v2.49.43: Ultragaz product-map — seed Água20L; preço do app_products; distribuição proporcional do total
 // v2.49.42: Ultragaz product-map table+CRUD+auto-seed; normalização pgto Hub; vale_gas_ultragaz
 // v2.49.41: Fix Ultragaz items_json — converte {produto,quantidade} → {name,qty}
 // v2.49.40: Fix Ultragaz — status inserido como 'novo' (minúsculo) — padrão do sistema
@@ -7750,47 +7751,68 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
           )
         `).run().catch(() => {});
 
-        // v2.49.42: Semear mapeamento padrão P13/P20/P45 se vazio
+        // v2.49.43: Semear mapeamento padrão P13/P20/P45/Água se vazio
         const mapCount = await env.DB.prepare('SELECT COUNT(*) as c FROM ultragaz_product_map').first();
         if (!mapCount || mapCount.c === 0) {
           const defaults = [
-            { sku: 'P13', name: 'Gás - GLP P13 Kg' },
-            { sku: 'P20', name: 'GLP P20' },
-            { sku: 'P45', name: 'GÁS P45 (recarga)' },
+            { sku: 'P13',     searchTerm: 'P13' },
+            { sku: 'P20',     searchTerm: 'P20' },
+            { sku: 'P45',     searchTerm: 'P45' },
+            { sku: 'AGUA20L', searchTerm: 'Agua' },
+            { sku: 'AGUA 20L',searchTerm: 'Agua' },
           ];
           for (const d of defaults) {
-            // Tentar encontrar o produto no sistema pelo nome
-            const prod = await env.DB.prepare("SELECT id, bling_id FROM app_products WHERE name LIKE ? AND ativo=1 LIMIT 1").bind(`%${d.sku}%`).first();
+            const prod = await env.DB.prepare("SELECT id, name, bling_id, price FROM app_products WHERE name LIKE ? AND ativo=1 LIMIT 1").bind(`%${d.searchTerm}%`).first();
             await env.DB.prepare(
-              "INSERT OR IGNORE INTO ultragaz_product_map (ultragaz_sku, moskogas_name, moskogas_product_id, bling_id) VALUES (?,?,?,?)"
-            ).bind(d.sku, prod?.name || d.name, prod?.id || null, prod?.bling_id || null).run();
+              "INSERT OR IGNORE INTO ultragaz_product_map (ultragaz_sku, moskogas_name, moskogas_product_id, bling_id, price_override) VALUES (?,?,?,?,?)"
+            ).bind(d.sku, prod?.name || d.sku, prod?.id || null, prod?.bling_id || null, prod?.price || null).run();
           }
         }
 
-        // v2.49.42: Carregar mapa de produtos ativo
+        // v2.49.43: Carregar mapa de produtos ativo (com preço do app_products se price_override nulo)
         const prodMap = {};
-        const mapRows = await env.DB.prepare("SELECT * FROM ultragaz_product_map WHERE ativo=1").all();
+        const mapRows = await env.DB.prepare(`
+          SELECT pm.*, ap.price as app_price, ap.name as app_name
+          FROM ultragaz_product_map pm
+          LEFT JOIN app_products ap ON pm.moskogas_product_id = ap.id
+          WHERE pm.ativo=1
+        `).all();
         for (const m of (mapRows.results || [])) {
-          prodMap[m.ultragaz_sku.toUpperCase()] = m;
+          prodMap[m.ultragaz_sku.toUpperCase()] = {
+            ...m,
+            resolvedPrice: m.price_override || m.app_price || 0,
+            resolvedName:  m.moskogas_name || m.app_name || m.ultragaz_sku
+          };
         }
 
-        // v2.49.42: Converter items usando mapa de produtos
+        // v2.49.43: Converter items usando mapa — nome + preço resolvido
         let parsedItems = [];
         try {
           const raw = typeof items_json === 'string' ? JSON.parse(items_json) : (items_json || []);
           parsedItems = raw.map(i => {
             const skuRaw = (i.name || i.produto || i.descricao || i.item || '').toString().trim().toUpperCase();
-            // Busca por SKU exato ou por prefixo (ex: "P13", "GAS P13")
             const mapEntry = prodMap[skuRaw] ||
-              Object.values(prodMap).find(m => skuRaw.includes(m.ultragaz_sku.toUpperCase()));
+              Object.values(prodMap).find(m => skuRaw.includes(m.ultragaz_sku.toUpperCase()) || m.ultragaz_sku.toUpperCase().includes(skuRaw));
             return {
-              name:  mapEntry ? mapEntry.moskogas_name : (i.name || i.produto || i.descricao || skuRaw || 'Produto'),
-              qty:   i.qty || i.quantidade || i.qtd || 1,
-              price: mapEntry?.price_override || i.price || i.valor || i.preco || 0,
+              name:  mapEntry ? mapEntry.resolvedName : (i.name || i.produto || skuRaw || 'Produto'),
+              qty:   Number(i.qty || i.quantidade || i.qtd || 1),
+              price: mapEntry?.resolvedPrice || Number(i.price || i.valor || i.preco || 0),
               ultragaz_sku: skuRaw || null
             };
           });
         } catch(e) { parsedItems = []; }
+
+        // v2.49.43: Se preços por item ainda somam zero mas tem total_value, distribuir proporcionalmente
+        const somaPrecos = parsedItems.reduce((s, i) => s + (i.price * i.qty), 0);
+        const totalValor = parseFloat(total_value) || 0;
+        if (somaPrecos === 0 && totalValor > 0 && parsedItems.length > 0) {
+          const totalQty = parsedItems.reduce((s, i) => s + i.qty, 0);
+          parsedItems = parsedItems.map(i => ({
+            ...i,
+            price: parseFloat(((totalValor / totalQty) * i.qty / i.qty).toFixed(2))
+          }));
+        }
+
         const itemsStr = JSON.stringify(parsedItems);
 
         // v2.49.42: Normalizar forma de pagamento do Hub → tipos do sistema
