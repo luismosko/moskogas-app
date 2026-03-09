@@ -1,5 +1,6 @@
-// v2.49.41
+// v2.49.42
 
+// v2.49.42: Ultragaz product-map table+CRUD+auto-seed; normalização pgto Hub; vale_gas_ultragaz
 // v2.49.41: Fix Ultragaz items_json — converte {produto,quantidade} → {name,qty}
 // v2.49.40: Fix Ultragaz — status inserido como 'novo' (minúsculo) — padrão do sistema
 // v2.49.37: checkPermRole() — permissões dinâmicas do Gerente lidas do banco (cancelar, reabrir, editar entregue)
@@ -7649,6 +7650,50 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         return json({ ok: true, ...JSON.parse(row.value) });
       }
 
+      // ── CRUD Mapa de Produtos Ultragaz ─────────────────────────────────────────
+      // GET /api/ultragaz/product-map — listar mapeamentos
+      if (path === '/api/ultragaz/product-map' && method === 'GET') {
+        const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+        if (authCheck instanceof Response) return authCheck;
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ultragaz_product_map (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, ultragaz_sku TEXT NOT NULL UNIQUE,
+          moskogas_name TEXT NOT NULL, moskogas_product_id INTEGER, bling_id TEXT,
+          price_override REAL, ativo INTEGER DEFAULT 1,
+          created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch())
+        )`).run().catch(()=>{});
+        const rows = await env.DB.prepare("SELECT * FROM ultragaz_product_map ORDER BY ultragaz_sku").all();
+        return json(rows.results || []);
+      }
+
+      // POST /api/ultragaz/product-map — criar ou atualizar entrada
+      if (path === '/api/ultragaz/product-map' && method === 'POST') {
+        const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+        if (authCheck instanceof Response) return authCheck;
+        const { ultragaz_sku, moskogas_name, moskogas_product_id, bling_id, price_override, ativo } = await request.json();
+        if (!ultragaz_sku || !moskogas_name) return err('ultragaz_sku e moskogas_name são obrigatórios');
+        await env.DB.prepare(`
+          INSERT INTO ultragaz_product_map (ultragaz_sku, moskogas_name, moskogas_product_id, bling_id, price_override, ativo, updated_at)
+          VALUES (?,?,?,?,?,?,unixepoch())
+          ON CONFLICT(ultragaz_sku) DO UPDATE SET
+            moskogas_name=excluded.moskogas_name,
+            moskogas_product_id=excluded.moskogas_product_id,
+            bling_id=excluded.bling_id,
+            price_override=excluded.price_override,
+            ativo=excluded.ativo,
+            updated_at=unixepoch()
+        `).bind(ultragaz_sku.trim().toUpperCase(), moskogas_name.trim(), moskogas_product_id||null, bling_id||null, price_override||null, ativo!=null?ativo:1).run();
+        return json({ ok: true });
+      }
+
+      // DELETE /api/ultragaz/product-map/:sku — remover entrada
+      const ugProdMapDel = path.match(/^\/api\/ultragaz\/product-map\/(.+)$/);
+      if (ugProdMapDel && method === 'DELETE') {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+        await env.DB.prepare("DELETE FROM ultragaz_product_map WHERE ultragaz_sku=?").bind(ugProdMapDel[1].toUpperCase()).run();
+        return json({ ok: true });
+      }
+
       // POST /api/ultragaz/pedido — Robot envia novo pedido capturado (só APP_API_KEY)
       if (path === '/api/ultragaz/pedido' && method === 'POST') {
         const apiKey = request.headers.get('X-API-KEY') || url.searchParams.get('api_key') || '';
@@ -7689,17 +7734,76 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
         // Cria pedido no sistema principal
         const now = Math.floor(Date.now() / 1000);
-        // v2.49.41: Converter items_json do formato Ultragaz {produto,quantidade} → padrão {name,qty}
+
+        // v2.49.42: Criar tabela de mapeamento de produtos se não existir
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS ultragaz_product_map (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ultragaz_sku TEXT NOT NULL UNIQUE,
+            moskogas_name TEXT NOT NULL,
+            moskogas_product_id INTEGER,
+            bling_id TEXT,
+            price_override REAL,
+            ativo INTEGER DEFAULT 1,
+            created_at INTEGER DEFAULT (unixepoch()),
+            updated_at INTEGER DEFAULT (unixepoch())
+          )
+        `).run().catch(() => {});
+
+        // v2.49.42: Semear mapeamento padrão P13/P20/P45 se vazio
+        const mapCount = await env.DB.prepare('SELECT COUNT(*) as c FROM ultragaz_product_map').first();
+        if (!mapCount || mapCount.c === 0) {
+          const defaults = [
+            { sku: 'P13', name: 'Gás - GLP P13 Kg' },
+            { sku: 'P20', name: 'GLP P20' },
+            { sku: 'P45', name: 'GÁS P45 (recarga)' },
+          ];
+          for (const d of defaults) {
+            // Tentar encontrar o produto no sistema pelo nome
+            const prod = await env.DB.prepare("SELECT id, bling_id FROM app_products WHERE name LIKE ? AND ativo=1 LIMIT 1").bind(`%${d.sku}%`).first();
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO ultragaz_product_map (ultragaz_sku, moskogas_name, moskogas_product_id, bling_id) VALUES (?,?,?,?)"
+            ).bind(d.sku, prod?.name || d.name, prod?.id || null, prod?.bling_id || null).run();
+          }
+        }
+
+        // v2.49.42: Carregar mapa de produtos ativo
+        const prodMap = {};
+        const mapRows = await env.DB.prepare("SELECT * FROM ultragaz_product_map WHERE ativo=1").all();
+        for (const m of (mapRows.results || [])) {
+          prodMap[m.ultragaz_sku.toUpperCase()] = m;
+        }
+
+        // v2.49.42: Converter items usando mapa de produtos
         let parsedItems = [];
         try {
           const raw = typeof items_json === 'string' ? JSON.parse(items_json) : (items_json || []);
-          parsedItems = raw.map(i => ({
-            name: i.name || i.produto || i.descricao || i.item || 'Produto',
-            qty:  i.qty  || i.quantidade || i.qtd || 1,
-            price: i.price || i.valor || i.preco || 0
-          }));
+          parsedItems = raw.map(i => {
+            const skuRaw = (i.name || i.produto || i.descricao || i.item || '').toString().trim().toUpperCase();
+            // Busca por SKU exato ou por prefixo (ex: "P13", "GAS P13")
+            const mapEntry = prodMap[skuRaw] ||
+              Object.values(prodMap).find(m => skuRaw.includes(m.ultragaz_sku.toUpperCase()));
+            return {
+              name:  mapEntry ? mapEntry.moskogas_name : (i.name || i.produto || i.descricao || skuRaw || 'Produto'),
+              qty:   i.qty || i.quantidade || i.qtd || 1,
+              price: mapEntry?.price_override || i.price || i.valor || i.preco || 0,
+              ultragaz_sku: skuRaw || null
+            };
+          });
         } catch(e) { parsedItems = []; }
         const itemsStr = JSON.stringify(parsedItems);
+
+        // v2.49.42: Normalizar forma de pagamento do Hub → tipos do sistema
+        const PG_MAP_HUB = {
+          'dinheiro': 'dinheiro', 'cash': 'dinheiro',
+          'debito': 'debito', 'débito': 'debito', 'debit': 'debito',
+          'credito': 'credito', 'crédito': 'credito', 'credit': 'credito',
+          'vale_gas': 'vale_gas_ultragaz', 'vale gás': 'vale_gas_ultragaz',
+          'vale_gas_ultragaz': 'vale_gas_ultragaz', 'voucher': 'vale_gas_ultragaz',
+          'vale': 'vale_gas_ultragaz', 'vale gas': 'vale_gas_ultragaz',
+        };
+        const pgNorm = (tipo_pagamento || '').toString().toLowerCase().trim();
+        const tipoPgtoFinal = PG_MAP_HUB[pgNorm] || 'dinheiro'; // padrão: dinheiro
 
         let moskogas_order_id = null;
         try {
@@ -7721,7 +7825,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
             itemsStr,
             parseFloat(total_value) || 0,
             `Pedido Ultragaz #${ultragaz_order_id}`,
-            tipo_pagamento || 'boleto_orgao',
+            tipoPgtoFinal,
             hoje_brt, now, now
           ).run();
           moskogas_order_id = r.meta?.last_row_id || null;
@@ -7742,7 +7846,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
           address_line || '',
           itemsStr,
           parseFloat(total_value) || 0,
-          tipo_pagamento || 'boleto_orgao',
+          tipo_pagamento || tipoPgtoFinal,
           JSON.stringify(raw_payload || {}),
           now
         ).run();
