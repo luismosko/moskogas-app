@@ -7564,7 +7564,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         if (!row) return json({ conectado: false, status: 'desconectado', updated_at: null });
         const data = JSON.parse(row.value);
         const idade = Date.now() - new Date(data.updated_at).getTime();
-        if (idade > 1800000) data.conectado = false;
+        if (idade > 300000) data.conectado = false; // 5min sem heartbeat = desconectado
         return json(data);
       }
 

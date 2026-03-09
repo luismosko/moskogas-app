@@ -277,22 +277,26 @@ function startPeriodicScan(apiUrl, apiKey, page) {
 }
 
 // Heartbeat — atualiza timestamp do status a cada 3min para evitar falso "desconectado"
+async function _sendHeartbeat(apiUrl, apiKey) {
+  try {
+    await fetch(`${apiUrl}/api/ultragaz/hub-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      body: JSON.stringify({
+        conectado: true, status: 'conectado',
+        mensagem: `Conectado (heartbeat ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })})`,
+        updated_at: new Date().toISOString()
+      })
+    });
+  } catch {}
+}
+
 function startHeartbeat(apiUrl, apiKey) {
   stopHeartbeat();
   const log = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
+  _sendHeartbeat(apiUrl, apiKey); // imediato ao conectar
   heartbeatInterval = setInterval(async () => {
-    try {
-      await fetch(`${apiUrl}/api/ultragaz/hub-status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-        body: JSON.stringify({
-          conectado: true,
-          status: 'conectado',
-          mensagem: `Conectado (heartbeat ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })})`,
-          updated_at: new Date().toISOString()
-        })
-      });
-    } catch {}
+    await _sendHeartbeat(apiUrl, apiKey);
   }, HEARTBEAT_MS);
   log(`💓 Heartbeat ativado (a cada ${HEARTBEAT_MS / 60000} min)`);
 }
