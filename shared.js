@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.7
+// shared.js — Utilitários compartilhados MoskoGás v1.24.8
+// v1.24.8: Hub badge azul=conectado/vermelho=desconectado; fix reload seenLS por ciclo
 // v1.24.7: Fix botões × banners UG — funções expostas no escopo global inline
 // v1.24.6: Hub Monitor — banner automático em todas as telas quando Hub desconecta
 // v1.24.5: Alerta UG — persistência "já visto" no localStorage; cancelados só hoje+ontem; badge Hub na gestão
@@ -1207,11 +1208,11 @@ async function _hubPingCheck(el) {
 
 function _updateHubBadge(el, ok) {
   if (!el) return;
-  el.style.background = ok ? '#ea580c' : '#dc2626';
-  el.style.opacity = ok ? '1' : '1';
-  el.textContent = ok ? '🟠 H' : '🔴 H';
-  el.title = ok ? 'Hub Ultragaz conectado' : '⚠️ Hub Ultragaz DESCONECTADO — clique para conectar';
-  el.style.cursor = 'pointer';
+  el.style.background    = ok ? '#2563eb' : '#dc2626';  // azul=conectado, vermelho=desconectado
+  el.style.border        = ok ? '2px solid #1d4ed8' : '2px solid #b91c1c';
+  el.textContent         = ok ? '🔵 H' : '🔴 H';
+  el.title               = ok ? 'Hub Ultragaz conectado — clique para configurar' : '⚠️ Hub Ultragaz DESCONECTADO — clique para conectar';
+  el.style.cursor        = 'pointer';
   el.onclick = () => { window.location.href = 'config.html#ultragaz'; };
 }
 
@@ -1464,12 +1465,15 @@ function _hideHubDisconnectBanner() {
     try {
       const data = await api('/api/orders/list?status=novo&limit=20');
       const lista = Array.isArray(data) ? data : (data.orders || []);
+      // Recarrega _ugSeenLS a cada ciclo para pegar marcações feitas em outras abas
+      var seenNow = _ugLoadSeen();
       lista.filter(function(o) {
         return o.vendedor_nome === 'Ultragaz Hub'
           && !_ultragazSeen.has(o.id)
-          && !_ugSeenLS.has(String(o.id));
+          && !seenNow.has(String(o.id));
       }).forEach(function(order) {
         _ultragazSeen.add(order.id);
+        _ugSeenLS.add(String(order.id)); // atualiza Set local também
         _showUGBanner(order);
       });
     } catch(e) {}
@@ -1560,6 +1564,12 @@ function _hideHubDisconnectBanner() {
   }
 
   // Expõe para uso externo (gestao.html pode chamar manualmente se quiser)
+  // Debug: limpar "já vistos" do localStorage (útil para testes)
+  window._ugClearSeen = function() {
+    Object.keys(localStorage).filter(function(k){ return k.startsWith('ug_seen_'); }).forEach(function(k){ localStorage.removeItem(k); });
+    console.log('[UG] localStorage limpo — próximo polling vai re-exibir alertas');
+  };
+
   window._ultragazGlobal = {
     start: startUltragazPolling,
     check: _checkUltragazAlerts,
