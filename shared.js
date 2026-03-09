@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.22.3
+// shared.js — Utilitários compartilhados MoskoGás v1.23.0
+// v1.23.0: Alerta global Ultragaz Hub — polling 15s em todas as telas, banner laranja pulsante
 // v1.22.3: 'gerente' adicionado a todos os itens do menu de navegação (NAV_ITEMS + NAV_DROPDOWNS)
 // v1.22.2: Bling badge — onclick direto ao OAuth quando desconectado; tooltip mais claro; texto "🔴 Bling OFF — clique"
 // v1.22.1: Bling Status Monitor centralizado — /bling/ping real + badge clicável + OAuth direto
@@ -1163,3 +1164,181 @@ function checkBlingReauth(err) {
   }
   return false;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTA GLOBAL ULTRAGAZ HUB — v1.23.0
+// Aparece em TODAS as telas via shared.js
+// ═══════════════════════════════════════════════════════════════
+
+(function() {
+  'use strict';
+
+  // IDs já exibidos nesta sessão (evita duplicata sem depender de endpoint dedicado)
+  const _ultragazSeen = new Set();
+  let _ultragazPolling = null;
+
+  // Injeta CSS de animações (uma só vez)
+  function _injectUltragazStyles() {
+    if (document.getElementById('ultragaz-global-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'ultragaz-global-styles';
+    s.textContent = `
+      @keyframes ugPulse {
+        0%,100% { box-shadow: 0 0 0 0 rgba(251,146,60,.7); }
+        50%      { box-shadow: 0 0 0 12px rgba(251,146,60,0); }
+      }
+      @keyframes ugSlideIn {
+        from { transform: translateY(-110%); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+      }
+      @keyframes ugShake {
+        0%,100% { transform: translateX(0); }
+        20%     { transform: translateX(-4px); }
+        40%     { transform: translateX(4px); }
+        60%     { transform: translateX(-3px); }
+        80%     { transform: translateX(3px); }
+      }
+      .ug-banner {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 999999;
+        background: linear-gradient(90deg, #ea580c, #f97316, #ea580c);
+        background-size: 200% 100%;
+        color: #fff;
+        padding: 0;
+        animation: ugSlideIn .35s ease, ugPulse 2s ease-in-out infinite;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        box-shadow: 0 4px 16px rgba(0,0,0,.35);
+      }
+      .ug-banner-inner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        flex-wrap: wrap;
+      }
+      .ug-banner-icon { font-size: 22px; flex-shrink: 0; animation: ugShake 1.2s ease .5s; }
+      .ug-banner-text { flex: 1; min-width: 0; }
+      .ug-banner-text strong { font-size: 14px; font-weight: 800; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ug-banner-text span  { font-size: 12px; opacity: .9; }
+      .ug-btn {
+        padding: 6px 14px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: opacity .15s;
+      }
+      .ug-btn:hover { opacity: .85; }
+      .ug-btn-ok  { background: #fff; color: #ea580c; }
+      .ug-btn-x   { background: rgba(255,255,255,.2); color: #fff; border-radius: 50%; width: 28px; height: 28px; padding: 0; font-size: 16px; }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function _formatItemsUG(items_json) {
+    try {
+      const arr = typeof items_json === 'string' ? JSON.parse(items_json) : (items_json || []);
+      return arr.map(function(i) { return (i.quantidade || 1) + 'x ' + (i.produto || i.name || '?'); }).join(', ') || 'Produtos N/D';
+    } catch(e) { return 'Produtos N/D'; }
+  }
+
+  function _playUGBeep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [440, 550, 660].forEach(function(freq, i) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
+        osc.start(ctx.currentTime + i * 0.15);
+        osc.stop(ctx.currentTime + i * 0.15 + 0.3);
+      });
+    } catch(e) {}
+  }
+
+  function _showUGBanner(order) {
+    _injectUltragazStyles();
+
+    // Remove banner anterior do mesmo pedido se existir
+    const existingId = 'ug-banner-' + order.id;
+    const existing = document.getElementById(existingId);
+    if (existing) return; // já exibindo
+
+    const items = _formatItemsUG(order.items_json);
+    const total = 'R$ ' + parseFloat(order.total_value || 0).toFixed(2).replace('.', ',');
+
+    const banner = document.createElement('div');
+    banner.id = existingId;
+    banner.className = 'ug-banner';
+
+    banner.innerHTML =
+      '<div class="ug-banner-inner">' +
+        '<div class="ug-banner-icon">🔵</div>' +
+        '<div class="ug-banner-text">' +
+          '<strong>PEDIDO ULTRAGAZ — ' + (order.customer_name || 'Cliente N/D').toUpperCase() + '</strong>' +
+          '<span>' + items + ' · ' + total + ' · ' + (order.address_line || 'Endereço N/D') + '</span>' +
+        '</div>' +
+        '<button class="ug-btn ug-btn-ok" title="Ver pedido na Gestão" onclick="window.location.href=\'gestao.html\'">✅ Ver na Gestão</button>' +
+        '<button class="ug-btn ug-btn-x" title="Fechar alerta" onclick="document.getElementById(\'' + existingId + '\').remove();document.body.style.paddingTop=\'\';">×</button>' +
+      '</div>';
+
+    // Empurra o conteúdo da página para baixo
+    document.body.prepend(banner);
+    document.body.style.paddingTop = '52px';
+
+    // Auto-remove após 45s
+    setTimeout(function() {
+      const el = document.getElementById(existingId);
+      if (el) { el.remove(); document.body.style.paddingTop = ''; }
+    }, 45000);
+
+    _playUGBeep();
+  }
+
+  async function _checkUltragazAlerts() {
+    // Só roda se o usuário está logado (token presente)
+    if (!localStorage.getItem('mg_session_token')) return;
+    try {
+      const res = await apiCall('/api/orders/list?status=NOVO&limit=10');
+      if (!res || !res.ok) return;
+      const data = await res.json();
+      const novos = (data.orders || []).filter(function(o) {
+        return o.vendedor_nome === 'Ultragaz Hub' && !_ultragazSeen.has(o.id);
+      });
+      for (const order of novos) {
+        _ultragazSeen.add(order.id);
+        _showUGBanner(order);
+      }
+    } catch(e) { /* silencioso */ }
+  }
+
+  function startUltragazPolling(intervalMs) {
+    if (_ultragazPolling) return; // já rodando
+    intervalMs = intervalMs || 15000;
+    // Primeira checagem com delay de 3s (aguarda página carregar)
+    setTimeout(_checkUltragazAlerts, 3000);
+    _ultragazPolling = setInterval(_checkUltragazAlerts, intervalMs);
+  }
+
+  // Expõe para uso externo (gestao.html pode chamar manualmente se quiser)
+  window._ultragazGlobal = {
+    start: startUltragazPolling,
+    check: _checkUltragazAlerts,
+    seen: _ultragazSeen
+  };
+
+  // Auto-inicia quando DOM estiver pronto
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { startUltragazPolling(); });
+  } else {
+    startUltragazPolling();
+  }
+})();
+
