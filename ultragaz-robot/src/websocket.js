@@ -20,7 +20,7 @@ let running = false;
 let consecutive401 = 0;
 let scanInterval = null;
 let heartbeatInterval = null;
-const SCAN_INTERVAL_MS = 5 * 60 * 1000; // varredura automática a cada 5 minutos
+const SCAN_INTERVAL_MS = 90 * 1000; // varredura automática a cada 90 segundos
 const HEARTBEAT_MS = 3 * 60 * 1000; // heartbeat a cada 3 minutos (worker expira em 30min)
 
 // Callback chamado quando chega pedido novo — definido pelo index.js
