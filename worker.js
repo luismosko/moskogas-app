@@ -1,5 +1,6 @@
-// v2.49.40
+// v2.49.41
 
+// v2.49.41: Fix Ultragaz items_json — converte {produto,quantidade} → {name,qty}
 // v2.49.40: Fix Ultragaz — status inserido como 'novo' (minúsculo) — padrão do sistema
 // v2.49.37: checkPermRole() — permissões dinâmicas do Gerente lidas do banco (cancelar, reabrir, editar entregue)
 // v2.49.36: role 'gerente' — hierarquia admin>gerente>atendente>entregador; acessa whatsapp safety, auditoria, cria atendente/entregador
@@ -7688,7 +7689,17 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
         // Cria pedido no sistema principal
         const now = Math.floor(Date.now() / 1000);
-        const itemsStr = typeof items_json === 'string' ? items_json : JSON.stringify(items_json || []);
+        // v2.49.41: Converter items_json do formato Ultragaz {produto,quantidade} → padrão {name,qty}
+        let parsedItems = [];
+        try {
+          const raw = typeof items_json === 'string' ? JSON.parse(items_json) : (items_json || []);
+          parsedItems = raw.map(i => ({
+            name: i.name || i.produto || i.descricao || i.item || 'Produto',
+            qty:  i.qty  || i.quantidade || i.qtd || 1,
+            price: i.price || i.valor || i.preco || 0
+          }));
+        } catch(e) { parsedItems = []; }
+        const itemsStr = JSON.stringify(parsedItems);
 
         let moskogas_order_id = null;
         try {
