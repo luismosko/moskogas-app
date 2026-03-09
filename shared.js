@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.6
+// shared.js — Utilitários compartilhados MoskoGás v1.24.7
+// v1.24.7: Fix botões × banners UG — funções expostas no escopo global inline
 // v1.24.6: Hub Monitor — banner automático em todas as telas quando Hub desconecta
 // v1.24.5: Alerta UG — persistência "já visto" no localStorage; cancelados só hoje+ontem; badge Hub na gestão
 // v1.24.4: Alerta de cancelamento Ultragaz — banner vermelho + polling /cancelamentos-recentes
@@ -1410,7 +1411,7 @@ function _hideHubDisconnectBanner() {
           '<span>' + items + ' · ' + total + ' · ' + (order.address_line || 'Endereço N/D') + '</span>' +
         '</div>' +
         '<button class="ug-btn ug-btn-ok" title="Ver pedido na Gestão" onclick="window.location.href=\'gestao.html?ultragaz=1\'">✅ Ver na Gestão</button>' +
-        '<button class="ug-btn ug-btn-x" title="Fechar (não mostrar novamente)" onclick="(function(){_ugMarkSeen(\'' + order.id + '\');_ugSeenLS.add(String(\'' + order.id + '\'));var b=document.getElementById(\'' + existingId + '\');if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';})()">×</button>' +
+        '<button class="ug-btn ug-btn-x" title="Fechar (não mostrar novamente)" onclick="(function(){var k=\'ug_seen_\'+new Date().toISOString().slice(0,10);var ex=(localStorage.getItem(k)||\'\').split(\',\').filter(Boolean);var rid=String(' + order.id + ');if(!ex.includes(rid)){ex.push(rid);localStorage.setItem(k,ex.join(\',\'));}var b=document.getElementById(\'' + existingId + '\');if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';})()">×</button>' +
       '</div>';
 
     // Empurra o conteúdo da página para baixo
@@ -1521,7 +1522,7 @@ function _hideHubDisconnectBanner() {
         '</span>',
       '</div>',
       '<a href="gestao.html?ultragaz=1" style="background:#fff;color:#dc2626;padding:6px 14px;border-radius:6px;font-weight:700;text-decoration:none;white-space:nowrap">👁 Ver na Gestão</a>',
-      '<button onclick="(function(btn){var b=btn.closest(\'[id^=ug-cancel-banner-]\');var ugId=b?b.id.replace(\'ug-cancel-banner-\',\'\'):\'\';if(ugId){_ugMarkSeen(\'c_\'+ugId);_ugSeenLS.add(\'c_\'+ugId);}if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';  })(this)" style="background:rgba(0,0,0,0.25);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1" title="Fechar (não mostrar novamente)">×</button>'
+      '<button onclick="(function(btn){var b=btn.closest(\'[id^=ug-cancel-banner-]\');var ugId=b?b.id.replace(\'ug-cancel-banner-\',\'\'):\'\';if(ugId){var k=\'ug_seen_\'+new Date().toISOString().slice(0,10);var ex=(localStorage.getItem(k)||\'\').split(\',\').filter(Boolean);var ck=\'c_\'+ugId;if(!ex.includes(ck)){ex.push(ck);localStorage.setItem(k,ex.join(\',\'));}};if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';  })(this)" style="background:rgba(0,0,0,0.25);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1" title="Fechar (não mostrar novamente)">×</button>'
     ].join('');
 
     document.body.style.paddingTop = '52px';
