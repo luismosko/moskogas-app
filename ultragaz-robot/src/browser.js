@@ -479,6 +479,74 @@ export async function getPendingOrders(page) {
   }
 }
 
+
+// Busca pedidos cancelados no Hub — aba "Pedidos Cancelados"
+export async function getCanceledOrders(page) {
+  const log = (msg) => console.log(`[browser] ${new Date().toISOString()} ${msg}`);
+  const canceled = [];
+
+  try {
+    // Clica na aba "Pedidos Cancelados"
+    const clicked = await page.evaluate(() => {
+      const els = document.querySelectorAll('.t-Tabs__item a, [role="tab"], .t-TabsRegion-tab, a, button');
+      for (const el of els) {
+        if (/Cancelad/i.test(el.textContent)) {
+          el.click();
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (!clicked) {
+      log('Aba Cancelados não encontrada');
+      return [];
+    }
+
+    await page.waitForTimeout(800);
+
+    // Debug: ver o que está visível
+    const domDebug = await page.evaluate(() => {
+      const allText = document.body.innerText || '';
+      const pedidoNums = allText.match(/\b2\d{7}\b/g) || [];
+      return { pedidoNums: [...new Set(pedidoNums)] };
+    });
+    log(`DOM [Cancelados]: pedidos visíveis: ${JSON.stringify(domDebug.pedidoNums)}`);
+
+    // Extrai IDs de pedidos cancelados
+    const orders = await page.evaluate(() => {
+      const rows = document.querySelectorAll([
+        'tr.t-Report-wrap', 'table tbody tr', '.a-IRR-table tbody tr',
+        '.t-Report-tableWrap tbody tr', 'tr',
+      ].join(', '));
+      const found = [];
+      rows.forEach(row => {
+        if (row.querySelector('th') || row.closest('thead')) return;
+        let orderId = null;
+        row.querySelectorAll('a, td').forEach(el => {
+          const txt = (el.innerText || el.textContent || '').trim();
+          if (/^\d{7,}$/.test(txt)) orderId = txt;
+        });
+        if (orderId) {
+          const cells = Array.from(row.querySelectorAll('td')).map(c => (c.innerText || c.textContent || '').trim());
+          found.push({ id: orderId, cells });
+        }
+      });
+      const unique = [];
+      const seen = new Set();
+      found.forEach(o => { if (!seen.has(o.id)) { seen.add(o.id); unique.push(o); } });
+      return unique;
+    });
+
+    log(`Aba [Cancelados]: ${orders.length} pedido(s) encontrado(s)`);
+    return orders;
+
+  } catch (e) {
+    log(`getCanceledOrders falhou: ${e.message}`);
+    return [];
+  }
+}
+
 export async function closeBrowser() {
   if (contextInstance) { try { await contextInstance.close(); } catch {} contextInstance = null; }
   if (browserInstance) { try { await browserInstance.close(); } catch {} browserInstance = null; }

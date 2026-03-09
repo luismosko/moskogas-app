@@ -1,12 +1,16 @@
 // websocket.js — Conexão WebSocket com Hub Ultragaz + listener de eventos
 import { WebSocket } from 'ws';
-import { getOrderDetails, getPendingOrders } from './browser.js';
+import { enviarCancelamento } from './moskogas.js';
+import { getOrderDetails, getPendingOrders, getCanceledOrders } from './browser.js';
 
 const log  = (msg) => console.log(`[ws] ${new Date().toISOString()} ${msg}`);
 const warn = (msg) => console.warn(`[ws] ${new Date().toISOString()} ${msg}`);
 
 // Tipos de evento que geram pedido novo
 const NEW_ORDER_EVENTS = ['newOrder', 'newOrderUG'];
+
+// IDs de cancelamentos já notificados (evita re-notificar a cada varredura)
+const canceledSeen = new Set();
 
 let wsInstance = null;
 let pingInterval = null;
@@ -227,8 +231,37 @@ async function runScan(page, source = 'auto') {
     } else {
       log(`✅ Nenhum pedido em aberto [${source}]`);
     }
+    // Verifica cancelamentos na aba "Pedidos Cancelados"
+    await runCancelScan(page, source);
+
   } catch (e) {
     warn(`Varredura [${source}] falhou: ${e.message}`);
+  }
+}
+
+// Varre aba de cancelados e notifica MoskoGás
+async function runCancelScan(page, source) {
+  try {
+    const cancelados = await getCanceledOrders(page);
+    if (!cancelados || cancelados.length === 0) return;
+    for (const order of cancelados) {
+      const orderId = String(order.id);
+      if (canceledSeen.has(orderId)) continue;
+      canceledSeen.add(orderId);
+      try {
+        const result = await enviarCancelamento(orderId);
+        if (result.cancelado) {
+          log(`🚫 Cancelamento #${orderId} notificado — pedido MoskoGás #${result.moskogas_order_id}`);
+        } else if (result.nao_encontrado) {
+          // Pedido cancelado no Hub que não estava no MoskoGás — ignorar silenciosamente
+        }
+      } catch (e) {
+        warn(`Erro ao notificar cancelamento #${orderId}: ${e.message}`);
+        canceledSeen.delete(orderId); // permite retry
+      }
+    }
+  } catch (e) {
+    warn(`runCancelScan falhou: ${e.message}`);
   }
 }
 

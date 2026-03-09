@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.3
+// shared.js — Utilitários compartilhados MoskoGás v1.24.4
+// v1.24.4: Alerta de cancelamento Ultragaz — banner vermelho + polling /cancelamentos-recentes
 // v1.24.3: Banner Ultragaz — "Ver na Gestão" redireciona com ?ultragaz=1 para limpar filtro de data
 // v1.24.1: Fix alerta Ultragaz — orders/list retorna array direto, não { orders: [] }
 // v1.24.3: Fix alerta Ultragaz — status=NOVO → status=novo (case-sensitive no D1)
@@ -1306,11 +1307,13 @@ function checkBlingReauth(err) {
     _playUGBeep();
   }
 
+  const _ultragazCancelSeen = new Set();
+
   async function _checkUltragazAlerts() {
     // Só roda se o usuário está logado (token presente)
     if (!localStorage.getItem('mg_session_token')) return;
     try {
-      // orders/list retorna array direto, não { orders: [] }
+      // Verifica novos pedidos (status=novo)
       const data = await api('/api/orders/list?status=novo&limit=20');
       const lista = Array.isArray(data) ? data : (data.orders || []);
       const novos = lista.filter(function(o) {
@@ -1320,7 +1323,83 @@ function checkBlingReauth(err) {
         _ultragazSeen.add(order.id);
         _showUGBanner(order);
       }
-    } catch(e) { /* silencioso — não interrompe o polling */ }
+    } catch(e) { /* silencioso */ }
+
+    try {
+      // Verifica cancelamentos recentes (últimos 5 min)
+      const dataCancel = await api('/api/ultragaz/cancelamentos-recentes');
+      const cancelados = Array.isArray(dataCancel) ? dataCancel : (dataCancel.cancelamentos || []);
+      for (const item of cancelados) {
+        if (!_ultragazCancelSeen.has(item.ultragaz_order_id)) {
+          _ultragazCancelSeen.add(item.ultragaz_order_id);
+          _showUGCancelBanner(item);
+        }
+      }
+    } catch(e) { /* silencioso */ }
+  }
+
+  function _showUGCancelBanner(item) {
+    // Remove banner anterior do mesmo pedido
+    var oldId = 'ug-cancel-banner-' + item.ultragaz_order_id;
+    var old = document.getElementById(oldId);
+    if (old) old.remove();
+
+    var banner = document.createElement('div');
+    banner.id = oldId;
+    banner.style.cssText = [
+      'position:fixed','top:0','left:0','right:0','z-index:999998',
+      'background:#dc2626','color:#fff','padding:12px 20px',
+      'display:flex','align-items:center','gap:12px','flex-wrap:wrap',
+      'box-shadow:0 3px 12px rgba(0,0,0,0.4)',
+      'animation:ugSlideIn 0.4s ease',
+      'font-family:inherit','font-size:15px'
+    ].join(';');
+
+    var itens = '';
+    try {
+      var arr = typeof item.items_json === 'string' ? JSON.parse(item.items_json) : (item.items_json || []);
+      itens = arr.map(function(i) { return (i.qty||i.quantidade||1) + 'x ' + (i.name||i.produto||''); }).join(', ');
+    } catch(e) {}
+
+    banner.innerHTML = [
+      '<span style="font-size:22px">🚫</span>',
+      '<div style="flex:1;min-width:200px">',
+        '<strong>CANCELAMENTO ULTRAGAZ</strong>',
+        '<br><span style="font-size:13px">',
+          (item.customer_name || 'Cliente') +
+          (itens ? ' · ' + itens : '') +
+          (item.moskogas_order_id ? ' · Pedido #' + item.moskogas_order_id : '') +
+          ' · Hub #' + item.ultragaz_order_id,
+        '</span>',
+      '</div>',
+      '<a href="gestao.html?ultragaz=1" style="background:#fff;color:#dc2626;padding:6px 14px;border-radius:6px;font-weight:700;text-decoration:none;white-space:nowrap">👁 Ver na Gestão</a>',
+      '<button onclick="this.closest('div[id^=ug-cancel-banner]').remove();document.body.style.paddingTop=''" style="background:rgba(0,0,0,0.2);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1">×</button>'
+    ].join('');
+
+    document.body.style.paddingTop = '52px';
+    document.body.insertBefore(banner, document.body.firstChild);
+
+    // Sons (3 beeps diferentes — tom mais grave para cancelamento)
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [330, 220, 165].forEach(function(freq, i) {
+        var osc = ctx.createOscillator(); var gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = freq; gain.gain.value = 0.18;
+        osc.start(ctx.currentTime + i * 0.18);
+        osc.stop(ctx.currentTime + i * 0.18 + 0.15);
+      });
+    } catch(e) {}
+
+    // Auto-remove em 45s
+    setTimeout(function() {
+      if (banner.parentNode) {
+        banner.remove();
+        if (!document.querySelector('[id^="ug-banner-"],[id^="ug-cancel-banner-"]')) {
+          document.body.style.paddingTop = '';
+        }
+      }
+    }, 45000);
   }
 
   function startUltragazPolling(intervalMs) {

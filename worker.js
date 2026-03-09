@@ -1,5 +1,6 @@
-// v2.49.44
+// v2.49.45
 
+// v2.49.45: Ultragaz — endpoint POST /api/ultragaz/cancelar — cancela pedido no sistema quando Hub cancela
 // v2.49.44: Ultragaz — total_value do Hub é sempre verdade (preço proporcional) — seed Água20L; preço do app_products; distribuição proporcional do total
 // v2.49.42: Ultragaz product-map table+CRUD+auto-seed; normalização pgto Hub; vale_gas_ultragaz
 // v2.49.41: Fix Ultragaz items_json — converte {produto,quantidade} → {name,qty}
@@ -7899,11 +7900,80 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
         return json({ ok: true, moskogas_order_id, ultragaz_order_id, criado: true });
       }
 
+      // POST /api/ultragaz/cancelar — Robô notifica cancelamento de pedido no Hub
+      if (path === '/api/ultragaz/cancelar' && method === 'POST') {
+        const apiKey = request.headers.get('X-API-KEY') || '';
+        if (!apiKey || apiKey !== env.APP_API_KEY) return err('Não autorizado', 401);
+
+        const { ultragaz_order_id } = await request.json();
+        if (!ultragaz_order_id) return err('ultragaz_order_id obrigatório');
+
+        // Busca pedido na tabela ultragaz_orders
+        const ugOrder = await env.DB.prepare(
+          'SELECT id, moskogas_order_id, status FROM ultragaz_orders WHERE ultragaz_order_id=?'
+        ).bind(String(ultragaz_order_id)).first();
+
+        if (!ugOrder) {
+          return json({ ok: true, nao_encontrado: true });
+        }
+
+        // Já foi cancelado antes?
+        if (ugOrder.status === 'cancelado') {
+          return json({ ok: true, duplicado: true, moskogas_order_id: ugOrder.moskogas_order_id });
+        }
+
+        // Atualiza status na tabela ultragaz_orders
+        await env.DB.prepare(
+          'UPDATE ultragaz_orders SET status=?, updated_at=? WHERE ultragaz_order_id=?'
+        ).bind('cancelado', Math.floor(Date.now()/1000), String(ultragaz_order_id)).run();
+
+        let moskogas_order_id = ugOrder.moskogas_order_id;
+        let pedidoCancelado = false;
+        let customerName = '';
+
+        // Cancela o pedido no MoskoGás se ainda estiver ativo
+        if (moskogas_order_id) {
+          const pedido = await env.DB.prepare(
+            'SELECT id, customer_name, status FROM orders WHERE id=?'
+          ).bind(moskogas_order_id).first();
+
+          if (pedido && !['cancelado', 'entregue'].includes(pedido.status)) {
+            customerName = pedido.customer_name || '';
+            await env.DB.prepare(
+              "UPDATE orders SET status='cancelado', cancel_motivo=?, canceled_at=? WHERE id=?"
+            ).bind('Cancelado pelo Hub Ultragaz', Math.floor(Date.now()/1000), moskogas_order_id).run();
+            await logStatusChange(env, moskogas_order_id, pedido.status, 'cancelado', 'Cancelado pelo Hub Ultragaz', { id: 0, nome: 'Robô Ultragaz', role: 'sistema' });
+            pedidoCancelado = true;
+          }
+        }
+
+        return json({ ok: true, cancelado: pedidoCancelado, moskogas_order_id, ultragaz_order_id, customer_name: customerName });
+      }
+
+      // GET /api/ultragaz/cancelamentos-recentes — Cancelamentos dos últimos 10min (polling shared.js)
+      if (path === '/api/ultragaz/cancelamentos-recentes' && method === 'GET') {
+        const authCheck = await requireAuth(request, env);
+        if (authCheck instanceof Response) return authCheck;
+        const since = Math.floor(Date.now()/1000) - 600; // últimos 10 min
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ultragaz_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, ultragaz_order_id TEXT UNIQUE NOT NULL, moskogas_order_id INTEGER, event_type TEXT, customer_name TEXT, address_line TEXT, items_json TEXT, total_value REAL, tipo_pagamento TEXT, raw_payload TEXT, status TEXT DEFAULT 'recebido', created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), processed_at INTEGER)`).run().catch(()=>{});
+        const rows = await env.DB.prepare(`
+          SELECT uo.ultragaz_order_id, uo.moskogas_order_id, uo.customer_name, uo.updated_at,
+                 o.items_json, o.total_value, o.cancel_motivo
+          FROM ultragaz_orders uo
+          LEFT JOIN orders o ON o.id = uo.moskogas_order_id
+          WHERE uo.status = 'cancelado'
+            AND uo.updated_at >= ?
+          ORDER BY uo.updated_at DESC
+          LIMIT 20
+        `).bind(since).all().catch(() => ({ results: [] }));
+        return json({ ok: true, cancelamentos: rows.results || [] });
+      }
+
       // GET /api/ultragaz/orders — Lista pedidos recebidos via Hub (admin)
       if (path === '/api/ultragaz/orders' && method === 'GET') {
         const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
         if (authCheck instanceof Response) return authCheck;
-        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ultragaz_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, ultragaz_order_id TEXT UNIQUE NOT NULL, moskogas_order_id INTEGER, event_type TEXT, customer_name TEXT, address_line TEXT, items_json TEXT, total_value REAL, tipo_pagamento TEXT, raw_payload TEXT, status TEXT DEFAULT 'recebido', created_at INTEGER DEFAULT (unixepoch()), processed_at INTEGER)`).run();
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ultragaz_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, ultragaz_order_id TEXT UNIQUE NOT NULL, moskogas_order_id INTEGER, event_type TEXT, customer_name TEXT, address_line TEXT, items_json TEXT, total_value REAL, tipo_pagamento TEXT, raw_payload TEXT, status TEXT DEFAULT 'recebido', created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), processed_at INTEGER)`).run();
         const rows = await env.DB.prepare("SELECT id, ultragaz_order_id, moskogas_order_id, event_type, customer_name, address_line, total_value, status, created_at FROM ultragaz_orders ORDER BY created_at DESC LIMIT 100").all();
         return json({ ok: true, orders: rows.results || [] });
       }

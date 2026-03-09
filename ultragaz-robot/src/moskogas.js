@@ -95,3 +95,15 @@ export async function enviarPedido(orderData) {
 
   return data; // { ok, moskogas_order_id, duplicado }
 }
+
+// Notifica MoskoGás que um pedido do Hub foi cancelado
+export async function enviarCancelamento(ultragaz_order_id) {
+  const res = await fetch(`${API_URL}/api/ultragaz/cancelar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-KEY': API_KEY },
+    body: JSON.stringify({ ultragaz_order_id: String(ultragaz_order_id) }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && !data.duplicado) throw new Error(`cancelar HTTP ${res.status}: ${JSON.stringify(data)}`);
+  return data;
+}
