@@ -1,6 +1,6 @@
-// v2.49.43
+// v2.49.44
 
-// v2.49.43: Ultragaz product-map — seed Água20L; preço do app_products; distribuição proporcional do total
+// v2.49.44: Ultragaz — total_value do Hub é sempre verdade (preço proporcional) — seed Água20L; preço do app_products; distribuição proporcional do total
 // v2.49.42: Ultragaz product-map table+CRUD+auto-seed; normalização pgto Hub; vale_gas_ultragaz
 // v2.49.41: Fix Ultragaz items_json — converte {produto,quantidade} → {name,qty}
 // v2.49.40: Fix Ultragaz — status inserido como 'novo' (minúsculo) — padrão do sistema
@@ -7802,15 +7802,25 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
           });
         } catch(e) { parsedItems = []; }
 
-        // v2.49.43: Se preços por item ainda somam zero mas tem total_value, distribuir proporcionalmente
-        const somaPrecos = parsedItems.reduce((s, i) => s + (i.price * i.qty), 0);
+        // v2.49.44: total_value do Hub é sempre a verdade — distribuir proporcionalmente pelos itens
         const totalValor = parseFloat(total_value) || 0;
-        if (somaPrecos === 0 && totalValor > 0 && parsedItems.length > 0) {
-          const totalQty = parsedItems.reduce((s, i) => s + i.qty, 0);
-          parsedItems = parsedItems.map(i => ({
-            ...i,
-            price: parseFloat(((totalValor / totalQty) * i.qty / i.qty).toFixed(2))
-          }));
+        if (totalValor > 0 && parsedItems.length > 0) {
+          // Distribui o total do Hub proporcional ao preço relativo de cada item
+          const somaPrecos = parsedItems.reduce((s, i) => s + (i.price * i.qty), 0);
+          if (somaPrecos > 0) {
+            // Mantém proporção relativa entre produtos, mas escala para o total do Hub
+            parsedItems = parsedItems.map(i => ({
+              ...i,
+              price: parseFloat(((i.price * i.qty / somaPrecos) * totalValor / i.qty).toFixed(2))
+            }));
+          } else {
+            // Sem referência de proporção: divide igualmente
+            const totalQty = parsedItems.reduce((s, i) => s + i.qty, 0);
+            parsedItems = parsedItems.map(i => ({
+              ...i,
+              price: parseFloat((totalValor / totalQty).toFixed(2))
+            }));
+          }
         }
 
         const itemsStr = JSON.stringify(parsedItems);
