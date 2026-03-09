@@ -1,5 +1,6 @@
-// v2.49.39
-// v2.49.39: Re-sync produção — worker Quick Edit divergiu do repo (aguardando_confirmacao vs criado:true)
+// v2.49.40
+
+// v2.49.40: Fix Ultragaz — status inserido como 'novo' (minúsculo) — padrão do sistema
 // v2.49.37: checkPermRole() — permissões dinâmicas do Gerente lidas do banco (cancelar, reabrir, editar entregue)
 // v2.49.36: role 'gerente' — hierarquia admin>gerente>atendente>entregador; acessa whatsapp safety, auditoria, cria atendente/entregador
 // v2.49.35: Recuperação de senha por WhatsApp+Email (OTP 6 dígitos, 15min) + campo email em app_users
@@ -7698,7 +7699,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
               phone_digits, customer_name, address_line, bairro, complemento, referencia,
               items_json, total_value, notes, status, sync_status,
               tipo_pagamento, pago, vendedor_nome, data_pedido, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOVO', 'pendente', ?, 0, 'Ultragaz Hub', ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', 'pendente', ?, 0, 'Ultragaz Hub', ?, ?, ?)
           `).bind(
             phone_digits || '',
             customer_name || 'Cliente Ultragaz',
