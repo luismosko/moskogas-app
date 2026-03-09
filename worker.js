@@ -7954,18 +7954,20 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
       if (path === '/api/ultragaz/cancelamentos-recentes' && method === 'GET') {
         const authCheck = await requireAuth(request, env);
         if (authCheck instanceof Response) return authCheck;
-        const since = Math.floor(Date.now()/1000) - 600; // últimos 10 min
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ultragaz_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, ultragaz_order_id TEXT UNIQUE NOT NULL, moskogas_order_id INTEGER, event_type TEXT, customer_name TEXT, address_line TEXT, items_json TEXT, total_value REAL, tipo_pagamento TEXT, raw_payload TEXT, status TEXT DEFAULT 'recebido', created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), processed_at INTEGER)`).run().catch(()=>{});
+        // Só cancelamentos reais (não entregues), de hoje e ontem
+        const sinceYesterday = Math.floor(Date.now()/1000) - 172800; // 48h
         const rows = await env.DB.prepare(`
           SELECT uo.ultragaz_order_id, uo.moskogas_order_id, uo.customer_name, uo.updated_at,
-                 o.items_json, o.total_value, o.cancel_motivo
+                 o.items_json, o.total_value, o.status AS moskogas_status
           FROM ultragaz_orders uo
           LEFT JOIN orders o ON o.id = uo.moskogas_order_id
           WHERE uo.status = 'cancelado'
             AND uo.updated_at >= ?
+            AND (o.status IS NULL OR o.status = 'cancelado')
           ORDER BY uo.updated_at DESC
           LIMIT 20
-        `).bind(since).all().catch(() => ({ results: [] }));
+        `).bind(sinceYesterday).all().catch(() => ({ results: [] }));
         return json({ ok: true, cancelamentos: rows.results || [] });
       }
 

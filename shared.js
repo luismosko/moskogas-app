@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.4
+// shared.js — Utilitários compartilhados MoskoGás v1.24.5
+// v1.24.5: Alerta UG — persistência "já visto" no localStorage; cancelados só hoje+ontem; badge Hub na gestão
 // v1.24.4: Alerta de cancelamento Ultragaz — banner vermelho + polling /cancelamentos-recentes
 // v1.24.3: Banner Ultragaz — "Ver na Gestão" redireciona com ?ultragaz=1 para limpar filtro de data
 // v1.24.1: Fix alerta Ultragaz — orders/list retorna array direto, não { orders: [] }
@@ -1291,7 +1292,7 @@ function checkBlingReauth(err) {
           '<span>' + items + ' · ' + total + ' · ' + (order.address_line || 'Endereço N/D') + '</span>' +
         '</div>' +
         '<button class="ug-btn ug-btn-ok" title="Ver pedido na Gestão" onclick="window.location.href=\'gestao.html?ultragaz=1\'">✅ Ver na Gestão</button>' +
-        '<button class="ug-btn ug-btn-x" title="Fechar alerta" onclick="document.getElementById(\'' + existingId + '\').remove();document.body.style.paddingTop=\'\';">×</button>' +
+        '<button class="ug-btn ug-btn-x" title="Fechar (não mostrar novamente)" onclick="(function(){_ugMarkSeen(\'' + order.id + '\');_ugSeenLS.add(String(\'' + order.id + '\'));var b=document.getElementById(\'' + existingId + '\');if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';})()">×</button>' +
       '</div>';
 
     // Empurra o conteúdo da página para baixo
@@ -1307,35 +1308,64 @@ function checkBlingReauth(err) {
     _playUGBeep();
   }
 
-  const _ultragazCancelSeen = new Set();
+  // ── Helpers para "já visto" persistido no localStorage ──────────────────
+  function _ugSeenKey() {
+    return 'ug_seen_' + new Date().toISOString().slice(0, 10);
+  }
+  function _ugLoadSeen() {
+    // Carrega IDs vistos hoje E ontem
+    var today = 'ug_seen_' + new Date().toISOString().slice(0, 10);
+    var d = new Date(); d.setDate(d.getDate() - 1);
+    var yesterday = 'ug_seen_' + d.toISOString().slice(0, 10);
+    var ids = new Set();
+    [today, yesterday].forEach(function(k) {
+      (localStorage.getItem(k) || '').split(',').filter(Boolean).forEach(function(id) { ids.add(id); });
+    });
+    return ids;
+  }
+  function _ugMarkSeen(id) {
+    var k = _ugSeenKey();
+    var ex = (localStorage.getItem(k) || '').split(',').filter(Boolean);
+    if (!ex.includes(String(id))) { ex.push(String(id)); localStorage.setItem(k, ex.join(',')); }
+    // Limpa chaves com mais de 2 dias
+    Object.keys(localStorage).filter(function(k) { return k.startsWith('ug_seen_'); }).forEach(function(k) {
+      var kd = new Date(k.replace('ug_seen_', '') + 'T00:00:00');
+      var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 2);
+      if (kd < cutoff) localStorage.removeItem(k);
+    });
+  }
+
+  // Carrega IDs já vistos do localStorage (persiste entre reloads)
+  var _ugSeenLS = _ugLoadSeen();
 
   async function _checkUltragazAlerts() {
-    // Só roda se o usuário está logado (token presente)
     if (!localStorage.getItem('mg_session_token')) return;
+
+    // ── Novos pedidos (status=novo, Hub) ─────────────────────────────────
     try {
-      // Verifica novos pedidos (status=novo)
       const data = await api('/api/orders/list?status=novo&limit=20');
       const lista = Array.isArray(data) ? data : (data.orders || []);
-      const novos = lista.filter(function(o) {
-        return o.vendedor_nome === 'Ultragaz Hub' && !_ultragazSeen.has(o.id);
-      });
-      for (const order of novos) {
+      lista.filter(function(o) {
+        return o.vendedor_nome === 'Ultragaz Hub'
+          && !_ultragazSeen.has(o.id)
+          && !_ugSeenLS.has(String(o.id));
+      }).forEach(function(order) {
         _ultragazSeen.add(order.id);
         _showUGBanner(order);
-      }
-    } catch(e) { /* silencioso */ }
+      });
+    } catch(e) {}
 
+    // ── Cancelamentos recentes (hoje + ontem, só cancelado mesmo) ────────
     try {
-      // Verifica cancelamentos recentes (últimos 5 min)
-      const dataCancel = await api('/api/ultragaz/cancelamentos-recentes');
-      const cancelados = Array.isArray(dataCancel) ? dataCancel : (dataCancel.cancelamentos || []);
-      for (const item of cancelados) {
-        if (!_ultragazCancelSeen.has(item.ultragaz_order_id)) {
-          _ultragazCancelSeen.add(item.ultragaz_order_id);
-          _showUGCancelBanner(item);
-        }
-      }
-    } catch(e) { /* silencioso */ }
+      const dc = await api('/api/ultragaz/cancelamentos-recentes');
+      const cancelados = Array.isArray(dc) ? dc : (dc.cancelamentos || []);
+      cancelados.filter(function(item) {
+        return !_ugSeenLS.has('c_' + item.ultragaz_order_id);
+      }).forEach(function(item) {
+        _ugSeenLS.add('c_' + item.ultragaz_order_id);
+        _showUGCancelBanner(item);
+      });
+    } catch(e) {}
   }
 
   function _showUGCancelBanner(item) {
@@ -1373,7 +1403,7 @@ function checkBlingReauth(err) {
         '</span>',
       '</div>',
       '<a href="gestao.html?ultragaz=1" style="background:#fff;color:#dc2626;padding:6px 14px;border-radius:6px;font-weight:700;text-decoration:none;white-space:nowrap">👁 Ver na Gestão</a>',
-      '<button onclick="this.closest('div[id^=ug-cancel-banner]').remove();document.body.style.paddingTop=''" style="background:rgba(0,0,0,0.2);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1">×</button>'
+      '<button onclick="(function(btn){var b=btn.closest(\'[id^=ug-cancel-banner-]\');var ugId=b?b.id.replace(\'ug-cancel-banner-\',\'\'):\'\';if(ugId){_ugMarkSeen(\'c_\'+ugId);_ugSeenLS.add(\'c_\'+ugId);}if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';  })(this)" style="background:rgba(0,0,0,0.25);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1" title="Fechar (não mostrar novamente)">×</button>'
     ].join('');
 
     document.body.style.paddingTop = '52px';
