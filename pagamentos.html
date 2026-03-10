@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.15</title>
+<title>Pagamentos — MoskoGás v1.9.16</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.15 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.16 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -86,7 +86,7 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.15</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.16</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -230,12 +230,19 @@ function renderTable(rows) {
     let actionBtns='';
     if(p.pago){
       // ── PAGO: só imprimir + Bling se ainda não enviado ──────────────
-      if(!p.bling_pedido_id){
+      if(!p.bling_pedido_id && !p.nfce_id){
         if(isNfe){
-          actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar Venda no Bling">📄 Bling</button>`;
+          actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar Venda Agrupada no Bling">📄 Bling</button>`;
         } else {
-          actionBtns+=`<button class="btn-nfe" onclick="gerarVendaBling(${p.id})" title="Enviar ao Bling" style="background:#0891b2">📤 Bling</button>`;
+          actionBtns+=`<button class="btn-nfe" onclick="emitirFiscalRetro(${p.id})" title="Emitir NFC-e ou criar NF-e/Bling" style="background:#0891b2">🧾 Fiscal</button>`;
         }
+      } else if(p.nfce_id){
+        // Badge NFC-e já emitida
+        const nfceStatus = p.nfce_status||'';
+        const nfceBadge = nfceStatus==='emitida'
+          ? `<span class="badge" style="background:#0ea5e9">🧾 NFC-e ${p.nfce_numero||''}</span>`
+          : `<span class="badge" style="background:#f59e0b">⚠️ NFC-e pendente</span>`;
+        actionBtns += nfceBadge;
       }
       actionBtns += `<button onclick="printRec(${p.id})" title="Imprimir recibo" style="background:#1F4E79;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">🖨️</button>`;
     } else {
@@ -431,6 +438,88 @@ async function gerarVendaBling(orderId){
   } else if(!result.canceled){
     toast('❌ '+result.error,'error');
   }
+}
+
+// ── Emissão fiscal retroativa (pedido já pago, sem NFC-e/Bling) ─────────────
+async function emitirFiscalRetro(orderId){
+  const pedido = allData.find(r=>r.id==orderId);
+  const nome = pedido ? pedido.customer_name : '#'+orderId;
+  const total = pedido ? 'R$ '+(parseFloat(pedido.total_value)||0).toFixed(2).replace('.',',') : '';
+
+  const tipoFiscal = await escolherTipoFiscalRetro(orderId, nome, total);
+  if(tipoFiscal === null) return;
+
+  const blingOk = await checkBlingBeforeAction();
+  if(!blingOk){toast('⚠️ Bling não conectado','error');return;}
+
+  if(tipoFiscal === 'nfce'){
+    showLoading('Emitindo NFC-e...');
+    try {
+      const data = await api('/api/pagamentos/'+orderId, {
+        method:'PATCH',
+        body: JSON.stringify({ tipo_fiscal:'nfce' })
+      });
+      hideLoading();
+      if(data.ok){
+        const f = data.fiscal;
+        const msg = f?.nfce_status==='emitida'
+          ? '🧾 NFC-e nº '+(f.nfce_numero||f.nfce_id)+' emitida! ✅'
+          : '⚠️ NFC-e criada — aguardando autorização SEFAZ';
+        toast(msg, f?.nfce_status==='emitida' ? 'success' : 'warning');
+        loadPagamentos();
+      } else toast('❌ '+(data.error||'Falha ao emitir NFC-e'),'error');
+    } catch(e){ hideLoading(); toast('❌ '+e.message,'error'); }
+
+  } else if(tipoFiscal === 'nfe'){
+    showLoading('Criando venda no Bling...');
+    try {
+      const data = await api('/api/pagamentos/'+orderId, {
+        method:'PATCH',
+        body: JSON.stringify({ tipo_fiscal:'nfe' })
+      });
+      hideLoading();
+      if(data.ok){
+        const f = data.fiscal;
+        toast('📄 Venda Bling nº '+(f?.bling_pedido_num||f?.bling_pedido_id||'')+' criada! Emita a NF-e no Bling.','success');
+        loadPagamentos();
+      } else toast('❌ '+(data.error||'Falha'),'error');
+    } catch(e){ hideLoading(); toast('❌ '+e.message,'error'); }
+  }
+}
+
+function escolherTipoFiscalRetro(orderId, nome, total){
+  return new Promise(resolve => {
+    const old = document.getElementById('modal-fiscal-retro');
+    if(old) old.remove();
+
+    const m = document.createElement('div');
+    m.id = 'modal-fiscal-retro';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    m.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 6px;font-size:18px;color:#1e293b">🧾 Emitir Documento Fiscal</h3>
+        <p style="margin:0 0 4px;color:#64748b;font-size:14px">Pedido <strong>#${orderId}</strong> — ${nome}</p>
+        <p style="margin:0 0 20px;font-size:15px;font-weight:700;color:#0f172a">${total} <span style="font-size:11px;font-weight:400;background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:10px;margin-left:4px">✅ Pago</span></p>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button id="btn-retro-nfce" style="background:#0ea5e9;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px">🧾</span>
+            <div><div>Emitir NFC-e agora</div><div style="font-size:11px;font-weight:400;opacity:0.85">Transmite automaticamente para SEFAZ</div></div>
+          </button>
+          <button id="btn-retro-nfe" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px">📄</span>
+            <div><div>Criar Pedido de Venda no Bling</div><div style="font-size:11px;font-weight:400;opacity:0.85">Para emitir NF-e manualmente depois</div></div>
+          </button>
+          <button id="btn-retro-cancel" style="background:transparent;color:#94a3b8;border:1px solid #e2e8f0;border-radius:10px;padding:10px 20px;font-size:13px;cursor:pointer;">
+            ✕ Cancelar
+          </button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(m);
+    document.getElementById('btn-retro-nfce').onclick   = () => { m.remove(); resolve('nfce'); };
+    document.getElementById('btn-retro-nfe').onclick    = () => { m.remove(); resolve('nfe');  };
+    document.getElementById('btn-retro-cancel').onclick = () => { m.remove(); resolve(null);   };
+  });
 }
 function bulkGerarNfe(){
   const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&TIPOS_NFE.includes(p.tipo_pagamento);});

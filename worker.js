@@ -1,4 +1,4 @@
-// v2.51.1
+// v2.51.2
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -4592,11 +4592,13 @@ export default {
       const orderId = parseInt(path.split('/')[3]);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
       if (!order) return err('Pedido não encontrado', 404);
-      if (order.pago === 1) return json({ ok: true, message: 'Já estava pago' });
 
       // tipo_fiscal: 'nfce' | 'nfe' | null (sem emissão fiscal)
       let tipoFiscal = null;
       try { const b = await request.clone().json(); tipoFiscal = b?.tipo_fiscal || null; } catch {}
+
+      // Se já pago e não veio tipo_fiscal → apenas confirmar (idempotente)
+      if (order.pago === 1 && !tipoFiscal) return json({ ok: true, message: 'Já estava pago' });
 
       // Migrations NFC-e (idempotente)
       for (const col of [
