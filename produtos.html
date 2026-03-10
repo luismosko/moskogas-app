@@ -672,6 +672,8 @@ function selectBlingProduct(p) {
   document.getElementById('blingResults').style.display = 'none';
   document.getElementById('blingSearchInput').value = p.nome;
   showToast('✅ Dados do Bling importados! Revise e salve.', 'success');
+}
+
 // ── Import CSV do Bling ───────────────────────────────────
 async function importCSV(input) {
   const file = input.files[0];
