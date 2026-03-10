@@ -1,4 +1,4 @@
-// v2.51.10
+// v2.51.11
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5508,6 +5508,24 @@ export default {
       const ativos = pedidos_sem_nfce.results.filter(p => (p.nfce_retry_count||0) < 5);
       const bloqueados = pedidos_sem_nfce.results.filter(p => (p.nfce_retry_count||0) >= 5);
       return json({ erros: erros.results, bling_audit: bling_audit.results, pedidos_sem_nfce: pedidos_sem_nfce.results, ativos, bloqueados, debug_pedidos: debug_pedidos.results });
+    }
+
+    // ── NFC-e: Bloquear pedidos antigos (antes de hoje) ───────────
+    if (method === 'POST' && path === '/api/nfce/bloquear-antigos') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      // Pegar data de hoje em BRT (UTC-4)
+      const agoraBRT = Date.now() - 4*3600*1000;
+      const hoje = new Date(agoraBRT);
+      const inicioHoje = Math.floor(new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate())).getTime()/1000) + 4*3600;
+      const r = await env.DB.prepare(
+        `UPDATE orders SET nfce_retry_count=5, nfce_error='ignorado: pedido anterior ao sistema NFC-e'
+         WHERE status='entregue'
+         AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
+         AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+         AND created_at < ?`
+      ).bind(inicioHoje).run();
+      return json({ ok: true, bloqueados: r.meta?.changes || 0, inicioHoje });
     }
 
     // ── NFC-e: Reset retry count (admin) ──────────────────────────

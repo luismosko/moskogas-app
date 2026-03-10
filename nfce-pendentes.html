@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.0.2</title>
+<title>NFC-e Pendentes — MoskoGás v1.0.3</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.0.2</span>
+  <span class="badge-ver">v1.0.3</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -97,6 +97,10 @@
     <button class="btn" id="btn-reset-retry" onclick="resetarRetry()"
       style="background:#f59e0b;color:#fff" title="Resetar contador de tentativas dos pedidos bloqueados">
       🔓 Desbloquear Bloqueados
+    </button>
+    <button class="btn" onclick="bloquearAntigos()"
+      style="background:#64748b;color:#fff" title="Marcar pedidos de dias anteriores como ignorados — emitir só os de hoje">
+      🗂️ Ignorar Histórico (só hoje)
     </button>
     <span id="status-msg" style="font-size:13px;color:#64748b;margin-left:4px"></span>
   </div>
@@ -299,6 +303,26 @@ async function retryUm(orderId) {
       toast('❌ ' + (data.error||'Falha'), 'error');
     }
   } catch(e) { if(btnEl){btnEl.disabled=false;btnEl.textContent='🔄';} toast('❌ ' + e.message, 'error'); }
+}
+
+async function bloquearAntigos() {
+  const total = dadosGlobais?.pedidos_sem_nfce?.length || 0;
+  if (!confirm(`Isso vai IGNORAR todos os pedidos anteriores a hoje sem NFC-e.
+
+Apenas os pedidos de HOJE continuarão pendentes.
+
+Confirmar?`)) return;
+  showLoading('Bloqueando histórico...');
+  try {
+    const r = await api('/api/nfce/bloquear-antigos', { method: 'POST', body: JSON.stringify({}) });
+    if (r.ok) {
+      toast(`✅ ${r.bloqueados || 0} pedidos antigos ignorados! Só os de hoje restam.`, 'success');
+      await carregarDados();
+    } else {
+      toast('❌ Erro: ' + (r.error || 'desconhecido'), 'error');
+    }
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 async function resetarRetry() {
