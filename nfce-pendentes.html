@@ -132,6 +132,9 @@ async function carregarDados() {
     dadosGlobais = data;
     renderizarDados(data);
   } catch(e) {
+    console.error('[nfce-pendentes] Erro:', e);
+    document.getElementById('tabela-pendentes').innerHTML = '<div style="padding:30px;text-align:center;color:#dc2626">❌ Erro ao carregar dados: ' + e.message + '</div>';
+    document.getElementById('tabela-erros').innerHTML = '<div style="padding:20px;text-align:center;color:#64748b">—</div>';
     toast('❌ Erro ao carregar: ' + e.message, 'error');
   }
 }
@@ -255,10 +258,10 @@ async function executarRetryBulk() {
 }
 
 async function retryUm(orderId) {
-  showLoading('Emitindo NFC-e #' + orderId + '...');
+  const btnEl = event?.target; if(btnEl){btnEl.disabled=true;btnEl.textContent='⏳';}
   try {
     const data = await api('/api/nfce/retry/' + orderId, { method: 'POST' });
-    hideLoading();
+    if(btnEl){btnEl.disabled=false;btnEl.textContent='🔄';}
     if (data.ok) {
       const n = data.nfce;
       toast(`✅ NFC-e #${orderId} → nº ${n?.nfce_numero||n?.nfce_id} emitida!`, 'success');
@@ -266,7 +269,7 @@ async function retryUm(orderId) {
     } else {
       toast('❌ ' + (data.error||'Falha'), 'error');
     }
-  } catch(e) { hideLoading(); toast('❌ ' + e.message, 'error'); }
+  } catch(e) { if(btnEl){btnEl.disabled=false;btnEl.textContent='🔄';} toast('❌ ' + e.message, 'error'); }
 }
 
 function formatTipo(t) {
@@ -276,7 +279,7 @@ function formatTipo(t) {
 
 // Inicializar
 document.addEventListener('DOMContentLoaded', async () => {
-  await initPage();
+  checkAuth(['admin', 'gerente']);
   await carregarDados();
 });
 </script>

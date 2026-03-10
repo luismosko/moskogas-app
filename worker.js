@@ -1,4 +1,4 @@
-// v2.51.7
+// v2.51.8
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5492,11 +5492,12 @@ export default {
          ORDER BY id DESC LIMIT 20`
       ).all().catch(() => ({ results: [] }));
       const pedidos_sem_nfce = await env.DB.prepare(
-        `SELECT id, status, tipo_pagamento, pago, nfce_id, bling_pedido_id, nfce_error, created_at
+        `SELECT id, customer_name, status, tipo_pagamento, pago, total_value,
+                nfce_id, bling_pedido_id, nfce_error, COALESCE(nfce_retry_count,0) as nfce_retry_count, created_at
          FROM orders WHERE status='entregue'
          AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
          AND nfce_id IS NULL
-         ORDER BY id DESC LIMIT 20`
+         ORDER BY id DESC LIMIT 50`
       ).all().catch(() => ({ results: [] }));
       return json({ erros: erros.results, bling_audit: bling_audit.results, pedidos_sem_nfce: pedidos_sem_nfce.results });
     }
