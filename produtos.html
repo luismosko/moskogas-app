@@ -127,6 +127,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
+<script>
+  if (document.getElementById('nav-placeholder')) {
+    document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+  }
+  checkAuth(['admin', 'gerente', 'atendente']);
+</script>
 
 <div class="container">
   <div class="version-badge">Produtos v1.0.0</div>
@@ -345,7 +351,6 @@ let _blingTimer = null;
 
 // ── Inicialização ──────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadNav();
   await loadProducts();
 });
 
@@ -475,26 +480,23 @@ async function syncBling() {
   fill.style.width = '10%';
   progressText.textContent = 'Conectando ao Bling...';
 
+  // Anima barra enquanto aguarda
+  let pct = 20;
+  const ticker = setInterval(() => { if (pct < 85) { pct += 3; fill.style.width = pct + '%'; } }, 800);
   try {
-    fill.style.width = '30%';
-    progressText.textContent = 'Buscando produtos no Bling...';
-
+    progressText.textContent = 'Buscando produtos no Bling (pode levar ~30s)...';
     const res = await api('/api/products/sync-bling', { method: 'POST' });
-
+    clearInterval(ticker);
     fill.style.width = '100%';
-    progressText.textContent = `✅ ${res.synced} produtos sincronizados!`;
-
-    showToast(`✅ ${res.synced} produtos sincronizados com dados fiscais!`, 'success');
-
-    setTimeout(async () => {
-      progress.style.display = 'none';
-      fill.style.width = '0%';
-      await loadProducts();
-    }, 2000);
-
+    const msg = `✅ ${res.synced} novos + ${res.updated} atualizados${res.errors ? ` (${res.errors} erros)` : ''}`;
+    progressText.textContent = msg;
+    showToast(msg, 'success');
+    setTimeout(async () => { progress.style.display = 'none'; fill.style.width = '0%'; await loadProducts(); }, 2000);
   } catch(e) {
+    clearInterval(ticker);
     showToast('Erro na sincronização: ' + e.message, 'error');
     progress.style.display = 'none';
+    fill.style.width = '0%';
   } finally {
     btn.disabled = false;
     btn.innerHTML = '🔄 Sincronizar com Bling';
