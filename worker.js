@@ -1,4 +1,4 @@
-// v2.51.26
+// v2.51.27
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2167,9 +2167,11 @@ export default {
       const dtFull = `${isoDate} ${hh}:${mi}:${ss}`;
       if (modo === '5') return json({ info: 'formas_pagamento', fpIds });
       if (modo === '6') {
-        const nr = await blingFetch('/naturezas-operacoes?pagina=1&limite=50', {}, env);
-        const body6 = await nr.text();
-        return json({ status: nr.status, body: body6 });
+        // Buscar produtos reais do Bling para usar no teste NFC-e
+        const pr = await blingFetch('/produtos?pagina=1&limite=10&criterio=1&tipo=P', {}, env);
+        const body6 = pr.ok ? await pr.json() : { error: pr.status, body: await pr.text() };
+        const produtos = (body6.data || []).map(p => ({ id: p.id, codigo: p.codigo, nome: p.nome, preco: p.preco }));
+        return json({ produtos });
       }
       const payloads = {
         // 1: dataVencimento em DD/MM/YYYY
@@ -2180,8 +2182,14 @@ export default {
         '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01}] },
         // 4: dataVencimento como datetime completo
         '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:dtFull}] },
-        // 7: parcelas com tipoPagamento direto (sem formaPagamento.id)
-        '7': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{tipoPagamento:{id:1},valor:0.01,dataVencimento:brDate}] },
+        // 7: item com produto.id real (pegar do modo 6)
+        '7': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate,
+          itens:[{ produto:{id: parseInt(url.searchParams.get('prodId')||'0') || undefined }, descricao:'TESTE', quantidade:1, valor:0.01 }],
+          parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] },
+        // 8: item com codigo de produto (string)
+        '8': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate,
+          itens:[{ codigo: url.searchParams.get('codigo')||'P13', descricao:'GLP 13KG', quantidade:1, valor:103.99 }],
+          parcelas:[{formaPagamento:{id:23368},valor:103.99,dataVencimento:brDate}] },
       };
       const payload = payloads[modo] || payloads['1'];
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
