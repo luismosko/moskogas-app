@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.0.4</title>
+<title>NFC-e Pendentes — MoskoGás v1.0.5</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.0.4</span>
+  <span class="badge-ver">v1.0.5</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -97,6 +97,10 @@
     <button class="btn" id="btn-reset-retry" onclick="resetarRetry()"
       style="background:#f59e0b;color:#fff" title="Resetar contador de tentativas dos pedidos bloqueados">
       🔓 Desbloquear Bloqueados
+    </button>
+    <button class="btn" onclick="reEmitirPendentes()"
+      style="background:#8b5cf6;color:#fff" title="Re-emitir NFC-es criadas no Bling mas ainda não autorizadas pela SEFAZ">
+      ⚡ Re-emitir Pendentes SEFAZ
     </button>
     <button class="btn" onclick="bloquearAntigos()"
       style="background:#64748b;color:#fff" title="Marcar pedidos de dias anteriores como ignorados — emitir só os de hoje">
@@ -309,6 +313,25 @@ async function retryUm(orderId) {
       toast('❌ ' + (data.error||'Falha'), 'error');
     }
   } catch(e) { if(btnEl){btnEl.disabled=false;btnEl.textContent='🔄';} toast('❌ ' + e.message, 'error'); }
+}
+
+async function reEmitirPendentes() {
+  if (!confirm('Isso vai tentar re-emitir para SEFAZ todas as NFC-es que foram criadas no Bling mas ainda estão Pendentes (não autorizadas).\n\nContinuar?')) return;
+  const res = document.getElementById('resultado');
+  res.innerHTML = '<div style="padding:12px;color:#6b21a8;background:#f5f3ff;border-radius:8px">⚡ Re-emitindo pendentes SEFAZ...</div>';
+  try {
+    const data = await apiCall('/api/nfce/re-emitir-pendentes', { method: 'POST' });
+    let html = `<div style="padding:12px;background:#f0fdf4;border-radius:8px;margin-bottom:12px">
+      <b>⚡ Re-emissão: ${data.total} NFC-e(s) processadas</b></div>`;
+    const ok = (data.resultados||[]).filter(d => d.status==='emitida');
+    const erros = (data.resultados||[]).filter(d => d.status==='erro'||d.erro);
+    ok.forEach(d => { html += `<div style="padding:6px 12px;background:#dcfce7;border-radius:6px;margin-bottom:4px">✅ Pedido #${d.id} → NFC-e ${d.numero||d.nfce_id} — Autorizada!</div>`; });
+    erros.forEach(d => { html += `<div style="padding:6px 12px;background:#fee2e2;border-radius:6px;margin-bottom:4px">❌ Pedido #${d.id} → ${d.body||d.erro}</div>`; });
+    res.innerHTML = html;
+    if (ok.length) { toast(`✅ ${ok.length} NFC-e(s) autorizadas pela SEFAZ!`, 'success'); carregarDados(); }
+    else if (erros.length) toast(`❌ Erros em ${erros.length} NFC-e(s) — verifique os detalhes`, 'error');
+    else toast('ℹ️ Nenhuma NFC-e pendente encontrada', 'info');
+  } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
 }
 
 async function bloquearAntigos() {
