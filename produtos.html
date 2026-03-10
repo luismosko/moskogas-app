@@ -141,6 +141,10 @@
     <h1 class="page-title">📦 <span>Produtos</span> MoskoGás</h1>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="openAddModal()">➕ Cadastrar</button>
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer;" title="Importar CSV exportado do Bling">
+        📄 Importar CSV
+        <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="importCSV(this)">
+      </label>
       <button class="btn btn-primary" id="btnSync" onclick="syncBling()">🔄 Sincronizar com Bling</button>
     </div>
   </div>
@@ -659,6 +663,83 @@ function selectBlingProduct(p) {
   document.getElementById('blingResults').style.display = 'none';
   document.getElementById('blingSearchInput').value = p.nome;
   showToast('✅ Dados do Bling importados! Revise e salve.', 'success');
+// ── Import CSV do Bling ───────────────────────────────────
+async function importCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = ''; // reset para permitir reimport
+
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return showToast('CSV vazio ou inválido', 'error');
+
+  // Parser CSV com separador ;
+  const parseCSVLine = (line) => {
+    const result = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ';' && !inQ) { result.push(cur.trim()); cur = ''; }
+      else { cur += c; }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, '').toLowerCase());
+  // Mapear colunas do Bling
+  const iId = headers.indexOf('id');
+  const iCod = headers.indexOf('código');
+  const iNome = headers.findIndex(h => h.includes('descrição') && !h.includes('compl'));
+  const iUnid = headers.indexOf('unidade');
+  const iNcm = headers.indexOf('ncm');
+  const iOrigem = headers.indexOf('origem');
+  const iPreco = headers.indexOf('preço');
+  const iPeso = headers.findIndex(h => h.includes('peso líquido'));
+  const iCest = headers.indexOf('cest');
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVLine(lines[i]);
+    if (cols.length < 5) continue;
+    const get = (idx) => idx >= 0 ? (cols[idx] || '').replace(/^"|"$/g, '').trim() : '';
+    rows.push({
+      id: get(iId),
+      codigo: get(iCod).replace(/\t/g, ''),
+      nome: get(iNome),
+      unidade: get(iUnid),
+      ncm: get(iNcm),
+      origem: get(iOrigem),
+      preco: get(iPreco),
+      peso_liquido: get(iPeso),
+      cest: get(iCest),
+    });
+  }
+
+  if (!rows.length) return showToast('Nenhum produto encontrado no CSV', 'error');
+
+  const progress = document.getElementById('syncProgress');
+  const fill = document.getElementById('syncFill');
+  const progressText = document.getElementById('syncProgressText');
+  progress.style.display = 'block';
+  fill.style.width = '50%';
+  progressText.textContent = `Importando ${rows.length} produtos do CSV...`;
+
+  try {
+    showLoading();
+    const res = await api('/api/products/import-csv', { method: 'POST', body: JSON.stringify({ rows }) });
+    fill.style.width = '100%';
+    const msg = `✅ ${res.synced} novos + ${res.updated} atualizados${res.errors ? ` (${res.errors} erros)` : ''}`;
+    progressText.textContent = msg;
+    showToast(msg, 'success');
+    setTimeout(async () => { progress.style.display = 'none'; fill.style.width = '0%'; await loadProducts(); }, 1500);
+  } catch(e) {
+    showToast('Erro ao importar CSV: ' + e.message, 'error');
+    progress.style.display = 'none';
+  } finally {
+    hideLoading();
+  }
 }
 </script>
 </body>

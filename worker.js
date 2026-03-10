@@ -1,6 +1,7 @@
-// v2.50.3
+// v2.50.4
 
-// v2.50.3: Fix produtos.html nav+auth; sync paralelo lotes 5 (evita timeout Worker)
+// v2.50.4: Fix sync-bling (} faltando causava timeout); endpoint import-csv para importar CSV do Bling direto
+// v2.50.3: Fix produtos.html nav+auth; sync paralelo lotes 5
 // v2.50.2: Relatório email — filtro por delivered_at (entregues) vs created_at (outros); faturamento exclui cancelados; cron envia D-1 e D-2
 // v2.50.1: produtos/sync-bling — busca detalhe individual por produto (garante NCM/CEST/CFOP completos da API Bling)
 // v2.50.0: Módulo Produtos completo — sync Bling com dados fiscais (NCM, CEST, CFOP, ICMS), endpoints CRUD, toggle-fav, search-bling
@@ -3141,6 +3142,45 @@ export default {
         }));
       }
       return json({ ok: true, synced, updated, errors, total: synced + updated });
+    }
+
+    // POST /api/products/import-csv — importa produtos direto do CSV exportado do Bling
+    if (method === 'POST' && path === '/api/products/import-csv') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body = await request.json();
+      const rows = body.rows || []; // array de objetos já parseados pelo frontend
+      if (!rows.length) return err('Nenhum produto no CSV');
+      let synced = 0, updated = 0, errors = 0;
+      const now = new Date().toISOString();
+      for (const row of rows) {
+        try {
+          const bId = String(row.id || '').trim();
+          const nome = (row.nome || '').trim();
+          const codigo = (row.codigo || '').trim();
+          const preco = parseFloat((row.preco || '0').replace(',', '.')) || 0;
+          const ncm = (row.ncm || '').replace(/\./g, '').trim();
+          const ncmFormatted = ncm.length >= 8 ? ncm.slice(0,4) + '.' + ncm.slice(4,6) + '.' + ncm.slice(6) : (row.ncm || '').trim();
+          const cest = (row.cest || '').trim();
+          const unidade = (row.unidade || 'UND').trim();
+          const pesoLiq = parseFloat((row.peso_liquido || '0').replace(',', '.')) || 0;
+          const origem = parseInt(row.origem || 0) || 0;
+          if (!nome) continue;
+          const exists = await env.DB.prepare('SELECT id, price FROM app_products WHERE bling_id=?').bind(bId).first();
+          if (exists) {
+            await env.DB.prepare('UPDATE app_products SET name=?,code=?,ncm=?,cest=?,cfop=?,origem=?,unidade=?,peso_liquido=?,bling_sync_at=?,price=CASE WHEN price=0 THEN ? ELSE price END WHERE bling_id=?'
+            ).bind(nome, codigo, ncmFormatted, cest, '5102', origem, unidade, pesoLiq, now, preco, bId).run();
+            updated++;
+          } else {
+            const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
+            await env.DB.prepare('INSERT INTO app_products (bling_id,name,code,price,ncm,cest,cfop,origem,unidade,peso_liquido,bling_sync_at,sort_order,ativo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)'
+            ).bind(bId, nome, codigo, preco, ncmFormatted, cest, '5102', origem, unidade, pesoLiq, now, (maxSort?.mx||0)+1).run();
+            synced++;
+          }
+        } catch(e) { errors++; }
+      }
+      return json({ ok: true, synced, updated, errors, total: synced + updated });
+    }
 
     if (method === 'GET' && path === '/api/products/search-bling') {
       const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
