@@ -1,4 +1,4 @@
-// v2.50.7
+// v2.50.8
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -8011,9 +8011,9 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
             updated_at INTEGER DEFAULT (unixepoch()),
             processed_at INTEGER
           )
-        \`).run();
+        `).run();
         // Migração: adiciona updated_at se não existir (tabelas criadas antes da v2.49.45)
-        await env.DB.prepare(\`ALTER TABLE ultragaz_orders ADD COLUMN updated_at INTEGER DEFAULT (unixepoch())\`).run().catch(() => {});
+        await env.DB.prepare(`ALTER TABLE ultragaz_orders ADD COLUMN updated_at INTEGER DEFAULT (unixepoch())`).run().catch(() => {});
 
         const existing = await env.DB.prepare("SELECT id, moskogas_order_id FROM ultragaz_orders WHERE ultragaz_order_id=?").bind(String(ultragaz_order_id)).first();
         if (existing) {
