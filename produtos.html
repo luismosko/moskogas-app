@@ -474,35 +474,54 @@ function filterProducts() {
 // ── Sincronizar com Bling ─────────────────────────────────
 async function syncBling() {
   const btn = document.getElementById('btnSync');
+  const btnSmall = document.getElementById('btnSyncSmall');
   const progress = document.getElementById('syncProgress');
   const fill = document.getElementById('syncFill');
   const progressText = document.getElementById('syncProgressText');
 
   btn.disabled = true;
-  btn.textContent = '⏳ Sincronizando...';
+  if (btnSmall) btnSmall.disabled = true;
+  btn.innerHTML = '⏳ Sincronizando...';
   progress.style.display = 'block';
-  fill.style.width = '10%';
-  progressText.textContent = 'Conectando ao Bling...';
+  fill.style.width = '3%';
+  progressText.textContent = 'Buscando lista de produtos no Bling...';
 
-  // Anima barra enquanto aguarda
-  let pct = 20;
-  const ticker = setInterval(() => { if (pct < 85) { pct += 3; fill.style.width = pct + '%'; } }, 800);
+  let synced = 0, updated = 0, errors = 0;
+
   try {
-    progressText.textContent = 'Buscando produtos no Bling (pode levar ~30s)...';
-    const res = await api('/api/products/sync-bling', { method: 'POST' });
-    clearInterval(ticker);
+    // Passo 1: buscar lista completa de IDs (1 chamada rápida)
+    const listRes = await api('/api/products/sync-list');
+    const ids = listRes.ids || [];
+    if (!ids.length) { showToast('Nenhum produto encontrado no Bling', 'error'); return; }
+
+    const total = ids.length;
+    progressText.textContent = `0 / ${total} produtos...`;
+
+    // Passo 2: processar 1 por vez, barra de progresso real
+    for (let i = 0; i < ids.length; i++) {
+      const item = ids[i];
+      const pct = Math.round(((i + 1) / total) * 100);
+      fill.style.width = pct + '%';
+      progressText.textContent = `${i + 1} / ${total} — ${item.nome}`;
+      try {
+        const res = await api('/api/products/sync-one', { method: 'POST', body: JSON.stringify(item) });
+        if (res.action === 'created') synced++; else updated++;
+      } catch(e) { errors++; }
+    }
+
     fill.style.width = '100%';
-    const msg = `✅ ${res.synced} novos + ${res.updated} atualizados${res.errors ? ` (${res.errors} erros)` : ''}`;
+    const msg = `✅ Concluído! ${synced} novos + ${updated} atualizados${errors ? ` (${errors} erros)` : ''}`;
     progressText.textContent = msg;
     showToast(msg, 'success');
     setTimeout(async () => { progress.style.display = 'none'; fill.style.width = '0%'; await loadProducts(); }, 2000);
+
   } catch(e) {
-    clearInterval(ticker);
-    showToast('Erro na sincronização: ' + e.message, 'error');
+    showToast('Erro: ' + e.message, 'error');
     progress.style.display = 'none';
     fill.style.width = '0%';
   } finally {
     btn.disabled = false;
+    if (btnSmall) btnSmall.disabled = false;
     btn.innerHTML = '🔄 Sincronizar com Bling';
   }
 }

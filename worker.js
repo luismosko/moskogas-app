@@ -1,6 +1,7 @@
-// v2.50.4
+// v2.50.5
 
-// v2.50.4: Fix sync-bling (} faltando causava timeout); endpoint import-csv para importar CSV do Bling direto
+// v2.50.5: sync produtos 1 por 1 via sync-list + sync-one (barra progresso real, sem timeout)
+// v2.50.4: Fix sync-bling (} faltando causava timeout); endpoint import-csv
 // v2.50.3: Fix produtos.html nav+auth; sync paralelo lotes 5
 // v2.50.2: Relatório email — filtro por delivered_at (entregues) vs created_at (outros); faturamento exclui cancelados; cron envia D-1 e D-2
 // v2.50.1: produtos/sync-bling — busca detalhe individual por produto (garante NCM/CEST/CFOP completos da API Bling)
@@ -3142,6 +3143,59 @@ export default {
         }));
       }
       return json({ ok: true, synced, updated, errors, total: synced + updated });
+    }
+
+    // GET /api/products/sync-list — retorna lista de IDs do Bling (rápido, sem detalhe)
+    if (method === 'GET' && path === '/api/products/sync-list') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const allIds = [];
+      let page = 1;
+      while (true) {
+        let bRes;
+        try { bRes = await blingFetch(`/produtos?pagina=${page}&limite=100&situacao=A`, {}, env); } catch(e) { break; }
+        const items = bRes?.data || [];
+        if (!items.length) break;
+        for (const item of items) {
+          if (item.id) allIds.push({ id: String(item.id), nome: item.nome || '', codigo: item.codigo || '', preco: parseFloat(item.preco || 0), unidade: item.unidade || 'UND' });
+        }
+        if (items.length < 100) break;
+        page++;
+      }
+      return json({ ids: allIds });
+    }
+
+    // POST /api/products/sync-one — busca detalhe de 1 produto no Bling e salva no D1
+    if (method === 'POST' && path === '/api/products/sync-one') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const { id: bId, nome: bNome, codigo: bCodigo, preco: bPreco, unidade: bUnidade } = await request.json();
+      if (!bId) return err('ID obrigatório');
+      const now = new Date().toISOString();
+      let detail = null;
+      try { const dr = await blingFetch(`/produtos/${bId}`, {}, env); detail = dr?.data || null; } catch(e) {}
+      const nome = detail?.nome || bNome || '';
+      const codigo = detail?.codigo || bCodigo || '';
+      const preco = parseFloat(detail?.preco || bPreco || 0);
+      const ncm = detail?.dadosTributarios?.ncm || '';
+      const cest = detail?.dadosTributarios?.cest || '';
+      const cfop = detail?.dadosTributarios?.cfop || '5102';
+      const origem = parseInt(detail?.dadosTributarios?.origem || 0);
+      const unidade = detail?.unidade || bUnidade || 'UND';
+      const pesoLiq = parseFloat(detail?.pesoLiquido || 0);
+      const icmsModal = parseInt(detail?.dadosTributarios?.icms?.st?.modalidadeDeterminacaoBC || 3);
+      const icmsAliq = parseFloat(detail?.dadosTributarios?.icms?.st?.aliquota || 0);
+      const exists = await env.DB.prepare('SELECT id, price FROM app_products WHERE bling_id=?').bind(bId).first();
+      if (exists) {
+        await env.DB.prepare('UPDATE app_products SET name=?,code=?,ncm=?,cest=?,cfop=?,origem=?,unidade=?,peso_liquido=?,icms_modalidade=?,icms_aliquota=?,bling_sync_at=?,price=CASE WHEN price=0 THEN ? ELSE price END WHERE bling_id=?'
+        ).bind(nome,codigo,ncm,cest,cfop,origem,unidade,pesoLiq,icmsModal,icmsAliq,now,preco,bId).run();
+        return json({ ok: true, action: 'updated', nome });
+      } else {
+        const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
+        await env.DB.prepare('INSERT INTO app_products (bling_id,name,code,price,ncm,cest,cfop,origem,unidade,peso_liquido,icms_modalidade,icms_aliquota,bling_sync_at,sort_order,ativo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)'
+        ).bind(bId,nome,codigo,preco,ncm,cest,cfop,origem,unidade,pesoLiq,icmsModal,icmsAliq,now,(maxSort?.mx||0)+1).run();
+        return json({ ok: true, action: 'created', nome });
+      }
     }
 
     // POST /api/products/import-csv — importa produtos direto do CSV exportado do Bling
