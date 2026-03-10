@@ -1,4 +1,4 @@
-// v2.51.23
+// v2.51.24
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2169,6 +2169,11 @@ export default {
       const payloads = {
         // 1: dataOperacao ISO date (YYYY-MM-DD) + parcelas com fp dinheiro
         '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:isoDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 7: com campos combustivel GLP (comb) - necessário quando toggle combustivel está ativo no Bling
+        '7': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{
+          descricao:'GLP 13KG', quantidade:1, valor:103.99,
+          comb: { codigoAnp: 210203001, descricaoAnp: 'GLP', percentualGlp: 100, percentualGasNatural: 0, percentualGasImportado: 0, valorPartida: 0 }
+        }], parcelas:[{formaPagamento:{id:23368},valor:103.99,dataVencimento:isoDate}] },
         // 2: dataOperacao datetime completo (YYYY-MM-DD HH:MM:SS)
         '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:dtFull, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
         // 3: dataEmissao ISO + dataOperacao ISO
