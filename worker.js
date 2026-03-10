@@ -1,4 +1,4 @@
-// v2.51.25
+// v2.51.26
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2166,23 +2166,22 @@ export default {
       const ss = String(now.getUTCSeconds()).padStart(2,'0');
       const dtFull = `${isoDate} ${hh}:${mi}:${ss}`;
       if (modo === '5') return json({ info: 'formas_pagamento', fpIds });
+      if (modo === '6') {
+        const nr = await blingFetch('/naturezas-operacoes?pagina=1&limite=50', {}, env);
+        const body6 = await nr.text();
+        return json({ status: nr.status, body: body6 });
+      }
       const payloads = {
-        // 1: dataOperacao ISO date (YYYY-MM-DD) + parcelas com fp dinheiro
-        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:isoDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
-        // 7: com campos combustivel GLP (comb) - necessário quando toggle combustivel está ativo no Bling
-        '7': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{
-          descricao:'GLP 13KG', quantidade:1, valor:103.99,
-          comb: { codigoAnp: 210203001, descricaoAnp: 'GLP', percentualGlp: 100, percentualGasNatural: 0, percentualGasImportado: 0, valorPartida: 0 }
-        }], parcelas:[{formaPagamento:{id:23368},valor:103.99,dataVencimento:isoDate}] },
-        // 2: dataOperacao datetime completo (YYYY-MM-DD HH:MM:SS)
-        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:dtFull, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
-        // 3: dataEmissao ISO + dataOperacao ISO
-        '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataEmissao:isoDate, dataOperacao:isoDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
-        // 4: só dataEmissao datetime completo
-        '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataEmissao:dtFull, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
-        // 5: (early return acima - lista formas pgto)
-        // 6: sem campo de data nenhum + fp dinheiro (o que causa exatamente?)
-        '6': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 1: dataVencimento em DD/MM/YYYY
+        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] },
+        // 2: sem naturezaOperacao
+        '2': { contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] },
+        // 3: parcelas sem dataVencimento
+        '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01}] },
+        // 4: dataVencimento como datetime completo
+        '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:dtFull}] },
+        // 7: parcelas com tipoPagamento direto (sem formaPagamento.id)
+        '7': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{tipoPagamento:{id:1},valor:0.01,dataVencimento:brDate}] },
       };
       const payload = payloads[modo] || payloads['1'];
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
