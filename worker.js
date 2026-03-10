@@ -1,5 +1,6 @@
-// v2.50.6
+// v2.50.7
 
+// v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
 // v2.50.5: Sync 1 por 1 com barra progresso real
 // v2.50.4: Fix sync-bling (} faltando causava timeout); endpoint import-csv

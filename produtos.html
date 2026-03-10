@@ -360,7 +360,7 @@ async function loadProducts() {
     updateStats();
     updateSyncBanner();
   } catch(e) {
-    showToast('Erro ao carregar produtos: ' + e.message, 'error');
+    toast('Erro ao carregar produtos: ' + e.message, 'error');
   } finally {
     document.getElementById('loadingState').style.display = 'none';
   }
@@ -482,7 +482,7 @@ async function syncBling() {
     // Passo 1: buscar lista completa de IDs (1 chamada rápida)
     const listRes = await api('/api/products/sync-list');
     const ids = listRes.ids || [];
-    if (!ids.length) { showToast('Nenhum produto encontrado no Bling', 'error'); return; }
+    if (!ids.length) { toast('Nenhum produto encontrado no Bling', 'error'); return; }
 
     const total = ids.length;
     progressText.textContent = `0 / ${total} produtos...`;
@@ -502,11 +502,11 @@ async function syncBling() {
     fill.style.width = '100%';
     const msg = `✅ Concluído! ${synced} novos + ${updated} atualizados${errors ? ` (${errors} erros)` : ''}`;
     progressText.textContent = msg;
-    showToast(msg, 'success');
+    toast(msg, 'success');
     setTimeout(async () => { progress.style.display = 'none'; fill.style.width = '0%'; await loadProducts(); }, 2000);
 
   } catch(e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
     progress.style.display = 'none';
     fill.style.width = '0%';
   } finally {
@@ -524,7 +524,7 @@ async function toggleFav(id, current) {
     if (p) p.is_favorite = current ? 0 : 1;
     renderProducts(_products);
   } catch(e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
@@ -586,8 +586,8 @@ function fillForm(p) {
 async function saveProduct() {
   const name = document.getElementById('fName').value.trim();
   const price = parseFloat(document.getElementById('fPrice').value) || 0;
-  if (!name) return showToast('Nome é obrigatório', 'error');
-  if (!price) return showToast('Preço é obrigatório', 'error');
+  if (!name) return toast('Nome é obrigatório', 'error');
+  if (!price) return toast('Preço é obrigatório', 'error');
 
   const data = {
     name,
@@ -610,15 +610,15 @@ async function saveProduct() {
     showLoading();
     if (_editingId) {
       await api(`/api/products/${_editingId}`, { method: 'PUT', body: JSON.stringify(data) });
-      showToast('✅ Produto atualizado!', 'success');
+      toast('✅ Produto atualizado!', 'success');
     } else {
       await api('/api/products', { method: 'POST', body: JSON.stringify(data) });
-      showToast('✅ Produto cadastrado!', 'success');
+      toast('✅ Produto cadastrado!', 'success');
     }
     closeModal();
     await loadProducts();
   } catch(e) {
-    showToast('Erro ao salvar: ' + e.message, 'error');
+    toast('Erro ao salvar: ' + e.message, 'error');
   } finally {
     hideLoading();
   }
@@ -628,10 +628,10 @@ async function deleteProduct(id, name) {
   if (!confirm(`Excluir "${name}"?\n\nIsso removerá o produto do sistema (não afeta o Bling).`)) return;
   try {
     await api(`/api/products/${id}`, { method: 'DELETE' });
-    showToast('🗑️ Produto excluído', 'success');
+    toast('🗑️ Produto excluído', 'success');
     await loadProducts();
   } catch(e) {
-    showToast('Erro: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 
@@ -671,7 +671,7 @@ function selectBlingProduct(p) {
   document.getElementById('fCfop').value = '5102';
   document.getElementById('blingResults').style.display = 'none';
   document.getElementById('blingSearchInput').value = p.nome;
-  showToast('✅ Dados do Bling importados! Revise e salve.', 'success');
+  toast('✅ Dados do Bling importados! Revise e salve.', 'success');
 }
 
 // ── Import CSV do Bling ───────────────────────────────────
@@ -682,7 +682,7 @@ async function importCSV(input) {
 
   const text = await file.text();
   const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return showToast('CSV vazio ou inválido', 'error');
+  if (lines.length < 2) return toast('CSV vazio ou inválido', 'error');
 
   // Parser CSV com separador ;
   const parseCSVLine = (line) => {
@@ -728,7 +728,7 @@ async function importCSV(input) {
     });
   }
 
-  if (!rows.length) return showToast('Nenhum produto encontrado no CSV', 'error');
+  if (!rows.length) return toast('Nenhum produto encontrado no CSV', 'error');
 
   const progress = document.getElementById('syncProgress');
   const fill = document.getElementById('syncFill');
@@ -743,10 +743,10 @@ async function importCSV(input) {
     fill.style.width = '100%';
     const msg = `✅ ${res.synced} novos + ${res.updated} atualizados${res.errors ? ` (${res.errors} erros)` : ''}`;
     progressText.textContent = msg;
-    showToast(msg, 'success');
+    toast(msg, 'success');
     setTimeout(async () => { progress.style.display = 'none'; fill.style.width = '0%'; await loadProducts(); }, 1500);
   } catch(e) {
-    showToast('Erro ao importar CSV: ' + e.message, 'error');
+    toast('Erro ao importar CSV: ' + e.message, 'error');
     progress.style.display = 'none';
   } finally {
     hideLoading();
