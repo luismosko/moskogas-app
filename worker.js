@@ -1,5 +1,6 @@
-// v2.50.1
+// v2.50.2
 
+// v2.50.2: Relatório email — filtro por delivered_at (entregues) vs created_at (outros); faturamento exclui cancelados; cron envia D-1 e D-2
 // v2.50.1: produtos/sync-bling — busca detalhe individual por produto (garante NCM/CEST/CFOP completos da API Bling)
 // v2.50.0: Módulo Produtos completo — sync Bling com dados fiscais (NCM, CEST, CFOP, ICMS), endpoints CRUD, toggle-fav, search-bling
 // v2.49.46: Ultragaz — endpoint POST /api/ultragaz/cancelar — cancela pedido no sistema quando Hub cancela
@@ -8183,14 +8184,28 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
     try {
       const reportConfig = await getReportConfig(env);
       if (reportConfig.ativo && hour === (reportConfig.hora_utc || 6)) {
+        // v2.50.2: envia D-1 (ontem) E D-2 (anteontem) para capturar fechamentos tardios
         const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-        // Dedup: verificar se já enviou relatório desse dia
-        const lastSent = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_last_sent'").first().catch(() => null);
-        if (lastSent?.value !== yesterday) {
+        const dayBefore  = new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10);
+
+        // D-1 (ontem)
+        const lastSentD1 = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_last_sent'").first().catch(() => null);
+        if (lastSentD1?.value !== yesterday) {
           await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('relatorio_last_sent', ?, datetime('now'))").bind(yesterday).run();
           ctx.waitUntil(sendDailyReportEmail(env, yesterday));
+          console.log(`[relatorio-cron] Enviando D-1: ${yesterday}`);
         } else {
-          console.log(`[relatorio-cron] Já enviado para ${yesterday}, pulando.`);
+          console.log(`[relatorio-cron] D-1 já enviado para ${yesterday}, pulando.`);
+        }
+
+        // D-2 (anteontem) — para capturar entregas registradas com atraso
+        const lastSentD2 = await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_last_sent_d2'").first().catch(() => null);
+        if (lastSentD2?.value !== dayBefore) {
+          await env.DB.prepare("INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('relatorio_last_sent_d2', ?, datetime('now'))").bind(dayBefore).run();
+          ctx.waitUntil(sendDailyReportEmail(env, dayBefore));
+          console.log(`[relatorio-cron] Enviando D-2: ${dayBefore}`);
+        } else {
+          console.log(`[relatorio-cron] D-2 já enviado para ${dayBefore}, pulando.`);
         }
       }
     } catch (e) { console.error('[relatorio-cron] Erro:', e.message); }
@@ -8699,6 +8714,7 @@ async function getResendKey(env, bodyKey) {
 
 async function generateDailyReport(env, dateStr) {
   // dateStr = 'YYYY-MM-DD'
+  // v2.50.2: pedidos ENTREGUES filtrados por delivered_at; demais por created_at
   const dayStart = Math.floor(new Date(dateStr + 'T00:00:00-04:00').getTime() / 1000);
   const dayEnd = dayStart + 86400;
 
@@ -8706,40 +8722,49 @@ async function generateDailyReport(env, dateStr) {
     SELECT o.*, cc.email, cc.cpf_cnpj, cc.bling_contact_id
     FROM orders o
     LEFT JOIN customers_cache cc ON cc.phone_digits = o.phone_digits
-    WHERE o.created_at >= ? AND o.created_at < ?
+    WHERE (
+      (o.status = 'entregue' AND o.delivered_at >= ? AND o.delivered_at < ?)
+      OR
+      (o.status != 'entregue' AND o.created_at >= ? AND o.created_at < ?)
+    )
     ORDER BY o.id ASC
-  `).bind(dayStart, dayEnd).all().then(r => r.results || []);
+  `).bind(dayStart, dayEnd, dayStart, dayEnd).all().then(r => r.results || []);
 
   // ── Resumo ──
   const total = orders.length;
-  const totalValor = orders.reduce((s, o) => s + (parseFloat(o.total_value) || 0), 0);
-  const entregues = orders.filter(o => o.status === 'entregue').length;
+  const entreguesArr = orders.filter(o => o.status === 'entregue');
+  const entregues = entreguesArr.length;
   const cancelados = orders.filter(o => o.status === 'cancelado').length;
   const pendentes = total - entregues - cancelados;
-  const pagos = orders.filter(o => o.pago === 1).length;
+  // v2.50.2: faturamento = somente pedidos ENTREGUES (cancelados excluídos)
+  const totalValor = entreguesArr.reduce((s, o) => s + (parseFloat(o.total_value) || 0), 0);
+  const pagos = entreguesArr.filter(o => o.pago === 1).length;
   const comBling = orders.filter(o => o.bling_pedido_id).length;
 
-  // Por tipo pagamento
+  // Por tipo pagamento — excluir cancelados
   const porTipo = {};
   for (const o of orders) {
+    if (o.status === 'cancelado') continue;
     const t = o.tipo_pagamento || 'indefinido';
     if (!porTipo[t]) porTipo[t] = { qtd: 0, valor: 0 };
     porTipo[t].qtd++;
     porTipo[t].valor += parseFloat(o.total_value) || 0;
   }
 
-  // Por vendedor
+  // Por vendedor — excluir cancelados
   const porVendedor = {};
   for (const o of orders) {
+    if (o.status === 'cancelado') continue;
     const v = o.vendedor_nome || 'Sem vendedor';
     if (!porVendedor[v]) porVendedor[v] = { qtd: 0, valor: 0 };
     porVendedor[v].qtd++;
     porVendedor[v].valor += parseFloat(o.total_value) || 0;
   }
 
-  // Por entregador
+  // Por entregador — excluir cancelados
   const porEntregador = {};
   for (const o of orders) {
+    if (o.status === 'cancelado') continue;
     if (o.driver_name_cache) {
       const d = o.driver_name_cache;
       if (!porEntregador[d]) porEntregador[d] = { qtd: 0, valor: 0 };
@@ -8748,10 +8773,10 @@ async function generateDailyReport(env, dateStr) {
     }
   }
 
-  // Produtos vendidos (soma)
+  // Produtos vendidos (soma) — somente entregues
   const produtosTotal = {};
   for (const o of orders) {
-    if (o.status === 'cancelado') continue;
+    if (o.status !== 'entregue') continue;
     try {
       const items = JSON.parse(o.items_json || '[]');
       for (const it of items) {
@@ -8888,6 +8913,8 @@ function buildReportHTML(report) {
       itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
     } catch { }
     const bg = o.status === 'cancelado' ? '#fef2f2' : (o.status === 'entregue' ? '#f0fdf4' : '#fff');
+    // v2.50.2: entregues mostram horário de entrega; demais mostram horário de criação
+    const horaExibir = o.status === 'entregue' ? fmtEpoch(o.delivered_at || o.created_at) : fmtEpoch(o.created_at);
     html += `<tr style="background:${bg};border-bottom:1px solid #e2e8f0">
       <td style="padding:4px;font-weight:700">${o.id}</td>
       <td style="padding:4px;font-size:10px">${statusLabel[o.status] || o.status}</td>
@@ -8901,7 +8928,7 @@ function buildReportHTML(report) {
       <td style="padding:4px;font-size:10px">${o.bling_pedido_id || '—'}</td>
       <td style="padding:4px;font-size:10px">${o.vendedor_nome || '—'}</td>
       <td style="padding:4px;font-size:10px">${o.driver_name_cache || '—'}</td>
-      <td style="padding:4px;font-size:10px">${fmtEpoch(o.created_at)}</td>
+      <td style="padding:4px;font-size:10px">${horaExibir}</td>
     </tr>`;
   }
 
@@ -8978,7 +9005,11 @@ async function sendDailyReportEmail(env, dateStr) {
   const csv = config.incluir_csv ? buildReportCSV(report) : null;
 
   const fmtBRL = v => 'R$ ' + v.toFixed(2).replace('.', ',');
-  const subject = `Pedidos do dia — ${dateStr} — ${report.total} pedidos — ${fmtBRL(report.totalValor)}`;
+  // v2.50.2: identificar se é D-1 ou D-2 no assunto
+  const today = new Date().toISOString().slice(0, 10);
+  const diffDays = Math.round((new Date(today) - new Date(dateStr)) / 86400000);
+  const diaLabel = diffDays <= 1 ? 'D-1 (ontem)' : `D-2 (${dateStr})`;
+  const subject = `Pedidos ${diaLabel} — ${dateStr} — ${report.total} pedidos — ${fmtBRL(report.totalValor)}`;
 
   const emailPayload = {
     from: 'MoskoGás <relatorio@moskogas.com.br>',
