@@ -1,4 +1,4 @@
-// v2.50.8
+// v2.50.9
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -3114,9 +3114,9 @@ export default {
       const allIds = [];
       // 1ª passagem: coletar todos os IDs da listagem
       while (true) {
-        let bRes;
-        try { bRes = await blingFetch(`/produtos?pagina=${page}&limite=100&situacao=A`, {}, env); } catch(e) { break; }
-        const items = bRes?.data || [];
+        let bRes, bData;
+        try { bRes = await blingFetch(`/produtos?pagina=${page}&limite=100&situacao=A`, {}, env); if(bRes.ok) bData = await bRes.json(); } catch(e) { break; }
+        const items = bData?.data || [];
         if (!items.length) break;
         for (const item of items) {
           if (item.id) allIds.push({ id: String(item.id), nome: item.nome || '', codigo: item.codigo || '', preco: parseFloat(item.preco || 0), unidade: item.unidade || 'UND' });
@@ -3130,7 +3130,7 @@ export default {
         await Promise.all(allIds.slice(i, i + BATCH).map(async (basic) => {
           try {
             let detail = null;
-            try { const dr = await blingFetch(`/produtos/${basic.id}`, {}, env); detail = dr?.data || null; } catch(e) {}
+            try { const dr = await blingFetch(`/produtos/${basic.id}`, {}, env); if(dr.ok){ const dj=await dr.json(); detail=dj?.data||null; } } catch(e) {}
             const nome = detail?.nome || basic.nome;
             const codigo = detail?.codigo || basic.codigo;
             const preco = parseFloat(detail?.preco || basic.preco || 0);
@@ -3166,9 +3166,13 @@ export default {
       const allIds = [];
       let page = 1;
       while (true) {
-        let bRes;
-        try { bRes = await blingFetch(`/produtos?pagina=${page}&limite=100&situacao=A`, {}, env); } catch(e) { break; }
-        const items = bRes?.data || [];
+        let bRes, bData;
+        try {
+          bRes = await blingFetch(`/produtos?pagina=${page}&limite=100&situacao=A`, {}, env);
+          if (!bRes.ok) break;
+          bData = await bRes.json();
+        } catch(e) { break; }
+        const items = bData?.data || [];
         if (!items.length) break;
         for (const item of items) {
           if (item.id) allIds.push({ id: String(item.id), nome: item.nome || '', codigo: item.codigo || '', preco: parseFloat(item.preco || 0), unidade: item.unidade || 'UND' });
@@ -3187,7 +3191,10 @@ export default {
       if (!bId) return err('ID obrigatório');
       const now = new Date().toISOString();
       let detail = null;
-      try { const dr = await blingFetch(`/produtos/${bId}`, {}, env); detail = dr?.data || null; } catch(e) {}
+      try {
+        const dr = await blingFetch(`/produtos/${bId}`, {}, env);
+        if (dr.ok) { const dj = await dr.json(); detail = dj?.data || null; }
+      } catch(e) {}
       const nome = detail?.nome || bNome || '';
       const codigo = detail?.codigo || bCodigo || '';
       const preco = parseFloat(detail?.preco || bPreco || 0);
@@ -3256,7 +3263,9 @@ export default {
       const q = (url.searchParams.get('q') || '').trim();
       if (!q || q.length < 2) return json({ produtos: [] });
       const bRes = await blingFetch(`/produtos?pagina=1&limite=20&pesquisa=${encodeURIComponent(q)}&situacao=A`, {}, env);
-      const items = (bRes?.data || []).map(p => ({
+      if (!bRes.ok) return json({ results: [] });
+      const bJson = await bRes.json();
+      const items = (bJson?.data || []).map(p => ({
         id: String(p.id),
         nome: p.nome,
         codigo: p.codigo || '',
