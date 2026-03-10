@@ -1,4 +1,4 @@
-// v2.51.18
+// v2.51.19
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -538,12 +538,14 @@ async function emitirNFCeBling(env, orderId, orderData) {
 
   // NFC-e: campo 'data' = DD/MM/YYYY; 'dataVencimento' nas parcelas = YYYY-MM-DD
   const todayISO = `${yyyy}-${mm}-${dd}`;
+  // Bling NFC-e: campo correto é 'dataOperacao' (não 'data')
+  // dataVencimento nas parcelas OBRIGATÓRIO — ausência causa SERVER_ERROR 500
   const nfceBody = {
     naturezaOperacao: { id: 8024085174 },
     contato: usarContatoReal
       ? { id: bling_contact_id }
       : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-    data: today,
+    dataOperacao: today,
     itens: itensNFCe,
     parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: todayISO }],
     observacoes: `MoskoGás #${orderId} | ${name || ''}`,
@@ -2095,18 +2097,18 @@ export default {
       const modo = url.searchParams.get('modo') || '1';
       // 6 modos para isolar o campo problemático
       const payloads = {
-        // 1: mínimo absoluto — sem data, sem parcelas
-        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
-        // 2: com data DD/MM/YYYY, sem parcelas
-        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
-        // 3: sem naturezaOperacao
-        '3': { contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
-        // 4: sem contato (só naturezaOperacao)
-        '4': { naturezaOperacao:{id:8024085174}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
-        // 5: data BR + parcelas SEM dataVencimento
-        '5': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01}] },
-        // 6: completo mas naturezaOperacao sem id (só nome)
-        '6': { naturezaOperacao:{descricao:'VENDA'}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 1: dataOperacao BR + parcelas com dataVencimento ISO (payload correto)
+        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 2: dataOperacao BR + parcelas com dataVencimento BR
+        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] },
+        // 3: dataEmissao em vez de dataOperacao
+        '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataEmissao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 4: ambos dataOperacao + dataEmissao
+        '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, dataEmissao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 5: dataOperacao sem parcelas (validação)
+        '5': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
+        // 6: formato datetime em dataOperacao
+        '6': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:`${isoDate} 12:00:00`, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
       };
       const payload = payloads[modo] || payloads['1'];
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
