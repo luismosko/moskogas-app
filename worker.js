@@ -1,4 +1,4 @@
-// v2.50.10
+// v2.50.11
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -3134,14 +3134,14 @@ export default {
             const nome = detail?.nome || basic.nome;
             const codigo = detail?.codigo || basic.codigo;
             const preco = parseFloat(detail?.preco || basic.preco || 0);
-            const ncm = detail?.dadosTributarios?.ncm || '';
-            const cest = detail?.dadosTributarios?.cest || '';
-            const cfop = detail?.dadosTributarios?.cfop || '5102';
-            const origem = parseInt(detail?.dadosTributarios?.origem || 0);
+            const ncm = detail?.tributacao?.ncm || '';
+            const cest = detail?.tributacao?.cest || '';
+            const cfop = detail?.tributacao?.cfop || '5102';
+            const origem = parseInt(detail?.tributacao?.origem || 0);
             const unidade = detail?.unidade || basic.unidade || 'UND';
             const pesoLiq = parseFloat(detail?.pesoLiquido || 0);
-            const icmsModal = parseInt(detail?.dadosTributarios?.icms?.st?.modalidadeDeterminacaoBC || 3);
-            const icmsAliq = parseFloat(detail?.dadosTributarios?.icms?.st?.aliquota || 0);
+            const icmsModal = parseInt(detail?.tributacao?.icms?.modalidade || 3);
+            const icmsAliq = parseFloat(detail?.tributacao?.icms?.aliquota || 0);
             const exists = await env.DB.prepare('SELECT id, price FROM app_products WHERE bling_id=?').bind(basic.id).first();
             if (exists) {
               await env.DB.prepare('UPDATE app_products SET name=?,code=?,ncm=?,cest=?,cfop=?,origem=?,unidade=?,peso_liquido=?,icms_modalidade=?,icms_aliquota=?,bling_sync_at=?,price=CASE WHEN price=0 THEN ? ELSE price END WHERE bling_id=?'
@@ -3208,14 +3208,14 @@ export default {
       const nome = detail?.nome || bNome || '';
       const codigo = detail?.codigo || bCodigo || '';
       const preco = parseFloat(detail?.preco || bPreco || 0);
-      const ncm = detail?.dadosTributarios?.ncm || '';
-      const cest = detail?.dadosTributarios?.cest || '';
-      const cfop = detail?.dadosTributarios?.cfop || '5102';
-      const origem = parseInt(detail?.dadosTributarios?.origem || 0);
+      const ncm = detail?.tributacao?.ncm || '';
+      const cest = detail?.tributacao?.cest || '';
+      const cfop = detail?.tributacao?.cfop || '5102';
+      const origem = parseInt(detail?.tributacao?.origem || 0);
       const unidade = detail?.unidade || bUnidade || 'UND';
       const pesoLiq = parseFloat(detail?.pesoLiquido || 0);
-      const icmsModal = parseInt(detail?.dadosTributarios?.icms?.st?.modalidadeDeterminacaoBC || 3);
-      const icmsAliq = parseFloat(detail?.dadosTributarios?.icms?.st?.aliquota || 0);
+      const icmsModal = parseInt(detail?.tributacao?.icms?.modalidade || 3);
+      const icmsAliq = parseFloat(detail?.tributacao?.icms?.aliquota || 0);
       const exists = await env.DB.prepare('SELECT id, price FROM app_products WHERE bling_id=?').bind(bId).first();
       if (exists) {
         await env.DB.prepare('UPDATE app_products SET name=?,code=?,ncm=?,cest=?,cfop=?,origem=?,unidade=?,peso_liquido=?,icms_modalidade=?,icms_aliquota=?,bling_sync_at=?,price=CASE WHEN price=0 THEN ? ELSE price END WHERE bling_id=?'
@@ -3280,11 +3280,11 @@ export default {
         nome: p.nome,
         codigo: p.codigo || '',
         preco: parseFloat(p.preco || 0),
-        ncm: p.dadosTributarios?.ncm || '',
-        cest: p.dadosTributarios?.cest || '',
+        ncm: p.tributacao?.ncm || '',
+        cest: p.tributacao?.cest || '',
         unidade: p.unidade || 'UND',
         pesoLiquido: parseFloat(p.pesoLiquido || 0),
-        origem: parseInt(p.dadosTributarios?.origem || 0),
+        origem: parseInt(p.tributacao?.origem || 0),
       }));
       return json({ produtos: items });
     }
