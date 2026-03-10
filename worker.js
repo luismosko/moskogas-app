@@ -1,4 +1,4 @@
-// v2.51.4
+// v2.51.5
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5373,12 +5373,8 @@ export default {
 
     // ── NFC-e: Diagnóstico e Retry ─────────────────────────────────
     if (method === 'GET' && path === '/api/nfce/diagnostico') {
-      // Aceita session token OU APP_API_KEY no header X-Api-Key
-      const apiKey = request.headers.get('X-Api-Key') || url.searchParams.get('key');
-      if (!apiKey || apiKey !== env.APP_API_KEY) {
-        const authCheck = await requireAuth(request, env);
-        if (authCheck instanceof Response) return authCheck;
-      }
+      const authCheck = await requireAuth(request, env);
+      if (authCheck instanceof Response) return authCheck;
       // Retorna últimos erros de NFC-e
       const erros = await env.DB.prepare(
         `SELECT order_id, event, payload_json, created_at FROM order_events
