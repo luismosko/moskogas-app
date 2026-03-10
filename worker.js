@@ -1,6 +1,6 @@
-// v2.49.46
+// v2.50.0
 
-// v2.49.46: Fix ultragaz_orders.updated_at migration + filtro cancelados hoje
+// v2.50.0: Módulo Produtos completo — sync Bling com dados fiscais (NCM, CEST, CFOP, ICMS), endpoints CRUD, toggle-fav, search-bling
 // v2.49.46: Ultragaz — endpoint POST /api/ultragaz/cancelar — cancela pedido no sistema quando Hub cancela
 // v2.49.44: Ultragaz — total_value do Hub é sempre verdade (preço proporcional) — seed Água20L; preço do app_products; distribuição proporcional do total
 // v2.49.42: Ultragaz product-map table+CRUD+auto-seed; normalização pgto Hub; vale_gas_ultragaz
@@ -2910,10 +2910,28 @@ export default {
         sort_order INTEGER DEFAULT 0,
         ativo INTEGER DEFAULT 1,
         icon_key TEXT,
+        ncm TEXT DEFAULT '',
+        cest TEXT DEFAULT '',
+        cfop TEXT DEFAULT '5102',
+        origem INTEGER DEFAULT 0,
+        unidade TEXT DEFAULT 'UND',
+        peso_liquido REAL DEFAULT 0,
+        icms_modalidade INTEGER DEFAULT 3,
+        icms_aliquota REAL DEFAULT 0,
+        bling_sync_at TEXT DEFAULT NULL,
         created_at TEXT DEFAULT (datetime('now'))
       )`).run().catch(() => { });
-      // Ensure icon_key column exists (migration)
+      // Migrations para colunas novas
       await env.DB.prepare("ALTER TABLE app_products ADD COLUMN icon_key TEXT").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN ncm TEXT DEFAULT ''").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN cest TEXT DEFAULT ''").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN cfop TEXT DEFAULT '5102'").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN origem INTEGER DEFAULT 0").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN unidade TEXT DEFAULT 'UND'").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN peso_liquido REAL DEFAULT 0").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN icms_modalidade INTEGER DEFAULT 3").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN icms_aliquota REAL DEFAULT 0").run().catch(() => { });
+      await env.DB.prepare("ALTER TABLE app_products ADD COLUMN bling_sync_at TEXT DEFAULT NULL").run().catch(() => { });
     }
 
     // Serve product icon from R2 (public)
@@ -3050,6 +3068,163 @@ export default {
       ).bind(String(bling_id || ''), name, code || '', parseFloat(price) || 0, is_favorite ? 1 : 0, (maxSort?.mx || 0) + 1).run();
       return json({ ok: true, id: result.meta?.last_row_id });
     }
+
+    // ── Módulo Produtos completo (v2.50.0) ──────────────────────────────────
+    // GET  /api/products/all          — lista todos os produtos com campos fiscais
+    // POST /api/products/sync-bling   — sync completo com Bling (traz dados fiscais)
+    // GET  /api/products/search-bling — busca produto no Bling por nome
+    // POST /api/products              — cadastrar produto manual
+    // PUT  /api/products/:id          — editar produto
+    // DELETE /api/products/:id        — excluir produto
+    // PATCH /api/products/:id/toggle-fav — alternar favorito
+
+    if (method === 'GET' && path === '/api/products/all') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const rows = await env.DB.prepare(
+        `SELECT * FROM app_products ORDER BY sort_order ASC, name ASC`
+      ).all();
+      return json({ products: rows.results || [] });
+    }
+
+    if (method === 'POST' && path === '/api/products/sync-bling') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      let page = 1, synced = 0, updated = 0;
+      const now = new Date().toISOString();
+      // Percorrer todas as páginas do Bling
+      while (true) {
+        let bRes;
+        try {
+          bRes = await blingFetch(`/produtos?pagina=${page}&limite=100&situacao=A`, {}, env);
+        } catch(e) { break; }
+        const items = bRes?.data || [];
+        if (!items.length) break;
+        for (const item of items) {
+          const bId = String(item.id || '');
+          const nome = item.nome || '';
+          const codigo = item.codigo || '';
+          const preco = parseFloat(item.preco || item.preco_custo || 0);
+          const ncm = item.dadosTributarios?.ncm || item.ncm || '';
+          const cest = item.dadosTributarios?.cest || item.cest || '';
+          const cfop = item.dadosTributarios?.cfop || '5102';
+          const origem = parseInt(item.dadosTributarios?.origem || 0);
+          const unidade = item.unidade || 'UND';
+          const pesoLiq = parseFloat(item.pesoLiquido || 0);
+          // ICMS ST
+          const icmsModal = parseInt(item.dadosTributarios?.icms?.st?.modalidadeDeterminacaoBC || 3);
+          const icmsAliq = parseFloat(item.dadosTributarios?.icms?.st?.aliquota || 0);
+          // Verificar se já existe
+          const exists = await env.DB.prepare('SELECT id, price FROM app_products WHERE bling_id=?').bind(bId).first();
+          if (exists) {
+            // Atualiza dados fiscais sempre; preço só se 0
+            await env.DB.prepare(`
+              UPDATE app_products SET
+                name=?, code=?, ncm=?, cest=?, cfop=?, origem=?, unidade=?,
+                peso_liquido=?, icms_modalidade=?, icms_aliquota=?, bling_sync_at=?,
+                price=CASE WHEN price=0 THEN ? ELSE price END
+              WHERE bling_id=?
+            `).bind(nome, codigo, ncm, cest, cfop, origem, unidade, pesoLiq, icmsModal, icmsAliq, now, preco, bId).run();
+            updated++;
+          } else {
+            // Insere novo produto
+            const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
+            await env.DB.prepare(`
+              INSERT INTO app_products (bling_id, name, code, price, ncm, cest, cfop, origem, unidade,
+                peso_liquido, icms_modalidade, icms_aliquota, bling_sync_at, sort_order, ativo)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+            `).bind(bId, nome, codigo, preco, ncm, cest, cfop, origem, unidade, pesoLiq, icmsModal, icmsAliq, now, (maxSort?.mx || 0) + 1).run();
+            synced++;
+          }
+        }
+        if (items.length < 100) break;
+        page++;
+      }
+      return json({ ok: true, synced, updated, total: synced + updated });
+    }
+
+    if (method === 'GET' && path === '/api/products/search-bling') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const q = (url.searchParams.get('q') || '').trim();
+      if (!q || q.length < 2) return json({ produtos: [] });
+      const bRes = await blingFetch(`/produtos?pagina=1&limite=20&pesquisa=${encodeURIComponent(q)}&situacao=A`, {}, env);
+      const items = (bRes?.data || []).map(p => ({
+        id: String(p.id),
+        nome: p.nome,
+        codigo: p.codigo || '',
+        preco: parseFloat(p.preco || 0),
+        ncm: p.dadosTributarios?.ncm || '',
+        cest: p.dadosTributarios?.cest || '',
+        unidade: p.unidade || 'UND',
+        pesoLiquido: parseFloat(p.pesoLiquido || 0),
+        origem: parseInt(p.dadosTributarios?.origem || 0),
+      }));
+      return json({ produtos: items });
+    }
+
+    if (method === 'POST' && path === '/api/products') {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const b = await request.json();
+      if (!b.name) return err('Nome obrigatório');
+      if (!b.price) return err('Preço obrigatório');
+      const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as mx FROM app_products').first();
+      const r = await env.DB.prepare(`
+        INSERT INTO app_products (bling_id, name, code, price, is_favorite, sort_order, ativo,
+          ncm, cest, cfop, origem, unidade, peso_liquido, icms_modalidade, icms_aliquota)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        b.bling_id || '', b.name, b.code || '', parseFloat(b.price), b.is_favorite ? 1 : 0,
+        (maxSort?.mx || 0) + 1, b.ativo !== undefined ? (b.ativo ? 1 : 0) : 1,
+        b.ncm || '', b.cest || '', b.cfop || '5102', parseInt(b.origem) || 0,
+        b.unidade || 'UND', parseFloat(b.peso_liquido) || 0,
+        parseInt(b.icms_modalidade) || 3, parseFloat(b.icms_aliquota) || 0
+      ).run();
+      return json({ ok: true, id: r.meta?.last_row_id });
+    }
+
+    if (method === 'PUT' && path.match(/^\/api\/products\/\d+$/)) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const prodId = parseInt(path.split('/')[3]);
+      const b = await request.json();
+      await env.DB.prepare(`
+        UPDATE app_products SET
+          name=?, code=?, price=?, is_favorite=?, ativo=?, bling_id=?,
+          ncm=?, cest=?, cfop=?, origem=?, unidade=?, peso_liquido=?,
+          icms_modalidade=?, icms_aliquota=?
+        WHERE id=?
+      `).bind(
+        b.name, b.code || '', parseFloat(b.price), b.is_favorite ? 1 : 0, b.ativo ? 1 : 0,
+        b.bling_id || '',
+        b.ncm || '', b.cest || '', b.cfop || '5102', parseInt(b.origem) || 0,
+        b.unidade || 'UND', parseFloat(b.peso_liquido) || 0,
+        parseInt(b.icms_modalidade) || 3, parseFloat(b.icms_aliquota) || 0,
+        prodId
+      ).run();
+      return json({ ok: true });
+    }
+
+    if (method === 'DELETE' && path.match(/^\/api\/products\/\d+$/)) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const prodId = parseInt(path.split('/')[3]);
+      // Apagar ícone do R2 se existir
+      const prod = await env.DB.prepare('SELECT icon_key FROM app_products WHERE id=?').bind(prodId).first();
+      if (prod?.icon_key) { try { await env.BUCKET.delete(prod.icon_key); } catch(e) {} }
+      await env.DB.prepare('DELETE FROM app_products WHERE id=?').bind(prodId).run();
+      return json({ ok: true });
+    }
+
+    if (method === 'PATCH' && path.match(/^\/api\/products\/\d+\/toggle-fav$/)) {
+      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const prodId = parseInt(path.split('/')[3]);
+      await env.DB.prepare('UPDATE app_products SET is_favorite = CASE WHEN is_favorite=1 THEN 0 ELSE 1 END WHERE id=?').bind(prodId).run();
+      return json({ ok: true });
+    }
+    // ── Fim Módulo Produtos (v2.50.0) ────────────────────────────────────────
 
     // ── Busca contato Bling por nome (para vincular cliente) ──
     // v2.49.32: busca multi-estratégia — nome completo → cada palavra → CNPJ

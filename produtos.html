@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Produtos v1.0.0 — MoskoGás</title>
+  <script src="shared.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+    .container { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    .version-badge { display:inline-block; background:#6366f1; color:#fff; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; margin-bottom:8px; }
+
+    .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+    .page-title { font-size:22px; font-weight:800; color:#1e293b; }
+    .page-title span { color:#6366f1; }
+
+    /* Toolbar */
+    .toolbar { background:#fff; border-radius:12px; padding:14px 16px; margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+    .search-wrap { flex:1; min-width:220px; position:relative; }
+    .search-wrap input { width:100%; padding:9px 14px 9px 36px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; transition:border-color .15s; }
+    .search-wrap input:focus { border-color:#6366f1; }
+    .search-wrap .icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:16px; pointer-events:none; }
+    .filter-select { padding:9px 12px; border:2px solid #e2e8f0; border-radius:8px; font-size:13px; color:#374151; outline:none; background:#fff; cursor:pointer; }
+    .filter-select:focus { border-color:#6366f1; }
+    .stats-bar { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+    .stat-pill { background:#f0f9ff; color:#0369a1; font-size:12px; font-weight:700; padding:4px 10px; border-radius:20px; border:1px solid #bae6fd; }
+    .stat-pill.green { background:#f0fdf4; color:#15803d; border-color:#bbf7d0; }
+    .stat-pill.orange { background:#fff7ed; color:#c2410c; border-color:#fed7aa; }
+
+    /* Sync banner */
+    .sync-banner { background:#fff; border-radius:12px; padding:14px 18px; margin-bottom:14px; display:flex; align-items:center; gap:12px; box-shadow:0 1px 4px rgba(0,0,0,0.07); border-left:4px solid #6366f1; }
+    .sync-banner .sync-info { flex:1; }
+    .sync-banner .sync-info strong { display:block; font-size:14px; color:#1e293b; }
+    .sync-banner .sync-info small { color:#64748b; font-size:12px; }
+    .btn { padding:9px 18px; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px; }
+    .btn-primary { background:#6366f1; color:#fff; }
+    .btn-primary:hover { background:#4f46e5; }
+    .btn-primary:disabled { opacity:.6; cursor:not-allowed; }
+    .btn-success { background:#16a34a; color:#fff; }
+    .btn-success:hover { background:#15803d; }
+    .btn-sm { padding:6px 12px; font-size:12px; }
+    .btn-ghost { background:transparent; color:#64748b; border:1px solid #e2e8f0; }
+    .btn-ghost:hover { background:#f8fafc; color:#374151; }
+    .btn-danger { background:#dc2626; color:#fff; }
+    .btn-danger:hover { background:#b91c1c; }
+
+    /* Table */
+    .table-wrap { background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,0.07); overflow:hidden; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#f8fafc; padding:11px 14px; text-align:left; font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
+    tbody tr { border-bottom:1px solid #f1f5f9; transition:background .1s; }
+    tbody tr:hover { background:#fafbff; }
+    tbody tr:last-child { border-bottom:none; }
+    td { padding:12px 14px; font-size:13px; color:#374151; vertical-align:middle; }
+    .product-name { font-weight:700; color:#1e293b; }
+    .product-code { font-size:11px; color:#94a3b8; font-family:monospace; }
+
+    /* Badges */
+    .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:700; }
+    .badge-active { background:#dcfce7; color:#15803d; }
+    .badge-inactive { background:#f1f5f9; color:#94a3b8; }
+    .badge-fav { background:#fef9c3; color:#854d0e; }
+    .badge-fiscal { background:#ede9fe; color:#6d28d9; font-family:monospace; font-size:10px; padding:2px 6px; }
+    .badge-nosync { background:#fee2e2; color:#dc2626; }
+    .badge-synced { background:#dcfce7; color:#15803d; }
+
+    /* Fiscal col */
+    .fiscal-info { display:flex; flex-direction:column; gap:2px; }
+    .fiscal-info span { font-size:11px; font-family:monospace; color:#6d28d9; }
+    .fiscal-info small { font-size:10px; color:#94a3b8; }
+    .no-fiscal { color:#dc2626; font-size:11px; font-weight:600; }
+
+    /* Sync status */
+    .sync-at { font-size:11px; color:#64748b; }
+
+    /* Actions */
+    .actions { display:flex; gap:6px; align-items:center; }
+    .icon-btn { width:30px; height:30px; border:none; border-radius:6px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:all .15s; }
+    .icon-btn:hover { transform:scale(1.1); }
+    .icon-btn.edit { background:#ede9fe; color:#6d28d9; }
+    .icon-btn.fav { background:#fef9c3; color:#854d0e; }
+    .icon-btn.fav.on { background:#f59e0b; color:#fff; }
+    .icon-btn.delete { background:#fee2e2; color:#dc2626; }
+
+    /* Empty */
+    .empty-state { text-align:center; padding:60px 20px; color:#94a3b8; }
+    .empty-state h3 { font-size:18px; color:#64748b; margin-bottom:8px; }
+
+    /* Loading */
+    .loading { text-align:center; padding:40px; color:#6366f1; font-size:28px; }
+
+    /* Progress bar de sync */
+    .sync-progress { display:none; margin-top:10px; }
+    .sync-progress-bar { height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden; }
+    .sync-progress-fill { height:100%; background:linear-gradient(90deg,#6366f1,#8b5cf6); border-radius:3px; transition:width .3s; width:0%; }
+    .sync-progress-text { font-size:12px; color:#64748b; margin-top:4px; text-align:center; }
+
+    /* Modal */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; padding:16px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:#fff; border-radius:16px; width:100%; max-width:540px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+    .modal-header { padding:20px 24px 16px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; }
+    .modal-header h3 { font-size:17px; font-weight:800; color:#1e293b; }
+    .modal-body { padding:20px 24px; }
+    .modal-footer { padding:16px 24px; border-top:1px solid #e2e8f0; display:flex; gap:10px; justify-content:flex-end; }
+    .close-btn { background:none; border:none; font-size:20px; cursor:pointer; color:#94a3b8; padding:4px; border-radius:6px; }
+    .close-btn:hover { background:#f1f5f9; color:#374151; }
+
+    .form-group { margin-bottom:16px; }
+    .form-group label { display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:6px; text-transform:uppercase; letter-spacing:.4px; }
+    .form-group input, .form-group select { width:100%; padding:10px 12px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; transition:border-color .15s; }
+    .form-group input:focus, .form-group select:focus { border-color:#6366f1; }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .form-section { background:#f8fafc; border-radius:8px; padding:14px; margin-bottom:14px; }
+    .form-section-title { font-size:11px; font-weight:800; color:#6366f1; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+    .hint { font-size:11px; color:#94a3b8; margin-top:4px; }
+
+    /* Bling search no modal */
+    .bling-search { position:relative; }
+    .bling-results { position:absolute; top:100%; left:0; right:0; background:#fff; border:2px solid #6366f1; border-top:none; border-radius:0 0 8px 8px; max-height:200px; overflow-y:auto; z-index:100; box-shadow:0 8px 20px rgba(0,0,0,.1); }
+    .bling-result-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid #f1f5f9; transition:background .1s; }
+    .bling-result-item:hover { background:#f0f9ff; }
+    .bling-result-item strong { display:block; font-size:13px; color:#1e293b; }
+    .bling-result-item small { font-size:11px; color:#64748b; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+
+<div class="container">
+  <div class="version-badge">Produtos v1.0.0</div>
+
+  <div class="page-header">
+    <h1 class="page-title">📦 <span>Produtos</span> MoskoGás</h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="openAddModal()">➕ Cadastrar</button>
+      <button class="btn btn-primary" id="btnSync" onclick="syncBling()">🔄 Sincronizar com Bling</button>
+    </div>
+  </div>
+
+  <!-- Sync Banner -->
+  <div class="sync-banner" id="syncBanner">
+    <div style="font-size:24px;">📡</div>
+    <div class="sync-info">
+      <strong id="syncStatus">Carregando status...</strong>
+      <small id="syncDetail">Sincronize para manter dados fiscais atualizados com o Bling</small>
+    </div>
+    <div>
+      <button class="btn btn-ghost btn-sm" onclick="syncBling()" id="btnSyncSmall">🔄 Sync agora</button>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="sync-progress" id="syncProgress">
+    <div class="sync-progress-bar"><div class="sync-progress-fill" id="syncFill"></div></div>
+    <div class="sync-progress-text" id="syncProgressText">Iniciando sincronização...</div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Buscar produto por nome, código ou NCM..." oninput="filterProducts()">
+    </div>
+    <select class="filter-select" id="filterStatus" onchange="filterProducts()">
+      <option value="">Todos</option>
+      <option value="ativo">✅ Ativos</option>
+      <option value="inativo">❌ Inativos</option>
+      <option value="fav">⭐ Favoritos</option>
+      <option value="semfiscal">⚠️ Sem dados fiscais</option>
+    </select>
+    <div class="stats-bar">
+      <span class="stat-pill" id="statTotal">0 produtos</span>
+      <span class="stat-pill green" id="statSynced">0 sincronizados</span>
+      <span class="stat-pill orange" id="statNoFiscal">0 sem fiscal</span>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <div class="loading" id="loadingState">⏳</div>
+    <table id="prodTable" style="display:none;">
+      <thead>
+        <tr>
+          <th>⭐</th>
+          <th>Produto</th>
+          <th>Preço</th>
+          <th>Dados Fiscais</th>
+          <th>Bling</th>
+          <th>Última Sync</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="prodTbody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <h3>Nenhum produto encontrado</h3>
+      <p>Sincronize com o Bling ou cadastre um produto manualmente.</p>
+      <br>
+      <button class="btn btn-primary" onclick="syncBling()">🔄 Sincronizar com Bling</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar/Adicionar Produto -->
+<div class="modal-overlay" id="modalProd">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Editar Produto</h3>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Busca Bling (só no add) -->
+      <div id="blingSearchSection" class="form-group" style="display:none;">
+        <label>Importar do Bling</label>
+        <div class="bling-search">
+          <input type="text" id="blingSearchInput" placeholder="Digite o nome do produto no Bling..." oninput="searchBling(this.value)">
+          <div class="bling-results" id="blingResults" style="display:none;"></div>
+        </div>
+        <div class="hint">Busque pelo nome para importar automaticamente os dados fiscais do Bling</div>
+        <div style="text-align:center;margin:10px 0;color:#94a3b8;font-size:12px;">— ou preencha manualmente abaixo —</div>
+      </div>
+
+      <!-- Dados básicos -->
+      <div class="form-section">
+        <div class="form-section-title">📋 Dados Básicos</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nome *</label>
+            <input type="text" id="fName" placeholder="Ex: Gás GLP P13">
+          </div>
+          <div class="form-group">
+            <label>Código Bling</label>
+            <input type="text" id="fCode" placeholder="Ex: 1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Preço (R$) *</label>
+            <input type="number" id="fPrice" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>Unidade</label>
+            <select id="fUnidade">
+              <option value="UND">UND</option>
+              <option value="UN">UN</option>
+              <option value="KG">KG</option>
+              <option value="Fardo">Fardo</option>
+              <option value="CX">CX</option>
+              <option value="L">L</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>ID Bling</label>
+            <input type="text" id="fBlingId" placeholder="ID do produto no Bling">
+          </div>
+          <div class="form-group">
+            <label>Peso Líquido (kg)</label>
+            <input type="number" id="fPeso" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Favorito (atalho rápido)</label>
+            <select id="fFavorito">
+              <option value="1">⭐ Sim</option>
+              <option value="0">Não</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ativo</label>
+            <select id="fAtivo">
+              <option value="1">✅ Ativo</option>
+              <option value="0">❌ Inativo</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dados fiscais -->
+      <div class="form-section">
+        <div class="form-section-title">🧾 Dados Fiscais (NFC-e)</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>NCM *</label>
+            <input type="text" id="fNcm" placeholder="Ex: 2711.19.10">
+            <div class="hint">Nomenclatura Comum do Mercosul</div>
+          </div>
+          <div class="form-group">
+            <label>CEST</label>
+            <input type="text" id="fCest" placeholder="Ex: 06.011.00">
+            <div class="hint">Código Especificador ST</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>CFOP *</label>
+            <input type="text" id="fCfop" placeholder="5102" value="5102">
+            <div class="hint">5102 = Venda de mercadoria</div>
+          </div>
+          <div class="form-group">
+            <label>Origem</label>
+            <select id="fOrigem">
+              <option value="0">0 - Nacional</option>
+              <option value="1">1 - Importado</option>
+              <option value="2">2 - Nacional c/ >40% importado</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>ICMS Modalidade</label>
+            <select id="fIcmsModal">
+              <option value="3">3 - Por dentro</option>
+              <option value="0">0 - Margem</option>
+              <option value="1">1 - Pauta</option>
+              <option value="2">2 - Preço máx</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Alíquota ICMS (%)</label>
+            <input type="number" id="fIcmsAliq" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" onclick="saveProduct()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const VERSION = 'v1.0.0';
+let _products = [];
+let _editingId = null;
+let _blingTimer = null;
+
+// ── Inicialização ──────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadNav();
+  await loadProducts();
+});
+
+async function loadProducts() {
+  try {
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('prodTable').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+
+    const res = await api('/api/products/all');
+    _products = res.products || [];
+    renderProducts(_products);
+    updateStats();
+    updateSyncBanner();
+  } catch(e) {
+    showToast('Erro ao carregar produtos: ' + e.message, 'error');
+  } finally {
+    document.getElementById('loadingState').style.display = 'none';
+  }
+}
+
+// ── Render ────────────────────────────────────────────────
+function renderProducts(list) {
+  const tbody = document.getElementById('prodTbody');
+  tbody.innerHTML = '';
+
+  if (!list.length) {
+    document.getElementById('prodTable').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('prodTable').style.display = 'table';
+  document.getElementById('emptyState').style.display = 'none';
+
+  list.forEach(p => {
+    const temFiscal = p.ncm && p.cfop;
+    const syncedAt = p.bling_sync_at ? new Date(p.bling_sync_at).toLocaleDateString('pt-BR') : '—';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <button class="icon-btn fav ${p.is_favorite ? 'on' : ''}" title="${p.is_favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}"
+          onclick="toggleFav(${p.id}, ${p.is_favorite})">⭐</button>
+      </td>
+      <td>
+        <div class="product-name">${p.name}</div>
+        <div class="product-code">Cód: ${p.code || '—'}</div>
+      </td>
+      <td><strong>R$ ${(p.price || 0).toFixed(2).replace('.',',')}</strong></td>
+      <td>
+        ${temFiscal ? `
+          <div class="fiscal-info">
+            <span>NCM: ${p.ncm}</span>
+            <span>CEST: ${p.cest || '—'} | CFOP: ${p.cfop}</span>
+            <small>Origem: ${p.origem || 0} | Unid: ${p.unidade || 'UND'}</small>
+          </div>
+        ` : `<span class="no-fiscal">⚠️ Sem dados fiscais</span>`}
+      </td>
+      <td>
+        ${p.bling_id ? `<span class="badge badge-synced">✅ Vinculado</span><br><small style="font-size:10px;color:#64748b;">${p.bling_id}</small>` :
+          `<span class="badge badge-nosync">❌ Sem vínculo</span>`}
+      </td>
+      <td><span class="sync-at">📅 ${syncedAt}</span></td>
+      <td><span class="badge ${p.ativo ? 'badge-active' : 'badge-inactive'}">${p.ativo ? 'Ativo' : 'Inativo'}</span></td>
+      <td>
+        <div class="actions">
+          <button class="icon-btn edit" title="Editar produto" onclick="openEditModal(${p.id})">✏️</button>
+          <button class="icon-btn delete" title="Excluir produto" onclick="deleteProduct(${p.id}, '${p.name.replace(/'/g,"\\'")}')">🗑️</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Stats ─────────────────────────────────────────────────
+function updateStats() {
+  const total = _products.length;
+  const synced = _products.filter(p => p.bling_id && p.ncm).length;
+  const noFiscal = _products.filter(p => !p.ncm || !p.cfop).length;
+  document.getElementById('statTotal').textContent = `${total} produtos`;
+  document.getElementById('statSynced').textContent = `${synced} c/ dados fiscais`;
+  document.getElementById('statNoFiscal').textContent = `${noFiscal} sem fiscal`;
+}
+
+function updateSyncBanner() {
+  const lastSync = _products.filter(p => p.bling_sync_at).map(p => p.bling_sync_at).sort().pop();
+  const status = document.getElementById('syncStatus');
+  const detail = document.getElementById('syncDetail');
+  if (lastSync) {
+    const d = new Date(lastSync);
+    status.textContent = `✅ Última sincronização: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}`;
+    detail.textContent = `${_products.filter(p=>p.bling_id).length} produtos vinculados ao Bling com dados fiscais completos`;
+  } else {
+    status.textContent = '⚠️ Nenhuma sincronização realizada';
+    detail.textContent = 'Clique em Sincronizar com Bling para importar todos os produtos com dados fiscais';
+  }
+}
+
+// ── Filtro ────────────────────────────────────────────────
+function filterProducts() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const st = document.getElementById('filterStatus').value;
+  const filtered = _products.filter(p => {
+    const matchQ = !q || p.name.toLowerCase().includes(q) || (p.code||'').toLowerCase().includes(q) || (p.ncm||'').includes(q);
+    const matchSt = !st
+      || (st === 'ativo' && p.ativo)
+      || (st === 'inativo' && !p.ativo)
+      || (st === 'fav' && p.is_favorite)
+      || (st === 'semfiscal' && (!p.ncm || !p.cfop));
+    return matchQ && matchSt;
+  });
+  renderProducts(filtered);
+}
+
+// ── Sincronizar com Bling ─────────────────────────────────
+async function syncBling() {
+  const btn = document.getElementById('btnSync');
+  const progress = document.getElementById('syncProgress');
+  const fill = document.getElementById('syncFill');
+  const progressText = document.getElementById('syncProgressText');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Sincronizando...';
+  progress.style.display = 'block';
+  fill.style.width = '10%';
+  progressText.textContent = 'Conectando ao Bling...';
+
+  try {
+    fill.style.width = '30%';
+    progressText.textContent = 'Buscando produtos no Bling...';
+
+    const res = await api('/api/products/sync-bling', { method: 'POST' });
+
+    fill.style.width = '100%';
+    progressText.textContent = `✅ ${res.synced} produtos sincronizados!`;
+
+    showToast(`✅ ${res.synced} produtos sincronizados com dados fiscais!`, 'success');
+
+    setTimeout(async () => {
+      progress.style.display = 'none';
+      fill.style.width = '0%';
+      await loadProducts();
+    }, 2000);
+
+  } catch(e) {
+    showToast('Erro na sincronização: ' + e.message, 'error');
+    progress.style.display = 'none';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔄 Sincronizar com Bling';
+  }
+}
+
+// ── Toggle favorito ───────────────────────────────────────
+async function toggleFav(id, current) {
+  try {
+    await api(`/api/products/${id}/toggle-fav`, { method: 'PATCH' });
+    const p = _products.find(x => x.id === id);
+    if (p) p.is_favorite = current ? 0 : 1;
+    renderProducts(_products);
+  } catch(e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+// ── Modais ────────────────────────────────────────────────
+function openAddModal() {
+  _editingId = null;
+  document.getElementById('modalTitle').textContent = '➕ Adicionar Produto';
+  document.getElementById('blingSearchSection').style.display = 'block';
+  clearForm();
+  document.getElementById('fCfop').value = '5102';
+  document.getElementById('modalProd').classList.add('open');
+}
+
+function openEditModal(id) {
+  const p = _products.find(x => x.id === id);
+  if (!p) return;
+  _editingId = id;
+  document.getElementById('modalTitle').textContent = '✏️ Editar Produto';
+  document.getElementById('blingSearchSection').style.display = 'none';
+  fillForm(p);
+  document.getElementById('modalProd').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalProd').classList.remove('open');
+  document.getElementById('blingResults').style.display = 'none';
+  _editingId = null;
+}
+
+function clearForm() {
+  ['fName','fCode','fPrice','fBlingId','fPeso','fNcm','fCest','fCfop','fIcmsAliq','blingSearchInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('fUnidade').value = 'UND';
+  document.getElementById('fOrigem').value = '0';
+  document.getElementById('fIcmsModal').value = '3';
+  document.getElementById('fFavorito').value = '1';
+  document.getElementById('fAtivo').value = '1';
+}
+
+function fillForm(p) {
+  document.getElementById('fName').value = p.name || '';
+  document.getElementById('fCode').value = p.code || '';
+  document.getElementById('fPrice').value = p.price || '';
+  document.getElementById('fBlingId').value = p.bling_id || '';
+  document.getElementById('fPeso').value = p.peso_liquido || '';
+  document.getElementById('fNcm').value = p.ncm || '';
+  document.getElementById('fCest').value = p.cest || '';
+  document.getElementById('fCfop').value = p.cfop || '5102';
+  document.getElementById('fOrigem').value = String(p.origem || 0);
+  document.getElementById('fUnidade').value = p.unidade || 'UND';
+  document.getElementById('fIcmsModal').value = String(p.icms_modalidade || 3);
+  document.getElementById('fIcmsAliq').value = p.icms_aliquota || '';
+  document.getElementById('fFavorito').value = String(p.is_favorite ? 1 : 0);
+  document.getElementById('fAtivo').value = String(p.ativo ? 1 : 0);
+}
+
+async function saveProduct() {
+  const name = document.getElementById('fName').value.trim();
+  const price = parseFloat(document.getElementById('fPrice').value) || 0;
+  if (!name) return showToast('Nome é obrigatório', 'error');
+  if (!price) return showToast('Preço é obrigatório', 'error');
+
+  const data = {
+    name,
+    code: document.getElementById('fCode').value.trim(),
+    price,
+    bling_id: document.getElementById('fBlingId').value.trim(),
+    peso_liquido: parseFloat(document.getElementById('fPeso').value) || 0,
+    ncm: document.getElementById('fNcm').value.trim(),
+    cest: document.getElementById('fCest').value.trim(),
+    cfop: document.getElementById('fCfop').value.trim() || '5102',
+    origem: parseInt(document.getElementById('fOrigem').value) || 0,
+    unidade: document.getElementById('fUnidade').value,
+    icms_modalidade: parseInt(document.getElementById('fIcmsModal').value) || 3,
+    icms_aliquota: parseFloat(document.getElementById('fIcmsAliq').value) || 0,
+    is_favorite: parseInt(document.getElementById('fFavorito').value),
+    ativo: parseInt(document.getElementById('fAtivo').value),
+  };
+
+  try {
+    showLoading();
+    if (_editingId) {
+      await api(`/api/products/${_editingId}`, { method: 'PUT', body: JSON.stringify(data) });
+      showToast('✅ Produto atualizado!', 'success');
+    } else {
+      await api('/api/products', { method: 'POST', body: JSON.stringify(data) });
+      showToast('✅ Produto cadastrado!', 'success');
+    }
+    closeModal();
+    await loadProducts();
+  } catch(e) {
+    showToast('Erro ao salvar: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteProduct(id, name) {
+  if (!confirm(`Excluir "${name}"?\n\nIsso removerá o produto do sistema (não afeta o Bling).`)) return;
+  try {
+    await api(`/api/products/${id}`, { method: 'DELETE' });
+    showToast('🗑️ Produto excluído', 'success');
+    await loadProducts();
+  } catch(e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+}
+
+// ── Busca Bling no modal ──────────────────────────────────
+async function searchBling(q) {
+  clearTimeout(_blingTimer);
+  const results = document.getElementById('blingResults');
+  if (!q || q.length < 2) { results.style.display = 'none'; return; }
+
+  _blingTimer = setTimeout(async () => {
+    try {
+      const res = await api(`/api/products/search-bling?q=${encodeURIComponent(q)}`);
+      const items = res.produtos || [];
+      if (!items.length) { results.style.display = 'none'; return; }
+
+      results.innerHTML = items.map(p => `
+        <div class="bling-result-item" onclick="selectBlingProduct(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+          <strong>${p.nome}</strong>
+          <small>Cód: ${p.codigo || '—'} | R$ ${(p.preco||0).toFixed(2)} | NCM: ${p.ncm || 'sem NCM'}</small>
+        </div>
+      `).join('');
+      results.style.display = 'block';
+    } catch(e) { results.style.display = 'none'; }
+  }, 400);
+}
+
+function selectBlingProduct(p) {
+  document.getElementById('fName').value = p.nome || '';
+  document.getElementById('fCode').value = p.codigo || '';
+  document.getElementById('fPrice').value = p.preco || '';
+  document.getElementById('fBlingId').value = p.id || '';
+  document.getElementById('fNcm').value = p.ncm || '';
+  document.getElementById('fCest').value = p.cest || '';
+  document.getElementById('fUnidade').value = p.unidade || 'UND';
+  document.getElementById('fPeso').value = p.pesoLiquido || '';
+  document.getElementById('fOrigem').value = String(p.origem || 0);
+  document.getElementById('fCfop').value = '5102';
+  document.getElementById('blingResults').style.display = 'none';
+  document.getElementById('blingSearchInput').value = p.nome;
+  showToast('✅ Dados do Bling importados! Revise e salve.', 'success');
+}
+</script>
+</body>
+</html>

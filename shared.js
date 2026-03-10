@@ -1,6 +1,6 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.24.9
+// shared.js — Utilitários compartilhados MoskoGás v1.25.1
+// v1.25.1: Menu ADM — Produtos adicionado (produtos.html); ícone Estoque atualizado
 // v1.25.0: Hub Monitor desabilitado (badge H + banner desconectado) — migrado para Extensão Chrome
-// v1.24.9: Fix banner Hub no config.html (pathname /config, não /config.html)
 // v1.24.8: Hub badge azul=conectado/vermelho=desconectado; fix reload seenLS por ciclo
 // v1.24.7: Fix botões × banners UG — funções expostas no escopo global inline
 // v1.24.6: Hub Monitor — banner automático em todas as telas quando Hub desconecta
@@ -180,7 +180,8 @@ const NAV_DROPDOWNS = [
     children: [
       { href: 'contratos.html', icon: '📄', label: 'Contratos' },
       { href: 'clientes.html', icon: '👥', label: 'Clientes' },
-      { href: 'estoque.html', icon: '📦', label: 'Estoque' },
+      { href: 'produtos.html', icon: '📦', label: 'Produtos' },
+      { href: 'estoque.html', icon: '📊', label: 'Estoque' },
       { href: 'vales.html', icon: '🎟️', label: 'Vale Gás' },
       { href: 'avaliacoes.html', icon: '⭐', label: 'Avaliações' },
     ]
