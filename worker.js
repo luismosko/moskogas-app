@@ -1,4 +1,4 @@
-// v2.51.31
+// v2.51.32
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -574,6 +574,8 @@ async function emitirNFCeBling(env, orderId, orderData) {
   const criarData = await criarResp.json();
   const nfceId = criarData.data?.id ?? null;
   if (!nfceId) throw new Error('NFC-e criada mas Bling não retornou ID');
+  // Bling retorna o numero já na resposta do criar (ex: "027740")
+  const nfceNumeroCriar = criarData.data?.numero ?? null;
 
   await logBlingAudit(env, orderId, 'criar_nfce', 'success', {
     bling_pedido_id: String(nfceId),
@@ -603,8 +605,9 @@ async function emitirNFCeBling(env, orderId, orderData) {
   }
 
   // Bling v3: número e chave podem estar em caminhos diferentes dependendo da versão
+  // Fallback: usar numero do criar se o emitir não retornar
   const d = emitirData.data || emitirData;
-  const nfceNumero = d?.numero ?? d?.numeroPedido ?? d?.numeroNfe ?? null;
+  const nfceNumero = d?.numero ?? d?.numeroPedido ?? d?.numeroNfe ?? nfceNumeroCriar ?? null;
   const nfceChave  = d?.chaveAcesso ?? d?.chave ?? d?.chaveNfe ?? null;
 
   await logBlingAudit(env, orderId, 'emitir_nfce', 'success', {
