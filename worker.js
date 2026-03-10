@@ -1,4 +1,4 @@
-// v2.51.21
+// v2.51.22
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2075,6 +2075,20 @@ export default {
       } catch (e) {
         return json({ ok: false, connected: false, error: e.message });
       }
+    }
+
+    // ── Listar formas de pagamento reais da conta ─────────────────
+    if (method === 'GET' && path === '/api/nfce/formas-pgto') {
+      const apiKey = url.searchParams.get('api_key') || request.headers.get('X-API-KEY');
+      if (apiKey !== env.APP_API_KEY) {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+      }
+      const resp = await blingFetch('/formas-pagamentos?pagina=1&limite=100&situacao=1', {}, env);
+      if (!resp.ok) return json({ error: resp.status, body: await resp.text() });
+      const data = await resp.json();
+      const lista = (data.data || []).map(f => ({ id: f.id, nome: f.descricao, situacao: f.situacao, tipoPagamento: f.tipoPagamento }));
+      return json({ total: lista.length, formas: lista });
     }
 
     // ── Diagnóstico erro NFC-e 403 ────────────────────────────────
