@@ -1,4 +1,4 @@
-// v2.51.30
+// v2.51.31
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -493,31 +493,37 @@ async function criarPedidoBling(env, orderId, orderData) {
 }
 
 
-// ── Emitir NFC-e no Bling (v2.51.0) — substitui Pedido de Venda para pagamentos à vista ──
+// ── Emitir NFC-e no Bling (v2.51.31) ──────────────────────────────────────────
+// REGRAS DESCOBERTAS EM PRODUÇÃO (10/03/2026):
+//   ✅ dataOperacao: "YYYY-MM-DD" (ISO) — DD/MM/YYYY causa SERVER_ERROR 500
+//   ✅ pagamentos[] — NÃO usar parcelas[] (causa SERVER_ERROR 500)
+//   ✅ item PRECISA de produto.id (bling_id) + codigo (código do produto no Bling)
+//   ✅ sem dataVencimento em pagamentos (não é necessário para NFC-e)
 // Fluxo: POST /nfce (criar) → POST /nfce/:id/emitir (transmitir para SEFAZ)
 async function emitirNFCeBling(env, orderId, orderData) {
   const { name, items, total_value, forma_pagamento_key, forma_pagamento_id,
           bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj } = orderData;
-  // NFC-e Bling exige DD/MM/YYYY (diferente de Pedido de Venda que aceita YYYY-MM-DD)
-  const now = new Date();
-  const dd = String(now.getUTCDate()).padStart(2,'0');
-  const mm = String(now.getUTCMonth()+1).padStart(2,'0');
-  const yyyy = now.getUTCFullYear();
-  const today = `${dd}/${mm}/${yyyy}`;
 
-  // Montar itens — buscar bling_id de cada item via app_products se não vier
+  const now = new Date();
+  const todayISO = now.toISOString().slice(0, 10); // YYYY-MM-DD — OBRIGATÓRIO para NFC-e
+
+  // Montar itens — buscar bling_id e codigo de cada item via app_products
   const itensNFCe = [];
   for (const item of (items || [])) {
     const qty   = parseFloat(item.qty)   || 1;
     const price = parseFloat(item.price) || 0;
 
-    // Tentar achar bling_id pelo código do produto em app_products
+    // Buscar bling_id E codigo do produto em app_products
     let blingId = item.bling_id || null;
-    if (!blingId && item.code) {
+    let blingCodigo = item.bling_codigo || item.code || null;
+    if ((!blingId || !blingCodigo) && item.code) {
       const prod = await env.DB.prepare(
-        'SELECT bling_id FROM app_products WHERE code=? AND ativo=1 LIMIT 1'
+        'SELECT bling_id, bling_codigo, code FROM app_products WHERE code=? AND ativo=1 LIMIT 1'
       ).bind(String(item.code)).first().catch(() => null);
-      blingId = prod?.bling_id || null;
+      if (prod) {
+        blingId = blingId || prod.bling_id || null;
+        blingCodigo = blingCodigo || prod.bling_codigo || prod.code || null;
+      }
     }
 
     const itemNFCe = {
@@ -525,7 +531,10 @@ async function emitirNFCeBling(env, orderId, orderData) {
       quantidade: qty,
       valor: price,
     };
+    // produto.id OBRIGATÓRIO para NFC-e (sem ele o Bling não encontra dados fiscais)
     if (blingId && Number(blingId) > 0) itemNFCe.produto = { id: Number(blingId) };
+    // codigo OBRIGATÓRIO (Bling valida explicitamente)
+    if (blingCodigo) itemNFCe.codigo = String(blingCodigo);
     itensNFCe.push(itemNFCe);
   }
 
@@ -536,18 +545,14 @@ async function emitirNFCeBling(env, orderId, orderData) {
   // Sem CPF → Consumidor Final (evita erro SEFAZ de cadastro incompleto)
   const usarContatoReal = bling_contact_id && cpf_cnpj && cpf_cnpj.replace(/\D/g,'').length >= 11;
 
-  // NFC-e: campo 'data' = DD/MM/YYYY; 'dataVencimento' nas parcelas = YYYY-MM-DD
-  const todayISO = `${yyyy}-${mm}-${dd}`;
-  // Bling NFC-e: campo correto é 'dataOperacao' (não 'data')
-  // dataVencimento nas parcelas OBRIGATÓRIO — ausência causa SERVER_ERROR 500
   const nfceBody = {
     naturezaOperacao: { id: 8024085174 },
     contato: usarContatoReal
       ? { id: bling_contact_id }
       : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-    dataOperacao: today,
+    dataOperacao: todayISO,   // ✅ ISO YYYY-MM-DD — DD/MM/YYYY causa SERVER_ERROR 500
     itens: itensNFCe,
-    parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: todayISO }],
+    pagamentos: [{ formaPagamento: { id: fpId }, valor: total }], // ✅ pagamentos, NÃO parcelas
     observacoes: `MoskoGás #${orderId} | ${name || ''}`,
   };
   if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
