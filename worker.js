@@ -1,4 +1,4 @@
-// v2.51.20
+// v2.51.21
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2109,21 +2109,25 @@ export default {
         }
       } catch(e) { fpIds._err = e.message; }
 
-      const payloads = {
-        // 1: sem parcelas (referência - deve dar 400 validation)
-        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
-        // 2: parcelas SEM formaPagamento
-        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{valor:0.01,dataVencimento:isoDate}] },
-        // 3: parcelas com formaPagamento null
-        '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:null,valor:0.01,dataVencimento:isoDate}] },
-        // 4: PIX Bradesco ID
-        '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:3138153},valor:0.01,dataVencimento:isoDate}] },
-        // 5: apenas retorna lista de formas de pagamento disponíveis (não faz POST)
-        '5': { _info: 'lista_formas_pagamento', formasPagamento: fpIds },
-        // 6: PIX ITAU ID  
-        '6': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:9052024},valor:0.01,dataVencimento:isoDate}] },
-      };
+      // datetime formato Bling: "YYYY-MM-DD HH:MM:SS"
+      const hh = String(now.getUTCHours()).padStart(2,'0');
+      const mi = String(now.getUTCMinutes()).padStart(2,'0');
+      const ss = String(now.getUTCSeconds()).padStart(2,'0');
+      const dtFull = `${isoDate} ${hh}:${mi}:${ss}`;
       if (modo === '5') return json({ info: 'formas_pagamento', fpIds });
+      const payloads = {
+        // 1: dataOperacao ISO date (YYYY-MM-DD) + parcelas com fp dinheiro
+        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:isoDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 2: dataOperacao datetime completo (YYYY-MM-DD HH:MM:SS)
+        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:dtFull, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 3: dataEmissao ISO + dataOperacao ISO
+        '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataEmissao:isoDate, dataOperacao:isoDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 4: só dataEmissao datetime completo
+        '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataEmissao:dtFull, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 5: (early return acima - lista formas pgto)
+        // 6: sem campo de data nenhum + fp dinheiro (o que causa exatamente?)
+        '6': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+      };
       const payload = payloads[modo] || payloads['1'];
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
       const status = resp.status;
