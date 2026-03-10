@@ -1,4 +1,4 @@
-// v2.51.32
+// v2.51.33
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5730,6 +5730,39 @@ export default {
         }
       }
       return json({ ok: true, message: 'Retry count resetado' });
+    }
+
+    // ── NFC-e: Recuperar números faltantes do Bling ────────────────
+    if (method === 'POST' && path === '/api/nfce/recuperar-numeros') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      // Buscar pedidos com nfce_id mas sem nfce_numero
+      const rows = await env.DB.prepare(
+        `SELECT id, nfce_id FROM orders
+         WHERE nfce_id IS NOT NULL AND nfce_id != ''
+         AND (nfce_numero IS NULL OR nfce_numero = '')
+         AND nfce_id NOT LIKE 'error%'
+         LIMIT 20`
+      ).all();
+      const resultados = [];
+      for (const row of (rows.results || [])) {
+        try {
+          const r = await blingFetch(`/nfce/${row.nfce_id}`, {}, env);
+          if (!r.ok) { resultados.push({ id: row.id, erro: `Bling ${r.status}` }); continue; }
+          const data = await r.json();
+          const numero = data.data?.numero ?? null;
+          const chave  = data.data?.chaveAcesso ?? data.data?.chave ?? null;
+          if (numero) {
+            await env.DB.prepare(
+              `UPDATE orders SET nfce_numero=?, nfce_chave=? WHERE id=?`
+            ).bind(String(numero), chave ? String(chave) : null, row.id).run();
+          }
+          resultados.push({ id: row.id, nfce_id: row.nfce_id, numero, chave: chave ? '✅' : null });
+        } catch (e) {
+          resultados.push({ id: row.id, erro: e.message });
+        }
+      }
+      return json({ ok: true, total: resultados.length, resultados });
     }
 
     // ── NFC-e: Retry em lote (manual) ──────────────────────────────
