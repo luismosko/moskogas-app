@@ -2090,35 +2090,29 @@ export default {
       const dataVenc = fmt === 'yyyymmdd' ? `${yyyy}-${mm}-${dd}`
                      : fmt === 'iso'      ? new Date().toISOString()
                      : `${dd}/${mm}/${yyyy}`;
-      // Testar múltiplas variações de formato e campo de data
-      const campoData = url.searchParams.get('campo') || 'data';
-      const hh = String(now.getUTCHours()).padStart(2,'0');
-      const mi = String(now.getUTCMinutes()).padStart(2,'0');
-      const ss = String(now.getUTCSeconds()).padStart(2,'0');
-      // Formatos a testar via &fmt=
-      const dateFormats = {
-        'ddmmyyyy':  `${dd}/${mm}/${yyyy}`,
-        'yyyymmdd':  `${yyyy}-${mm}-${dd}`,
-        'datetime':  `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`,
-        'datetime2': `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`,
-        'iso':       new Date().toISOString(),
-        'NONE':      undefined,
+      const brDate  = `${dd}/${mm}/${yyyy}`;
+      const isoDate = `${yyyy}-${mm}-${dd}`;
+      const modo = url.searchParams.get('modo') || '1';
+      // 6 modos para isolar o campo problemático
+      const payloads = {
+        // 1: mínimo absoluto — sem data, sem parcelas
+        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
+        // 2: com data DD/MM/YYYY, sem parcelas
+        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
+        // 3: sem naturezaOperacao
+        '3': { contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
+        // 4: sem contato (só naturezaOperacao)
+        '4': { naturezaOperacao:{id:8024085174}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
+        // 5: data BR + parcelas SEM dataVencimento
+        '5': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01}] },
+        // 6: completo mas naturezaOperacao sem id (só nome)
+        '6': { naturezaOperacao:{descricao:'VENDA'}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, data:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
       };
-      const dateVal = dateFormats[fmt] ?? `${dd}/${mm}/${yyyy}`;
-      // dataVencimento nas parcelas: sempre YYYY-MM-DD (mais seguro)
-      const vencISO = `${yyyy}-${mm}-${dd}`;
-      const payload = {
-        naturezaOperacao: { id: 8024085174 },
-        contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-        itens: [{ descricao: 'TESTE DIAGNOSTICO', quantidade: 1, valor: 0.01 }],
-        parcelas: [{ formaPagamento: { id: 23368 }, valor: 0.01, dataVencimento: vencISO }],
-        observacoes: 'TESTE DIAGNOSTICO - PODE DELETAR'
-      };
-      if (dateVal !== undefined && campoData !== 'NONE') payload[campoData] = dateVal;
+      const payload = payloads[modo] || payloads['1'];
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
       const status = resp.status;
       const body = await resp.text();
-      return json({ status, ok: resp.ok, payload_enviado: payload, body_raw: body, fmt_usado: fmt });
+      return json({ status, ok: resp.ok, modo, payload_enviado: payload, body_raw: body });
     }
 
     if (method === 'GET' && path === '/api/bling/diagnostico') {
