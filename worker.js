@@ -1,4 +1,4 @@
-// v2.50.9
+// v2.50.10
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -3181,6 +3181,16 @@ export default {
         page++;
       }
       return json({ ids: allIds });
+    }
+
+    // GET /api/products/debug-bling/:id — retorna JSON bruto do Bling para diagnóstico
+    if (method === 'GET' && path.match(/^\/api\/products\/debug-bling\/\d+$/)) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const bId = path.split('/').pop();
+      const dr = await blingFetch(`/produtos/${bId}`, {}, env);
+      const raw = await dr.json();
+      return json({ status: dr.status, raw });
     }
 
     // POST /api/products/sync-one — busca detalhe de 1 produto no Bling e salva no D1
