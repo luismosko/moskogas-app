@@ -1,4 +1,4 @@
-// v2.51.12
+// v2.51.13
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -536,6 +536,8 @@ async function emitirNFCeBling(env, orderId, orderData) {
   // Sem CPF → Consumidor Final (evita erro SEFAZ de cadastro incompleto)
   const usarContatoReal = bling_contact_id && cpf_cnpj && cpf_cnpj.replace(/\D/g,'').length >= 11;
 
+  // NFC-e: campo 'data' = DD/MM/YYYY; 'dataVencimento' nas parcelas = YYYY-MM-DD
+  const todayISO = `${yyyy}-${mm}-${dd}`;
   const nfceBody = {
     naturezaOperacao: { id: 8024085174 },
     contato: usarContatoReal
@@ -543,7 +545,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
       : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
     data: today,
     itens: itensNFCe,
-    parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: today }],
+    parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: todayISO }],
     observacoes: `MoskoGás #${orderId} | ${name || ''}`,
   };
   if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
