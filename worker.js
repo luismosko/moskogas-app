@@ -1,4 +1,4 @@
-// v2.51.19
+// v2.51.20
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2096,20 +2096,34 @@ export default {
       const isoDate = `${yyyy}-${mm}-${dd}`;
       const modo = url.searchParams.get('modo') || '1';
       // 6 modos para isolar o campo problemático
+      // Buscar IDs reais das formas de pagamento desta conta
+      let fpIds = { dinheiro: 23368, pix: 3138153 };
+      try {
+        const fpResp = await fetch('https://www.bling.com.br/Api/v3/formas-pagamentos?pagina=1&limite=50', {
+          headers: { Authorization: `Bearer ${(await env.DB.prepare("SELECT access_token FROM bling_tokens ORDER BY id DESC LIMIT 1").first())||''}`, 'enable-jwt': '1' }
+        });
+        if (fpResp.ok) {
+          const fpData = await fpResp.json();
+          fpIds._list = (fpData.data||[]).map(f => ({id:f.id,nome:f.descricao,situacao:f.situacao}));
+          if (fpData.data?.[0]) fpIds.primeiro = fpData.data[0].id;
+        }
+      } catch(e) { fpIds._err = e.message; }
+
       const payloads = {
-        // 1: dataOperacao BR + parcelas com dataVencimento ISO (payload correto)
-        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
-        // 2: dataOperacao BR + parcelas com dataVencimento BR
-        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] },
-        // 3: dataEmissao em vez de dataOperacao
-        '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataEmissao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
-        // 4: ambos dataOperacao + dataEmissao
-        '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, dataEmissao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
-        // 5: dataOperacao sem parcelas (validação)
-        '5': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
-        // 6: formato datetime em dataOperacao
-        '6': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:`${isoDate} 12:00:00`, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:isoDate}] },
+        // 1: sem parcelas (referência - deve dar 400 validation)
+        '1': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] },
+        // 2: parcelas SEM formaPagamento
+        '2': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{valor:0.01,dataVencimento:isoDate}] },
+        // 3: parcelas com formaPagamento null
+        '3': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:null,valor:0.01,dataVencimento:isoDate}] },
+        // 4: PIX Bradesco ID
+        '4': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:3138153},valor:0.01,dataVencimento:isoDate}] },
+        // 5: apenas retorna lista de formas de pagamento disponíveis (não faz POST)
+        '5': { _info: 'lista_formas_pagamento', formasPagamento: fpIds },
+        // 6: PIX ITAU ID  
+        '6': { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate, itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:9052024},valor:0.01,dataVencimento:isoDate}] },
       };
+      if (modo === '5') return json({ info: 'formas_pagamento', fpIds });
       const payload = payloads[modo] || payloads['1'];
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
       const status = resp.status;
