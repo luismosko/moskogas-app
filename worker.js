@@ -1,4 +1,4 @@
-// v2.51.28
+// v2.51.29
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2181,13 +2181,36 @@ export default {
         const r9 = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(p9) }, env);
         return json({ status: r9.status, modo:'9-brDatetime', payload: p9, body: await r9.text() });
       }
-      // Modo A: campo "data" separado + dataOperacao
+      // Modo A: "pagamentos" em vez de "parcelas" (NFC-e pode não usar parcelas)
       if (modo === 'a') {
-        const pA = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'},
-          data: brDate, dataOperacao: brDate,
-          itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] };
+        const pA = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate,
+          itens:[{descricao:'TESTE',quantidade:1,valor:0.01}],
+          pagamentos:[{formaPagamento:{id:23368},valor:0.01}] };
         const rA = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pA) }, env);
-        return json({ status: rA.status, modo:'a-campo-data', payload: pA, body: await rA.text() });
+        return json({ status: rA.status, modo:'a-pagamentos-sem-parcelas', payload: pA, body: await rA.text() });
+      }
+      // Modo B: formaPagamento no nível raiz (não dentro de array)
+      if (modo === 'b') {
+        const pB = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate,
+          itens:[{descricao:'TESTE',quantidade:1,valor:0.01}],
+          formaPagamento:{id:23368} };
+        const rB = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pB) }, env);
+        return json({ status: rB.status, modo:'b-formaPagamento-raiz', payload: pB, body: await rB.text() });
+      }
+      // Modo C: sem nenhum campo de pagamento (só itens)
+      if (modo === 'c') {
+        const pC = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate,
+          itens:[{descricao:'TESTE',quantidade:1,valor:0.01}] };
+        const rC = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pC) }, env);
+        return json({ status: rC.status, modo:'c-sem-pagamento', payload: pC, body: await rC.text() });
+      }
+      // Modo D: produto.id real (P13) + pagamentos
+      if (modo === 'd') {
+        const pD = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate,
+          itens:[{ produto:{id:16278195026}, descricao:'VASILHAME GLP P13', quantidade:1, valor:103.99 }],
+          pagamentos:[{formaPagamento:{id:23368},valor:103.99}] };
+        const rD = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pD) }, env);
+        return json({ status: rD.status, modo:'d-produtoId-real-pagamentos', payload: pD, body: await rD.text() });
       }
       const payloads = {
         // 1: dataVencimento em DD/MM/YYYY
