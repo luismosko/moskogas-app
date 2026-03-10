@@ -1,4 +1,4 @@
-// v2.51.5
+// v2.51.6
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -498,7 +498,12 @@ async function criarPedidoBling(env, orderId, orderData) {
 async function emitirNFCeBling(env, orderId, orderData) {
   const { name, items, total_value, forma_pagamento_key, forma_pagamento_id,
           bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj } = orderData;
-  const today = new Date().toISOString().slice(0, 10);
+  // NFC-e Bling exige DD/MM/YYYY (diferente de Pedido de Venda que aceita YYYY-MM-DD)
+  const now = new Date();
+  const dd = String(now.getUTCDate()).padStart(2,'0');
+  const mm = String(now.getUTCMonth()+1).padStart(2,'0');
+  const yyyy = now.getUTCFullYear();
+  const today = `${dd}/${mm}/${yyyy}`;
 
   // Montar itens — buscar bling_id de cada item via app_products se não vier
   const itensNFCe = [];
