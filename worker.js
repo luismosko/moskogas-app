@@ -1,4 +1,4 @@
-// v2.51.2
+// v2.51.3
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5370,6 +5370,79 @@ export default {
     }
 
     // ── AUDITORIA ─────────────────────────────────────────────
+
+    // ── NFC-e: Diagnóstico e Retry ─────────────────────────────────
+    if (method === 'GET' && path === '/api/nfce/diagnostico') {
+      const authCheck = await requireAuth(request, env);
+      if (authCheck instanceof Response) return authCheck;
+      // Retorna últimos erros de NFC-e
+      const erros = await env.DB.prepare(
+        `SELECT order_id, event, payload_json, created_at FROM order_events
+         WHERE event IN ('nfce_error_on_deliver','nfce_error_on_pay','nfce_emitida','nfce_payload')
+         ORDER BY id DESC LIMIT 40`
+      ).all().catch(() => ({ results: [] }));
+      const bling_audit = await env.DB.prepare(
+        `SELECT order_id, action, status, error_message, request_payload, response_data, created_at
+         FROM integration_audit WHERE action IN ('criar_nfce','emitir_nfce')
+         ORDER BY id DESC LIMIT 20`
+      ).all().catch(() => ({ results: [] }));
+      const pedidos_sem_nfce = await env.DB.prepare(
+        `SELECT id, status, tipo_pagamento, pago, nfce_id, bling_pedido_id, nfce_error, created_at
+         FROM orders WHERE status='entregue'
+         AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+         AND nfce_id IS NULL
+         ORDER BY id DESC LIMIT 20`
+      ).all().catch(() => ({ results: [] }));
+      return json({ erros: erros.results, bling_audit: bling_audit.results, pedidos_sem_nfce: pedidos_sem_nfce.results });
+    }
+
+    const nfceRetryMatch = path.match(/^\/api\/nfce\/retry\/(\d+)$/);
+    if (method === 'POST' && nfceRetryMatch) {
+      const authCheck = await requireAuth(request, env);
+      if (authCheck instanceof Response) return authCheck;
+      const orderId = parseInt(nfceRetryMatch[1]);
+      const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      if (order.nfce_id) return json({ ok: false, error: `Pedido já tem NFC-e: ${order.nfce_id}` });
+
+      // Migrations idempotentes
+      for (const col of [
+        "ALTER TABLE orders ADD COLUMN nfce_id TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_numero TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_chave TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_status TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_error TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_emitida_at INTEGER DEFAULT NULL",
+      ]) { await env.DB.prepare(col).run().catch(() => {}); }
+
+      const custData = order.phone_digits
+        ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first().catch(() => null)
+        : null;
+      const vendedorRow = order.vendedor_id
+        ? await env.DB.prepare('SELECT bling_vendedor_id FROM app_users WHERE id=?').bind(order.vendedor_id).first().catch(() => null)
+        : null;
+
+      try {
+        const nfceData = await emitirNFCeBling(env, orderId, {
+          name: order.customer_name,
+          items: JSON.parse(order.items_json || '[]'),
+          total_value: order.total_value,
+          tipo_pagamento: order.tipo_pagamento,
+          bling_contact_id: custData?.bling_contact_id || null,
+          cpf_cnpj: custData?.cpf_cnpj || null,
+          bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+        });
+        await env.DB.prepare(
+          'UPDATE orders SET nfce_id=?, nfce_numero=?, nfce_chave=?, nfce_status=?, nfce_emitida_at=unixepoch(), nfce_error=NULL WHERE id=?'
+        ).bind(nfceData.nfce_id, nfceData.nfce_numero, nfceData.nfce_chave, nfceData.nfce_status, orderId).run();
+        await logEvent(env, orderId, 'nfce_emitida_retry', { nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero });
+        return json({ ok: true, nfce: nfceData });
+      } catch (e) {
+        await env.DB.prepare('UPDATE orders SET nfce_error=? WHERE id=?').bind(e.message.substring(0, 500), orderId).run();
+        await logEvent(env, orderId, 'nfce_error_retry', { error: e.message });
+        return json({ ok: false, error: e.message });
+      }
+    }
 
     if (method === 'GET' && path === '/api/auditoria/diaria') {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);

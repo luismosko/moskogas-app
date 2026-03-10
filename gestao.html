@@ -78,7 +78,7 @@
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
     -->
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.18</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.19</span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -150,7 +150,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.18: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
+// v2.9.19: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
 // v2.9.13
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
@@ -165,7 +165,7 @@ let autoTimer = null;
 
 // ── Init ──────────────────────────────────────────────────────
 async function init() {
-  // v2.9.18: Se veio do banner Ultragaz (?ultragaz=1), limpa filtro de data e mostra só NOVO
+  // v2.9.19: Se veio do banner Ultragaz (?ultragaz=1), limpa filtro de data e mostra só NOVO
   const params = new URLSearchParams(window.location.search);
   const viaUltragaz = params.get('ultragaz') === '1';
 
@@ -184,7 +184,7 @@ async function init() {
     sel.appendChild(opt);
   });
   setDateFilter('hoje');
-  // v2.9.18: veio do banner Ultragaz — limpa filtro de data para mostrar pedidos de qualquer dia
+  // v2.9.19: veio do banner Ultragaz — limpa filtro de data para mostrar pedidos de qualquer dia
   if (viaUltragaz) {
     setDateFilter('limpar');
     // Ativa só status NOVO
@@ -492,11 +492,22 @@ async function markDelivered(id) {
   if (!confirm(`Marcar pedido #${id} como ENTREGUE?`)) return;
   showLoading('Marcando como entregue...');
   try {
-    await api(`/api/order/${id}/mark-delivered`, { method: 'POST', body: JSON.stringify({}) });
-    toast('✅ Pedido entregue!');
+    const resp = await api(`/api/order/${id}/mark-delivered`, { method: 'POST', body: JSON.stringify({}) });
+    hideLoading();
+    const br = resp?.bling_result;
+    if (br?.action === 'nfce' && br?.nfce_status === 'emitida') {
+      toast(`✅ Entregue! 🧾 NFC-e nº ${br.nfce_numero||br.nfce_id} emitida`, 'success');
+    } else if (br?.action === 'nfce' && br?.nfce_status === 'pendente_emissao') {
+      toast(`✅ Entregue! ⚠️ NFC-e criada mas aguarda SEFAZ`, 'warning');
+    } else if (br?.action === 'pedido_venda') {
+      toast(`✅ Entregue! 📄 Venda Bling nº ${br.bling_num||''} criada`, 'success');
+    } else if (br?.action === 'error') {
+      toast(`✅ Entregue! ⚠️ Erro NFC-e: ${br.error?.substring(0,120)}`, 'error');
+    } else {
+      toast('✅ Pedido entregue!');
+    }
     load();
-  } catch(e) { toast(e.message, 'error'); }
-  finally { hideLoading(); }
+  } catch(e) { hideLoading(); toast(e.message, 'error'); }
 }
 
 // ── Modal Cancelar ────────────────────────────────────────────
