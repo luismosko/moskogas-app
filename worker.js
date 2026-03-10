@@ -1,4 +1,4 @@
-// v2.51.22
+// v2.51.23
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2075,6 +2075,43 @@ export default {
       } catch (e) {
         return json({ ok: false, connected: false, error: e.message });
       }
+    }
+
+    // ── Buscar ID da loja (NFC-e exige loja) ──────────────────────
+    if (method === 'GET' && path === '/api/nfce/loja') {
+      const apiKey = url.searchParams.get('api_key') || request.headers.get('X-API-KEY');
+      if (apiKey !== env.APP_API_KEY) {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+      }
+      const [lojaResp, empResp] = await Promise.all([
+        blingFetch('/lojas?pagina=1&limite=10', {}, env),
+        blingFetch('/empresas', {}, env),
+      ]);
+      const lojas = lojaResp.ok ? await lojaResp.json() : { error: lojaResp.status, body: await lojaResp.text() };
+      const empresa = empResp.ok ? await empResp.json() : { error: empResp.status };
+      // Testar NFC-e com loja se tivermos o ID
+      let testeComLoja = null;
+      const lojaId = lojas?.data?.[0]?.id;
+      if (lojaId) {
+        const now = new Date();
+        const dd = String(now.getUTCDate()).padStart(2,'0');
+        const mm = String(now.getUTCMonth()+1).padStart(2,'0');
+        const yyyy = now.getUTCFullYear();
+        const isoDate = `${yyyy}-${mm}-${dd}`;
+        const brDate = `${dd}/${mm}/${yyyy}`;
+        const payload = {
+          naturezaOperacao: { id: 8024085174 },
+          contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+          loja: { id: lojaId },
+          dataOperacao: brDate,
+          itens: [{ descricao: 'TESTE', quantidade: 1, valor: 0.01 }],
+          parcelas: [{ formaPagamento: { id: 23368 }, valor: 0.01, dataVencimento: isoDate }],
+        };
+        const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
+        testeComLoja = { status: resp.status, body: await resp.text(), payload };
+      }
+      return json({ lojas: lojas?.data || lojas, empresa: empresa?.data || empresa, testeComLoja });
     }
 
     // ── Listar formas de pagamento reais da conta ─────────────────
