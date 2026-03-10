@@ -1,4 +1,4 @@
-// v2.51.8
+// v2.51.9
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5499,7 +5499,34 @@ export default {
          AND nfce_id IS NULL
          ORDER BY id DESC LIMIT 50`
       ).all().catch(() => ({ results: [] }));
-      return json({ erros: erros.results, bling_audit: bling_audit.results, pedidos_sem_nfce: pedidos_sem_nfce.results });
+      // Separar bloqueados (max retries) dos ativos
+      const ativos = pedidos_sem_nfce.results.filter(p => (p.nfce_retry_count||0) < 5);
+      const bloqueados = pedidos_sem_nfce.results.filter(p => (p.nfce_retry_count||0) >= 5);
+      return json({ erros: erros.results, bling_audit: bling_audit.results, pedidos_sem_nfce: pedidos_sem_nfce.results, ativos, bloqueados });
+    }
+
+    // ── NFC-e: Reset retry count (admin) ──────────────────────────
+    if (method === 'POST' && path === '/api/nfce/reset-retry') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      let ids = [];
+      try { const b = await request.clone().json(); ids = b?.ids || []; } catch {}
+      if (!ids.length) {
+        // Reset todos que têm nfce_retry_count >= 5 e ainda não têm nfce_id
+        await env.DB.prepare(
+          `UPDATE orders SET nfce_retry_count=0, nfce_error=NULL
+           WHERE nfce_id IS NULL AND status='entregue'
+           AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+           AND nfce_retry_count >= 5`
+        ).run();
+      } else {
+        for (const id of ids) {
+          await env.DB.prepare(
+            `UPDATE orders SET nfce_retry_count=0, nfce_error=NULL WHERE id=?`
+          ).bind(id).run();
+        }
+      }
+      return json({ ok: true, message: 'Retry count resetado' });
     }
 
     // ── NFC-e: Retry em lote (manual) ──────────────────────────────

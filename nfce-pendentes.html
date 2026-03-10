@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.0.1</title>
+<title>NFC-e Pendentes — MoskoGás v1.0.2</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.0.1</span>
+  <span class="badge-ver">v1.0.2</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -94,6 +94,10 @@
     <button class="btn btn-secondary" onclick="carregarDados()">
       🔃 Atualizar
     </button>
+    <button class="btn" id="btn-reset-retry" onclick="resetarRetry()"
+      style="background:#f59e0b;color:#fff" title="Resetar contador de tentativas dos pedidos bloqueados">
+      🔓 Desbloquear Bloqueados
+    </button>
     <span id="status-msg" style="font-size:13px;color:#64748b;margin-left:4px"></span>
   </div>
 
@@ -107,6 +111,15 @@
       <span id="total-pendentes-label" style="font-size:12px;color:#64748b"></span>
     </div>
     <div id="tabela-pendentes"><div style="padding:30px;text-align:center"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- Tabela bloqueados (max retries) -->
+  <div class="card" style="margin-bottom:20px" id="card-bloqueados" style="display:none">
+    <div class="card-header">
+      <h2>🚫 Bloqueados — max retries atingido</h2>
+      <button class="btn btn-sm" onclick="resetarRetry()" style="background:#f59e0b;color:#fff;border:none">🔓 Resetar e Tentar</button>
+    </div>
+    <div id="tabela-bloqueados"></div>
   </div>
 
   <!-- Tabela erros recentes -->
@@ -137,14 +150,15 @@ async function carregarDados() {
 
 function renderizarDados(data) {
   const pendentes = data.pedidos_sem_nfce || [];
+  const ativos = data.ativos || pendentes.filter(p => (p.nfce_retry_count||0) < 5);
+  const bloqueados = data.bloqueados || pendentes.filter(p => (p.nfce_retry_count||0) >= 5);
   const erros = data.bling_audit || [];
 
   // Cards
-  const maxRetry = pendentes.filter(p => (p.nfce_retry_count||0) >= 5).length;
-  const comRetry = pendentes.filter(p => (p.nfce_retry_count||0) > 0 && (p.nfce_retry_count||0) < 5).length;
-  document.getElementById('cnt-pendentes').textContent = pendentes.length;
+  const comRetry = ativos.filter(p => (p.nfce_retry_count||0) > 0).length;
+  document.getElementById('cnt-pendentes').textContent = ativos.length;
   document.getElementById('cnt-retry').textContent = comRetry;
-  document.getElementById('cnt-maxretry').textContent = maxRetry;
+  document.getElementById('cnt-maxretry').textContent = bloqueados.length;
 
   // Emitidas hoje (via erros de audit success)
   const hojeStr = new Date().toISOString().slice(0,10);
@@ -188,6 +202,25 @@ function renderizarDados(data) {
     document.getElementById('tabela-pendentes').innerHTML = html;
   }
 
+  // Tabela bloqueados
+  const cardBloq = document.getElementById('card-bloqueados');
+  if (cardBloq) cardBloq.style.display = bloqueados.length ? 'block' : 'none';
+  if (bloqueados.length) {
+    let html = '<table><thead><tr><th>#</th><th>Data</th><th>Cliente</th><th>Valor</th><th>Tentativas</th><th>Último Erro</th></tr></thead><tbody>';
+    for (const p of bloqueados) {
+      const dt = p.created_at ? new Date(p.created_at*1000).toLocaleString('pt-BR',{timeZone:'America/Campo_Grande',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+      html += `<tr>
+        <td><strong>#${p.id}</strong></td><td>${dt}</td>
+        <td>${p.customer_name||'—'}</td>
+        <td>R$ ${parseFloat(p.total_value||0).toFixed(2).replace('.',',')}</td>
+        <td><span class="pill pill-red">🚫 ${p.nfce_retry_count}</span></td>
+        <td><span class="erro-text" title="${p.nfce_error||''}">${(p.nfce_error||'').substring(0,100)}</span></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('tabela-bloqueados').innerHTML = html;
+  }
+
   // Tabela erros audit
   const errosRecentes = erros.filter(e => e.status === 'error').slice(0, 15);
   if (!errosRecentes.length) {
@@ -208,8 +241,8 @@ function renderizarDados(data) {
 }
 
 async function executarRetryBulk() {
-  const pendentes = dadosGlobais?.pedidos_sem_nfce || [];
-  const aptos = pendentes.filter(p => (p.nfce_retry_count||0) < 5).length;
+  const ativos = dadosGlobais?.ativos || (dadosGlobais?.pedidos_sem_nfce || []).filter(p => (p.nfce_retry_count||0) < 5);
+  const aptos = ativos.length;
   if (!aptos) { toast('Nenhum pedido apto para retry', 'warning'); return; }
 
   if (!confirm(`Tentar emitir NFC-e para ${aptos} pedido(s) pendente(s)?\n\nIsso pode levar alguns segundos.`)) return;
@@ -266,6 +299,25 @@ async function retryUm(orderId) {
       toast('❌ ' + (data.error||'Falha'), 'error');
     }
   } catch(e) { if(btnEl){btnEl.disabled=false;btnEl.textContent='🔄';} toast('❌ ' + e.message, 'error'); }
+}
+
+async function resetarRetry() {
+  const bloqueados = dadosGlobais?.bloqueados || [];
+  if (!bloqueados.length) { toast('Nenhum pedido bloqueado', 'warning'); return; }
+  if (!confirm(`Resetar ${bloqueados.length} pedido(s) bloqueado(s) e tentar emitir NFC-e?
+
+Isso vai zerar o contador de tentativas e tentar novamente.`)) return;
+  showLoading('Resetando...');
+  try {
+    const r = await api('/api/nfce/reset-retry', { method: 'POST', body: JSON.stringify({}) });
+    if (r.ok) {
+      toast('✅ Desbloqueados! Gerando NFC-es...', 'success');
+      await carregarDados();
+      // Executar retry bulk imediatamente
+      setTimeout(() => executarRetryBulk(), 500);
+    }
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { hideLoading(); }
 }
 
 function formatTipo(t) {
