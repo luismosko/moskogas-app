@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.14</title>
+<title>Pagamentos — MoskoGás v1.9.15</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -65,7 +65,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.14 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.15 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -86,7 +86,7 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.14</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.15</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -333,18 +333,72 @@ function updateBulkBar(){
 
 // ═══ MARCAR PAGO (PIX a Receber) ═══
 async function marcarPago(orderId){
-  if(!confirm('Confirmar recebimento do PIX #'+orderId+'?'))return;
-  showLoading('Verificando Bling...');
-  const result = await apiBling('Marcando PIX #'+orderId+' como pago', async () => {
-    return await api('/api/pagamentos/'+orderId,{method:'PATCH'});
+  // Modal de escolha fiscal
+  const pedido = allData.find(r=>r.id==orderId);
+  const nome = pedido ? pedido.customer_name : '#'+orderId;
+  const total = pedido ? 'R$ '+(pedido.total_value||0).toFixed(2).replace('.',',') : '';
+
+  const tipoFiscal = await escolherTipoFiscal(orderId, nome, total);
+  if(tipoFiscal === null) return; // cancelou
+
+  const blingOk = await checkBlingBeforeAction();
+  if(!blingOk){toast('⚠️ Bling não conectado','error');return;}
+
+  showLoading(tipoFiscal==='nfce' ? 'Emitindo NFC-e...' : tipoFiscal==='nfe' ? 'Criando NF-e no Bling...' : 'Marcando como pago...');
+  try {
+    const body = tipoFiscal ? { tipo_fiscal: tipoFiscal } : {};
+    const data = await api('/api/pagamentos/'+orderId, { method:'PATCH', body: JSON.stringify(body) });
+    hideLoading();
+    if(data.ok){
+      const f = data.fiscal;
+      let msg = '✅ Pedido #'+orderId+' marcado como pago!';
+      if(f?.tipo==='nfce') msg += f.nfce_status==='emitida' ? ` NFC-e nº ${f.nfce_numero||f.nfce_id} emitida ✅` : ' ⚠️ NFC-e pendente emissão SEFAZ';
+      else if(f?.tipo==='nfe') msg += ` Venda Bling nº ${f.bling_pedido_num||f.bling_pedido_id} criada`;
+      toast(msg, 'success');
+      loadPagamentos();
+    } else toast('❌ '+(data.error||'Falha'),'error');
+  } catch(e){ hideLoading(); toast('❌ '+e.message,'error'); }
+}
+
+function escolherTipoFiscal(orderId, nome, total){
+  return new Promise(resolve => {
+    // Remove modal anterior se houver
+    const old = document.getElementById('modal-fiscal-choice');
+    if(old) old.remove();
+
+    const m = document.createElement('div');
+    m.id = 'modal-fiscal-choice';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    m.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 6px;font-size:18px;color:#1e293b">💳 Confirmar Pagamento</h3>
+        <p style="margin:0 0 20px;color:#64748b;font-size:14px">Pedido <strong>#${orderId}</strong> — ${nome}<br><strong>${total}</strong></p>
+        <p style="margin:0 0 14px;font-weight:600;color:#374151;font-size:14px">Emitir documento fiscal?</p>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button id="btn-fiscal-nfce" style="background:#0ea5e9;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px">🧾</span>
+            <div><div>Emitir NFC-e agora</div><div style="font-size:11px;font-weight:400;opacity:0.85">Emite automaticamente para SEFAZ</div></div>
+          </button>
+          <button id="btn-fiscal-nfe" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px">📄</span>
+            <div><div>Criar NF-e / Pedido de Venda</div><div style="font-size:11px;font-weight:400;opacity:0.85">Cria venda no Bling para emitir NF-e depois</div></div>
+          </button>
+          <button id="btn-fiscal-none" style="background:#f1f5f9;color:#475569;border:none;border-radius:10px;padding:12px 20px;font-size:14px;font-weight:600;cursor:pointer;">
+            Sem documento fiscal — só marcar pago
+          </button>
+          <button id="btn-fiscal-cancel" style="background:transparent;color:#94a3b8;border:1px solid #e2e8f0;border-radius:10px;padding:10px 20px;font-size:13px;cursor:pointer;">
+            ✕ Cancelar
+          </button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(m);
+
+    document.getElementById('btn-fiscal-nfce').onclick   = () => { m.remove(); resolve('nfce'); };
+    document.getElementById('btn-fiscal-nfe').onclick    = () => { m.remove(); resolve('nfe');  };
+    document.getElementById('btn-fiscal-none').onclick   = () => { m.remove(); resolve('');     };
+    document.getElementById('btn-fiscal-cancel').onclick = () => { m.remove(); resolve(null);   };
   });
-  hideLoading();
-  if(result.ok){
-    if(result.data.ok){toast('✅ Pedido #'+orderId+' pago!');loadPagamentos();}
-    else toast('❌ '+(result.data.error||'Falha'),'error');
-  } else if(!result.canceled) {
-    toast('❌ '+result.error,'error');
-  }
 }
 async function bulkMarcarPago(){
   const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&p.tipo_pagamento==='pix_receber';});

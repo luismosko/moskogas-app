@@ -1,4 +1,4 @@
-// v2.51.0
+// v2.51.1
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -4594,56 +4594,99 @@ export default {
       if (!order) return err('Pedido não encontrado', 404);
       if (order.pago === 1) return json({ ok: true, message: 'Já estava pago' });
 
-      // Tipos que criam Bling individualmente (ao entregar)
-      // Boleto e Mensalista → Bling só em lote (criar-vendas-bling), não criar aqui
-      const tiposCriarBling = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
-      const deveCriarBling = !order.bling_pedido_id && tiposCriarBling.includes(order.tipo_pagamento);
+      // tipo_fiscal: 'nfce' | 'nfe' | null (sem emissão fiscal)
+      let tipoFiscal = null;
+      try { const b = await request.clone().json(); tipoFiscal = b?.tipo_fiscal || null; } catch {}
 
-      if (deveCriarBling) {
+      // Migrations NFC-e (idempotente)
+      for (const col of [
+        "ALTER TABLE orders ADD COLUMN nfce_id TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_numero TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_chave TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_status TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_error TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_emitida_at INTEGER DEFAULT NULL",
+      ]) { await env.DB.prepare(col).run().catch(() => {}); }
+
+      // Montar dados do pedido para fiscal
+      const items = JSON.parse(order.items_json || '[]');
+      const cached = order.phone_digits
+        ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first().catch(() => null)
+        : null;
+      let vendedorBlingId = null, vendedorNome = order.vendedor_nome || null;
+      if (order.vendedor_id) {
+        const vu = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(order.vendedor_id).first().catch(() => null);
+        if (vu?.bling_vendedor_id) vendedorBlingId = vu.bling_vendedor_id;
+        if (vu?.nome) vendedorNome = vu.nome;
+      }
+      const orderDataFiscal = {
+        name: order.customer_name,
+        items,
+        total_value: order.total_value,
+        forma_pagamento_key: order.forma_pagamento_key,
+        forma_pagamento_id: order.forma_pagamento_id,
+        bling_contact_id: cached?.bling_contact_id || null,
+        cpf_cnpj: cached?.cpf_cnpj || null,
+        tipo_pagamento: order.tipo_pagamento,
+        bling_vendedor_id: vendedorBlingId,
+        vendedor_nome: vendedorNome,
+      };
+
+      let fiscalResult = null;
+      const jaTemFiscal = order.nfce_id || order.bling_pedido_id;
+
+      if (tipoFiscal === 'nfce' && !jaTemFiscal) {
+        // ── NFC-e automática ──
         try {
-          const cached = await env.DB.prepare(
-            'SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?'
-          ).bind(order.phone_digits).first();
-
-          const items = JSON.parse(order.items_json || '[]');
-          let orderVendedorBlingId = null;
-          let orderVendedorNome = order.vendedor_nome || null;
-          if (order.vendedor_id) {
-            const vendUser = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(order.vendedor_id).first().catch(() => null);
-            if (vendUser?.bling_vendedor_id) orderVendedorBlingId = vendUser.bling_vendedor_id;
-            if (vendUser?.nome) orderVendedorNome = vendUser.nome;
+          const nfceData = await emitirNFCeBling(env, orderId, orderDataFiscal);
+          await env.DB.prepare(
+            'UPDATE orders SET nfce_id=?, nfce_numero=?, nfce_chave=?, nfce_status=?, nfce_emitida_at=unixepoch(), sync_status=? WHERE id=?'
+          ).bind(nfceData.nfce_id, nfceData.nfce_numero, nfceData.nfce_chave, nfceData.nfce_status, 'synced', orderId).run();
+          if (nfceData.nfce_error) {
+            await env.DB.prepare('UPDATE orders SET nfce_error=? WHERE id=?').bind(nfceData.nfce_error, orderId).run();
           }
-          const blingResult = await criarPedidoBling(env, orderId, {
-            name: order.customer_name,
-            items,
-            total_value: order.total_value,
-            forma_pagamento_key: order.forma_pagamento_key,
-            forma_pagamento_id: order.forma_pagamento_id,
-            bling_contact_id: cached?.bling_contact_id || null,
-            cpf_cnpj: cached?.cpf_cnpj || null,
-            tipo_pagamento: order.tipo_pagamento,
-            bling_vendedor_id: orderVendedorBlingId,
-            vendedor_nome: orderVendedorNome,
-          });
+          await logEvent(env, orderId, 'nfce_emitida_on_pay', { nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero });
+          fiscalResult = { tipo: 'nfce', nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero, nfce_status: nfceData.nfce_status };
+        } catch (e) {
+          await logEvent(env, orderId, 'nfce_error_on_pay', { error: e.message });
+          return json({ ok: false, error: 'Falha ao emitir NFC-e: ' + e.message }, 500);
+        }
 
+      } else if (tipoFiscal === 'nfe' && !jaTemFiscal) {
+        // ── NF-e: criar Pedido de Venda no Bling ──
+        try {
+          const blingResult = await criarPedidoBling(env, orderId, orderDataFiscal);
           await env.DB.prepare(
             'UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?'
           ).bind(blingResult.bling_pedido_id, blingResult.bling_pedido_num, 'synced', orderId).run();
-
-          await logEvent(env, orderId, 'bling_created_on_pay', {
-            bling_pedido_id: blingResult.bling_pedido_id,
-            bling_pedido_num: blingResult.bling_pedido_num,
-          });
+          await logEvent(env, orderId, 'bling_created_on_pay', { bling_pedido_id: blingResult.bling_pedido_id });
+          fiscalResult = { tipo: 'nfe', bling_pedido_id: blingResult.bling_pedido_id, bling_pedido_num: blingResult.bling_pedido_num };
         } catch (e) {
           await logEvent(env, orderId, 'bling_error_on_pay', { error: e.message });
           return json({ ok: false, error: 'Falha ao criar venda no Bling: ' + e.message }, 500);
         }
+
+      } else if (!tipoFiscal && !jaTemFiscal) {
+        // Comportamento legado: pix_receber cria Pedido de Venda automaticamente
+        const tiposCriarBling = ['pix_receber'];
+        if (tiposCriarBling.includes(order.tipo_pagamento)) {
+          try {
+            const blingResult = await criarPedidoBling(env, orderId, orderDataFiscal);
+            await env.DB.prepare(
+              'UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?'
+            ).bind(blingResult.bling_pedido_id, blingResult.bling_pedido_num, 'synced', orderId).run();
+            await logEvent(env, orderId, 'bling_created_on_pay', { bling_pedido_id: blingResult.bling_pedido_id });
+            fiscalResult = { tipo: 'nfe', bling_pedido_id: blingResult.bling_pedido_id };
+          } catch (e) {
+            await logEvent(env, orderId, 'bling_error_on_pay', { error: e.message });
+          }
+        }
       }
 
       await env.DB.prepare('UPDATE orders SET pago=1 WHERE id=?').bind(orderId).run();
-      await logBlingAudit(env, orderId, 'marcar_pago', 'success', { bling_pedido_id: order.bling_pedido_id || '', tipo: order.tipo_pagamento });
-      await logEvent(env, orderId, 'payment_confirmed', {});
-      return json({ ok: true });
+      await logBlingAudit(env, orderId, 'marcar_pago', 'success', { tipo: order.tipo_pagamento, tipo_fiscal: tipoFiscal });
+      await logEvent(env, orderId, 'payment_confirmed', { tipo_fiscal: tipoFiscal });
+      return json({ ok: true, fiscal: fiscalResult });
     }
 
     // ── PushInPay PIX — QR Code do pedido ──────────────────
