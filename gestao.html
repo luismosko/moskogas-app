@@ -151,7 +151,7 @@
 <script src="shared.js"></script>
 <script>
 // v2.9.18: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
-// v2.9.12
+// v2.9.13
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -169,7 +169,7 @@ async function init() {
   const params = new URLSearchParams(window.location.search);
   const viaUltragaz = params.get('ultragaz') === '1';
 
-  // v2.9.12: carregar timezone da empresa do config
+  // v2.9.13: carregar timezone da empresa do config
   try {
     const tzCfg = await api('/api/config?key=empresa_timezone');
     window._appTimezone = tzCfg?.value || 'America/Campo_Grande';
@@ -284,7 +284,7 @@ async function _load() {
   if (dateFrom || dateTo) {
     rows = rows.filter(r => {
       if (!r.created_at) return true;
-      // v2.9.12: usa data_pedido se disponível, senão created_at
+      // v2.9.13: usa data_pedido se disponível, senão created_at
       const d = r.data_pedido || new Date(r.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
       if (dateFrom && d < dateFrom) return false;
       if (dateTo   && d > dateTo)   return false;
@@ -296,7 +296,7 @@ async function _load() {
   rows.sort((a, b) => {
     const sd = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
     if (sd !== 0) return sd;
-    // v2.9.12: ordenar por data_pedido (data real) + _sortTs (retroativos às 22:30)
+    // v2.9.13: ordenar por data_pedido (data real) + _sortTs (retroativos às 22:30)
     const da = a.data_pedido || new Date(a.created_at*1000).toLocaleDateString('sv-SE',{timeZone:window._appTimezone||'America/Campo_Grande'});
     const db = b.data_pedido || new Date(b.created_at*1000).toLocaleDateString('sv-SE',{timeZone:window._appTimezone||'America/Campo_Grande'});
     if (da !== db) return db < da ? -1 : 1;
@@ -321,7 +321,7 @@ function renderTable(rows) {
     const items = JSON.parse(o.items_json || '[]');
     const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
     const total = o.total_value ? `R$ ${o.total_value.toFixed(2)}` : '—';
-    // v2.9.12: data_pedido é a data principal — created_at só como hora de inserção
+    // v2.9.13: data_pedido é a data principal — created_at só como hora de inserção
     const _dataPedido = o.data_pedido || null;
     const _hoje = todayCG();
     const _tz = window._appTimezone || 'America/Campo_Grande';
@@ -392,7 +392,16 @@ function renderTable(rows) {
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
       <td style="font-weight:700;color:#1e293b;white-space:nowrap">${total}</td>
       <td style="white-space:nowrap;font-size:12px">${pgtoLabel} ${pagoFlag}</td>
-      <td>${statusBadge(o.status)} ${o.bling_pedido_id ? '<span title="✅ Venda Bling nº '+(o.bling_pedido_num||o.bling_pedido_id)+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#16a34a;color:#fff;font-size:9px;font-weight:800;vertical-align:middle;margin-left:2px;cursor:help;">B</span>' : ''}</td>
+      <td>
+        ${statusBadge(o.status)}
+        ${o.nfce_id ? (() => {
+          const ok = o.nfce_status === 'emitida';
+          const pend = o.nfce_status === 'pendente_emissao';
+          const bg = ok ? '#16a34a' : pend ? '#d97706' : '#dc2626';
+          const tt = ok ? `✅ NFC-e nº ${o.nfce_numero||o.nfce_id} emitida` : pend ? `⚠️ NFC-e criada mas pendente emissão SEFAZ` : `❌ NFC-e erro: ${o.nfce_error||''}`;
+          return `<span title="${tt}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:18px;border-radius:4px;background:${bg};color:#fff;font-size:8px;font-weight:800;vertical-align:middle;margin-left:2px;cursor:help;letter-spacing:-0.5px;">NF</span>`;
+        })() : (o.bling_pedido_id ? `<span title="✅ Venda Bling nº ${o.bling_pedido_num||o.bling_pedido_id}" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#16a34a;color:#fff;font-size:9px;font-weight:800;vertical-align:middle;margin-left:2px;cursor:help;">B</span>` : '')}
+      </td>
       <td onclick="event.stopPropagation()">
         <select class="driver-sel" onchange="selectDriver(${o.id}, this.value)">
           ${driverOpts}
@@ -854,7 +863,7 @@ function openEditModal(orderId) {
   }
   if (btnCancel) btnCancel.style.display = canCancel ? '' : 'none';
   window._editOrderStatus = o.status;
-  // v2.9.12: data do pedido
+  // v2.9.13: data do pedido
   const isEntregue = o.status === 'entregue';
   const _dtInp = document.getElementById('edit-data-pedido');
   const _dtBloq = document.getElementById('edit-data-pedido-bloqueada');
@@ -885,7 +894,7 @@ function closeEditModal() {
   document.getElementById('modal-edit').style.display = 'none';
 }
 
-// v2.9.12: helpers data modal edicao
+// v2.9.13: helpers data modal edicao
 function _editDataCG(offset) {
   const d = new Date(); d.setDate(d.getDate() + offset);
   return d.toLocaleDateString('sv-SE', { timeZone: 'America/Campo_Grande' });
@@ -1041,7 +1050,14 @@ async function saveEditOrder(confirmBling = false) {
     if (resp.bling_result) {
       const br = resp.bling_result;
       if (br.action === 'created') {
-        toast(`✅ Pedido atualizado + Venda Bling nº ${br.bling_pedido_num || br.bling_pedido_id} criada!`, 'success');
+        const fiscalMsg = br.nfce_status === 'emitida'
+            ? `✅ NFC-e nº ${br.nfce_numero || br.nfce_id} emitida com sucesso!`
+            : br.nfce_status === 'pendente_emissao'
+            ? `⚠️ NFC-e criada mas aguardando emissão SEFAZ`
+            : br.bling_pedido_num
+            ? `✅ Venda Bling nº ${br.bling_pedido_num} criada`
+            : '';
+          if (fiscalMsg) toast(fiscalMsg, br.nfce_status === 'emitida' ? 'success' : 'warning');
       } else if (br.action === 'deleted') {
         toast(`✅ Pedido atualizado + Venda Bling excluída`, 'success');
       } else if (br.action === 'create_error') {
@@ -1177,7 +1193,7 @@ setInterval(autoCheckPixGestao, 20000);
       <button onclick="closeEditModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px" title="Fechar">&times;</button>
     </div>
 
-    <!-- DATA DO PEDIDO topo modal v2.9.12 -->
+    <!-- DATA DO PEDIDO topo modal v2.9.13 -->
     <div id="edit-data-pedido-wrap" style="margin-bottom:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:2px solid #e2e8f0">
       <label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:6px">&#x1F4C5; DATA DO PEDIDO</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">

@@ -1,4 +1,4 @@
-// v2.50.11
+// v2.51.0
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -490,6 +490,122 @@ async function criarPedidoBling(env, orderId, orderData) {
   });
 
   return { bling_pedido_id, bling_pedido_num };
+}
+
+
+// ── Emitir NFC-e no Bling (v2.51.0) — substitui Pedido de Venda para pagamentos à vista ──
+// Fluxo: POST /nfce (criar) → POST /nfce/:id/emitir (transmitir para SEFAZ)
+async function emitirNFCeBling(env, orderId, orderData) {
+  const { name, items, total_value, forma_pagamento_key, forma_pagamento_id,
+          bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj } = orderData;
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Montar itens — buscar bling_id de cada item via app_products se não vier
+  const itensNFCe = [];
+  for (const item of (items || [])) {
+    const qty   = parseFloat(item.qty)   || 1;
+    const price = parseFloat(item.price) || 0;
+
+    // Tentar achar bling_id pelo código do produto em app_products
+    let blingId = item.bling_id || null;
+    if (!blingId && item.code) {
+      const prod = await env.DB.prepare(
+        'SELECT bling_id FROM app_products WHERE code=? AND ativo=1 LIMIT 1'
+      ).bind(String(item.code)).first().catch(() => null);
+      blingId = prod?.bling_id || null;
+    }
+
+    const itemNFCe = {
+      descricao: String(item.name || 'Produto').substring(0, 120),
+      quantidade: qty,
+      valor: price,
+    };
+    if (blingId && Number(blingId) > 0) itemNFCe.produto = { id: Number(blingId) };
+    itensNFCe.push(itemNFCe);
+  }
+
+  const fpId = getFormaPagamentoForTipo(tipo_pagamento, forma_pagamento_key, forma_pagamento_id);
+  const totalCalc = Math.round(itensNFCe.reduce((s, i) => s + i.valor * i.quantidade, 0) * 100) / 100;
+  const total = totalCalc || parseFloat(total_value) || 0;
+
+  // Sem CPF → Consumidor Final (evita erro SEFAZ de cadastro incompleto)
+  const usarContatoReal = bling_contact_id && cpf_cnpj && cpf_cnpj.replace(/\D/g,'').length >= 11;
+
+  const nfceBody = {
+    naturezaOperacao: { id: 8024085174 },
+    contato: usarContatoReal
+      ? { id: bling_contact_id }
+      : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+    data: today,
+    itens: itensNFCe,
+    parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: today }],
+    observacoes: `MoskoGás #${orderId} | ${name || ''}`,
+  };
+  if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
+
+  await logEvent(env, orderId, 'nfce_payload', { itens: itensNFCe, contato: nfceBody.contato }).catch(() => {});
+
+  // ── PASSO 1: Criar NFC-e ──
+  const criarResp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(nfceBody) }, env);
+  if (!criarResp.ok) {
+    const errText = await criarResp.text();
+    console.error('[NFC-e] Criar erro:', criarResp.status, errText);
+    await logBlingAudit(env, orderId, 'criar_nfce', 'error', {
+      request_payload: nfceBody,
+      error_message: `HTTP ${criarResp.status}: ${errText.substring(0, 300)}`
+    });
+    throw new Error(`NFC-e criar ${criarResp.status}: ${errText.substring(0, 300)}`);
+  }
+
+  const criarData = await criarResp.json();
+  const nfceId = criarData.data?.id ?? null;
+  if (!nfceId) throw new Error('NFC-e criada mas Bling não retornou ID');
+
+  await logBlingAudit(env, orderId, 'criar_nfce', 'success', {
+    bling_pedido_id: String(nfceId),
+    request_payload: nfceBody,
+    response_data: criarData
+  });
+
+  // ── PASSO 2: Emitir NFC-e (transmite para SEFAZ) ──
+  const emitirResp = await blingFetch(`/nfce/${nfceId}/emitir`, { method: 'POST', body: '{}' }, env);
+  const emitirText = await emitirResp.text();
+  let emitirData; try { emitirData = JSON.parse(emitirText); } catch { emitirData = {}; }
+
+  if (!emitirResp.ok) {
+    console.error('[NFC-e] Emitir erro:', emitirResp.status, emitirText);
+    await logBlingAudit(env, orderId, 'emitir_nfce', 'error', {
+      bling_pedido_id: String(nfceId),
+      error_message: `HTTP ${emitirResp.status}: ${emitirText.substring(0, 300)}`
+    });
+    // NFC-e criada mas não emitida — salva como pendente para retry manual
+    return {
+      nfce_id: String(nfceId),
+      nfce_numero: null,
+      nfce_chave: null,
+      nfce_status: 'pendente_emissao',
+      nfce_error: `Emissão SEFAZ falhou: HTTP ${emitirResp.status}`
+    };
+  }
+
+  // Bling v3: número e chave podem estar em caminhos diferentes dependendo da versão
+  const d = emitirData.data || emitirData;
+  const nfceNumero = d?.numero ?? d?.numeroPedido ?? d?.numeroNfe ?? null;
+  const nfceChave  = d?.chaveAcesso ?? d?.chave ?? d?.chaveNfe ?? null;
+
+  await logBlingAudit(env, orderId, 'emitir_nfce', 'success', {
+    bling_pedido_id: String(nfceId),
+    response_data: emitirData
+  });
+
+  console.log(`[NFC-e] ✅ Pedido #${orderId} → NFC-e ${nfceNumero} emitida (id=${nfceId})`);
+  return {
+    nfce_id: String(nfceId),
+    nfce_numero: nfceNumero ? String(nfceNumero) : null,
+    nfce_chave: nfceChave ? String(nfceChave) : null,
+    nfce_status: 'emitida',
+    nfce_error: null
+  };
 }
 
 // ── [REMOVIDO v2.12.0] criarPedidoEGerarNFCe — NFCe não existe na API Bling v3 ──
@@ -4031,12 +4147,26 @@ export default {
         sql += `, pago=1`;
       }
 
-      // ── v2.17.0: Criar venda no Bling AGORA (ao entregar) ──
-      // v2.28.7: Boleto/Mensalista NÃO criam Bling aqui — só via criar-vendas-bling (agrupado)
-      const TIPOS_BLING_ENTREGA = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito', 'vale_gas'];
+      // ── v2.51.0: NFC-e para pagamentos à vista / Pedido de Venda para pix_receber ──
+      // TIPOS_NFCE: emite NFC-e automática (dinheiro, pix, débito, crédito)
+      // TIPOS_PEDIDO: cria Pedido de Venda (pix_receber, vale_gas — sem emissão fiscal imediata)
+      const TIPOS_NFCE   = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+      const TIPOS_PEDIDO = ['pix_receber', 'vale_gas'];
+      const TIPOS_BLING_ENTREGA = [...TIPOS_NFCE, ...TIPOS_PEDIDO];
+
+      // Migrations NFC-e (idempotente)
+      for (const col of [
+        "ALTER TABLE orders ADD COLUMN nfce_id TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_numero TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_chave TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_status TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_error TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN nfce_emitida_at INTEGER DEFAULT NULL",
+      ]) { await env.DB.prepare(col).run().catch(() => {}); }
+
       let blingResult = null;
-      // v2.49.26: skip_bling=true → Vale Gás com NF já emitida, não cria no Bling
-      if (!order.bling_pedido_id && TIPOS_BLING_ENTREGA.includes(tipoFinal) && !skipBling) {
+      // v2.49.26: skip_bling=true → Vale Gás com NF já emitida
+      if (!order.bling_pedido_id && !order.nfce_id && TIPOS_BLING_ENTREGA.includes(tipoFinal) && !skipBling) {
         try {
           const custData = order.phone_digits
             ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
@@ -4045,7 +4175,7 @@ export default {
             ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(order.vendedor_id).first()
             : null;
 
-          const blingData = await criarPedidoBling(env, id, {
+          const orderDataCommon = {
             name: order.customer_name,
             items: JSON.parse(order.items_json || '[]'),
             total_value: order.total_value,
@@ -4054,16 +4184,32 @@ export default {
             cpf_cnpj: custData?.cpf_cnpj || null,
             bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
             vendedor_nome: vendedorRow?.bling_vendedor_nome || order.vendedor_nome || ''
-          });
-          sql += `, bling_pedido_id=?, bling_pedido_num=?, sync_status='synced'`;
-          params.push(blingData.bling_pedido_id, blingData.bling_pedido_num);
-          blingResult = { action: 'created', bling_pedido_id: blingData.bling_pedido_id, bling_num: blingData.bling_pedido_num };
-          await logEvent(env, id, 'bling_created_on_deliver', { bling_pedido_id: blingData.bling_pedido_id });
+          };
+
+          if (TIPOS_NFCE.includes(tipoFinal)) {
+            // ✅ NFC-e automática (substitui Pedido de Venda para pagamentos à vista)
+            const nfceData = await emitirNFCeBling(env, id, orderDataCommon);
+            sql += `, nfce_id=?, nfce_numero=?, nfce_chave=?, nfce_status=?, nfce_emitida_at=unixepoch(), sync_status='synced'`;
+            params.push(nfceData.nfce_id, nfceData.nfce_numero, nfceData.nfce_chave, nfceData.nfce_status);
+            if (nfceData.nfce_error) {
+              sql += `, nfce_error=?`;
+              params.push(nfceData.nfce_error);
+            }
+            blingResult = { action: 'nfce', nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero, nfce_status: nfceData.nfce_status };
+            await logEvent(env, id, 'nfce_emitida', { nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero, status: nfceData.nfce_status });
+          } else {
+            // Pedido de Venda (pix_receber, vale_gas)
+            const blingData = await criarPedidoBling(env, id, orderDataCommon);
+            sql += `, bling_pedido_id=?, bling_pedido_num=?, sync_status='synced'`;
+            params.push(blingData.bling_pedido_id, blingData.bling_pedido_num);
+            blingResult = { action: 'pedido_venda', bling_pedido_id: blingData.bling_pedido_id, bling_num: blingData.bling_pedido_num };
+            await logEvent(env, id, 'bling_created_on_deliver', { bling_pedido_id: blingData.bling_pedido_id });
+          }
         } catch (e) {
-          console.error('[Deliver] Erro criar Bling:', e.message);
-          blingResult = { action: 'create_error', error: e.message };
-          await logEvent(env, id, 'bling_error_on_deliver', { error: e.message });
-          // NÃO bloqueia entrega — salva sem Bling, depois resolve em pagamentos
+          console.error('[Deliver] Erro fiscal:', e.message);
+          blingResult = { action: 'error', error: e.message };
+          await logEvent(env, id, 'nfce_error_on_deliver', { error: e.message });
+          // NÃO bloqueia a entrega — foto/status salvos; resolve depois
         }
       }
 
