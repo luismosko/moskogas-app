@@ -1,4 +1,4 @@
-// v2.51.15
+// v2.51.16
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2082,21 +2082,26 @@ export default {
         const authCheck = await requireAuth(request, env, ['admin']);
         if (authCheck instanceof Response) return authCheck;
       }
-      // Tenta criar uma NFC-e de R$0,01 para ver o erro completo
-      const resp = await blingFetch('/nfce', {
-        method: 'POST',
-        body: JSON.stringify({
-          naturezaOperacao: { id: 8024085174 },
-          contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-          data: '10/03/2026',
-          itens: [{ descricao: 'TESTE DIAGNOSTICO', quantidade: 1, valor: 0.01 }],
-          parcelas: [{ formaPagamento: { id: 23368 }, valor: 0.01, dataVencimento: '2026-03-10' }],
-          observacoes: 'TESTE DIAGNOSTICO - PODE DELETAR'
-        })
-      }, env);
+      const now = new Date();
+      const dd = String(now.getUTCDate()).padStart(2,'0');
+      const mm = String(now.getUTCMonth()+1).padStart(2,'0');
+      const yyyy = now.getUTCFullYear();
+      const fmt = url.searchParams.get('fmt') || 'ddmmyyyy'; // ddmmyyyy | yyyymmdd | iso
+      const dataVenc = fmt === 'yyyymmdd' ? `${yyyy}-${mm}-${dd}`
+                     : fmt === 'iso'      ? new Date().toISOString()
+                     : `${dd}/${mm}/${yyyy}`;
+      const payload = {
+        naturezaOperacao: { id: 8024085174 },
+        contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+        data: `${dd}/${mm}/${yyyy}`,
+        itens: [{ descricao: 'TESTE DIAGNOSTICO', quantidade: 1, valor: 0.01 }],
+        parcelas: [{ formaPagamento: { id: 23368 }, valor: 0.01, dataVencimento: dataVenc }],
+        observacoes: 'TESTE DIAGNOSTICO - PODE DELETAR'
+      };
+      const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
       const status = resp.status;
       const body = await resp.text();
-      return json({ status, body_raw: body, ok: resp.ok });
+      return json({ status, ok: resp.ok, payload_enviado: payload, body_raw: body, fmt_usado: fmt });
     }
 
     if (method === 'GET' && path === '/api/bling/diagnostico') {
