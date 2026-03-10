@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.0.3</title>
+<title>NFC-e Pendentes — MoskoGás v1.0.4</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.0.3</span>
+  <span class="badge-ver">v1.0.4</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -248,45 +248,51 @@ async function executarRetryBulk() {
   const ativos = dadosGlobais?.ativos || (dadosGlobais?.pedidos_sem_nfce || []).filter(p => (p.nfce_retry_count||0) < 5);
   const aptos = ativos.length;
   if (!aptos) { toast('Nenhum pedido apto para retry', 'warning'); return; }
-
-  if (!confirm(`Tentar emitir NFC-e para ${aptos} pedido(s) pendente(s)?\n\nIsso pode levar alguns segundos.`)) return;
+  if (!confirm(`Tentar emitir NFC-e para ${aptos} pedido(s) pendente(s)?\n\nO sistema vai processar em lotes de 8.`)) return;
 
   const btn = document.getElementById('btn-retry-bulk');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Processando...';
-  document.getElementById('status-msg').textContent = 'Emitindo NFC-es...';
   document.getElementById('resultado').innerHTML = '';
+  let totalOk = 0, totalFalhas = 0, rodadas = 0;
+  const maxRodadas = Math.ceil(aptos / 8) + 1; // segurança: não loop infinito
+  let logHtml = '';
 
   try {
-    const data = await api('/api/nfce/retry-bulk', { method: 'POST', body: JSON.stringify({ limite: 50 }) });
-    btn.disabled = false;
-    btn.innerHTML = '🔄 Gerar NFC-es Pendentes';
-    document.getElementById('status-msg').textContent = '';
+    while (rodadas < maxRodadas) {
+      rodadas++;
+      btn.innerHTML = `<span class="spinner"></span> Lote ${rodadas}...`;
+      document.getElementById('status-msg').textContent = `Emitindo... ${totalOk} emitidas, ${totalFalhas} erros`;
 
-    if (data.ok) {
-      // Renderizar resultado
-      let html = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px;margin-bottom:16px">
-        <div style="font-weight:700;font-size:15px;margin-bottom:12px">
-          ✅ ${data.ok} emitida(s) — ❌ ${data.falhas} com erro — ${data.total} processadas
-        </div>`;
+      const data = await api('/api/nfce/retry-bulk', { method: 'POST', body: JSON.stringify({ limite: 8 }) });
+      if (!data.ok && data.error) { toast('❌ ' + data.error, 'error'); break; }
+
+      const loteOk = data.ok || 0;
+      const loteFalhas = data.falhas || 0;
+      const loteTotal = data.total || 0;
+      totalOk += loteOk;
+      totalFalhas += loteFalhas;
+
       for (const d of (data.detalhes || [])) {
-        if (d.status === 'ok') html += `<div class="log-item log-ok">✅ Pedido #${d.id} → NFC-e ${d.nfce_numero||d.nfce_id||'?'} ${d.nfce_status==='emitida'?'autorizada':'pendente SEFAZ'}</div>`;
-        else if (d.status === 'error') html += `<div class="log-item log-err">❌ Pedido #${d.id} → ${(d.error||'').substring(0,120)}</div>`;
-        else if (d.status === 'skip') html += `<div class="log-item log-skip">⏭️ Pedido #${d.id} → ${d.motivo}</div>`;
+        if (d.status === 'ok') logHtml += `<div class="log-item log-ok">✅ Pedido #${d.id} → NFC-e nº ${d.nfce_numero||d.nfce_id||'?'}</div>`;
+        else if (d.status === 'error') logHtml += `<div class="log-item log-err">❌ Pedido #${d.id} → ${(d.error||'').substring(0,100)}</div>`;
+        else if (d.status === 'skip') logHtml += `<div class="log-item log-skip">⏭️ Pedido #${d.id} → ${d.motivo||'sem pendentes'}</div>`;
       }
-      html += '</div>';
-      document.getElementById('resultado').innerHTML = html;
+      document.getElementById('resultado').innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-weight:700;font-size:15px;margin-bottom:12px">✅ ${totalOk} emitida(s) — ❌ ${totalFalhas} erro(s)</div>
+        ${logHtml}
+      </div>`;
 
-      toast(`✅ ${data.ok} NFC-e(s) emitida(s)!`, 'success');
-      await carregarDados(); // refresh
-    } else {
-      toast('❌ Erro: ' + (data.error||'Falha'), 'error');
+      // Parar se não teve mais nada pra processar nesta rodada
+      if (loteTotal === 0 || (loteOk === 0 && loteFalhas === 0)) break;
     }
+    toast(totalOk > 0 ? `✅ ${totalOk} NFC-e(s) emitida(s)!` : 'Nenhuma NFC-e emitida', totalOk > 0 ? 'success' : 'warning');
+    await carregarDados();
   } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
     btn.disabled = false;
     btn.innerHTML = '🔄 Gerar NFC-es Pendentes';
     document.getElementById('status-msg').textContent = '';
-    toast('❌ ' + e.message, 'error');
   }
 }
 

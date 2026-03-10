@@ -1,4 +1,4 @@
-// v2.51.11
+// v2.51.12
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -1955,7 +1955,7 @@ async function retryNFCePendentes(env, limite = 20) {
       ok++;
 
       // Pequeno delay entre emissões para não sobrecarregar o Bling
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 200));
 
     } catch (e) {
       const errMsg = e.message.substring(0, 400);
@@ -5556,10 +5556,10 @@ export default {
     if (method === 'POST' && path === '/api/nfce/retry-bulk') {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
-      let limite = 20;
+      let limite = 5; // max 5 por chamada — evita timeout Worker (30s)
       try { const b = await request.clone().json(); if (b?.limite) limite = parseInt(b.limite); } catch {}
       try {
-        const resultado = await retryNFCePendentes(env, Math.min(limite, 50));
+        const resultado = await retryNFCePendentes(env, Math.min(limite, 8));
         return json({ ok: true, ...resultado });
       } catch (e) {
         return json({ ok: false, error: e.message }, 500);
