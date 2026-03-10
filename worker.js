@@ -1,4 +1,4 @@
-// v2.51.29
+// v2.51.30
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2204,13 +2204,21 @@ export default {
         const rC = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pC) }, env);
         return json({ status: rC.status, modo:'c-sem-pagamento', payload: pC, body: await rC.text() });
       }
-      // Modo D: produto.id real (P13) + pagamentos
+      // Modo D: ISO date + codigo produto + pagamentos (todos os fixes juntos)
       if (modo === 'd') {
-        const pD = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:brDate,
-          itens:[{ produto:{id:16278195026}, descricao:'VASILHAME GLP P13', quantidade:1, valor:103.99 }],
+        const pD = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:isoDate,
+          itens:[{ produto:{id:16278195026}, codigo:'174', descricao:'VASILHAME GLP P13', quantidade:1, valor:103.99 }],
           pagamentos:[{formaPagamento:{id:23368},valor:103.99}] };
         const rD = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pD) }, env);
-        return json({ status: rD.status, modo:'d-produtoId-real-pagamentos', payload: pD, body: await rD.text() });
+        return json({ status: rD.status, modo:'d-isoDate-codigo-pagamentos', payload: pD, body: await rD.text() });
+      }
+      // Modo E: igual D mas com produto simples (descricao+codigo sem produto.id)
+      if (modo === 'e') {
+        const pE = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao:isoDate,
+          itens:[{ codigo:'174', descricao:'VASILHAME GLP P13', quantidade:1, valor:103.99 }],
+          pagamentos:[{formaPagamento:{id:23368},valor:103.99}] };
+        const rE = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pE) }, env);
+        return json({ status: rE.status, modo:'e-sem-produto-id', payload: pE, body: await rE.text() });
       }
       const payloads = {
         // 1: dataVencimento em DD/MM/YYYY
