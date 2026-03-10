@@ -1,4 +1,4 @@
-// v2.51.27
+// v2.51.28
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2172,6 +2172,22 @@ export default {
         const body6 = pr.ok ? await pr.json() : { error: pr.status, body: await pr.text() };
         const produtos = (body6.data || []).map(p => ({ id: p.id, codigo: p.codigo, nome: p.nome, preco: p.preco }));
         return json({ produtos });
+      }
+      // Modo 9: dataOperacao como DD/MM/YYYY HH:MM:SS (datetime BR completo)
+      if (modo === '9') {
+        const brDt = `${brDate} ${String(now.getUTCHours()-3).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}:${String(now.getUTCSeconds()).padStart(2,'0')}`;
+        const p9 = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'}, dataOperacao: brDt,
+          itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] };
+        const r9 = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(p9) }, env);
+        return json({ status: r9.status, modo:'9-brDatetime', payload: p9, body: await r9.text() });
+      }
+      // Modo A: campo "data" separado + dataOperacao
+      if (modo === 'a') {
+        const pA = { naturezaOperacao:{id:8024085174}, contato:{id:CONSUMIDOR_FINAL_ID,tipoPessoa:'F'},
+          data: brDate, dataOperacao: brDate,
+          itens:[{descricao:'TESTE',quantidade:1,valor:0.01}], parcelas:[{formaPagamento:{id:23368},valor:0.01,dataVencimento:brDate}] };
+        const rA = await blingFetch('/nfce', { method:'POST', body: JSON.stringify(pA) }, env);
+        return json({ status: rA.status, modo:'a-campo-data', payload: pA, body: await rA.text() });
       }
       const payloads = {
         // 1: dataVencimento em DD/MM/YYYY
