@@ -1,4 +1,4 @@
-// v2.51.16
+// v2.51.17
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2090,14 +2090,16 @@ export default {
       const dataVenc = fmt === 'yyyymmdd' ? `${yyyy}-${mm}-${dd}`
                      : fmt === 'iso'      ? new Date().toISOString()
                      : `${dd}/${mm}/${yyyy}`;
+      // Testar variações do campo de data (data vs dataEmissao vs dataOperacao)
+      const campoData = url.searchParams.get('campo') || 'data';
       const payload = {
         naturezaOperacao: { id: 8024085174 },
         contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-        data: `${dd}/${mm}/${yyyy}`,
         itens: [{ descricao: 'TESTE DIAGNOSTICO', quantidade: 1, valor: 0.01 }],
         parcelas: [{ formaPagamento: { id: 23368 }, valor: 0.01, dataVencimento: dataVenc }],
         observacoes: 'TESTE DIAGNOSTICO - PODE DELETAR'
       };
+      payload[campoData] = `${dd}/${mm}/${yyyy}`;
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
       const status = resp.status;
       const body = await resp.text();
