@@ -1,6 +1,7 @@
-// v2.50.5
+// v2.50.6
 
-// v2.50.5: sync produtos 1 por 1 via sync-list + sync-one (barra progresso real, sem timeout)
+// v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
+// v2.50.5: Sync 1 por 1 com barra progresso real
 // v2.50.4: Fix sync-bling (} faltando causava timeout); endpoint import-csv
 // v2.50.3: Fix produtos.html nav+auth; sync paralelo lotes 5
 // v2.50.2: Relatório email — filtro por delivered_at (entregues) vs created_at (outros); faturamento exclui cancelados; cron envia D-1 e D-2
@@ -3084,8 +3085,20 @@ export default {
     // PATCH /api/products/:id/toggle-fav — alternar favorito
 
     if (method === 'GET' && path === '/api/products/all') {
-      const authCheck = await requireAuth(request, env, ['admin', 'atendente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
+      // Migrations das colunas fiscais (idempotente)
+      for (const col of [
+        "ALTER TABLE app_products ADD COLUMN ncm TEXT DEFAULT ''",
+        "ALTER TABLE app_products ADD COLUMN cest TEXT DEFAULT ''",
+        "ALTER TABLE app_products ADD COLUMN cfop TEXT DEFAULT '5102'",
+        "ALTER TABLE app_products ADD COLUMN origem INTEGER DEFAULT 0",
+        "ALTER TABLE app_products ADD COLUMN unidade TEXT DEFAULT 'UND'",
+        "ALTER TABLE app_products ADD COLUMN peso_liquido REAL DEFAULT 0",
+        "ALTER TABLE app_products ADD COLUMN icms_modalidade INTEGER DEFAULT 3",
+        "ALTER TABLE app_products ADD COLUMN icms_aliquota REAL DEFAULT 0",
+        "ALTER TABLE app_products ADD COLUMN bling_sync_at TEXT DEFAULT NULL"
+      ]) { await env.DB.prepare(col).run().catch(() => {}); }
       const rows = await env.DB.prepare(
         `SELECT * FROM app_products ORDER BY sort_order ASC, name ASC`
       ).all();

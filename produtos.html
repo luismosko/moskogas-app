@@ -127,12 +127,6 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<script>
-  if (document.getElementById('nav-placeholder')) {
-    document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
-  }
-  checkAuth(['admin', 'gerente', 'atendente']);
-</script>
 
 <div class="container">
   <div class="version-badge">Produtos v1.0.0</div>
@@ -156,9 +150,7 @@
       <strong id="syncStatus">Carregando status...</strong>
       <small id="syncDetail">Sincronize para manter dados fiscais atualizados com o Bling</small>
     </div>
-    <div>
-      <button class="btn btn-ghost btn-sm" onclick="syncBling()" id="btnSyncSmall">🔄 Sync agora</button>
-    </div>
+
   </div>
 
   <!-- Progress bar -->
@@ -208,8 +200,7 @@
     <div class="empty-state" id="emptyState" style="display:none;">
       <h3>Nenhum produto encontrado</h3>
       <p>Sincronize com o Bling ou cadastre um produto manualmente.</p>
-      <br>
-      <button class="btn btn-primary" onclick="syncBling()">🔄 Sincronizar com Bling</button>
+
     </div>
   </div>
 </div>
@@ -354,9 +345,11 @@ let _editingId = null;
 let _blingTimer = null;
 
 // ── Inicialização ──────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadProducts();
-});
+document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
+checkAuth(['admin', 'gerente', 'atendente']);
+
+// Carregar produtos ao iniciar
+loadProducts();
 
 async function loadProducts() {
   try {
