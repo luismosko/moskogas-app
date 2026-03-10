@@ -1,4 +1,4 @@
-// v2.51.14
+// v2.51.15
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2077,8 +2077,11 @@ export default {
 
     // ── Diagnóstico erro NFC-e 403 ────────────────────────────────
     if (method === 'GET' && path === '/api/nfce/teste-403') {
-      const authCheck = await requireAuth(request, env, ['admin']);
-      if (authCheck instanceof Response) return authCheck;
+      const apiKey = url.searchParams.get('api_key') || request.headers.get('X-API-KEY');
+      if (apiKey !== env.APP_API_KEY) {
+        const authCheck = await requireAuth(request, env, ['admin']);
+        if (authCheck instanceof Response) return authCheck;
+      }
       // Tenta criar uma NFC-e de R$0,01 para ver o erro completo
       const resp = await blingFetch('/nfce', {
         method: 'POST',
