@@ -1,4 +1,4 @@
-// v2.51.17
+// v2.51.18
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -2090,16 +2090,31 @@ export default {
       const dataVenc = fmt === 'yyyymmdd' ? `${yyyy}-${mm}-${dd}`
                      : fmt === 'iso'      ? new Date().toISOString()
                      : `${dd}/${mm}/${yyyy}`;
-      // Testar variações do campo de data (data vs dataEmissao vs dataOperacao)
+      // Testar múltiplas variações de formato e campo de data
       const campoData = url.searchParams.get('campo') || 'data';
+      const hh = String(now.getUTCHours()).padStart(2,'0');
+      const mi = String(now.getUTCMinutes()).padStart(2,'0');
+      const ss = String(now.getUTCSeconds()).padStart(2,'0');
+      // Formatos a testar via &fmt=
+      const dateFormats = {
+        'ddmmyyyy':  `${dd}/${mm}/${yyyy}`,
+        'yyyymmdd':  `${yyyy}-${mm}-${dd}`,
+        'datetime':  `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`,
+        'datetime2': `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`,
+        'iso':       new Date().toISOString(),
+        'NONE':      undefined,
+      };
+      const dateVal = dateFormats[fmt] ?? `${dd}/${mm}/${yyyy}`;
+      // dataVencimento nas parcelas: sempre YYYY-MM-DD (mais seguro)
+      const vencISO = `${yyyy}-${mm}-${dd}`;
       const payload = {
         naturezaOperacao: { id: 8024085174 },
         contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
         itens: [{ descricao: 'TESTE DIAGNOSTICO', quantidade: 1, valor: 0.01 }],
-        parcelas: [{ formaPagamento: { id: 23368 }, valor: 0.01, dataVencimento: dataVenc }],
+        parcelas: [{ formaPagamento: { id: 23368 }, valor: 0.01, dataVencimento: vencISO }],
         observacoes: 'TESTE DIAGNOSTICO - PODE DELETAR'
       };
-      payload[campoData] = `${dd}/${mm}/${yyyy}`;
+      if (dateVal !== undefined && campoData !== 'NONE') payload[campoData] = dateVal;
       const resp = await blingFetch('/nfce', { method: 'POST', body: JSON.stringify(payload) }, env);
       const status = resp.status;
       const body = await resp.text();
