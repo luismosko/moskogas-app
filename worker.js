@@ -1,4 +1,4 @@
-// v2.51.6
+// v2.51.7
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -1872,6 +1872,106 @@ async function ensureValesTables(env) {
   )`).run().catch(() => { });
 
   try { await env.DB.prepare("ALTER TABLE vales ADD COLUMN produto TEXT DEFAULT 'P13';").run(); } catch (e) { }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// NFC-e RETRY — bulk automático (cron) e manual
+// ══════════════════════════════════════════════════════════════
+async function retryNFCePendentes(env, limite = 20) {
+  // Migrations idempotentes
+  for (const col of [
+    "ALTER TABLE orders ADD COLUMN nfce_id TEXT DEFAULT NULL",
+    "ALTER TABLE orders ADD COLUMN nfce_numero TEXT DEFAULT NULL",
+    "ALTER TABLE orders ADD COLUMN nfce_chave TEXT DEFAULT NULL",
+    "ALTER TABLE orders ADD COLUMN nfce_status TEXT DEFAULT NULL",
+    "ALTER TABLE orders ADD COLUMN nfce_error TEXT DEFAULT NULL",
+    "ALTER TABLE orders ADD COLUMN nfce_emitida_at INTEGER DEFAULT NULL",
+  ]) { await env.DB.prepare(col).run().catch(() => {}); }
+
+  // Busca pedidos ENTREGUES com tipos que devem ter NFC-e, sem NFC-e ainda
+  // Limita a 7 dias atrás para não processar histórico muito antigo
+  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
+  const pendentes = await env.DB.prepare(
+    `SELECT id, customer_name, phone_digits, items_json, total_value,
+            tipo_pagamento, forma_pagamento_key, forma_pagamento_id,
+            vendedor_id, vendedor_nome, nfce_error, nfce_retry_count
+     FROM orders
+     WHERE status = 'entregue'
+       AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+       AND nfce_id IS NULL
+       AND bling_pedido_id IS NULL
+       AND created_at >= ?
+     ORDER BY id DESC
+     LIMIT ?`
+  ).bind(sevenDaysAgo, limite).all().catch(() => ({ results: [] }));
+
+  // Adicionar coluna nfce_retry_count se não existir
+  await env.DB.prepare("ALTER TABLE orders ADD COLUMN nfce_retry_count INTEGER DEFAULT 0").run().catch(() => {});
+
+  let ok = 0, falhas = 0;
+  const detalhes = [];
+
+  for (const order of pendentes.results) {
+    // Pular se já tentou muitas vezes (evita loop infinito com erro persistente)
+    const retryCount = order.nfce_retry_count || 0;
+    if (retryCount >= 5) {
+      detalhes.push({ id: order.id, status: 'skip', motivo: `Max retries (${retryCount})` });
+      continue;
+    }
+
+    try {
+      const custData = order.phone_digits
+        ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first().catch(() => null)
+        : null;
+      const vendedorRow = order.vendedor_id
+        ? await env.DB.prepare('SELECT bling_vendedor_id FROM app_users WHERE id=?').bind(order.vendedor_id).first().catch(() => null)
+        : null;
+
+      const nfceData = await emitirNFCeBling(env, order.id, {
+        name: order.customer_name,
+        items: JSON.parse(order.items_json || '[]'),
+        total_value: order.total_value,
+        tipo_pagamento: order.tipo_pagamento,
+        forma_pagamento_key: order.forma_pagamento_key,
+        forma_pagamento_id: order.forma_pagamento_id,
+        bling_contact_id: custData?.bling_contact_id || null,
+        cpf_cnpj: custData?.cpf_cnpj || null,
+        bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+        vendedor_nome: order.vendedor_nome || '',
+      });
+
+      await env.DB.prepare(
+        `UPDATE orders SET nfce_id=?, nfce_numero=?, nfce_chave=?, nfce_status=?,
+         nfce_emitida_at=unixepoch(), nfce_error=NULL, nfce_retry_count=?, sync_status='synced' WHERE id=?`
+      ).bind(nfceData.nfce_id, nfceData.nfce_numero, nfceData.nfce_chave, nfceData.nfce_status, retryCount + 1, order.id).run();
+
+      await logEvent(env, order.id, 'nfce_emitida_retry', {
+        nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero, tentativa: retryCount + 1
+      }).catch(() => {});
+
+      console.log(`[NFC-e retry] ✅ Pedido #${order.id} → NFC-e ${nfceData.nfce_numero} (tentativa ${retryCount + 1})`);
+      detalhes.push({ id: order.id, status: 'ok', nfce_numero: nfceData.nfce_numero, nfce_status: nfceData.nfce_status });
+      ok++;
+
+      // Pequeno delay entre emissões para não sobrecarregar o Bling
+      await new Promise(r => setTimeout(r, 600));
+
+    } catch (e) {
+      const errMsg = e.message.substring(0, 400);
+      await env.DB.prepare(
+        `UPDATE orders SET nfce_error=?, nfce_retry_count=COALESCE(nfce_retry_count,0)+1 WHERE id=?`
+      ).bind(errMsg, order.id).run().catch(() => {});
+      await logEvent(env, order.id, 'nfce_error_retry', { error: errMsg, tentativa: retryCount + 1 }).catch(() => {});
+      console.error(`[NFC-e retry] ❌ Pedido #${order.id}: ${errMsg}`);
+      detalhes.push({ id: order.id, status: 'error', error: errMsg });
+      falhas++;
+    }
+  }
+
+  const total = pendentes.results.length;
+  console.log(`[NFC-e retry] Concluído: ${ok} OK / ${falhas} falhas / ${total} processados`);
+  return { ok, falhas, total, detalhes };
 }
 
 export default {
@@ -5401,6 +5501,20 @@ export default {
       return json({ erros: erros.results, bling_audit: bling_audit.results, pedidos_sem_nfce: pedidos_sem_nfce.results });
     }
 
+    // ── NFC-e: Retry em lote (manual) ──────────────────────────────
+    if (method === 'POST' && path === '/api/nfce/retry-bulk') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      let limite = 20;
+      try { const b = await request.clone().json(); if (b?.limite) limite = parseInt(b.limite); } catch {}
+      try {
+        const resultado = await retryNFCePendentes(env, Math.min(limite, 50));
+        return json({ ok: true, ...resultado });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
+    }
+
     const nfceRetryMatch = path.match(/^\/api\/nfce\/retry\/(\d+)$/);
     if (method === 'POST' && nfceRetryMatch) {
       const authCheck = await requireAuth(request, env);
@@ -8618,6 +8732,8 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
     ctx.waitUntil(processarAvaliacoesCron(env));
     // Marketing: publicar posts agendados aprovados
     ctx.waitUntil(publishScheduledPosts(env));
+    // NFC-e retry automático: a cada execução do cron (5min), tenta emitir pendentes
+    ctx.waitUntil(retryNFCePendentes(env, 10));
   },
 };
 

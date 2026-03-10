@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NFC-e Pendentes — MoskoGás v1.0.0</title>
+<script src="shared.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
+  .header { background: #0f172a; color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .badge-ver { background: #334155; color: #94a3b8; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+
+  /* Cards topo */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: #fff; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; }
+  .stat-card .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .stat-card .value { font-size: 28px; font-weight: 800; }
+  .stat-card.danger .value { color: #dc2626; }
+  .stat-card.warn .value { color: #f59e0b; }
+  .stat-card.ok .value { color: #16a34a; }
+  .stat-card.blue .value { color: #0ea5e9; }
+
+  /* Botões */
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+  .btn { border: none; border-radius: 8px; padding: 10px 18px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: #0ea5e9; color: #fff; }
+  .btn-primary:hover { background: #0284c7; }
+  .btn-danger { background: #dc2626; color: #fff; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-secondary { background: #e2e8f0; color: #475569; }
+  .btn-secondary:hover { background: #cbd5e1; }
+  .btn:disabled { background: #94a3b8; cursor: not-allowed; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; border-radius: 6px; }
+
+  /* Tabela */
+  .card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
+  .card-header { padding: 14px 20px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+  .card-header h2 { font-size: 15px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f8fafc; padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f8fafc; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .pill-red { background: #fee2e2; color: #991b1b; }
+  .pill-yellow { background: #fef9c3; color: #854d0e; }
+  .pill-green { background: #dcfce7; color: #166534; }
+  .pill-blue { background: #e0f2fe; color: #0369a1; }
+  .pill-gray { background: #f1f5f9; color: #475569; }
+
+  /* Loading spinner */
+  .spinner { width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Log resultado */
+  #resultado { margin-top: 16px; }
+  .log-item { padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .log-ok { background: #dcfce7; color: #166534; }
+  .log-err { background: #fee2e2; color: #991b1b; }
+  .log-skip { background: #f1f5f9; color: #64748b; }
+
+  .erro-text { font-size: 11px; color: #dc2626; max-width: 350px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+
+  .nav-back { color: #94a3b8; font-size: 13px; text-decoration: none; display: flex; align-items: center; gap: 4px; margin-left: auto; }
+  .nav-back:hover { color: #fff; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span style="font-size:24px">🧾</span>
+  <div>
+    <h1>NFC-e Pendentes</h1>
+    <div style="font-size:12px;color:#94a3b8;margin-top:2px">Pedidos entregues sem emissão fiscal</div>
+  </div>
+  <span class="badge-ver">v1.0.0</span>
+  <a href="gestao.html" class="nav-back">← Gestão</a>
+</div>
+
+<div class="container">
+
+  <!-- Cards estatísticas -->
+  <div class="stats" id="stats-cards">
+    <div class="stat-card danger"><div class="label">⚠️ Pendentes (7d)</div><div class="value" id="cnt-pendentes">—</div></div>
+    <div class="stat-card ok"><div class="label">✅ Emitidas hoje</div><div class="value" id="cnt-emitidas">—</div></div>
+    <div class="stat-card warn"><div class="label">🔁 Em retry</div><div class="value" id="cnt-retry">—</div></div>
+    <div class="stat-card blue"><div class="label">🚫 Max retries</div><div class="value" id="cnt-maxretry">—</div></div>
+  </div>
+
+  <!-- Ações -->
+  <div class="actions">
+    <button class="btn btn-primary" id="btn-retry-bulk" onclick="executarRetryBulk()">
+      🔄 Gerar NFC-es Pendentes
+    </button>
+    <button class="btn btn-secondary" onclick="carregarDados()">
+      🔃 Atualizar
+    </button>
+    <span id="status-msg" style="font-size:13px;color:#64748b;margin-left:4px"></span>
+  </div>
+
+  <!-- Resultado do retry -->
+  <div id="resultado"></div>
+
+  <!-- Tabela pendentes -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <h2>🔴 Pendentes — últimos 7 dias</h2>
+      <span id="total-pendentes-label" style="font-size:12px;color:#64748b"></span>
+    </div>
+    <div id="tabela-pendentes"><div style="padding:30px;text-align:center"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- Tabela erros recentes -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <h2>❌ Erros recentes (audit log)</h2>
+    </div>
+    <div id="tabela-erros"><div style="padding:30px;text-align:center"><div class="spinner"></div></div></div>
+  </div>
+
+</div>
+
+<script>
+let dadosGlobais = null;
+
+async function carregarDados() {
+  try {
+    const data = await api('/api/nfce/diagnostico');
+    dadosGlobais = data;
+    renderizarDados(data);
+  } catch(e) {
+    toast('❌ Erro ao carregar: ' + e.message, 'error');
+  }
+}
+
+function renderizarDados(data) {
+  const pendentes = data.pedidos_sem_nfce || [];
+  const erros = data.bling_audit || [];
+
+  // Cards
+  const maxRetry = pendentes.filter(p => (p.nfce_retry_count||0) >= 5).length;
+  const comRetry = pendentes.filter(p => (p.nfce_retry_count||0) > 0 && (p.nfce_retry_count||0) < 5).length;
+  document.getElementById('cnt-pendentes').textContent = pendentes.length;
+  document.getElementById('cnt-retry').textContent = comRetry;
+  document.getElementById('cnt-maxretry').textContent = maxRetry;
+
+  // Emitidas hoje (via erros de audit success)
+  const hojeStr = new Date().toISOString().slice(0,10);
+  const emitidasHoje = erros.filter(e => e.status === 'success' && e.action === 'emitir_nfce' && e.created_at?.startsWith(hojeStr)).length;
+  document.getElementById('cnt-emitidas').textContent = emitidasHoje;
+
+  document.getElementById('total-pendentes-label').textContent = pendentes.length + ' pedidos';
+
+  // Tabela pendentes
+  if (!pendentes.length) {
+    document.getElementById('tabela-pendentes').innerHTML = '<div style="padding:30px;text-align:center;color:#16a34a;font-weight:700">✅ Nenhum pedido pendente!</div>';
+  } else {
+    let html = '<table><thead><tr><th>#</th><th>Data</th><th>Cliente</th><th>Tipo Pgto</th><th>Valor</th><th>Tentativas</th><th>Erro</th><th>Ação</th></tr></thead><tbody>';
+    for (const p of pendentes) {
+      const dt = p.created_at ? new Date(p.created_at * 1000).toLocaleString('pt-BR', {timeZone:'America/Campo_Grande',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+      const retries = p.nfce_retry_count || 0;
+      const maxed = retries >= 5;
+      const retryPill = retries === 0
+        ? '<span class="pill pill-gray">0</span>'
+        : maxed
+        ? `<span class="pill pill-red">🚫 ${retries}</span>`
+        : `<span class="pill pill-yellow">🔁 ${retries}</span>`;
+      const errMsg = p.nfce_error
+        ? `<span class="erro-text" title="${p.nfce_error}">${p.nfce_error.substring(0,80)}...</span>`
+        : '—';
+      const btnRetry = maxed
+        ? `<button class="btn btn-sm btn-secondary" disabled title="Máximo de tentativas atingido. Corrija o erro antes.">🚫</button>`
+        : `<button class="btn btn-sm btn-primary" onclick="retryUm(${p.id})" title="Tentar emitir NFC-e">🔄</button>`;
+      html += `<tr>
+        <td><strong>#${p.id}</strong></td>
+        <td>${dt}</td>
+        <td>${p.customer_name||'—'}</td>
+        <td><span class="pill pill-blue">${formatTipo(p.tipo_pagamento)}</span></td>
+        <td>R$ ${parseFloat(p.total_value||0).toFixed(2).replace('.',',')}</td>
+        <td>${retryPill}</td>
+        <td>${errMsg}</td>
+        <td>${btnRetry}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('tabela-pendentes').innerHTML = html;
+  }
+
+  // Tabela erros audit
+  const errosRecentes = erros.filter(e => e.status === 'error').slice(0, 15);
+  if (!errosRecentes.length) {
+    document.getElementById('tabela-erros').innerHTML = '<div style="padding:30px;text-align:center;color:#16a34a;font-weight:700">✅ Sem erros recentes no audit log!</div>';
+  } else {
+    let html = '<table><thead><tr><th>#Pedido</th><th>Ação</th><th>Data</th><th>Erro</th></tr></thead><tbody>';
+    for (const e of errosRecentes) {
+      html += `<tr>
+        <td><strong>#${e.order_id}</strong></td>
+        <td><span class="pill pill-yellow">${e.action}</span></td>
+        <td style="font-size:11px;color:#64748b">${e.created_at||'—'}</td>
+        <td><span class="erro-text" title="${e.error_message||''}">${(e.error_message||'').substring(0,120)}</span></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('tabela-erros').innerHTML = html;
+  }
+}
+
+async function executarRetryBulk() {
+  const pendentes = dadosGlobais?.pedidos_sem_nfce || [];
+  const aptos = pendentes.filter(p => (p.nfce_retry_count||0) < 5).length;
+  if (!aptos) { toast('Nenhum pedido apto para retry', 'warning'); return; }
+
+  if (!confirm(`Tentar emitir NFC-e para ${aptos} pedido(s) pendente(s)?\n\nIsso pode levar alguns segundos.`)) return;
+
+  const btn = document.getElementById('btn-retry-bulk');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Processando...';
+  document.getElementById('status-msg').textContent = 'Emitindo NFC-es...';
+  document.getElementById('resultado').innerHTML = '';
+
+  try {
+    const data = await api('/api/nfce/retry-bulk', { method: 'POST', body: JSON.stringify({ limite: 50 }) });
+    btn.disabled = false;
+    btn.innerHTML = '🔄 Gerar NFC-es Pendentes';
+    document.getElementById('status-msg').textContent = '';
+
+    if (data.ok) {
+      // Renderizar resultado
+      let html = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-weight:700;font-size:15px;margin-bottom:12px">
+          ✅ ${data.ok} emitida(s) — ❌ ${data.falhas} com erro — ${data.total} processadas
+        </div>`;
+      for (const d of (data.detalhes || [])) {
+        if (d.status === 'ok') html += `<div class="log-item log-ok">✅ Pedido #${d.id} → NFC-e ${d.nfce_numero||d.nfce_id||'?'} ${d.nfce_status==='emitida'?'autorizada':'pendente SEFAZ'}</div>`;
+        else if (d.status === 'error') html += `<div class="log-item log-err">❌ Pedido #${d.id} → ${(d.error||'').substring(0,120)}</div>`;
+        else if (d.status === 'skip') html += `<div class="log-item log-skip">⏭️ Pedido #${d.id} → ${d.motivo}</div>`;
+      }
+      html += '</div>';
+      document.getElementById('resultado').innerHTML = html;
+
+      toast(`✅ ${data.ok} NFC-e(s) emitida(s)!`, 'success');
+      await carregarDados(); // refresh
+    } else {
+      toast('❌ Erro: ' + (data.error||'Falha'), 'error');
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '🔄 Gerar NFC-es Pendentes';
+    document.getElementById('status-msg').textContent = '';
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+async function retryUm(orderId) {
+  showLoading('Emitindo NFC-e #' + orderId + '...');
+  try {
+    const data = await api('/api/nfce/retry/' + orderId, { method: 'POST' });
+    hideLoading();
+    if (data.ok) {
+      const n = data.nfce;
+      toast(`✅ NFC-e #${orderId} → nº ${n?.nfce_numero||n?.nfce_id} emitida!`, 'success');
+      await carregarDados();
+    } else {
+      toast('❌ ' + (data.error||'Falha'), 'error');
+    }
+  } catch(e) { hideLoading(); toast('❌ ' + e.message, 'error'); }
+}
+
+function formatTipo(t) {
+  const m = { dinheiro:'💵 Dinheiro', pix_vista:'⚡ PIX', pix_receber:'⏳ PIX Rec.', debito:'💳 Débito', credito:'💳 Crédito' };
+  return m[t] || t;
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', async () => {
+  await initPage();
+  await carregarDados();
+});
+</script>
+</body>
+</html>
