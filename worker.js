@@ -1,4 +1,4 @@
-// v2.51.33
+// v2.51.34
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5730,6 +5730,56 @@ export default {
         }
       }
       return json({ ok: true, message: 'Retry count resetado' });
+    }
+
+    // ── NFC-e: Testar /emitir em uma NFC-e existente (diagnóstico) ──
+    if (method === 'POST' && path === '/api/nfce/testar-emitir') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body2 = await request.json().catch(() => ({}));
+      const nfceId = body2?.nfce_id;
+      if (!nfceId) return json({ error: 'nfce_id obrigatório' }, 400);
+      // Tentar emitir
+      const r = await blingFetch(`/nfce/${nfceId}/emitir`, { method: 'POST', body: '{}' }, env);
+      const txt = await r.text();
+      return json({ status: r.status, ok: r.ok, nfce_id: nfceId, body: txt });
+    }
+
+    // ── NFC-e: Re-emitir todas com status pendente_emissao ─────────
+    if (method === 'POST' && path === '/api/nfce/re-emitir-pendentes') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const rows = await env.DB.prepare(
+        `SELECT id, nfce_id, nfce_numero FROM orders
+         WHERE nfce_status = 'pendente_emissao'
+         OR (nfce_id IS NOT NULL AND nfce_id != '' AND nfce_id NOT LIKE 'error%'
+             AND (nfce_status IS NULL OR nfce_status != 'emitida'))
+         LIMIT 20`
+      ).all();
+      const resultados = [];
+      for (const row of (rows.results || [])) {
+        try {
+          const r = await blingFetch(`/nfce/${row.nfce_id}/emitir`, { method: 'POST', body: '{}' }, env);
+          const txt = await r.text();
+          let data; try { data = JSON.parse(txt); } catch { data = {}; }
+          if (r.ok) {
+            const d = data.data || data;
+            const numero = d?.numero ?? row.nfce_numero ?? null;
+            const chave = d?.chaveAcesso ?? d?.chave ?? null;
+            await env.DB.prepare(
+              `UPDATE orders SET nfce_status='emitida', nfce_numero=COALESCE(?,nfce_numero), nfce_chave=COALESCE(?,nfce_chave), nfce_error=NULL WHERE id=?`
+            ).bind(numero, chave, row.id).run();
+            resultados.push({ id: row.id, nfce_id: row.nfce_id, status: 'emitida', numero });
+          } else {
+            await env.DB.prepare(`UPDATE orders SET nfce_error=? WHERE id=?`).bind(`Emitir ${r.status}: ${txt.substring(0,200)}`, row.id).run();
+            resultados.push({ id: row.id, nfce_id: row.nfce_id, status: 'erro', http: r.status, body: txt.substring(0,300) });
+          }
+          await new Promise(res => setTimeout(res, 300));
+        } catch(e) {
+          resultados.push({ id: row.id, erro: e.message });
+        }
+      }
+      return json({ ok: true, total: resultados.length, resultados });
     }
 
     // ── NFC-e: Recuperar números faltantes do Bling ────────────────
