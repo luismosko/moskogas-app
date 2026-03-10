@@ -344,12 +344,9 @@ let _products = [];
 let _editingId = null;
 let _blingTimer = null;
 
-// ── Inicialização ──────────────────────────────────────────
+// ── Inicialização — roda depois de todas as funções estarem declaradas ──
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkAuth(['admin', 'gerente', 'atendente']);
-
-// Carregar produtos ao iniciar
-loadProducts();
 
 async function loadProducts() {
   try {
@@ -753,6 +750,9 @@ async function importCSV(input) {
     hideLoading();
   }
 }
+
+// Iniciar após todas as funções declaradas
+loadProducts();
 </script>
 </body>
 </html>
