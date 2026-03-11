@@ -1,4 +1,4 @@
-// v2.51.41
+// v2.51.42
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -502,19 +502,13 @@ async function criarPedidoBling(env, orderId, orderData) {
 // Fluxo: POST /nfce (criar) → POST /nfce/:id/emitir (transmitir para SEFAZ)
 async function emitirNFCeBling(env, orderId, orderData) {
   const { name, items, total_value, forma_pagamento_key, forma_pagamento_id,
-          bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj,
-          delivered_at, created_at } = orderData;
+          bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj } = orderData;
 
-  // Usar data da entrega (ou criação) do pedido — NÃO hoje
-  // Isso evita "Já existe uma nota fiscal cadastrada com este XML" em retries
-  const orderTs = delivered_at || created_at;
-  const orderDate = orderTs
-    ? new Date(typeof orderTs === 'number' ? orderTs * 1000 : orderTs)
-    : new Date();
-  // Converter para horário BRT (UTC-3) para pegar a data correta do dia
+  // Data de hoje em BRT (SEFAZ exige data atual — não pode ser data anterior)
+  const now = new Date();
   const brtOffset = -3 * 60;
-  const brtDate = new Date(orderDate.getTime() + (brtOffset - orderDate.getTimezoneOffset()) * 60000);
-  const dataOperacaoISO = brtDate.toISOString().slice(0, 10); // YYYY-MM-DD
+  const brtNow = new Date(now.getTime() + (brtOffset - now.getTimezoneOffset()) * 60000);
+  const dataOperacaoISO = brtNow.toISOString().slice(0, 10); // YYYY-MM-DD
 
   // Montar itens — buscar bling_id e codigo de cada item via app_products
   const itensNFCe = [];
@@ -569,7 +563,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
     indicadorPresenca: 1,         // Operação presencial (indPres=1)
     itens: itensNFCe,
     pagamentos: [{ formaPagamento: { id: fpId }, valor: total }], // ✅ pagamentos, NÃO parcelas
-    observacoes: `MoskoGás #${orderId} | ${name || ''}`,
+    observacoes: `MoskoGás #${orderId} | ${name || ''} | t${Date.now()}`,
   };
   if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
 
