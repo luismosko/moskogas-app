@@ -1,4 +1,4 @@
-// v2.51.45
+// v2.51.46
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -553,16 +553,15 @@ async function emitirNFCeBling(env, orderId, orderData) {
 
   const nfceBody = {
     naturezaOperacao: { id: 8024085174 },
+    tipo: 1,  // ✅ NFC-e Bling v3: 1=Saída (Venda), 2=Entrada — DIFERENTE de NF-e onde tipoNota:1=Entrada
     contato: usarContatoReal
       ? { id: bling_contact_id }
       : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-    dataOperacao: dataOperacaoISO, // data original do pedido — evita duplicata de XML
-    // NÃO passar tipoNota — a natureza de operação (id:8024085174, Tipo:Saída) controla isso
-    // tipoNota:1 no Bling = ENTRADA (inverso do SEFAZ onde tpNF:1=Saída) — NÃO usar!
-    indicadorConsumidorFinal: 1,  // Consumidor Final (indFinal=1 no XML SEFAZ)
-    indicadorPresenca: 1,         // Operação presencial (indPres=1)
+    dataOperacao: dataOperacaoISO,
+    indicadorConsumidorFinal: 1,
+    indicadorPresenca: 1,
     itens: itensNFCe,
-    pagamentos: [{ formaPagamento: { id: fpId }, valor: total }], // ✅ pagamentos, NÃO parcelas
+    pagamentos: [{ formaPagamento: { id: fpId }, valor: total }],
     observacoes: `MoskoGás #${orderId} | ${name || ''} | t${Date.now()}`,
   };
   if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
