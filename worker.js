@@ -1,4 +1,4 @@
-// v2.51.44
+// v2.51.45
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -603,60 +603,44 @@ async function emitirNFCeBling(env, orderId, orderData) {
     response_data: criarData
   });
 
-  // ── PASSO 2: Emitir NFC-e (transmite para SEFAZ) ──
-  // Confirma que o ID existe antes de emitir
-  await new Promise(r => setTimeout(r, 800));
-  const confirmResp = await blingFetch(`/nfce/${nfceId}`, { method: 'GET' }, env);
-  console.log('[NFC-e] Confirmar ID antes emitir:', nfceId, '→ status GET:', confirmResp.status);
+  // ── PASSO 2: Buscar número e chave via GET (Bling v3 transmite NFC-e no POST — não há /emitir) ──
+  await new Promise(r => setTimeout(r, 600));
+  let nfceNumero = criarData.data?.numero ?? null;
+  let nfceChave  = criarData.data?.chaveAcesso ?? criarData.data?.chave ?? null;
+  let nfceSituacao = criarData.data?.situacao?.id ?? criarData.data?.situacao ?? null;
 
-  const emitirUrl = `/nfce/${nfceId}/emitir`;
-  console.log('[NFC-e] Chamando emitir URL:', emitirUrl);
-  const emitirResp = await blingFetch(emitirUrl, { method: 'POST', body: '{}' }, env);
-  const emitirText = await emitirResp.text();
-  let emitirData; try { emitirData = JSON.parse(emitirText); } catch { emitirData = {}; }
-
-  if (!emitirResp.ok) {
-    console.error('[NFC-e] Emitir erro:', emitirResp.status, emitirText);
-    await logBlingAudit(env, orderId, 'emitir_nfce', 'error', {
-      bling_pedido_id: String(nfceId),
-      error_message: `HTTP ${emitirResp.status}: ${emitirText.substring(0, 300)}`
-    });
-    // 404 = NFC-e não existe mais no Bling (foi deletada ou nunca foi salva)
-    // Limpa o nfce_id para que o próximo retry CRIE uma nova NFC-e do zero
-    if (emitirResp.status === 404) {
-      await env.DB.prepare(
-        `UPDATE orders SET nfce_id=NULL, nfce_status='pendente_emissao', nfce_error='404: NFC-e não encontrada no Bling — será recriada no próximo retry' WHERE id=?`
-      ).bind(orderId).run().catch(() => {});
-      throw new Error(`NFC-e ${nfceId} não encontrada no Bling (404) — ID inválido, pedido resetado para recriar`);
+  // Sempre busca via GET para pegar situação real (autorizada/pendente)
+  try {
+    const getResp = await blingFetch(`/nfce/${nfceId}`, { method: 'GET' }, env);
+    if (getResp.ok) {
+      const getData = await getResp.json();
+      const d = getData.data || {};
+      nfceNumero  = d.numero    ?? nfceNumeroCriar ?? nfceNumero;
+      nfceChave   = d.chaveAcesso ?? d.chave ?? nfceChave;
+      nfceSituacao = d.situacao?.id ?? d.situacao ?? nfceSituacao;
+      console.log(`[NFC-e] GET após criar → situacao: ${JSON.stringify(d.situacao)}, numero: ${nfceNumero}`);
+      await logBlingAudit(env, orderId, 'get_nfce', 'success', {
+        bling_pedido_id: String(nfceId),
+        response_data: getData
+      });
     }
-    // Outros erros: salva como pendente com o ID existente
-    return {
-      nfce_id: String(nfceId),
-      nfce_numero: null,
-      nfce_chave: null,
-      nfce_status: 'pendente_emissao',
-      nfce_error: `Emissão SEFAZ falhou: HTTP ${emitirResp.status}`
-    };
+  } catch(e) {
+    console.error('[NFC-e] GET após criar falhou:', e.message);
   }
 
-  // Bling v3: número e chave podem estar em caminhos diferentes dependendo da versão
-  // Fallback: usar numero do criar se o emitir não retornar
-  const d = emitirData.data || emitirData;
-  const nfceNumero = d?.numero ?? d?.numeroPedido ?? d?.numeroNfe ?? nfceNumeroCriar ?? null;
-  const nfceChave  = d?.chaveAcesso ?? d?.chave ?? d?.chaveNfe ?? null;
+  // situacao 100 = autorizada, 101 = cancelada, outros = pendente
+  const autorizada = nfceSituacao === 100 || nfceSituacao === '100';
+  const status = autorizada ? 'emitida' : 'pendente_emissao';
+  const errorMsg = autorizada ? null : `NFC-e criada mas situação ${nfceSituacao} — aguardando autorização SEFAZ`;
 
-  await logBlingAudit(env, orderId, 'emitir_nfce', 'success', {
-    bling_pedido_id: String(nfceId),
-    response_data: emitirData
-  });
+  console.log(`[NFC-e] ✅ Pedido #${orderId} → NFC-e ${nfceNumero} | situacao=${nfceSituacao} | status=${status}`);
 
-  console.log(`[NFC-e] ✅ Pedido #${orderId} → NFC-e ${nfceNumero} emitida (id=${nfceId})`);
   return {
     nfce_id: String(nfceId),
     nfce_numero: nfceNumero ? String(nfceNumero) : null,
     nfce_chave: nfceChave ? String(nfceChave) : null,
-    nfce_status: 'emitida',
-    nfce_error: null
+    nfce_status: status,
+    nfce_error: errorMsg
   };
 }
 
