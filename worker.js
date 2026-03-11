@@ -1,4 +1,4 @@
-// v2.51.66
+// v2.51.67
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -3055,7 +3055,7 @@ export default {
         const data = await resp.json();
         const all = (data.data || []);
         const filtered = q ? all.filter(p => { const nome = (p.descricao || p.nome || '').toLowerCase(); return nome.includes(q); }) : all;
-        const produtos = (filtered.length ? filtered : all).map(p => ({ id: p.id, name: p.descricao || p.nome || '', code: p.codigo || '', price: parseFloat(p.preco) || 0, unit: p.unidade || 'un' }));
+        const produtos = (filtered.length ? filtered : all).map(p => ({ id: p.id, bling_id: p.id, name: p.descricao || p.nome || '', code: p.codigo || '', price: parseFloat(p.preco) || 0, unit: p.unidade || 'un' }));
         return json(produtos.slice(0, 15));
       } catch (e) { return json({ error: e.message }, 500); }
     }
