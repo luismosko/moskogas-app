@@ -1,4 +1,4 @@
-// v2.51.35
+// v2.51.36
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -571,16 +571,25 @@ async function emitirNFCeBling(env, orderId, orderData) {
     console.error('[NFC-e] Criar erro:', criarResp.status, errText);
     await logBlingAudit(env, orderId, 'criar_nfce', 'error', {
       request_payload: nfceBody,
-      error_message: `HTTP ${criarResp.status}: ${errText.substring(0, 300)}`
+      error_message: `HTTP ${criarResp.status}: ${errText.substring(0, 600)}`
     });
-    throw new Error(`NFC-e criar ${criarResp.status}: ${errText.substring(0, 300)}`);
+    throw new Error(`NFC-e criar ${criarResp.status}: ${errText.substring(0, 600)}`);
   }
 
   const criarData = await criarResp.json();
   const nfceId = criarData.data?.id ?? null;
   if (!nfceId) throw new Error('NFC-e criada mas Bling não retornou ID');
-  // Bling retorna o numero já na resposta do criar (ex: "027740")
-  const nfceNumeroCriar = criarData.data?.numero ?? null;
+  // Bling às vezes não retorna numero no criar — busca via GET /nfce/{id}
+  let nfceNumeroCriar = criarData.data?.numero ?? null;
+  if (!nfceNumeroCriar) {
+    try {
+      const getResp = await blingFetch(`/nfce/${nfceId}`, { method: 'GET' }, env);
+      if (getResp.ok) {
+        const getData = await getResp.json();
+        nfceNumeroCriar = getData.data?.numero ?? getData.numero ?? null;
+      }
+    } catch(_) {} // falha silenciosa — numero pode vir no emitir
+  }
 
   await logBlingAudit(env, orderId, 'criar_nfce', 'success', {
     bling_pedido_id: String(nfceId),
@@ -1975,13 +1984,21 @@ async function retryNFCePendentes(env, limite = 20) {
       await new Promise(r => setTimeout(r, 200));
 
     } catch (e) {
-      const errMsg = e.message.substring(0, 400);
-      await env.DB.prepare(
-        `UPDATE orders SET nfce_error=?, nfce_retry_count=COALESCE(nfce_retry_count,0)+1 WHERE id=?`
-      ).bind(errMsg, order.id).run().catch(() => {});
-      await logEvent(env, order.id, 'nfce_error_retry', { error: errMsg, tentativa: retryCount + 1 }).catch(() => {});
-      console.error(`[NFC-e retry] ❌ Pedido #${order.id}: ${errMsg}`);
-      detalhes.push({ id: order.id, status: 'error', error: errMsg });
+      const errMsg = e.message.substring(0, 600);
+      // Não incrementar retry_count se o erro for de token (invalid_token)
+      // Isso evita que pedidos válidos atinjam max_retries por falha temporária do Bling
+      const isTokenError = errMsg.includes('invalid_token') || errMsg.includes('reauth') || errMsg.includes('401');
+      if (!isTokenError) {
+        await env.DB.prepare(
+          `UPDATE orders SET nfce_error=?, nfce_retry_count=COALESCE(nfce_retry_count,0)+1 WHERE id=?`
+        ).bind(errMsg, order.id).run().catch(() => {});
+      } else {
+        // Apenas salva o erro, não incrementa contador
+        await env.DB.prepare(`UPDATE orders SET nfce_error=? WHERE id=?`).bind(errMsg, order.id).run().catch(() => {});
+      }
+      await logEvent(env, order.id, 'nfce_error_retry', { error: errMsg, tentativa: retryCount + 1, token_error: isTokenError }).catch(() => {});
+      console.error(`[NFC-e retry] ❌ Pedido #${order.id}: ${errMsg}${isTokenError ? ' (token error - retry_count preservado)' : ''}`);
+      detalhes.push({ id: order.id, status: 'error', error: errMsg, token_error: isTokenError });
       falhas++;
     }
   }
@@ -5737,6 +5754,23 @@ export default {
       return json({ ok: true, message: 'Retry count resetado' });
     }
 
+    // ── NFC-e: Ver erro completo de um pedido ──────────────────────
+    if (method === 'GET' && path.startsWith('/api/nfce/erro/')) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const oid = parseInt(path.split('/').pop());
+      if (isNaN(oid)) return json({ error: 'id inválido' }, 400);
+      const ord = await env.DB.prepare(
+        'SELECT id, customer_name, items_json, total_value, tipo_pagamento, nfce_id, nfce_numero, nfce_status, nfce_error, nfce_retry_count FROM orders WHERE id=?'
+      ).bind(oid).first();
+      if (!ord) return json({ error: 'Pedido não encontrado' }, 404);
+      // Buscar audit log completo deste pedido
+      const audit = await env.DB.prepare(
+        `SELECT acao, status, detalhes, created_at FROM integration_audit WHERE order_id=? ORDER BY created_at DESC LIMIT 20`
+      ).bind(oid).all().catch(() => ({ results: [] }));
+      return json({ pedido: ord, audit: audit.results || [] });
+    }
+
     // ── NFC-e: Testar /emitir em uma NFC-e existente (diagnóstico) ──
     if (method === 'POST' && path === '/api/nfce/testar-emitir') {
       const authCheck = await requireAuth(request, env, ['admin']);
@@ -5748,6 +5782,18 @@ export default {
       const r = await blingFetch(`/nfce/${nfceId}/emitir`, { method: 'POST', body: '{}' }, env);
       const txt = await r.text();
       return json({ status: r.status, ok: r.ok, nfce_id: nfceId, body: txt });
+    }
+
+    // ── NFC-e: Reset retry_count de erros de token (invalid_token) ──
+    if (method === 'POST' && path === '/api/nfce/reset-token-errors') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const result = await env.DB.prepare(
+        `UPDATE orders SET nfce_retry_count=0, nfce_error=NULL
+         WHERE nfce_error LIKE '%invalid_token%' OR nfce_error LIKE '%reauth%'
+         OR nfce_error LIKE '%401%'`
+      ).run();
+      return json({ ok: true, updated: result.changes, message: `${result.changes} pedido(s) com erro de token resetados` });
     }
 
     // ── NFC-e: Re-emitir todas com status pendente_emissao ─────────

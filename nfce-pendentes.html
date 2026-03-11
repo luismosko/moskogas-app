@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.0.5</title>
+<title>NFC-e Pendentes — MoskoGás v1.0.6</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.0.5</span>
+  <span class="badge-ver">v1.0.6</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -97,6 +97,10 @@
     <button class="btn" id="btn-reset-retry" onclick="resetarRetry()"
       style="background:#f59e0b;color:#fff" title="Resetar contador de tentativas dos pedidos bloqueados">
       🔓 Desbloquear Bloqueados
+    </button>
+    <button class="btn" onclick="resetTokenErrors()"
+      style="background:#dc2626;color:#fff" title="Resetar pedidos que falharam por token expirado (invalid_token) — eles serão tentados novamente">
+      🔑 Reset Erros de Token
     </button>
     <button class="btn" onclick="reEmitirPendentes()"
       style="background:#8b5cf6;color:#fff" title="Re-emitir NFC-es criadas no Bling mas ainda não autorizadas pela SEFAZ">
@@ -313,6 +317,17 @@ async function retryUm(orderId) {
       toast('❌ ' + (data.error||'Falha'), 'error');
     }
   } catch(e) { if(btnEl){btnEl.disabled=false;btnEl.textContent='🔄';} toast('❌ ' + e.message, 'error'); }
+}
+
+async function resetTokenErrors() {
+  const res = document.getElementById('resultado');
+  res.innerHTML = '<div style="padding:12px;color:#991b1b;background:#fef2f2;border-radius:8px">🔑 Resetando erros de token...</div>';
+  try {
+    const data = await apiCall('/api/nfce/reset-token-errors', { method: 'POST' });
+    res.innerHTML = `<div style="padding:12px;background:#dcfce7;border-radius:8px">✅ ${data.message}</div>`;
+    toast(data.message, 'success');
+    carregarDados();
+  } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
 }
 
 async function reEmitirPendentes() {
