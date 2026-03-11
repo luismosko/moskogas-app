@@ -1,4 +1,4 @@
-// v2.51.62
+// v2.51.63
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5902,77 +5902,89 @@ export default {
       const authCheck = await requireAuth(request, env, ['admin']);
       if (authCheck instanceof Response) return authCheck;
       const body3 = await request.json().catch(() => ({}));
-      const confirmar = body3?.confirmar === true; // false = apenas preview
-      const apenasAntesDeHoje = body3?.apenas_anteriores !== false; // default: true = proteção ativa
+      const confirmar = body3?.confirmar === true;
+      const apenasAntesDeHoje = body3?.apenas_anteriores !== false;
+      // lote_max: limite de DELETEs por chamada para não estourar subrequests do Cloudflare
+      const LOTE_MAX = 20;
 
-      // Data de hoje em BRT (YYYY-MM-DD) — notas de hoje NÃO são deletadas
       const hoje = new Date(Date.now() - 3*3600000).toISOString().slice(0, 10);
-
       const resultados = [];
-      const protegidas = []; // notas de hoje — não serão deletadas
+      const protegidas = [];
       let pagina = 1;
       let totalEncontradas = 0;
-
-      while (pagina <= 5) {
+      // Coleta TODOS os IDs primeiro (só GET, sem deletar ainda)
+      const paraDeletear = [];
+      while (pagina <= 10) {
         const listResp = await blingFetch(`/nfce?pagina=${pagina}&limite=100&situacao=1`, {}, env);
         if (!listResp.ok) break;
         const listData = await listResp.json();
         const notas = listData?.data || [];
         if (notas.length === 0) break;
         totalEncontradas += notas.length;
-
         for (const nota of notas) {
           const nfceId = String(nota.id);
-          // Proteção: data da nota (formato YYYY-MM-DD ou DD/MM/YYYY)
           let dataNota = nota.dataEmissao || nota.data || nota.dataOperacao || '';
-          // normalizar DD/MM/YYYY → YYYY-MM-DD
           if (dataNota && dataNota.includes('/')) {
             const p = dataNota.split('/');
             dataNota = `${p[2]}-${p[1]}-${p[0]}`;
           }
           const isHoje = dataNota >= hoje;
-
           if (apenasAntesDeHoje && isHoje) {
             protegidas.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, motivo: 'nota de hoje — protegida' });
-            continue;
-          }
-
-          if (!confirmar) {
-            // Modo preview — só lista, não deleta
-            resultados.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, acao: 'seria deletada' });
-            continue;
-          }
-
-          try {
-            const delResp = await blingFetch(`/nfce/${nfceId}`, { method: 'DELETE' }, env);
-            const delOk = delResp.ok || delResp.status === 204 || delResp.status === 404;
-            const reset = await env.DB.prepare(
-              `UPDATE orders SET nfce_id=NULL, nfce_numero=NULL, nfce_chave=NULL,
-               nfce_status=NULL, nfce_error=NULL, nfce_retry_count=0, nfce_emitida_at=NULL
-               WHERE nfce_id=?`
-            ).bind(nfceId).run().catch(() => ({ changes: 0 }));
-            resultados.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, deletado: delOk, http_delete: delResp.status, orders_resetadas: reset.changes || 0 });
-            await new Promise(r => setTimeout(r, 300));
-          } catch(e) {
-            resultados.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, erro: e.message });
+          } else {
+            paraDeletear.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota });
           }
         }
         if (notas.length < 100) break;
         pagina++;
       }
+
+      if (!confirmar) {
+        // Modo preview — apenas lista, sem deletar nada
+        return json({
+          ok: true, modo: 'preview', hoje,
+          total_encontradas: totalEncontradas,
+          protegidas_hoje: protegidas.length,
+          para_deletar: paraDeletear.length,
+          has_more: false,
+          protegidas,
+          resultados: paraDeletear.map(n => ({ ...n, acao: 'seria deletada' }))
+        });
+      }
+
+      // Modo execução: processa só LOTE_MAX por chamada
+      // offset permite retomar de onde parou
+      const offset = parseInt(body3?.offset || 0);
+      const lote = paraDeletear.slice(offset, offset + LOTE_MAX);
+      for (const nota of lote) {
+        try {
+          const delResp = await blingFetch(`/nfce/${nota.nfce_id}`, { method: 'DELETE' }, env);
+          const delOk = delResp.ok || delResp.status === 204 || delResp.status === 404;
+          const reset = await env.DB.prepare(
+            `UPDATE orders SET nfce_id=NULL, nfce_numero=NULL, nfce_chave=NULL,
+             nfce_status=NULL, nfce_error=NULL, nfce_retry_count=0, nfce_emitida_at=NULL
+             WHERE nfce_id=?`
+          ).bind(nota.nfce_id).run().catch(() => ({ changes: 0 }));
+          resultados.push({ ...nota, deletado: delOk, http_delete: delResp.status, orders_resetadas: reset.changes || 0 });
+          await new Promise(r => setTimeout(r, 200));
+        } catch(e) {
+          resultados.push({ ...nota, erro: e.message });
+        }
+      }
+      const proxOffset = offset + lote.length;
+      const hasMore = proxOffset < paraDeletear.length;
       const deletadas = resultados.filter(r => r.deletado).length;
       const resetadas = resultados.reduce((s, r) => s + (r.orders_resetadas || 0), 0);
       return json({
-        ok: true,
-        modo: confirmar ? 'executado' : 'preview',
-        hoje,
+        ok: true, modo: 'executado', hoje,
         total_encontradas: totalEncontradas,
+        total_para_deletar: paraDeletear.length,
         protegidas_hoje: protegidas.length,
-        para_deletar: resultados.length,
-        deletadas,
-        orders_resetadas: resetadas,
-        protegidas,
-        resultados
+        offset_atual: offset,
+        proximo_offset: proxOffset,
+        has_more: hasMore,
+        deletadas, orders_resetadas: resetadas,
+        protegidas, resultados
       });
     }
 

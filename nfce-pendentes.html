@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.2.5</title>
+<title>NFC-e Pendentes — MoskoGás v1.2.6</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.2.5</span>
+  <span class="badge-ver">v1.2.6</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -481,26 +481,44 @@ async function deletarPendentesBling() {
 
 async function confirmarDeleteBling() {
   const res = document.getElementById('resultado');
-  res.innerHTML = '<div style="padding:12px;color:#7f1d1d;background:#fef2f2;border-radius:8px">🗑️ Deletando notas erradas do Bling e resetando pedidos... aguarde...</div>';
-  try {
-    const data = await api('/api/nfce/deletar-pendentes-bling', {
-      method: 'POST',
-      body: JSON.stringify({ confirmar: true })
-    });
-    let html = `<div style="padding:12px;background:#fef2f2;border-radius:8px;margin-bottom:12px">
-      <b>🗑️ ${data.deletadas} notas deletadas | ${data.orders_resetadas} pedido(s) resetados</b><br>
-      <small>🛡️ ${data.protegidas_hoje} nota(s) de hoje protegidas e mantidas</small></div>
-      <div style="padding:10px;background:#dbeafe;border-radius:8px;margin-bottom:12px">
-      ℹ️ Agora clique em <b>"Gerar Todas Pendentes"</b> para recriar as NFC-es corretamente.</div>`;
-    (data.resultados||[]).forEach(d => {
-      const ok = d.deletado;
-      html += `<div style="padding:3px 12px;background:${ok?'#dcfce7':'#fee2e2'};border-radius:4px;margin-bottom:2px;font-size:12px">
-        ${ok?'✅':'❌'} NFC-e ${d.numero||d.nfce_id} | ${d.data||'?'} → ${ok?'Deletada':'Erro'} ${d.orders_resetadas?'| Pedido resetado':''}${d.erro||''}</div>`;
-    });
-    res.innerHTML = html;
-    if (data.deletadas > 0) { toast(`🗑️ ${data.deletadas} notas deletadas! Agora gere novamente.`, 'success'); carregarDados(); }
-    else toast('ℹ️ Nenhuma nota deletada', 'info');
-  } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
+  let totalDeletadas = 0, totalResetadas = 0, totalErros = 0;
+  let offset = 0;
+  let totalGeral = null;
+
+  while (true) {
+    res.innerHTML = `<div style="padding:14px;color:#7f1d1d;background:#fef2f2;border-radius:8px">
+      🗑️ Deletando lote... ${totalDeletadas} notas deletadas até agora${totalGeral ? ' de ' + totalGeral : ''}
+      <div style="margin-top:6px;background:#fca5a5;border-radius:4px;height:8px;overflow:hidden">
+        <div style="background:#dc2626;height:100%;width:${totalGeral ? Math.round(offset/totalGeral*100) : 0}%;transition:width 0.3s"></div>
+      </div>
+    </div>`;
+    try {
+      const data = await api('/api/nfce/deletar-pendentes-bling', {
+        method: 'POST',
+        body: JSON.stringify({ confirmar: true, offset })
+      });
+      totalGeral = data.total_para_deletar || totalGeral;
+      totalDeletadas += data.deletadas || 0;
+      totalResetadas += data.orders_resetadas || 0;
+      totalErros += (data.resultados||[]).filter(r => r.erro).length;
+      offset = data.proximo_offset || offset;
+      if (!data.has_more) break;
+      await new Promise(r => setTimeout(r, 500)); // pausa entre lotes
+    } catch(e) {
+      res.innerHTML = `<div style="padding:12px;background:#fee2e2;border-radius:8px">❌ Erro no lote: ${e.message}</div>`;
+      return;
+    }
+  }
+  // Resultado final
+  res.innerHTML = `<div style="padding:12px;background:#fef2f2;border-radius:8px;margin-bottom:12px">
+    <b>✅ Concluído! ${totalDeletadas} notas deletadas do Bling | ${totalResetadas} pedido(s) resetados no sistema</b>
+    ${totalErros ? `<br><span style="color:#dc2626">⚠️ ${totalErros} erro(s)</span>` : ''}
+  </div>
+  <div style="padding:10px;background:#dbeafe;border-radius:8px">
+    ℹ️ Agora clique em <b>"Gerar NFC-es Pendentes"</b> para recriar todas corretamente.
+  </div>`;
+  toast(`🗑️ ${totalDeletadas} notas deletadas! Agora gere novamente.`, 'success');
+  carregarDados();
 }
 
 async function enviarPendentesBling() {
