@@ -1,4 +1,4 @@
-// v2.51.64
+// v2.51.65
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -517,18 +517,34 @@ async function emitirNFCeBling(env, orderId, orderData) {
     const price = parseFloat(item.price) || 0;
 
     // Buscar bling_id, codigo E unidade do produto em app_products
+    // Estratégia: tenta por bling_id primeiro (mais confiável), depois por code, depois por nome
     let blingId = item.bling_id || null;
-    let blingCodigo = item.bling_codigo || item.code || null;
+    let blingCodigo = null; // NÃO usar item.code como código — pode ser chave interna, não SKU
     let blingUnidade = 'UN'; // default seguro
-    if (item.code) {
-      const prod = await env.DB.prepare(
-        'SELECT bling_id, bling_codigo, code, unidade FROM app_products WHERE code=? AND ativo=1 LIMIT 1'
+    let prod = null;
+    // 1) Buscar por bling_id (mais confiável — ID numérico do produto no Bling)
+    if (!prod && item.bling_id && Number(item.bling_id) > 0) {
+      prod = await env.DB.prepare(
+        'SELECT bling_id, code, unidade FROM app_products WHERE bling_id=? AND ativo=1 LIMIT 1'
+      ).bind(String(item.bling_id)).first().catch(() => null);
+    }
+    // 2) Buscar por code (pode ser o SKU do Bling após sync, como "154")
+    if (!prod && item.code) {
+      prod = await env.DB.prepare(
+        'SELECT bling_id, code, unidade FROM app_products WHERE code=? AND ativo=1 LIMIT 1'
       ).bind(String(item.code)).first().catch(() => null);
-      if (prod) {
-        blingId = blingId || prod.bling_id || null;
-        blingCodigo = blingCodigo || prod.bling_codigo || prod.code || null;
-        blingUnidade = prod.unidade || 'UN';
-      }
+    }
+    // 3) Buscar por nome (último recurso)
+    if (!prod && item.name) {
+      prod = await env.DB.prepare(
+        'SELECT bling_id, code, unidade FROM app_products WHERE name=? AND ativo=1 LIMIT 1'
+      ).bind(String(item.name)).first().catch(() => null);
+    }
+    if (prod) {
+      blingId = blingId || prod.bling_id || null;
+      // code no app_products após sync = SKU do Bling (ex: "154") — usar como codigo NFC-e
+      blingCodigo = prod.code || null;
+      blingUnidade = prod.unidade || 'UN';
     }
 
     const itemNFCe = {
