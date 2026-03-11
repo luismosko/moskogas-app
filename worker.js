@@ -1,4 +1,4 @@
-// v2.51.55
+// v2.51.56
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -496,7 +496,7 @@ async function criarPedidoBling(env, orderId, orderData) {
 // ── Emitir NFC-e no Bling (v2.51.31) ──────────────────────────────────────────
 // REGRAS DESCOBERTAS EM PRODUÇÃO (10/03/2026):
 //   ✅ dataOperacao: "YYYY-MM-DD" (ISO) — DD/MM/YYYY causa SERVER_ERROR 500
-//   ✅ pagamentos[] — NÃO usar parcelas[] (causa SERVER_ERROR 500)
+//   ✅ pagamentos[] — NÃO usar parcelas[] (causa SERVER_ERROR 500 — lançamento financeiro feito pela config do Bling)
 //   ✅ item PRECISA de produto.id (bling_id) + codigo (código do produto no Bling)
 //   ✅ sem dataVencimento em pagamentos (não é necessário para NFC-e)
 // Fluxo: POST /nfce (criar) → POST /nfce/:id/emitir (transmitir para SEFAZ)
@@ -567,8 +567,6 @@ async function emitirNFCeBling(env, orderId, orderData) {
     indicadorPresenca: 1,
     itens: itensNFCe,
     pagamentos: [{ formaPagamento: { id: fpId }, valor: total }],
-    // parcelas obrigatório para lançamento financeiro automático (botão "C" no Bling)
-    parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: dataOperacaoISO.split('-').reverse().join('/') }],
     observacoes: `MoskoGás Pedido #${orderId} | ${name || 'Consumidor Final'} | Entregue: ${pedidoDataStr}`,
   };
   if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
