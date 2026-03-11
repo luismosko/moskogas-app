@@ -1,4 +1,4 @@
-// v2.51.38
+// v2.51.39
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -513,16 +513,18 @@ async function emitirNFCeBling(env, orderId, orderData) {
     const qty   = parseFloat(item.qty)   || 1;
     const price = parseFloat(item.price) || 0;
 
-    // Buscar bling_id E codigo do produto em app_products
+    // Buscar bling_id, codigo E unidade do produto em app_products
     let blingId = item.bling_id || null;
     let blingCodigo = item.bling_codigo || item.code || null;
-    if ((!blingId || !blingCodigo) && item.code) {
+    let blingUnidade = 'UN'; // default seguro
+    if (item.code) {
       const prod = await env.DB.prepare(
-        'SELECT bling_id, bling_codigo, code FROM app_products WHERE code=? AND ativo=1 LIMIT 1'
+        'SELECT bling_id, bling_codigo, code, unidade FROM app_products WHERE code=? AND ativo=1 LIMIT 1'
       ).bind(String(item.code)).first().catch(() => null);
       if (prod) {
         blingId = blingId || prod.bling_id || null;
         blingCodigo = blingCodigo || prod.bling_codigo || prod.code || null;
+        blingUnidade = prod.unidade || 'UN';
       }
     }
 
@@ -530,6 +532,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
       descricao: String(item.name || 'Produto').substring(0, 120),
       quantidade: qty,
       valor: price,
+      unidade: blingUnidade,  // UN, UND, GL etc — obrigatório para SEFAZ
     };
     // produto.id OBRIGATÓRIO para NFC-e (sem ele o Bling não encontra dados fiscais)
     if (blingId && Number(blingId) > 0) itemNFCe.produto = { id: Number(blingId) };
