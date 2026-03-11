@@ -1,4 +1,4 @@
-// v2.51.48
+// v2.51.49
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -9128,8 +9128,8 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
     ctx.waitUntil(processarAvaliacoesCron(env));
     // Marketing: publicar posts agendados aprovados
     ctx.waitUntil(publishScheduledPosts(env));
-    // NFC-e retry automático: a cada execução do cron (5min), tenta emitir pendentes
-    ctx.waitUntil(retryNFCePendentes(env, 10));
+    // NFC-e retry automático: DESATIVADO TEMPORARIAMENTE durante ajustes de configuração
+    // ctx.waitUntil(retryNFCePendentes(env, 10));  // ← reativar após testes OK
   },
 };
 
