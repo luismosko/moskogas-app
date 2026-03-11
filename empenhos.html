@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.2</title>
+<title>Empenhos GOV — MoskoGás v1.0.3</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -121,7 +121,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.2</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.3</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -252,7 +252,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.2
+// v1.0.3
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -487,7 +487,7 @@ function addItemRow(item = {}) {
       <input type="hidden" class="item-nome-hidden"   value="${nomeExibido}">
       <input type="hidden" class="item-bling-hidden"  value="${blingId}">
     </div>
-    <input type="text"   class="item-bling-id-vis" placeholder="ID Bling" value="${blingId}" style="font-size:11px;color:#94a3b8">
+    <input type="text" readonly class="item-bling-id-vis" placeholder="— preenchido ao selecionar produto —" value="${blingId}" style="font-size:11px;color:#94a3b8;background:#f8fafc;cursor:default" title="ID Bling preenchido automaticamente ao selecionar o produto">
     <input type="number" class="item-qtd"           placeholder="Qtd"     value="${qtd}"   min="1">
     <input type="number" class="item-preco"         placeholder="R$ unit." value="${preco}" min="0" step="0.01">
     <button onclick="this.closest('.item-edit-row').remove()" style="background:#fee2e2;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;color:#dc2626;font-weight:700">✕</button>`;
