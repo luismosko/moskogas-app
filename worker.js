@@ -1,6 +1,6 @@
-// v2.51.76
+// v2.51.77
 
-// v2.51.76: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
+// v2.51.77: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
 // v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
@@ -1229,10 +1229,26 @@ async function enviarLembretePix(env, order, config, user, force = false) {
     }
   }
 
-  // PushInPay standby — fase 2 (não auto-gera QR por enquanto)
+  // PushInPay — ativo somente se config.pushinpay_ativo === true
+  if (config.pushinpay_ativo && isPixConfigured(env)) {
+    const pixCode = order.pix_qrcode || order.cora_qrcode || null;
+    if (!pixCode) {
+      try {
+        await ensurePixColumns(env);
+        const pixData = await pushInPayCreateCharge(env, order.id, order.total_value);
+        if (pixData.tx_id && pixData.qr_code) {
+          await env.DB.prepare('UPDATE orders SET pix_tx_id=?, pix_qrcode=?, pix_qrcode_base64=? WHERE id=?')
+            .bind(pixData.tx_id, pixData.qr_code, pixData.qr_code_base64 || '', order.id).run();
+          order.pix_qrcode = pixData.qr_code;
+        }
+      } catch (pe) {
+        console.error(`[lembrete] Erro ao gerar QR Code pedido #${order.id}:`, pe.message);
+      }
+    }
+  }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
-  // v2.51.76: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
+  // v2.51.77: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
   const isManual = !!user;
   const skipSafety = isManual || (config.intervalo_horas === 0 && config.max_lembretes === 0);
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });

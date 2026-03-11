@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.14.3 — MoskoGás</title>
+<title>Config v2.14.4 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -143,8 +143,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.14.3 — config</div>
-  <h1>⚙️ Configurações v2.14.3</h1>
+  <div class="version-badge">v2.14.4 — config</div>
+  <h1>⚙️ Configurações v2.14.4</h1>
 
   <!-- ── ABAS DE CONFIGURAÇÃO ── -->
   <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
@@ -566,6 +566,11 @@
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="lemb-cron" style="width:18px;height:18px">
         <span style="font-size:13px;font-weight:600">Envio automático (cron)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;grid-column:1/-1;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px">
+        <input type="checkbox" id="lemb-pushinpay" style="width:18px;height:18px">
+        <span style="font-size:13px;font-weight:600">⚡ Ativar cobrança PushInPay</span>
+        <span style="font-size:11px;color:#92400e;margin-left:4px">— Gera QR Code automático e envia junto com o lembrete</span>
       </label>
       <label style="font-size:13px">
         ⏱️ Intervalo entre lembretes (horas)
@@ -1899,6 +1904,7 @@ async function carregarLembreteConfig() {
     const config = await api('/api/lembretes/config');
     document.getElementById('lemb-ativo').checked = config.ativo !== false;
     document.getElementById('lemb-cron').checked = config.cron_ativo !== false;
+    document.getElementById('lemb-pushinpay').checked = config.pushinpay_ativo === true;
     document.getElementById('lemb-intervalo').value = config.intervalo_horas ?? 24;
     document.getElementById('lemb-max').value = config.max_lembretes ?? 3;
     document.getElementById('lemb-hora').value = config.cron_hora_utc || 12;
@@ -1915,6 +1921,7 @@ async function salvarLembreteConfig() {
   const config = {
     ativo: document.getElementById('lemb-ativo').checked,
     cron_ativo: document.getElementById('lemb-cron').checked,
+    pushinpay_ativo: document.getElementById('lemb-pushinpay').checked,
     intervalo_horas: parseInt(document.getElementById('lemb-intervalo').value) ?? 24,
     max_lembretes: parseInt(document.getElementById('lemb-max').value) ?? 3,
     cron_hora_utc: parseInt(document.getElementById('lemb-hora').value) || 12,
