@@ -1,4 +1,4 @@
-// v2.51.59
+// v2.51.60
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5896,6 +5896,49 @@ export default {
       return json({ ok: true, updated: result.changes, message: `${result.changes} pedido(s) com ID inválido resetados — serão recriados no próximo Gerar` });
     }
 
+    // ── NFC-e: Buscar pendentes NO BLING e enviar via /enviar ────────
+    // Processa NFC-es que existem no Bling com situacao=1 (Pendente)
+    // independente de estarem no nosso banco
+    if (method === 'POST' && path === '/api/nfce/enviar-pendentes-bling') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const resultados = [];
+      let pagina = 1;
+      let totalBling = 0;
+      // Busca todas as NFC-es Pendentes no Bling (situacao=1)
+      while (pagina <= 5) { // max 5 páginas = 500 notas
+        const listResp = await blingFetch(`/nfce?pagina=${pagina}&limite=100&situacao=1`, {}, env);
+        if (!listResp.ok) break;
+        const listData = await listResp.json();
+        const notas = listData?.data || [];
+        if (notas.length === 0) break;
+        totalBling += notas.length;
+        for (const nota of notas) {
+          const nfceId = nota.id;
+          try {
+            const r = await blingFetch(`/nfce/${nfceId}/enviar`, { method: 'POST', body: '{}' }, env);
+            const txt = await r.text();
+            const ok = r.ok || r.status === 200;
+            resultados.push({ nfce_id: nfceId, numero: nota.numero, status: ok ? 'enviada' : 'erro', http: r.status, body: txt.substring(0, 200) });
+            // Atualizar nosso banco se tiver esse nfce_id
+            if (ok) {
+              await env.DB.prepare(
+                `UPDATE orders SET nfce_status='emitida', nfce_error=NULL WHERE nfce_id=?`
+              ).bind(String(nfceId)).run().catch(() => {});
+            }
+            await new Promise(res => setTimeout(res, 400));
+          } catch(e) {
+            resultados.push({ nfce_id: nfceId, numero: nota.numero, erro: e.message });
+          }
+        }
+        if (notas.length < 100) break;
+        pagina++;
+      }
+      const ok = resultados.filter(r => r.status === 'enviada').length;
+      const erros = resultados.filter(r => r.status === 'erro' || r.erro).length;
+      return json({ ok: true, total_bling: totalBling, enviadas: ok, erros, resultados });
+    }
+
     // ── NFC-e: Re-emitir todas com status pendente_emissao ─────────
     if (method === 'POST' && path === '/api/nfce/re-emitir-pendentes') {
       const authCheck = await requireAuth(request, env, ['admin']);
@@ -5905,12 +5948,12 @@ export default {
          WHERE nfce_status = 'pendente_emissao'
          OR (nfce_id IS NOT NULL AND nfce_id != '' AND nfce_id NOT LIKE 'error%'
              AND (nfce_status IS NULL OR nfce_status != 'emitida'))
-         LIMIT 20`
+         LIMIT 100`
       ).all();
       const resultados = [];
       for (const row of (rows.results || [])) {
         try {
-          const r = await blingFetch(`/nfce/${row.nfce_id}/emitir`, { method: 'POST', body: '{}' }, env);
+          const r = await blingFetch(`/nfce/${row.nfce_id}/enviar`, { method: 'POST', body: '{}' }, env);
           const txt = await r.text();
           let data; try { data = JSON.parse(txt); } catch { data = {}; }
           if (r.ok) {
