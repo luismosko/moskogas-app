@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Produtos v1.0.0 — MoskoGás</title>
+  <title>Produtos v1.1.0 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -82,6 +82,12 @@
     .icon-btn.fav { background:#fef9c3; color:#854d0e; }
     .icon-btn.fav.on { background:#f59e0b; color:#fff; }
     .icon-btn.delete { background:#fee2e2; color:#dc2626; }
+    .prod-icon-wrap { width:36px;height:36px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px dashed #cbd5e1;transition:border-color .2s; }
+    .prod-icon-wrap:hover { border-color:#f97316; background:#fff7ed; }
+    .prod-icon-empty { font-size:16px;color:#cbd5e1; }
+    /* icon preview in modal */
+    .icon-preview-wrap { width:80px;height:80px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px dashed #cbd5e1;transition:all .2s;margin-right:12px; }
+    .icon-preview-wrap:hover { border-color:#f97316;background:#fff7ed; }
 
     /* Empty */
     .empty-state { text-align:center; padding:60px 20px; color:#94a3b8; }
@@ -129,7 +135,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge">Produtos v1.0.0</div>
+  <div class="version-badge">Produtos v1.1.0</div>
 
   <div class="page-header">
     <h1 class="page-title">📦 <span>Produtos</span> MoskoGás</h1>
@@ -186,6 +192,7 @@
       <thead>
         <tr>
           <th>⭐</th>
+          <th>Ícone</th>
           <th>Produto</th>
           <th>Preço</th>
           <th>Dados Fiscais</th>
@@ -223,6 +230,23 @@
         </div>
         <div class="hint">Busque pelo nome para importar automaticamente os dados fiscais do Bling</div>
         <div style="text-align:center;margin:10px 0;color:#94a3b8;font-size:12px;">— ou preencha manualmente abaixo —</div>
+      </div>
+
+      <!-- Ícone do produto -->
+      <div class="form-section">
+        <div class="form-section-title">🖼️ Ícone do Produto</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="icon-preview-wrap" id="iconPreviewWrap" onclick="uploadProductIconModal()" title="Clique para enviar ou trocar ícone">
+            <span id="iconPreviewEmpty" style="font-size:28px;color:#cbd5e1">📷</span>
+            <img id="iconPreviewImg" src="" style="display:none;width:80px;height:80px;object-fit:cover;border-radius:8px;">
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#334155">Foto do produto</div>
+            <div style="font-size:11px;color:#94a3b8;margin:2px 0 8px">Aparece como ícone nos atalhos rápidos do pedido</div>
+            <button type="button" onclick="uploadProductIconModal()" style="background:#f97316;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600">📷 Enviar ícone</button>
+            <button type="button" id="btnRemoveIcon" onclick="removeProductIcon()" style="display:none;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600;margin-left:6px">🗑️ Remover</button>
+          </div>
+        </div>
       </div>
 
       <!-- Dados básicos -->
@@ -339,7 +363,7 @@
 </div>
 
 <script>
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.1.0';
 let _products = [];
 let _editingId = null;
 let _blingTimer = null;
@@ -385,10 +409,18 @@ function renderProducts(list) {
     const syncedAt = p.bling_sync_at ? new Date(p.bling_sync_at).toLocaleDateString('pt-BR') : '—';
 
     const tr = document.createElement('tr');
+    const iconSrc = p.icon_key ? `${API_BASE}/api/pub/product-icon/${p.id}?t=${Date.now()}` : '';
     tr.innerHTML = `
       <td>
         <button class="icon-btn fav ${p.is_favorite ? 'on' : ''}" title="${p.is_favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}"
           onclick="toggleFav(${p.id}, ${p.is_favorite})">⭐</button>
+      </td>
+      <td>
+        <div class="prod-icon-wrap" onclick="uploadProductIcon(${p.id})" title="${iconSrc ? 'Trocar ícone' : 'Clique para adicionar ícone'}">
+          ${iconSrc
+            ? `<img src="${iconSrc}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block;">`
+            : `<span class="prod-icon-empty">📷</span>`}
+        </div>
       </td>
       <td>
         <div class="product-name">${p.name}</div>
@@ -545,12 +577,16 @@ function openEditModal(id) {
   document.getElementById('modalTitle').textContent = '✏️ Editar Produto';
   document.getElementById('blingSearchSection').style.display = 'none';
   fillForm(p);
+  // Mostrar ícone atual no modal
+  const iconSrc = p.icon_key ? `${API_BASE}/api/pub/product-icon/${p.id}?t=${Date.now()}` : '';
+  setModalIconPreview(iconSrc);
   document.getElementById('modalProd').classList.add('open');
 }
 
 function closeModal() {
   document.getElementById('modalProd').classList.remove('open');
   document.getElementById('blingResults').style.display = 'none';
+  setModalIconPreview('');
   _editingId = null;
 }
 
@@ -622,6 +658,108 @@ async function saveProduct() {
   } finally {
     hideLoading();
   }
+}
+
+// ── Ícone do produto ──────────────────────────────────────
+function setModalIconPreview(src) {
+  const img = document.getElementById('iconPreviewImg');
+  const empty = document.getElementById('iconPreviewEmpty');
+  const btnRemove = document.getElementById('btnRemoveIcon');
+  if (src) {
+    img.src = src; img.style.display = 'block';
+    empty.style.display = 'none';
+    if (btnRemove) btnRemove.style.display = 'inline-block';
+  } else {
+    img.src = ''; img.style.display = 'none';
+    empty.style.display = 'block';
+    if (btnRemove) btnRemove.style.display = 'none';
+  }
+}
+
+// Upload ícone direto da linha da tabela (clicar no mini-ícone)
+function uploadProductIcon(prodId) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const file = inp.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast('⚠️ Máximo 2MB', 'warning'); return; }
+    showLoading('Enviando ícone...');
+    try {
+      const fd = new FormData();
+      fd.append('icon', file);
+      const token = getSessionToken();
+      const res = await fetch(API_BASE + `/api/app-products/${prodId}/icon`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro upload');
+      const p = _products.find(x => x.id === prodId);
+      if (p) p.icon_key = data.icon_key || 'set';
+      renderProducts(_products.filter(x => filterProduct(x)));
+      toast('🖼️ Ícone salvo!', 'success');
+    } catch(e) { toast('❌ ' + e.message, 'error'); }
+    finally { hideLoading(); }
+  };
+  inp.click();
+}
+
+// Upload ícone pelo modal de edição
+function uploadProductIconModal() {
+  if (!_editingId) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const file = inp.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast('⚠️ Máximo 2MB', 'warning'); return; }
+    showLoading('Enviando ícone...');
+    try {
+      const fd = new FormData();
+      fd.append('icon', file);
+      const token = getSessionToken();
+      const res = await fetch(API_BASE + `/api/app-products/${_editingId}/icon`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro upload');
+      const p = _products.find(x => x.id === _editingId);
+      if (p) p.icon_key = data.icon_key || 'set';
+      setModalIconPreview(`${API_BASE}/api/pub/product-icon/${_editingId}?t=${Date.now()}`);
+      toast('🖼️ Ícone salvo!', 'success');
+    } catch(e) { toast('❌ ' + e.message, 'error'); }
+    finally { hideLoading(); }
+  };
+  inp.click();
+}
+
+async function removeProductIcon() {
+  if (!_editingId) return;
+  if (!confirm('Remover ícone deste produto?')) return;
+  showLoading('Removendo...');
+  try {
+    const token = getSessionToken();
+    const res = await fetch(API_BASE + `/api/app-products/${_editingId}/icon`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Erro ao remover');
+    const p = _products.find(x => x.id === _editingId);
+    if (p) p.icon_key = null;
+    setModalIconPreview('');
+    toast('🗑️ Ícone removido', 'success');
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { hideLoading(); }
+}
+
+function filterProduct(p) {
+  const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  const filter = document.getElementById('filterStatus')?.value || '';
+  if (q && !p.name.toLowerCase().includes(q) && !(p.code||'').toLowerCase().includes(q) && !(p.ncm||'').toLowerCase().includes(q)) return false;
+  if (filter === 'fav' && !p.is_favorite) return false;
+  if (filter === 'semfiscal' && (p.ncm && p.cfop)) return false;
+  if (filter === 'ativo' && !p.ativo) return false;
+  if (filter === 'inativo' && p.ativo) return false;
+  return true;
 }
 
 async function deleteProduct(id, name) {
