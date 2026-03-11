@@ -1,4 +1,4 @@
-// v2.51.58
+// v2.51.59
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -567,6 +567,9 @@ async function emitirNFCeBling(env, orderId, orderData) {
     indicadorPresenca: 1,
     itens: itensNFCe,
     pagamentos: [{ formaPagamento: { id: fpId }, valor: total }],
+    // parcelas com campo "data" (YYYY-MM-DD) — confirmado pelo suporte Bling em 11/03/2026
+    // SEM dataVencimento (causa 500) — campo correto é "data"
+    parcelas: [{ formaPagamento: { id: fpId }, valor: total, data: dataOperacaoISO }],
     observacoes: `MoskoGás Pedido #${orderId} | ${name || 'Consumidor Final'} | Entregue: ${pedidoDataStr}`,
   };
   if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
