@@ -1,4 +1,4 @@
-// v2.51.39
+// v2.51.40
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -610,7 +610,15 @@ async function emitirNFCeBling(env, orderId, orderData) {
       bling_pedido_id: String(nfceId),
       error_message: `HTTP ${emitirResp.status}: ${emitirText.substring(0, 300)}`
     });
-    // NFC-e criada mas não emitida — salva como pendente para retry manual
+    // 404 = NFC-e não existe mais no Bling (foi deletada ou nunca foi salva)
+    // Limpa o nfce_id para que o próximo retry CRIE uma nova NFC-e do zero
+    if (emitirResp.status === 404) {
+      await env.DB.prepare(
+        `UPDATE orders SET nfce_id=NULL, nfce_status='pendente_emissao', nfce_error='404: NFC-e não encontrada no Bling — será recriada no próximo retry' WHERE id=?`
+      ).bind(orderId).run().catch(() => {});
+      throw new Error(`NFC-e ${nfceId} não encontrada no Bling (404) — ID inválido, pedido resetado para recriar`);
+    }
+    // Outros erros: salva como pendente com o ID existente
     return {
       nfce_id: String(nfceId),
       nfce_numero: null,
@@ -5798,6 +5806,17 @@ export default {
       return json({ ok: true, updated: result.changes, message: `${result.changes} pedido(s) com erro de token resetados` });
     }
 
+    // ── NFC-e: Reset IDs inválidos (404 RESOURCE_NOT_FOUND) ─────────
+    if (method === 'POST' && path === '/api/nfce/reset-404') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const result = await env.DB.prepare(
+        `UPDATE orders SET nfce_id=NULL, nfce_status=NULL, nfce_retry_count=0, nfce_error=NULL
+         WHERE nfce_error LIKE '%404%' OR nfce_error LIKE '%não encontrada%' OR nfce_error LIKE '%RESOURCE_NOT_FOUND%'`
+      ).run();
+      return json({ ok: true, updated: result.changes, message: `${result.changes} pedido(s) com ID inválido resetados — serão recriados no próximo Gerar` });
+    }
+
     // ── NFC-e: Re-emitir todas com status pendente_emissao ─────────
     if (method === 'POST' && path === '/api/nfce/re-emitir-pendentes') {
       const authCheck = await requireAuth(request, env, ['admin']);
@@ -5823,6 +5842,12 @@ export default {
               `UPDATE orders SET nfce_status='emitida', nfce_numero=COALESCE(?,nfce_numero), nfce_chave=COALESCE(?,nfce_chave), nfce_error=NULL WHERE id=?`
             ).bind(numero, chave, row.id).run();
             resultados.push({ id: row.id, nfce_id: row.nfce_id, status: 'emitida', numero });
+          } else if (r.status === 404) {
+            // NFC-e não existe mais no Bling — limpar para recriar no próximo retry
+            await env.DB.prepare(
+              `UPDATE orders SET nfce_id=NULL, nfce_status=NULL, nfce_error='ID inválido (404) — será recriada', nfce_retry_count=0 WHERE id=?`
+            ).bind(row.id).run();
+            resultados.push({ id: row.id, nfce_id: row.nfce_id, status: 'resetado_para_recriar', http: 404 });
           } else {
             await env.DB.prepare(`UPDATE orders SET nfce_error=? WHERE id=?`).bind(`Emitir ${r.status}: ${txt.substring(0,200)}`, row.id).run();
             resultados.push({ id: row.id, nfce_id: row.nfce_id, status: 'erro', http: r.status, body: txt.substring(0,300) });
