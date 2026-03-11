@@ -1,4 +1,4 @@
-// v2.51.70
+// v2.51.71
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -1999,7 +1999,7 @@ async function retryNFCePendentes(env, limite = 20) {
             delivered_at, created_at
      FROM orders
      WHERE status = 'entregue'
-       AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
+       AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
        AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
        AND COALESCE(nfce_retry_count,0) < 5
        AND created_at >= ?
@@ -4061,7 +4061,7 @@ export default {
       await env.DB.prepare('UPDATE orders SET foto_comprovante=? WHERE id=?').bind(photoKey, orderId).run();
 
       // 3) Criar Bling se aplicável
-      const TIPOS_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
+      const TIPOS_BLING = ['dinheiro', 'pix_vista', 'debito', 'credito']; // pix_receber: venda criada só ao confirmar pagamento
       let blingResult = null;
       if (TIPOS_BLING.includes(tipoPagamento)) {
         try {
@@ -4180,7 +4180,7 @@ export default {
         }
       }
 
-      const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'pix_receber', 'debito', 'credito'];
+      const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'debito', 'credito']; // pix_receber: tratado na tela de pagamentos
       const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas'];
 
       const oldTipo = currentOrder.tipo_pagamento || '';
@@ -4818,7 +4818,7 @@ export default {
         FROM orders
         WHERE status = 'entregue'
           AND bling_pedido_id IS NULL
-          AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
+          AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
         ORDER BY delivered_at DESC
       `).all();
       return json({ pedidos: rows.results || [], total: rows.results?.length || 0 });
@@ -5052,22 +5052,9 @@ export default {
           return json({ ok: false, error: 'Falha ao criar venda no Bling: ' + e.message }, 500);
         }
 
-      } else if (!tipoFiscal && !jaTemFiscal) {
-        // Comportamento legado: pix_receber cria Pedido de Venda automaticamente
-        const tiposCriarBling = ['pix_receber'];
-        if (tiposCriarBling.includes(order.tipo_pagamento)) {
-          try {
-            const blingResult = await criarPedidoBling(env, orderId, orderDataFiscal);
-            await env.DB.prepare(
-              'UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?'
-            ).bind(blingResult.bling_pedido_id, blingResult.bling_pedido_num, 'synced', orderId).run();
-            await logEvent(env, orderId, 'bling_created_on_pay', { bling_pedido_id: blingResult.bling_pedido_id });
-            fiscalResult = { tipo: 'nfe', bling_pedido_id: blingResult.bling_pedido_id };
-          } catch (e) {
-            await logEvent(env, orderId, 'bling_error_on_pay', { error: e.message });
-          }
-        }
       }
+      // pix_receber sem tipo_fiscal → apenas marca pago, sem fiscal automático
+      // O atendente escolhe na tela de pagamentos: NFC-e, NF-e ou sem fiscal
 
       await env.DB.prepare('UPDATE orders SET pago=1 WHERE id=?').bind(orderId).run();
       await logBlingAudit(env, orderId, 'marcar_pago', 'success', { tipo: order.tipo_pagamento, tipo_fiscal: tipoFiscal });
@@ -5774,7 +5761,7 @@ export default {
         `SELECT id, customer_name, status, tipo_pagamento, pago, total_value,
                 nfce_id, bling_pedido_id, nfce_error, COALESCE(nfce_retry_count,0) as nfce_retry_count, created_at
          FROM orders WHERE status='entregue'
-         AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
+         AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
          AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
          ORDER BY id DESC LIMIT 50`
       ).all().catch(() => ({ results: [] }));
@@ -5801,7 +5788,7 @@ export default {
         `UPDATE orders SET nfce_retry_count=5, nfce_error='ignorado: pedido anterior ao sistema NFC-e'
          WHERE status='entregue'
          AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
-         AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
+         AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
          AND created_at < ?`
       ).bind(inicioHoje).run();
       return json({ ok: true, bloqueados: r.meta?.changes || 0, inicioHoje });
@@ -5819,7 +5806,7 @@ export default {
           `UPDATE orders SET nfce_retry_count=0, nfce_error=NULL, nfce_id=NULL
            WHERE (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
            AND status='entregue'
-           AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')`
+           AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')`
         ).run();
       } else {
         for (const id of ids) {
