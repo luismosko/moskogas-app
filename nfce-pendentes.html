@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.2.3</title>
+<title>NFC-e Pendentes — MoskoGás v1.2.4</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.2.3</span>
+  <span class="badge-ver">v1.2.4</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -119,6 +119,10 @@
     <button class="btn" onclick="enviarPendentesBling()"
       style="background:#dc2626;color:#fff" title="Busca TODAS as NFC-es Pendentes no Bling e envia para a SEFAZ — use para corrigir lotes antigos">
       🔥 Autorizar Todas Pendentes no Bling
+    </button>
+    <button class="btn" onclick="deletarPendentesBling()"
+      style="background:#7f1d1d;color:#fff" title="DELETA todas as NFC-es Pendentes no Bling (criadas erradas) e reseta os pedidos para recriar corretamente">
+      🗑️ Deletar Pendentes Erradas + Resetar
     </button>
     <button class="btn" onclick="bloquearAntigos()"
       style="background:#64748b;color:#fff" title="Marcar pedidos de dias anteriores como ignorados — emitir só os de hoje">
@@ -434,6 +438,28 @@ async function resetTokenErrors() {
     res.innerHTML = `<div style="padding:12px;background:#dcfce7;border-radius:8px">✅ ${data.message}</div>`;
     toast(data.message, 'success');
     carregarDados();
+  } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
+}
+
+async function deletarPendentesBling() {
+  if (!confirm('⚠️ ATENÇÃO!\n\nIsso vai DELETAR do Bling todas as NFC-es com status Pendente (que foram criadas com dados errados) e resetar os pedidos correspondentes no sistema para que sejam RECRIADOS corretamente.\n\nApós isso, use o botão "Gerar Todas Pendentes" para reemitir.\n\nContinuar?')) return;
+  const res = document.getElementById('resultado');
+  res.innerHTML = '<div style="padding:12px;color:#7f1d1d;background:#fef2f2;border-radius:8px">🗑️ Deletando notas erradas do Bling e resetando pedidos... aguarde...</div>';
+  try {
+    const data = await api('/api/nfce/deletar-pendentes-bling', { method: 'POST' });
+    let html = `<div style="padding:12px;background:#fef2f2;border-radius:8px;margin-bottom:12px">
+      <b>🗑️ ${data.deletadas} notas deletadas do Bling | ${data.orders_resetadas} pedido(s) resetados no sistema</b><br>
+      <small>Total encontradas no Bling: ${data.total_encontradas}</small></div>
+      <div style="padding:10px;background:#dbeafe;border-radius:8px;margin-bottom:12px">
+      ℹ️ Agora clique em <b>"Gerar Todas Pendentes"</b> para recriar as NFC-es corretamente.</div>`;
+    (data.resultados||[]).forEach(d => {
+      const ok = d.deletado;
+      html += `<div style="padding:3px 12px;background:${ok?'#dcfce7':'#fee2e2'};border-radius:4px;margin-bottom:2px;font-size:12px">
+        ${ok?'✅':'❌'} NFC-e ${d.numero||d.nfce_id} → ${ok?'Deletada':'Erro'} (HTTP ${d.http_delete||'?'}) ${d.orders_resetadas?'| Pedido resetado':''}${d.erro||''}</div>`;
+    });
+    res.innerHTML = html;
+    if (data.deletadas > 0) { toast(`🗑️ ${data.deletadas} notas deletadas! Agora gere novamente.`, 'success'); carregarDados(); }
+    else toast('ℹ️ Nenhuma nota pendente encontrada no Bling', 'info');
   } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
 }
 

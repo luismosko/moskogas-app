@@ -1,4 +1,4 @@
-// v2.51.60
+// v2.51.61
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5894,6 +5894,53 @@ export default {
          WHERE nfce_error LIKE '%404%' OR nfce_error LIKE '%não encontrada%' OR nfce_error LIKE '%RESOURCE_NOT_FOUND%'`
       ).run();
       return json({ ok: true, updated: result.changes, message: `${result.changes} pedido(s) com ID inválido resetados — serão recriados no próximo Gerar` });
+    }
+
+    // ── NFC-e: Deletar pendentes erradas no Bling e resetar no banco ──
+    // Busca todas NFC-es Pendentes no Bling, deleta, e reseta orders para recriar
+    if (method === 'POST' && path === '/api/nfce/deletar-pendentes-bling') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const resultados = [];
+      let pagina = 1;
+      let totalEncontradas = 0;
+      while (pagina <= 5) {
+        const listResp = await blingFetch(`/nfce?pagina=${pagina}&limite=100&situacao=1`, {}, env);
+        if (!listResp.ok) break;
+        const listData = await listResp.json();
+        const notas = listData?.data || [];
+        if (notas.length === 0) break;
+        totalEncontradas += notas.length;
+        for (const nota of notas) {
+          const nfceId = String(nota.id);
+          try {
+            // Deletar do Bling
+            const delResp = await blingFetch(`/nfce/${nfceId}`, { method: 'DELETE' }, env);
+            const delOk = delResp.ok || delResp.status === 204 || delResp.status === 404;
+            // Resetar no nosso banco se existir
+            const reset = await env.DB.prepare(
+              `UPDATE orders SET nfce_id=NULL, nfce_numero=NULL, nfce_chave=NULL,
+               nfce_status=NULL, nfce_error=NULL, nfce_retry_count=0, nfce_emitida_at=NULL
+               WHERE nfce_id=?`
+            ).bind(nfceId).run().catch(() => ({ changes: 0 }));
+            resultados.push({
+              nfce_id: nfceId,
+              numero: nota.numero,
+              deletado: delOk,
+              http_delete: delResp.status,
+              orders_resetadas: reset.changes || 0
+            });
+            await new Promise(r => setTimeout(r, 300));
+          } catch(e) {
+            resultados.push({ nfce_id: nfceId, numero: nota.numero, erro: e.message });
+          }
+        }
+        if (notas.length < 100) break;
+        pagina++;
+      }
+      const deletadas = resultados.filter(r => r.deletado).length;
+      const resetadas = resultados.reduce((s, r) => s + (r.orders_resetadas || 0), 0);
+      return json({ ok: true, total_encontradas: totalEncontradas, deletadas, orders_resetadas: resetadas, resultados });
     }
 
     // ── NFC-e: Buscar pendentes NO BLING e enviar via /enviar ────────
