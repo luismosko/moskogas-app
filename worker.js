@@ -1,4 +1,4 @@
-// v2.51.37
+// v2.51.38
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5886,7 +5886,8 @@ export default {
       const orderId = parseInt(nfceRetryMatch[1]);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
       if (!order) return err('Pedido não encontrado', 404);
-      if (order.nfce_id) return json({ ok: false, error: `Pedido já tem NFC-e: ${order.nfce_id}` });
+      // Só bloquear se já foi emitida com sucesso
+      if (order.nfce_id && order.nfce_status === 'emitida') return json({ ok: false, error: `Pedido já tem NFC-e emitida: ${order.nfce_id} (nº ${order.nfce_numero})` });
 
       // Migrations idempotentes
       for (const col of [
