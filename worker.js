@@ -1,5 +1,6 @@
-// v2.51.73
+// v2.51.74
 
+// v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
 // v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
 // v2.51.71: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
@@ -1244,8 +1245,24 @@ async function enviarLembretePix(env, order, config, user, force = false) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
-  const skipSafety = config.intervalo_horas === 0 && config.max_lembretes === 0;
+  // v2.51.74: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
+  const isManual = !!user;
+  const skipSafety = isManual || (config.intervalo_horas === 0 && config.max_lembretes === 0);
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
+
+  // Se falhou, retornar mensagem legível
+  if (!waResult.ok) {
+    const safetyLabels = {
+      whatsapp_desabilitado: 'WhatsApp desabilitado nas configurações',
+      circuit_breaker_aberto: 'WhatsApp bloqueado temporariamente (429). Aguarde alguns minutos.',
+      fora_horario_comercial: 'Fora do horário comercial configurado',
+      rate_limit: 'Limite de envios atingido. Aguarde um momento.',
+      cooldown_destinatario: 'Cooldown por destinatário ativo',
+      telefone_invalido: 'Telefone inválido',
+    };
+    const motivo = safetyLabels[waResult.safety] || waResult.safety || `Erro HTTP ${waResult.status}`;
+    return { ok: false, order_id: order.id, error: motivo, safety: waResult.safety };
+  }
 
   // Segunda msg = imagem QR, terceira = código puro
   const qrCode = order.pix_qrcode || order.cora_qrcode || null;
