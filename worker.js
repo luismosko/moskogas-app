@@ -1,5 +1,6 @@
-// v2.51.74
+// v2.51.75
 
+// v2.51.75: Lembrete PIX — sem QR PushInPay envia chave_pix como texto simples
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
 // v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
@@ -1245,7 +1246,7 @@ async function enviarLembretePix(env, order, config, user, force = false) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
-  // v2.51.74: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
+  // v2.51.75: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
   const isManual = !!user;
   const skipSafety = isManual || (config.intervalo_horas === 0 && config.max_lembretes === 0);
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
@@ -1264,14 +1265,21 @@ async function enviarLembretePix(env, order, config, user, force = false) {
     return { ok: false, order_id: order.id, error: motivo, safety: waResult.safety };
   }
 
-  // Segunda msg = imagem QR, terceira = código puro
+  // Segunda msg: se tem QR PushInPay → imagem + copia e cola; senão → chave PIX como texto simples
   const qrCode = order.pix_qrcode || order.cora_qrcode || null;
-  if (waResult.ok && qrCode) {
+  if (waResult.ok) {
     await new Promise(r => setTimeout(r, 2000));
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qrCode)}`;
-    await sendWhatsAppImage(env, phone, qrUrl);
-    await new Promise(r => setTimeout(r, 2000));
-    await sendWhatsApp(env, phone, qrCode, { category: 'lembrete_pix', skipSafety: true });
+    if (qrCode) {
+      // PushInPay: envia imagem QR + código copia e cola
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qrCode)}`;
+      await sendWhatsAppImage(env, phone, qrUrl);
+      await new Promise(r => setTimeout(r, 2000));
+      await sendWhatsApp(env, phone, qrCode, { category: 'lembrete_pix', skipSafety: true });
+    } else if (config.chave_pix) {
+      // Sem QR: envia só a chave PIX como texto para fácil cópia
+      const chaveMsg = `🔑 *Chave PIX (CNPJ):*\n${config.chave_pix}`;
+      await sendWhatsApp(env, phone, chaveMsg, { category: 'lembrete_pix', skipSafety: true });
+    }
   }
 
   const tipo = user ? 'manual' : 'cron';
