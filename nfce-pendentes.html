@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.2.0</title>
+<title>NFC-e Pendentes — MoskoGás v1.2.1</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.2.0</span>
+  <span class="badge-ver">v1.2.1</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -389,7 +389,7 @@ async function verLog(orderId) {
   } catch(e) { toast('❌ ' + e.message, 'error'); }
 }
 
-
+async function reset404() {
   const res = document.getElementById('resultado');
   res.innerHTML = '<div style="padding:12px;color:#5b21b6;background:#f5f3ff;border-radius:8px">🗑️ Limpando IDs inválidos...</div>';
   try {
