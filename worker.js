@@ -1,4 +1,4 @@
-// v2.51.51
+// v2.51.52
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -619,7 +619,24 @@ async function emitirNFCeBling(env, orderId, orderData) {
     console.error('[NFC-e] /enviar falhou:', e.message);
   }
 
-  // ── PASSO 3: Buscar número e chave via GET ──
+  // ── PASSO 3: Lançar contas via POST /nfce/{id}/lancar-contas ──
+  // Botão "C" (Contas) que aparece na UI do Bling. Faz integração financeira.
+  await new Promise(r => setTimeout(r, 500));
+  try {
+    const contasResp = await blingFetch(`/nfce/${nfceId}/lancar-contas`, { method: 'POST', body: '{}' }, env);
+    const contasStatus = contasResp.status;
+    let contasBody = '';
+    try { contasBody = await contasResp.text(); } catch(_) {}
+    console.log(`[NFC-e] /lancar-contas → HTTP ${contasStatus}: ${contasBody.substring(0, 300)}`);
+    await logBlingAudit(env, orderId, 'lancar_contas_nfce', contasResp.ok ? 'success' : 'error', {
+      bling_pedido_id: String(nfceId),
+      error_message: `HTTP ${contasStatus}: ${contasBody.substring(0, 400)}`,
+    });
+  } catch(e) {
+    console.error('[NFC-e] /lancar-contas falhou:', e.message);
+  }
+
+  // ── PASSO 4: Buscar número e chave via GET ──
   await new Promise(r => setTimeout(r, 1000));
   let nfceNumero = criarData.data?.numero ?? null;
   let nfceChave  = criarData.data?.chaveAcesso ?? criarData.data?.chave ?? null;
