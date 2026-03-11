@@ -1,4 +1,4 @@
-// v2.51.34
+// v2.51.35
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -551,6 +551,11 @@ async function emitirNFCeBling(env, orderId, orderData) {
       ? { id: bling_contact_id }
       : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
     dataOperacao: todayISO,   // ✅ ISO YYYY-MM-DD — DD/MM/YYYY causa SERVER_ERROR 500
+    // Campos obrigatórios para autorização SEFAZ (extraídos do XML de NFC-e autorizada)
+    // <tpNF>1</tpNF> = saída | <indFinal>1</indFinal> = consumidor final | <indPres>1</indPres> = presencial
+    tipoNota: 1,              // 1=Saída (venda) — evita rejeição 706 "NFC-e para operacao de entrada"
+    indicadorConsumidorFinal: 1,  // Consumidor Final (faz aparecer "Consumidor Final" no Bling)
+    indicadorPresenca: 1,         // Operação presencial (balcão)
     itens: itensNFCe,
     pagamentos: [{ formaPagamento: { id: fpId }, valor: total }], // ✅ pagamentos, NÃO parcelas
     observacoes: `MoskoGás #${orderId} | ${name || ''}`,
