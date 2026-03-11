@@ -79,11 +79,11 @@
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
     -->
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.20</span>
-  <a id="nfce-alert-badge" href="nfce-pendentes.html" title="Pedidos entregues sem NFC-e — clique para emitir"
-     style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:2px 10px;font-size:11px;font-weight:800;text-decoration:none;animation:pulseRed 1.5s infinite;cursor:pointer">
-    🧾 <span id="nfce-alert-count">0</span> NFC-e pendente(s)
-  </a>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.21</span>
+  <span id="nfce-alert-badge" title="Pedidos entregues sem NFC-e" style="display:none;align-items:center;gap:6px;background:#fef2f2;border:1px solid #dc2626;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;color:#dc2626;animation:pulseRed 1.5s infinite">
+    🧾 <span id="nfce-alert-count">0</span> pendente(s)
+    <button onclick="gerarNFCePendentes()" id="btn-gerar-nfce" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700;cursor:pointer" title="Gerar NFC-e agora para todos os pedidos pendentes">▶ Gerar</button>
+  </span>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
     <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
   </label>
@@ -155,7 +155,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.20: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
+// v2.9.21: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
 // v2.9.13
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
@@ -173,7 +173,7 @@ async function checkNFCePendentes() {
     if (!badge || !count) return;
     if (pendentes.length > 0) {
       count.textContent = pendentes.length;
-      badge.style.display = 'inline-block';
+      badge.style.display = 'flex';
       badge.title = `${pendentes.length} pedido(s) entregue(s) sem NFC-e — clique para emitir`;
     } else {
       badge.style.display = 'none';

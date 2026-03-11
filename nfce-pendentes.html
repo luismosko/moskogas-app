@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.2.7</title>
+<title>NFC-e Pendentes — MoskoGás v1.2.8</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.2.7</span>
+  <span class="badge-ver">v1.2.8</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -88,12 +88,11 @@
 
   <!-- Ações -->
   <div class="actions">
-    <button class="btn btn-primary" id="btn-retry-bulk" onclick="executarRetryBulk()">
+    <button class="btn btn-primary" id="btn-retry-bulk" onclick="executarRetryBulk()"
+      title="Gerar NFC-e para todos os pedidos entregues ainda sem nota fiscal">
       🔄 Gerar NFC-es Pendentes
     </button>
     <select id="limite-bulk" style="padding:6px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;height:36px;margin-left:-6px">
-      <option value="1">1 nota (teste)</option>
-      <option value="3">3 notas</option>
       <option value="8">8 notas</option>
       <option value="20" selected>20 notas</option>
       <option value="50">50 notas</option>
@@ -101,35 +100,31 @@
     <button class="btn btn-secondary" onclick="carregarDados()">
       🔃 Atualizar
     </button>
-    <button class="btn" id="btn-reset-retry" onclick="resetarRetry()"
-      style="background:#f59e0b;color:#fff" title="Resetar contador de tentativas dos pedidos bloqueados">
-      🔓 Desbloquear Bloqueados
-    </button>
-    <button class="btn" onclick="resetTokenErrors()"
-      style="background:#dc2626;color:#fff" title="Resetar pedidos que falharam por token expirado (invalid_token) — eles serão tentados novamente">
-      🔑 Reset Erros de Token
-    </button>
-    <button class="btn" onclick="reset404()"
-      style="background:#7c3aed;color:#fff" title="Limpar IDs inválidos (404 Not Found) — os pedidos serão recriados do zero no Bling">
-      🗑️ Limpar IDs Inválidos (404)
-    </button>
-    <button class="btn" onclick="reEmitirPendentes()"
-      style="background:#8b5cf6;color:#fff" title="Re-emitir NFC-es criadas no Bling mas ainda não autorizadas pela SEFAZ">
-      ⚡ Re-emitir Pendentes SEFAZ
-    </button>
-    <button class="btn" onclick="enviarPendentesBling()"
-      style="background:#dc2626;color:#fff" title="Busca TODAS as NFC-es Pendentes no Bling e envia para a SEFAZ — use para corrigir lotes antigos">
-      🔥 Autorizar Todas Pendentes no Bling
-    </button>
-    <button class="btn" onclick="deletarPendentesBling()"
-      style="background:#7f1d1d;color:#fff" title="DELETA todas as NFC-es Pendentes no Bling (criadas erradas) e reseta os pedidos para recriar corretamente">
-      🗑️ Deletar Pendentes Erradas + Resetar
-    </button>
-    <button class="btn" onclick="bloquearAntigos()"
-      style="background:#64748b;color:#fff" title="Marcar pedidos de dias anteriores como ignorados — emitir só os de hoje">
-      🗂️ Ignorar Histórico (só hoje)
-    </button>
     <span id="status-msg" style="font-size:13px;color:#64748b;margin-left:4px"></span>
+  </div>
+
+  <!-- Ferramentas avançadas (ocultas por padrão) -->
+  <div style="margin:8px 0">
+    <button onclick="toggleAvancado()" style="background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;padding:0">
+      ⚙️ Ferramentas avançadas (diagnóstico)
+    </button>
+  </div>
+  <div id="painel-avancado" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:12px">
+    <p style="margin:0 0 10px;font-size:12px;color:#64748b">⚠️ Use apenas para corrigir problemas — o sistema gera NFC-es automaticamente via cron.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <button class="btn" onclick="resetarRetry()"
+        style="background:#f59e0b;color:#fff;font-size:12px" title="Desbloquear pedidos que atingiram 5 tentativas com erro">
+        🔓 Desbloquear Bloqueados
+      </button>
+      <button class="btn" onclick="resetTokenErrors()"
+        style="background:#ef4444;color:#fff;font-size:12px" title="Resetar pedidos que falharam por token expirado — serão tentados novamente">
+        🔑 Reset Erros de Token
+      </button>
+      <button class="btn" onclick="deletarPendentesBling()"
+        style="background:#7f1d1d;color:#fff;font-size:12px" title="DELETA notas Pendentes criadas erradas no Bling e reseta os pedidos para recriar">
+        🗑️ Deletar Pendentes Erradas
+      </button>
+    </div>
   </div>
 
   <!-- Resultado do retry -->
@@ -440,6 +435,11 @@ async function resetTokenErrors() {
     toast(data.message, 'success');
     carregarDados();
   } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
+}
+
+function toggleAvancado() {
+  const p = document.getElementById('painel-avancado');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
 }
 
 async function deletarPendentesBling() {
