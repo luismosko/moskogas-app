@@ -1,4 +1,4 @@
-// v2.51.47
+// v2.51.48
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -549,15 +549,12 @@ async function emitirNFCeBling(env, orderId, orderData) {
   const totalCalc = Math.round(itensNFCe.reduce((s, i) => s + i.valor * i.quantidade, 0) * 100) / 100;
   const total = totalCalc || parseFloat(total_value) || 0;
 
-  // Sem CPF → Consumidor Final (evita erro SEFAZ de cadastro incompleto)
-  const usarContatoReal = bling_contact_id && cpf_cnpj && cpf_cnpj.replace(/\D/g,'').length >= 11;
-
+  // NFC-e: SEMPRE Consumidor Final (ID 726746364) — nunca contato real do cliente
+  // NFC-e é nota ao consumidor, o padrão Bling/SEFAZ é sempre Consumidor Final
   const nfceBody = {
     naturezaOperacao: { id: 8024085174 },
-    tipo: 1,  // ✅ NFC-e Bling v3: 1=Saída (Venda), 2=Entrada — DIFERENTE de NF-e onde tipoNota:1=Entrada
-    contato: usarContatoReal
-      ? { id: bling_contact_id }
-      : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+    tipo: 1,  // ✅ NFC-e Bling v3: 1=Saída (Venda)
+    contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
     dataOperacao: dataOperacaoISO,
     indicadorConsumidorFinal: 1,
     indicadorPresenca: 1,
