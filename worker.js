@@ -1,4 +1,4 @@
-// v2.51.54
+// v2.51.55
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -502,7 +502,7 @@ async function criarPedidoBling(env, orderId, orderData) {
 // Fluxo: POST /nfce (criar) → POST /nfce/:id/emitir (transmitir para SEFAZ)
 async function emitirNFCeBling(env, orderId, orderData) {
   const { name, items, total_value, forma_pagamento_key, forma_pagamento_id,
-          bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj } = orderData;
+          bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj, created_at, delivered_at } = orderData;
 
   // Data de hoje em BRT (SEFAZ exige data atual — não pode ser data anterior)
   const now = new Date();
@@ -549,6 +549,12 @@ async function emitirNFCeBling(env, orderId, orderData) {
   const totalCalc = Math.round(itensNFCe.reduce((s, i) => s + i.valor * i.quantidade, 0) * 100) / 100;
   const total = totalCalc || parseFloat(total_value) || 0;
 
+  // Data original do pedido para observacao (justificativa SEFAZ)
+  const pedidoEpoch = delivered_at || created_at;
+  const pedidoDataStr = pedidoEpoch
+    ? new Date(pedidoEpoch * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande', day: '2-digit', month: '2-digit', year: 'numeric' })
+    : dataOperacaoISO.split('-').reverse().join('/');
+
   // NFC-e: SEMPRE Consumidor Final (ID 726746364) — nunca contato real do cliente
   // NFC-e é nota ao consumidor, o padrão Bling/SEFAZ é sempre Consumidor Final
   const nfceBody = {
@@ -563,7 +569,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
     pagamentos: [{ formaPagamento: { id: fpId }, valor: total }],
     // parcelas obrigatório para lançamento financeiro automático (botão "C" no Bling)
     parcelas: [{ formaPagamento: { id: fpId }, valor: total, dataVencimento: dataOperacaoISO.split('-').reverse().join('/') }],
-    observacoes: `MoskoGás #${orderId} | ${name || ''} | t${Date.now()}`,
+    observacoes: `MoskoGás Pedido #${orderId} | ${name || 'Consumidor Final'} | Entregue: ${pedidoDataStr}`,
   };
   if (bling_vendedor_id) nfceBody.vendedor = { id: bling_vendedor_id };
 
