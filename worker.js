@@ -1,6 +1,7 @@
-// v2.51.71
+// v2.51.72
 
-// v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
+// v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
+// v2.51.71: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
 // v2.50.5: Sync 1 por 1 com barra progresso real
 // v2.50.4: Fix sync-bling (} faltando causava timeout); endpoint import-csv
@@ -3395,6 +3396,17 @@ export default {
     // ── ÚLTIMO PEDIDO DO CLIENTE ────────────────────────────────
     if (method === 'GET' && path === '/api/customer/last-order') {
       const phone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
+      const nameParam = (url.searchParams.get('name') || '').trim().toUpperCase();
+      // v2.51.72: Consumidor Final — busca por nome quando sem telefone
+      if (!phone && nameParam === 'CONSUMIDOR FINAL') {
+        const order = await env.DB.prepare(
+          `SELECT id, customer_name, items_json, total_value, tipo_pagamento, created_at, status
+           FROM orders WHERE customer_name = 'CONSUMIDOR FINAL' AND status != 'cancelado'
+           ORDER BY created_at DESC LIMIT 1`
+        ).first();
+        if (!order) return json({ found: false });
+        return json({ found: true, order: { ...order, items: JSON.parse(order.items_json || '[]') } });
+      }
       if (!phone || phone.length < 6) return json({ found: false });
       const order = await env.DB.prepare(
         `SELECT id, customer_name, items_json, total_value, tipo_pagamento, created_at, status
