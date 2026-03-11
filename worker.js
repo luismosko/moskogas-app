@@ -1,4 +1,4 @@
-// v2.51.69
+// v2.51.70
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -1999,7 +1999,7 @@ async function retryNFCePendentes(env, limite = 20) {
             delivered_at, created_at
      FROM orders
      WHERE status = 'entregue'
-       AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+       AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
        AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
        AND COALESCE(nfce_retry_count,0) < 5
        AND created_at >= ?
@@ -4818,7 +4818,7 @@ export default {
         FROM orders
         WHERE status = 'entregue'
           AND bling_pedido_id IS NULL
-          AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+          AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
         ORDER BY delivered_at DESC
       `).all();
       return json({ pedidos: rows.results || [], total: rows.results?.length || 0 });
@@ -5774,7 +5774,7 @@ export default {
         `SELECT id, customer_name, status, tipo_pagamento, pago, total_value,
                 nfce_id, bling_pedido_id, nfce_error, COALESCE(nfce_retry_count,0) as nfce_retry_count, created_at
          FROM orders WHERE status='entregue'
-         AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+         AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
          AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
          ORDER BY id DESC LIMIT 50`
       ).all().catch(() => ({ results: [] }));
@@ -5801,7 +5801,7 @@ export default {
         `UPDATE orders SET nfce_retry_count=5, nfce_error='ignorado: pedido anterior ao sistema NFC-e'
          WHERE status='entregue'
          AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
-         AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+         AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
          AND created_at < ?`
       ).bind(inicioHoje).run();
       return json({ ok: true, bloqueados: r.meta?.changes || 0, inicioHoje });
@@ -5819,7 +5819,7 @@ export default {
           `UPDATE orders SET nfce_retry_count=0, nfce_error=NULL, nfce_id=NULL
            WHERE (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
            AND status='entregue'
-           AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')`
+           AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')`
         ).run();
       } else {
         for (const id of ids) {
