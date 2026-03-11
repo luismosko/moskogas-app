@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.2.1</title>
+<title>NFC-e Pendentes — MoskoGás v1.2.2</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.2.1</span>
+  <span class="badge-ver">v1.2.2</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -210,6 +210,7 @@ function renderizarDados(data) {
         ? `<button class="btn btn-sm btn-secondary" disabled title="Máximo de tentativas atingido. Corrija o erro antes.">🚫</button>`
         : `<button class="btn btn-sm btn-primary" onclick="retryUm(${p.id})" title="Tentar emitir NFC-e">🔄</button>`;
       const btnLog = `<button class="btn btn-sm btn-secondary" onclick="verLog(${p.id})" title="Ver log completo do Bling">🔍</button>`;
+      const btnContas = p.nfce_id ? `<button class="btn btn-sm btn-warning" onclick="testarLancarContas('${p.nfce_id}', ${p.id})" title="Testar lançar contas financeiras no Bling">💰</button>` : '';
       html += `<tr>
         <td><strong>#${p.id}</strong></td>
         <td>${dt}</td>
@@ -218,7 +219,7 @@ function renderizarDados(data) {
         <td>R$ ${parseFloat(p.total_value||0).toFixed(2).replace('.',',')}</td>
         <td>${retryPill}</td>
         <td>${errMsg}</td>
-        <td>${btnRetry} ${btnLog}</td>
+        <td>${btnRetry} ${btnLog} ${btnContas||''}</td>
       </tr>`;
     }
     html += '</tbody></table>';
@@ -315,6 +316,27 @@ async function executarRetryBulk() {
     btn.disabled = false;
     btn.innerHTML = '🔄 Gerar NFC-es Pendentes';
     document.getElementById('status-msg').textContent = '';
+  }
+}
+
+async function testarLancarContas(nfceId, orderId) {
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  try {
+    const data = await api('/api/nfce/testar-lancar-contas', {
+      method: 'POST',
+      body: JSON.stringify({ nfce_id: nfceId })
+    });
+    let msg = `Resultados para NFC-e ${nfceId} (Pedido #${orderId}):\n\n`;
+    for (const r of (data.resultados || [])) {
+      const ok = r.status >= 200 && r.status < 300;
+      msg += (ok ? '✅' : '❌') + ` ${r.rota}\n   HTTP ${r.status}: ${r.body || r.erro || ''}\n\n`;
+    }
+    alert(msg);
+  } catch(e) {
+    alert('Erro: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💰'; }
   }
 }
 

@@ -1,4 +1,4 @@
-// v2.51.57
+// v2.51.58
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5829,8 +5829,13 @@ export default {
       const authCheck = await requireAuth(request, env, ['admin']);
       if (authCheck instanceof Response) return authCheck;
       const body2 = await request.json().catch(() => ({}));
-      const nfceId = body2?.nfce_id;
-      if (!nfceId) return json({ error: 'nfce_id obrigatorio' }, 400);
+      let nfceId = body2?.nfce_id;
+      // Se não passou nfce_id mas passou order_id, busca no banco
+      if (!nfceId && body2?.order_id) {
+        const row = await env.DB.prepare('SELECT nfce_id FROM orders WHERE id=?').bind(body2.order_id).first().catch(() => null);
+        nfceId = row?.nfce_id || null;
+      }
+      if (!nfceId) return json({ error: 'nfce_id obrigatorio (ou order_id)' }, 400);
       const variacoes = [
         `/nfce/${nfceId}/lancar-contas`,
         `/nfce/${nfceId}/lancamento/contas`,
