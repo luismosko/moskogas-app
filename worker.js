@@ -1,4 +1,4 @@
-// v2.51.46
+// v2.51.47
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -536,6 +536,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
       quantidade: qty,
       valor: price,
       unidade: blingUnidade,  // UN, UND, GL etc — obrigatório para SEFAZ
+      cfop: '5405',           // Venda com substituição tributária — SEMPRE 5405 para Gás e Água
     };
     // produto.id OBRIGATÓRIO para NFC-e (sem ele o Bling não encontra dados fiscais)
     if (blingId && Number(blingId) > 0) itemNFCe.produto = { id: Number(blingId) };
