@@ -1,5 +1,6 @@
-// v2.51.72
+// v2.51.73
 
+// v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
 // v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
 // v2.51.71: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5326,7 +5327,7 @@ export default {
       ).bind(orderId).first();
       if (!order) return err('Pedido não encontrado ou não é PIX pendente', 404);
       const config = await getLembreteConfig(env);
-      if (!config.ativo) return err('Lembretes PIX estão desativados', 400);
+      // v2.51.73: config.ativo só bloqueia o CRON — envio manual sempre permitido
       const result = await enviarLembretePix(env, order, config, user, force);
       return json(result, 200);
     }
