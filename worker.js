@@ -1,4 +1,4 @@
-// v2.51.40
+// v2.51.41
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -502,10 +502,19 @@ async function criarPedidoBling(env, orderId, orderData) {
 // Fluxo: POST /nfce (criar) → POST /nfce/:id/emitir (transmitir para SEFAZ)
 async function emitirNFCeBling(env, orderId, orderData) {
   const { name, items, total_value, forma_pagamento_key, forma_pagamento_id,
-          bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj } = orderData;
+          bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj,
+          delivered_at, created_at } = orderData;
 
-  const now = new Date();
-  const todayISO = now.toISOString().slice(0, 10); // YYYY-MM-DD — OBRIGATÓRIO para NFC-e
+  // Usar data da entrega (ou criação) do pedido — NÃO hoje
+  // Isso evita "Já existe uma nota fiscal cadastrada com este XML" em retries
+  const orderTs = delivered_at || created_at;
+  const orderDate = orderTs
+    ? new Date(typeof orderTs === 'number' ? orderTs * 1000 : orderTs)
+    : new Date();
+  // Converter para horário BRT (UTC-3) para pegar a data correta do dia
+  const brtOffset = -3 * 60;
+  const brtDate = new Date(orderDate.getTime() + (brtOffset - orderDate.getTimezoneOffset()) * 60000);
+  const dataOperacaoISO = brtDate.toISOString().slice(0, 10); // YYYY-MM-DD
 
   // Montar itens — buscar bling_id e codigo de cada item via app_products
   const itensNFCe = [];
@@ -553,7 +562,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
     contato: usarContatoReal
       ? { id: bling_contact_id }
       : { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
-    dataOperacao: todayISO,   // ✅ ISO YYYY-MM-DD — DD/MM/YYYY causa SERVER_ERROR 500
+    dataOperacao: dataOperacaoISO, // data original do pedido — evita duplicata de XML
     // NÃO passar tipoNota — a natureza de operação (id:8024085174, Tipo:Saída) controla isso
     // tipoNota:1 no Bling = ENTRADA (inverso do SEFAZ onde tpNF:1=Saída) — NÃO usar!
     indicadorConsumidorFinal: 1,  // Consumidor Final (indFinal=1 no XML SEFAZ)
@@ -1931,7 +1940,8 @@ async function retryNFCePendentes(env, limite = 20) {
   const pendentes = await env.DB.prepare(
     `SELECT id, customer_name, phone_digits, items_json, total_value,
             tipo_pagamento, forma_pagamento_key, forma_pagamento_id,
-            vendedor_id, vendedor_nome, nfce_error, nfce_retry_count
+            vendedor_id, vendedor_nome, nfce_error, nfce_retry_count,
+            delivered_at, created_at
      FROM orders
      WHERE status = 'entregue'
        AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
@@ -1975,6 +1985,8 @@ async function retryNFCePendentes(env, limite = 20) {
         cpf_cnpj: custData?.cpf_cnpj || null,
         bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
         vendedor_nome: order.vendedor_nome || '',
+        delivered_at: order.delivered_at || null,
+        created_at: order.created_at || null,
       });
 
       await env.DB.prepare(
@@ -5943,6 +5955,8 @@ export default {
           bling_contact_id: custData?.bling_contact_id || null,
           cpf_cnpj: custData?.cpf_cnpj || null,
           bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+          delivered_at: order.delivered_at || null,
+          created_at: order.created_at || null,
         });
         await env.DB.prepare(
           'UPDATE orders SET nfce_id=?, nfce_numero=?, nfce_chave=?, nfce_status=?, nfce_emitida_at=unixepoch(), nfce_error=NULL WHERE id=?'
