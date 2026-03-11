@@ -1,4 +1,4 @@
-// v2.51.56
+// v2.51.57
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5822,6 +5822,34 @@ export default {
         `SELECT event, payload_json, created_at FROM order_events WHERE order_id=? ORDER BY id DESC LIMIT 20`
       ).bind(oid).all().catch(() => ({ results: [] }));
       return json({ pedido: ord, audit: audit.results || [], events: events.results || [] });
+    }
+
+    // ── NFC-e: Testar variações de endpoint para lançar contas ──
+    if (method === 'POST' && path === '/api/nfce/testar-lancar-contas') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const body2 = await request.json().catch(() => ({}));
+      const nfceId = body2?.nfce_id;
+      if (!nfceId) return json({ error: 'nfce_id obrigatorio' }, 400);
+      const variacoes = [
+        `/nfce/${nfceId}/lancar-contas`,
+        `/nfce/${nfceId}/lancamento/contas`,
+        `/nfce/${nfceId}/contas`,
+        `/nfce/${nfceId}/lancarcontas`,
+        `/nfce/${nfceId}/lancar_contas`,
+      ];
+      const resultados = [];
+      for (const rota of variacoes) {
+        try {
+          const r = await blingFetch(rota, { method: 'POST', body: '{}' }, env);
+          const txt = await r.text().catch(() => '');
+          resultados.push({ rota, status: r.status, body: txt.substring(0, 300) });
+        } catch(e) {
+          resultados.push({ rota, erro: e.message });
+        }
+        await new Promise(r2 => setTimeout(r2, 400));
+      }
+      return json({ nfce_id: nfceId, resultados });
     }
 
     // ── NFC-e: Testar /emitir em uma NFC-e existente (diagnóstico) ──
