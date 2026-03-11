@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.1.0</title>
+<title>NFC-e Pendentes — MoskoGás v1.2.0</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.1.0</span>
+  <span class="badge-ver">v1.2.0</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -209,6 +209,7 @@ function renderizarDados(data) {
       const btnRetry = maxed
         ? `<button class="btn btn-sm btn-secondary" disabled title="Máximo de tentativas atingido. Corrija o erro antes.">🚫</button>`
         : `<button class="btn btn-sm btn-primary" onclick="retryUm(${p.id})" title="Tentar emitir NFC-e">🔄</button>`;
+      const btnLog = `<button class="btn btn-sm btn-secondary" onclick="verLog(${p.id})" title="Ver log completo do Bling">🔍</button>`;
       html += `<tr>
         <td><strong>#${p.id}</strong></td>
         <td>${dt}</td>
@@ -217,7 +218,7 @@ function renderizarDados(data) {
         <td>R$ ${parseFloat(p.total_value||0).toFixed(2).replace('.',',')}</td>
         <td>${retryPill}</td>
         <td>${errMsg}</td>
-        <td>${btnRetry}</td>
+        <td>${btnRetry} ${btnLog}</td>
       </tr>`;
     }
     html += '</tbody></table>';
@@ -332,7 +333,63 @@ async function retryUm(orderId) {
   } catch(e) { if(btnEl){btnEl.disabled=false;btnEl.textContent='🔄';} toast('❌ ' + e.message, 'error'); }
 }
 
-async function reset404() {
+async function verLog(orderId) {
+  try {
+    const data = await api('/api/nfce/erro/' + orderId);
+    const p = data.pedido || {};
+    const audit = data.audit || [];
+    const events = data.events || [];
+
+    let html = `<div style="font-size:13px">`;
+    html += `<p><strong>Pedido #${p.id}</strong> — ${p.customer_name||''} — R$ ${parseFloat(p.total_value||0).toFixed(2).replace('.',',')}`;
+    html += `<br>nfce_id: <code>${p.nfce_id||'NULL'}</code> | status: <code>${p.nfce_status||'NULL'}</code> | retries: <code>${p.nfce_retry_count||0}</code></p>`;
+    if (p.nfce_error) html += `<p style="color:red"><strong>Erro atual:</strong> ${p.nfce_error}</p>`;
+
+    if (audit.length) {
+      html += `<hr><strong>🔍 Audit Bling (${audit.length}):</strong>`;
+      for (const a of audit) {
+        const ts = a.created_at ? new Date(a.created_at*1000).toLocaleString('pt-BR') : '';
+        const icon = a.status === 'success' ? '✅' : '❌';
+        html += `<div style="background:#f1f5f9;border-radius:6px;padding:8px;margin:4px 0">`;
+        html += `<b>${icon} ${a.action}</b> <span style="color:#64748b;font-size:11px">${ts}</span>`;
+        if (a.error_message) html += `<br><span style="color:red">${a.error_message.substring(0,300)}</span>`;
+        if (a.response_data) {
+          try {
+            const rd = typeof a.response_data === 'string' ? JSON.parse(a.response_data) : a.response_data;
+            html += `<br><code style="font-size:11px">${JSON.stringify(rd).substring(0,400)}</code>`;
+          } catch { html += `<br><code style="font-size:11px">${String(a.response_data).substring(0,400)}</code>`; }
+        }
+        if (a.request_payload) {
+          try {
+            const rp = typeof a.request_payload === 'string' ? JSON.parse(a.request_payload) : a.request_payload;
+            html += `<details><summary style="cursor:pointer;font-size:11px;color:#64748b">payload enviado</summary><code style="font-size:10px">${JSON.stringify(rp,null,2).substring(0,800)}</code></details>`;
+          } catch {}
+        }
+        html += `</div>`;
+      }
+    } else {
+      html += `<p style="color:#64748b">Nenhum audit log encontrado para este pedido.</p>`;
+    }
+    html += `</div>`;
+
+    // Modal simples
+    let modal = document.getElementById('modal-log');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'modal-log';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+      modal.innerHTML = `<div style="background:#fff;border-radius:12px;padding:24px;max-width:700px;width:95%;max-height:80vh;overflow-y:auto;position:relative">
+        <button onclick="document.getElementById('modal-log').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+        <div id="modal-log-body"></div>
+      </div>`;
+      document.body.appendChild(modal);
+    }
+    document.getElementById('modal-log-body').innerHTML = html;
+    modal.style.display = 'flex';
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+}
+
+
   const res = document.getElementById('resultado');
   res.innerHTML = '<div style="padding:12px;color:#5b21b6;background:#f5f3ff;border-radius:8px">🗑️ Limpando IDs inválidos...</div>';
   try {

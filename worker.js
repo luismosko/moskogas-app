@@ -1,4 +1,4 @@
-// v2.51.43
+// v2.51.44
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5785,14 +5785,20 @@ export default {
       const oid = parseInt(path.split('/').pop());
       if (isNaN(oid)) return json({ error: 'id inválido' }, 400);
       const ord = await env.DB.prepare(
-        'SELECT id, customer_name, items_json, total_value, tipo_pagamento, nfce_id, nfce_numero, nfce_status, nfce_error, nfce_retry_count FROM orders WHERE id=?'
+        `SELECT id, customer_name, items_json, total_value, tipo_pagamento, forma_pagamento_key,
+                nfce_id, nfce_numero, nfce_chave, nfce_status, nfce_error, nfce_retry_count,
+                created_at, delivered_at FROM orders WHERE id=?`
       ).bind(oid).first();
       if (!ord) return json({ error: 'Pedido não encontrado' }, 404);
-      // Buscar audit log completo deste pedido
+      // Buscar audit log completo — tenta ambas as colunas possíveis
       const audit = await env.DB.prepare(
-        `SELECT acao, status, detalhes, created_at FROM integration_audit WHERE order_id=? ORDER BY created_at DESC LIMIT 20`
+        `SELECT action, status, error_message, request_payload, response_data, created_at
+         FROM integration_audit WHERE order_id=? ORDER BY id DESC LIMIT 30`
       ).bind(oid).all().catch(() => ({ results: [] }));
-      return json({ pedido: ord, audit: audit.results || [] });
+      const events = await env.DB.prepare(
+        `SELECT event, payload_json, created_at FROM order_events WHERE order_id=? ORDER BY id DESC LIMIT 20`
+      ).bind(oid).all().catch(() => ({ results: [] }));
+      return json({ pedido: ord, audit: audit.results || [], events: events.results || [] });
     }
 
     // ── NFC-e: Testar /emitir em uma NFC-e existente (diagnóstico) ──
