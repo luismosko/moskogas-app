@@ -1,4 +1,4 @@
-// v2.51.50
+// v2.51.51
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -601,13 +601,31 @@ async function emitirNFCeBling(env, orderId, orderData) {
     response_data: criarData
   });
 
-  // ── PASSO 2: Buscar número e chave via GET (Bling v3 transmite NFC-e no POST — não há /emitir) ──
-  await new Promise(r => setTimeout(r, 600));
+  // ── PASSO 2: Tentar enviar à SEFAZ via POST /nfce/{id}/enviar ──
+  // Descoberta v2.51.51: POST /nfce apenas SALVA (situação Pendente).
+  // O envio à SEFAZ requer chamada separada. Testando /enviar (nunca tentado antes).
+  await new Promise(r => setTimeout(r, 800));
+  try {
+    const enviarResp = await blingFetch(`/nfce/${nfceId}/enviar`, { method: 'POST', body: '{}' }, env);
+    const enviarStatus = enviarResp.status;
+    let enviarBody = '';
+    try { enviarBody = await enviarResp.text(); } catch(_) {}
+    console.log(`[NFC-e] /enviar → HTTP ${enviarStatus}: ${enviarBody.substring(0, 300)}`);
+    await logBlingAudit(env, orderId, 'enviar_nfce', enviarResp.ok ? 'success' : 'error', {
+      bling_pedido_id: String(nfceId),
+      error_message: `HTTP ${enviarStatus}: ${enviarBody.substring(0, 400)}`,
+    });
+  } catch(e) {
+    console.error('[NFC-e] /enviar falhou:', e.message);
+  }
+
+  // ── PASSO 3: Buscar número e chave via GET ──
+  await new Promise(r => setTimeout(r, 1000));
   let nfceNumero = criarData.data?.numero ?? null;
   let nfceChave  = criarData.data?.chaveAcesso ?? criarData.data?.chave ?? null;
   let nfceSituacao = criarData.data?.situacao?.id ?? criarData.data?.situacao ?? null;
 
-  // Sempre busca via GET para pegar situação real (autorizada/pendente)
+  // Sempre busca via GET para pegar situação real após /enviar
   try {
     const getResp = await blingFetch(`/nfce/${nfceId}`, { method: 'GET' }, env);
     if (getResp.ok) {
