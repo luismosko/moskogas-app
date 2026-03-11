@@ -1,4 +1,4 @@
-// v2.51.63
+// v2.51.64
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -541,6 +541,14 @@ async function emitirNFCeBling(env, orderId, orderData) {
     // produto.id OBRIGATÓRIO para NFC-e (sem ele o Bling não encontra dados fiscais)
     if (blingId && Number(blingId) > 0) itemNFCe.produto = { id: Number(blingId) };
     // codigo OBRIGATÓRIO (Bling valida explicitamente)
+    // Se não encontrou código, gera fallback a partir do nome (max 30 chars, só alfanumérico+hífen)
+    if (!blingCodigo && item.name) {
+      blingCodigo = String(item.name)
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .substring(0, 30) || 'PROD';
+      console.warn(`[NFC-e] Produto sem código no Bling — usando fallback: "${blingCodigo}" para "${item.name}". Cadastre o código no Bling para evitar este aviso.`);
+    }
     if (blingCodigo) itemNFCe.codigo = String(blingCodigo);
     itensNFCe.push(itemNFCe);
   }
