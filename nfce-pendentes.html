@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.0.8</title>
+<title>NFC-e Pendentes — MoskoGás v1.0.9</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.0.8</span>
+  <span class="badge-ver">v1.0.9</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -262,13 +262,16 @@ async function executarRetryBulk() {
   const ativos = dadosGlobais?.ativos || (dadosGlobais?.pedidos_sem_nfce || []).filter(p => (p.nfce_retry_count||0) < 5);
   const aptos = ativos.length;
   if (!aptos) { toast('Nenhum pedido apto para retry', 'warning'); return; }
-  if (!confirm(`Tentar emitir NFC-e para ${aptos} pedido(s) pendente(s)?\n\nO sistema vai processar em lotes de 8.`)) return;
+  const limite = parseInt(document.getElementById('limite-bulk')?.value || 8);
+  // Se limite <= 3, processa 1 rodada só (modo teste)
+  const modoTeste = limite <= 3;
+  if (!confirm(`Tentar emitir NFC-e para ${modoTeste ? limite : aptos} pedido(s)?${modoTeste ? ' (modo teste — apenas '+limite+')' : '\n\nO sistema vai processar em lotes de '+limite+'.'}`)) return;
 
   const btn = document.getElementById('btn-retry-bulk');
   btn.disabled = true;
   document.getElementById('resultado').innerHTML = '';
   let totalOk = 0, totalFalhas = 0, rodadas = 0;
-  const maxRodadas = Math.ceil(aptos / 8) + 1; // segurança: não loop infinito
+  const maxRodadas = modoTeste ? 1 : Math.ceil(aptos / limite) + 1;
   let logHtml = '';
 
   try {
@@ -277,7 +280,7 @@ async function executarRetryBulk() {
       btn.innerHTML = `<span class="spinner"></span> Lote ${rodadas}...`;
       document.getElementById('status-msg').textContent = `Emitindo... ${totalOk} emitidas, ${totalFalhas} erros`;
 
-      const data = await api('/api/nfce/retry-bulk', { method: 'POST', body: JSON.stringify({ limite: parseInt(document.getElementById('limite-bulk')?.value || 8) }) });
+      const data = await api('/api/nfce/retry-bulk', { method: 'POST', body: JSON.stringify({ limite: limite }) });
       if (!data.ok && data.error) { toast('❌ ' + data.error, 'error'); break; }
 
       const loteOk = data.ok || 0;
