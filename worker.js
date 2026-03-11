@@ -1,4 +1,4 @@
-// v2.51.61
+// v2.51.62
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -5901,9 +5901,18 @@ export default {
     if (method === 'POST' && path === '/api/nfce/deletar-pendentes-bling') {
       const authCheck = await requireAuth(request, env, ['admin']);
       if (authCheck instanceof Response) return authCheck;
+      const body3 = await request.json().catch(() => ({}));
+      const confirmar = body3?.confirmar === true; // false = apenas preview
+      const apenasAntesDeHoje = body3?.apenas_anteriores !== false; // default: true = proteção ativa
+
+      // Data de hoje em BRT (YYYY-MM-DD) — notas de hoje NÃO são deletadas
+      const hoje = new Date(Date.now() - 3*3600000).toISOString().slice(0, 10);
+
       const resultados = [];
+      const protegidas = []; // notas de hoje — não serão deletadas
       let pagina = 1;
       let totalEncontradas = 0;
+
       while (pagina <= 5) {
         const listResp = await blingFetch(`/nfce?pagina=${pagina}&limite=100&situacao=1`, {}, env);
         if (!listResp.ok) break;
@@ -5911,28 +5920,41 @@ export default {
         const notas = listData?.data || [];
         if (notas.length === 0) break;
         totalEncontradas += notas.length;
+
         for (const nota of notas) {
           const nfceId = String(nota.id);
+          // Proteção: data da nota (formato YYYY-MM-DD ou DD/MM/YYYY)
+          let dataNota = nota.dataEmissao || nota.data || nota.dataOperacao || '';
+          // normalizar DD/MM/YYYY → YYYY-MM-DD
+          if (dataNota && dataNota.includes('/')) {
+            const p = dataNota.split('/');
+            dataNota = `${p[2]}-${p[1]}-${p[0]}`;
+          }
+          const isHoje = dataNota >= hoje;
+
+          if (apenasAntesDeHoje && isHoje) {
+            protegidas.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, motivo: 'nota de hoje — protegida' });
+            continue;
+          }
+
+          if (!confirmar) {
+            // Modo preview — só lista, não deleta
+            resultados.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, acao: 'seria deletada' });
+            continue;
+          }
+
           try {
-            // Deletar do Bling
             const delResp = await blingFetch(`/nfce/${nfceId}`, { method: 'DELETE' }, env);
             const delOk = delResp.ok || delResp.status === 204 || delResp.status === 404;
-            // Resetar no nosso banco se existir
             const reset = await env.DB.prepare(
               `UPDATE orders SET nfce_id=NULL, nfce_numero=NULL, nfce_chave=NULL,
                nfce_status=NULL, nfce_error=NULL, nfce_retry_count=0, nfce_emitida_at=NULL
                WHERE nfce_id=?`
             ).bind(nfceId).run().catch(() => ({ changes: 0 }));
-            resultados.push({
-              nfce_id: nfceId,
-              numero: nota.numero,
-              deletado: delOk,
-              http_delete: delResp.status,
-              orders_resetadas: reset.changes || 0
-            });
+            resultados.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, deletado: delOk, http_delete: delResp.status, orders_resetadas: reset.changes || 0 });
             await new Promise(r => setTimeout(r, 300));
           } catch(e) {
-            resultados.push({ nfce_id: nfceId, numero: nota.numero, erro: e.message });
+            resultados.push({ nfce_id: nfceId, numero: nota.numero, data: dataNota, erro: e.message });
           }
         }
         if (notas.length < 100) break;
@@ -5940,7 +5962,18 @@ export default {
       }
       const deletadas = resultados.filter(r => r.deletado).length;
       const resetadas = resultados.reduce((s, r) => s + (r.orders_resetadas || 0), 0);
-      return json({ ok: true, total_encontradas: totalEncontradas, deletadas, orders_resetadas: resetadas, resultados });
+      return json({
+        ok: true,
+        modo: confirmar ? 'executado' : 'preview',
+        hoje,
+        total_encontradas: totalEncontradas,
+        protegidas_hoje: protegidas.length,
+        para_deletar: resultados.length,
+        deletadas,
+        orders_resetadas: resetadas,
+        protegidas,
+        resultados
+      });
     }
 
     // ── NFC-e: Buscar pendentes NO BLING e enviar via /enviar ────────
