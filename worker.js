@@ -1,4 +1,4 @@
-// v2.51.65
+// v2.51.66
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -1987,8 +1987,8 @@ async function retryNFCePendentes(env, limite = 20) {
   ]) { await env.DB.prepare(col).run().catch(() => {}); }
 
   // Busca pedidos ENTREGUES com tipos que devem ter NFC-e, sem NFC-e ainda
-  // Limita a 7 dias atrás para não processar histórico muito antigo
-  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
+  // Limita a 30 dias atrás para cobrir reprocessamentos históricos
+  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 30 * 86400;
   const pendentes = await env.DB.prepare(
     `SELECT id, customer_name, phone_digits, items_json, total_value,
             tipo_pagamento, forma_pagamento_key, forma_pagamento_id,
