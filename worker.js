@@ -1,4 +1,4 @@
-// v2.51.49
+// v2.51.50
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -554,7 +554,8 @@ async function emitirNFCeBling(env, orderId, orderData) {
   const nfceBody = {
     naturezaOperacao: { id: 8024085174 },
     tipo: 1,  // ✅ NFC-e Bling v3: 1=Saída (Venda)
-    contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F' },
+    contato: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F', nome: 'Consumidor Final' },
+    cliente: { id: CONSUMIDOR_FINAL_ID, tipoPessoa: 'F', nome: 'Consumidor Final' },
     dataOperacao: dataOperacaoISO,
     indicadorConsumidorFinal: 1,
     indicadorPresenca: 1,
