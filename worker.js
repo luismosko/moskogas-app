@@ -1,4 +1,4 @@
-// v2.51.42
+// v2.51.43
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -582,8 +582,9 @@ async function emitirNFCeBling(env, orderId, orderData) {
   }
 
   const criarData = await criarResp.json();
+  console.log('[NFC-e] Criar resposta completa:', JSON.stringify(criarData).substring(0, 500));
   const nfceId = criarData.data?.id ?? null;
-  if (!nfceId) throw new Error('NFC-e criada mas Bling não retornou ID');
+  if (!nfceId) throw new Error('NFC-e criada mas Bling não retornou ID: ' + JSON.stringify(criarData).substring(0, 200));
   // Bling às vezes não retorna numero no criar — busca via GET /nfce/{id}
   let nfceNumeroCriar = criarData.data?.numero ?? null;
   if (!nfceNumeroCriar) {
@@ -603,7 +604,14 @@ async function emitirNFCeBling(env, orderId, orderData) {
   });
 
   // ── PASSO 2: Emitir NFC-e (transmite para SEFAZ) ──
-  const emitirResp = await blingFetch(`/nfce/${nfceId}/emitir`, { method: 'POST', body: '{}' }, env);
+  // Confirma que o ID existe antes de emitir
+  await new Promise(r => setTimeout(r, 800));
+  const confirmResp = await blingFetch(`/nfce/${nfceId}`, { method: 'GET' }, env);
+  console.log('[NFC-e] Confirmar ID antes emitir:', nfceId, '→ status GET:', confirmResp.status);
+
+  const emitirUrl = `/nfce/${nfceId}/emitir`;
+  console.log('[NFC-e] Chamando emitir URL:', emitirUrl);
+  const emitirResp = await blingFetch(emitirUrl, { method: 'POST', body: '{}' }, env);
   const emitirText = await emitirResp.text();
   let emitirData; try { emitirData = JSON.parse(emitirText); } catch { emitirData = {}; }
 
