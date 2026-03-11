@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC-e Pendentes — MoskoGás v1.2.8</title>
+<title>NFC-e Pendentes — MoskoGás v1.2.9</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,7 +72,7 @@
 <div class="page-title">
   <span style="font-size:20px">🧾</span>
   <h1>NFC-e Pendentes</h1>
-  <span class="badge-ver">v1.2.8</span>
+  <span class="badge-ver">v1.2.9</span>
   <span style="font-size:12px;color:#94a3b8;margin-left:8px">Pedidos entregues sem emissão fiscal</span>
 </div>
 
@@ -112,6 +112,10 @@
   <div id="painel-avancado" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:12px">
     <p style="margin:0 0 10px;font-size:12px;color:#64748b">⚠️ Use apenas para corrigir problemas — o sistema gera NFC-es automaticamente via cron.</p>
     <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <button class="btn" onclick="sincronizarStatus()"
+        style="background:#0284c7;color:#fff;font-size:12px" title="Verifica no Bling a situação real das notas pendentes e corrige o status no sistema">
+        🔄 Sincronizar Status com Bling
+      </button>
       <button class="btn" onclick="resetarRetry()"
         style="background:#f59e0b;color:#fff;font-size:12px" title="Desbloquear pedidos que atingiram 5 tentativas com erro">
         🔓 Desbloquear Bloqueados
@@ -434,6 +438,19 @@ async function resetTokenErrors() {
     res.innerHTML = `<div style="padding:12px;background:#dcfce7;border-radius:8px">✅ ${data.message}</div>`;
     toast(data.message, 'success');
     carregarDados();
+  } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
+}
+
+async function sincronizarStatus() {
+  const res = document.getElementById('resultado');
+  res.innerHTML = '<div style="padding:10px;background:#eff6ff;border-radius:8px">🔄 Verificando situação real no Bling...</div>';
+  try {
+    const data = await api('/api/nfce/sincronizar-status', { method: 'POST' });
+    res.innerHTML = `<div style="padding:10px;background:#dcfce7;border-radius:8px">
+      ✅ <b>${data.corrigidas} nota(s) corrigidas para "emitida"</b> | ${data.ainda_pendentes} ainda pendentes no Bling | ${data.total} verificadas
+    </div>`;
+    if (data.corrigidas > 0) { toast(`✅ ${data.corrigidas} status corrigidos!`, 'success'); carregarDados(); }
+    else toast('ℹ️ Nenhuma alteração necessária', 'info');
   } catch(e) { res.innerHTML = ''; toast('❌ ' + e.message, 'error'); }
 }
 

@@ -1,4 +1,4 @@
-// v2.51.68
+// v2.51.69
 
 // v2.50.7: Redeploy forçado — endpoints /api/products/all e /api/products/sync-list
 // v2.50.6: Fix produtos.html — 1 botão sync, init padrão clientes.html; products/all inclui gerente + migrations
@@ -694,10 +694,13 @@ async function emitirNFCeBling(env, orderId, orderData) {
     console.error('[NFC-e] GET após criar falhou:', e.message);
   }
 
-  // situacao 100 = autorizada, 101 = cancelada, outros = pendente
-  const autorizada = nfceSituacao === 100 || nfceSituacao === '100';
+  // situacao 100 = autorizada, outros = pendente
+  // Bling pode retornar: 100 (int), '100' (string), {id:100} (objeto), ou descricao 'autorizada'
+  const sitId = typeof nfceSituacao === 'object' ? (nfceSituacao?.id ?? nfceSituacao?.valor) : nfceSituacao;
+  const sitStr = String(sitId || '').toLowerCase();
+  const autorizada = sitId === 100 || sitId === '100' || sitStr.includes('autoriza') || sitStr === '100';
   const status = autorizada ? 'emitida' : 'pendente_emissao';
-  const errorMsg = autorizada ? null : `NFC-e criada mas situação ${nfceSituacao} — aguardando autorização SEFAZ`;
+  const errorMsg = autorizada ? null : `NFC-e criada mas situação ${JSON.stringify(nfceSituacao)} — aguardando autorização SEFAZ`;
 
   console.log(`[NFC-e] ✅ Pedido #${orderId} → NFC-e ${nfceNumero} | situacao=${nfceSituacao} | status=${status}`);
 
@@ -6053,6 +6056,40 @@ export default {
       const ok = resultados.filter(r => r.status === 'enviada').length;
       const erros = resultados.filter(r => r.status === 'erro' || r.erro).length;
       return json({ ok: true, total_bling: totalBling, enviadas: ok, erros, resultados });
+    }
+
+    // ── NFC-e: Sincronizar status real das notas pendente_emissao com o Bling ──
+    if (method === 'POST' && path === '/api/nfce/sincronizar-status') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const rows = await env.DB.prepare(
+        `SELECT id, nfce_id, nfce_numero FROM orders
+         WHERE nfce_status = 'pendente_emissao' AND nfce_id IS NOT NULL AND nfce_id != ''
+         LIMIT 50`
+      ).all().then(r => r.results || []);
+      let corrigidas = 0, ainda_pendentes = 0;
+      for (const row of rows) {
+        try {
+          const getResp = await blingFetch(`/nfce/${row.nfce_id}`, {}, env);
+          if (!getResp.ok) continue;
+          const getData = await getResp.json();
+          const d = getData.data || {};
+          const sitId = d.situacao?.id ?? d.situacao;
+          const sitStr = String(sitId || '').toLowerCase();
+          const autorizada = sitId === 100 || sitId === '100' || sitStr.includes('autoriza');
+          if (autorizada) {
+            const numero = d.numero ?? row.nfce_numero;
+            const chave = d.chaveAcesso ?? d.chave ?? null;
+            await env.DB.prepare(
+              `UPDATE orders SET nfce_status='emitida', nfce_numero=COALESCE(?,nfce_numero),
+               nfce_chave=COALESCE(?,nfce_chave), nfce_error=NULL WHERE id=?`
+            ).bind(numero ? String(numero) : null, chave, row.id).run();
+            corrigidas++;
+          } else { ainda_pendentes++; }
+          await new Promise(r => setTimeout(r, 200));
+        } catch(_) {}
+      }
+      return json({ ok: true, total: rows.length, corrigidas, ainda_pendentes });
     }
 
     // ── NFC-e: Re-emitir todas com status pendente_emissao ─────────
