@@ -1,6 +1,6 @@
-// v2.51.77
+// v2.51.78
 
-// v2.51.77: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
+// v2.51.78: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
 // v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
@@ -1093,11 +1093,10 @@ async function sendWhatsApp(env, to, message, opts = {}) {
 }
 
 // ── Envio de imagem via IzChat (multipart) ────────────────────
-async function sendWhatsAppImage(env, to, imageUrl, caption = '') {
+async function sendWhatsAppImage(env, to, imageUrl, caption = '', category = 'geral') {
   to = formatPhoneWA(to);
   if (!to) return { ok: false, error: 'telefone_invalido' };
   try {
-    // Baixar imagem do qrserver
     const imgResp = await fetch(imageUrl);
     if (!imgResp.ok) return { ok: false, error: 'qr_download_failed' };
     const imgBlob = await imgResp.blob();
@@ -1107,9 +1106,11 @@ async function sendWhatsAppImage(env, to, imageUrl, caption = '') {
     if (caption) fd.append('body', caption);
     fd.append('medias', imgBlob, 'qrcode.png');
 
+    // Usa o mesmo token da categoria (mesmo número que enviou a mensagem)
+    const waToken = await getWATokenForCategory(env, category);
     const resp = await fetch('https://chatapi.izchat.com.br/api/messages/send', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${env.IZCHAT_TOKEN}` },
+      headers: { Authorization: `Bearer ${waToken}` },
       body: fd,
     });
     const data = await resp.json().catch(() => ({}));
@@ -1248,7 +1249,7 @@ async function enviarLembretePix(env, order, config, user, force = false) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
-  // v2.51.77: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
+  // v2.51.78: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
   const isManual = !!user;
   const skipSafety = isManual || (config.intervalo_horas === 0 && config.max_lembretes === 0);
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
@@ -1267,18 +1268,18 @@ async function enviarLembretePix(env, order, config, user, force = false) {
     return { ok: false, order_id: order.id, error: motivo, safety: waResult.safety };
   }
 
-  // Segunda msg: se tem QR PushInPay → imagem + copia e cola; senão → chave PIX como texto simples
-  const qrCode = order.pix_qrcode || order.cora_qrcode || null;
+  // Segunda msg: se PushInPay ativo E tem QR → imagem + copia e cola; senão → só chave PIX texto
+  const qrCode = (config.pushinpay_ativo) ? (order.pix_qrcode || order.cora_qrcode || null) : null;
   if (waResult.ok) {
     await new Promise(r => setTimeout(r, 2000));
     if (qrCode) {
-      // PushInPay: envia imagem QR + código copia e cola
+      // PushInPay ativo: envia imagem QR + código copia e cola (mesmo número/categoria)
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qrCode)}`;
-      await sendWhatsAppImage(env, phone, qrUrl);
+      await sendWhatsAppImage(env, phone, qrUrl, '', 'lembrete_pix');
       await new Promise(r => setTimeout(r, 2000));
       await sendWhatsApp(env, phone, qrCode, { category: 'lembrete_pix', skipSafety: true });
     } else if (config.chave_pix) {
-      // Sem QR: envia só a chave PIX como texto para fácil cópia
+      // PushInPay inativo ou sem QR: envia só a chave PIX como texto para fácil cópia
       const chaveMsg = `🔑 *Chave PIX (CNPJ):*\n${config.chave_pix}`;
       await sendWhatsApp(env, phone, chaveMsg, { category: 'lembrete_pix', skipSafety: true });
     }
