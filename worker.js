@@ -1063,7 +1063,7 @@ async function emitirNFeBling(env, orderId, orderData, fiscalConfigs = [], natur
   return nfeResults;
 }
 
-
+async function ensurePixColumns(env) {
   const cols = [
     { name: 'pix_tx_id', def: 'TEXT' },
     { name: 'pix_qrcode', def: 'TEXT' },
