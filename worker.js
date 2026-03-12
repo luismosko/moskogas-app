@@ -1,6 +1,6 @@
-// v2.51.78
+// v2.51.79
 
-// v2.51.78: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
+// v2.51.79: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
 // v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
@@ -1249,7 +1249,7 @@ async function enviarLembretePix(env, order, config, user, force = false) {
   }
 
   const message = buildLembreteMessage(config.mensagem, order, config);
-  // v2.51.78: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
+  // v2.51.79: envio manual (user presente) pula Safety Layer — atendente clicou intencionalmente
   const isManual = !!user;
   const skipSafety = isManual || (config.intervalo_horas === 0 && config.max_lembretes === 0);
   const waResult = await sendWhatsApp(env, phone, message, { category: 'lembrete_pix', variar: true, skipSafety });
@@ -1280,7 +1280,7 @@ async function enviarLembretePix(env, order, config, user, force = false) {
       await sendWhatsApp(env, phone, qrCode, { category: 'lembrete_pix', skipSafety: true });
     } else if (config.chave_pix) {
       // PushInPay inativo ou sem QR: envia só a chave PIX como texto para fácil cópia
-      const chaveMsg = `🔑 *Chave PIX (CNPJ):*\n${config.chave_pix}`;
+      const chaveMsg = config.chave_pix;
       await sendWhatsApp(env, phone, chaveMsg, { category: 'lembrete_pix', skipSafety: true });
     }
   }
