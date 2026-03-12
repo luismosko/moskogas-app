@@ -1,6 +1,6 @@
-// v2.51.81
+// v2.51.82
 
-// v2.51.81: GMB OAuth — popup em vez de redirect; callback fecha popup; não perde sessão MoskoApp
+// v2.51.82: GMB OAuth — popup síncrono no clique (fix bloqueio Chrome); restore sessão no fallback redirect
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)

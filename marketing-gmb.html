@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Google Meu Negócio v1.1.0 — MoskoGás</title>
+<title>Google Meu Negócio v1.1.1 — MoskoGás</title>
 <script src="shared.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,7 +64,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div class="version-badge">v1.1.0 — Google Meu Negócio</div>
+<div class="version-badge">v1.1.1 — Google Meu Negócio</div>
 
 <div class="container">
 
@@ -177,6 +177,15 @@ document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 let allReviews = [];
 
 async function initPage() {
+  // Restaurar sessão se veio do fallback de redirect (popup bloqueado)
+  const bkpToken = sessionStorage.getItem('mg_session_token_bkp');
+  const bkpUser = sessionStorage.getItem('mg_user_bkp');
+  if (bkpToken && !localStorage.getItem('mg_session_token')) {
+    localStorage.setItem('mg_session_token', bkpToken);
+    if (bkpUser) localStorage.setItem('mg_user', bkpUser);
+  }
+  sessionStorage.removeItem('mg_session_token_bkp');
+  sessionStorage.removeItem('mg_user_bkp');
   // Verificar se voltou do OAuth
   const params = new URLSearchParams(location.search);
   if (params.get('connected') === '1') {
@@ -225,24 +234,28 @@ function setDisconnected() {
 function connectGoogle(btn) {
   btn.disabled = true;
   btn.innerHTML = '⏳ Aguarde...';
+
+  // CRÍTICO: abrir popup SINCRONICAMENTE no clique (antes de qualquer async)
+  // Browsers bloqueiam window.open dentro de .then() por ser assíncrono
+  const popup = window.open('about:blank', 'google_oauth',
+    'width=520,height=640,top=80,left=200,scrollbars=yes,resizable=yes');
+
   api('/api/marketing/google/auth-url').then(r => {
     if (!r || !r.url) {
       btn.disabled = false;
       btn.innerHTML = '<img src="https://www.google.com/favicon.ico" style="width:14px"> Conectar com Google';
       toast('Erro ao obter URL de conexão', 'error');
+      if (popup) popup.close();
       return;
     }
-    // Abrir OAuth em popup — não redireciona a janela principal
-    const popup = window.open(r.url, 'google_oauth', 'width=520,height=620,top=100,left=200,scrollbars=yes');
-    if (!popup) {
-      // Popup bloqueado — fallback para redirect
-      window.location.href = r.url;
-      return;
-    }
-    btn.innerHTML = '⏳ Aguardando autorização...';
-    // Monitorar fechamento do popup
-    const check = setInterval(() => {
-      try {
+
+    if (popup && !popup.closed) {
+      // Navegar o popup para a URL do Google (janela principal fica intacta)
+      popup.location.href = r.url;
+      btn.innerHTML = '⏳ Aguardando autorização...';
+
+      // Monitorar fechamento do popup
+      const check = setInterval(() => {
         if (popup.closed) {
           clearInterval(check);
           btn.disabled = false;
@@ -250,17 +263,26 @@ function connectGoogle(btn) {
           // Verificar se conectou com sucesso
           api('/api/marketing/google/status').then(s => {
             if (s && s.connected) {
+              document.getElementById('tokenAlert').style.display = 'none';
               toast('✅ Google conectado com sucesso!', 'success');
               setConnected(s.email);
             }
           }).catch(() => {});
         }
-      } catch(e) { /* cross-origin, aguardar fechar */ }
-    }, 800);
+      }, 800);
+    } else {
+      // Popup foi bloqueado mesmo assim — fallback: salvar token de sessão e redirecionar
+      const token = localStorage.getItem('mg_session_token');
+      const userStr = localStorage.getItem('mg_user');
+      if (token) sessionStorage.setItem('mg_session_token_bkp', token);
+      if (userStr) sessionStorage.setItem('mg_user_bkp', userStr);
+      window.location.href = r.url;
+    }
   }).catch(() => {
     btn.disabled = false;
     btn.innerHTML = '<img src="https://www.google.com/favicon.ico" style="width:14px"> Conectar com Google';
     toast('Erro ao conectar', 'error');
+    if (popup) popup.close();
   });
 }
 
