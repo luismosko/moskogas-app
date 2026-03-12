@@ -1,7 +1,8 @@
-// v2.52.2
+// v2.52.3
 
-// v2.52.2: Venda Agrupada — agrupamento por bling_contact_id > cpf_cnpj > nome (nunca phone_digits)
-// v2.52.1: fix sintaxe worker.js + fix template literal gestao.html
+// v2.52.3: NF-e — 3 correções confirmadas suporte Bling 12/03/2026:
+//          tipoNota:1 (saída), parcelas usa "data" (não dataVencimento), endpoint /enviar (não /emitir)
+// v2.52.2: Venda Agrupada — agrupamento por bling_contact_id > cpf_cnpj > nome
 // v2.51.83: GMB — restore sessão ANTES do checkAuth (fix logout); connectGoogle redirect direto c/ sessionStorage backup
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
@@ -991,13 +992,13 @@ async function emitirNFeBling(env, orderId, orderData, fiscalConfigs = [], natur
 
     const nfeBody = {
       naturezaOperacao: { id: parseInt(grupo.natureza.id) },
-      tipoNota: 2,           // 2 = Saída/Venda na NF-e (diferente da NFC-e que usa tipo:1)
+      tipoNota: 1,           // 1 = Saída/Venda (confirmado suporte Bling: 0=entrada, 1=saída)
       contato: { id: parseInt(bling_contact_id) },
       data: dataHoje,
       dataSaida: dataHoje,
       itens: itensNFe,
-      // Tentamos dataVencimento (doc) e data (descoberta NFC-e) — Bling aceita um dos dois
-      parcelas: [{ formaPagamento: { id: fpId }, valor: totalGrupo, dataVencimento: dataHoje, data: dataHoje }],
+      // Confirmado suporte Bling 12/03/2026: campo correto é "data" (igual NFC-e, não dataVencimento)
+      parcelas: [{ formaPagamento: { id: fpId }, valor: totalGrupo, data: dataHoje }],
       observacoes,
     };
     if (bling_vendedor_id) nfeBody.vendedor = { id: bling_vendedor_id };
@@ -1020,7 +1021,7 @@ async function emitirNFeBling(env, orderId, orderData, fiscalConfigs = [], natur
     await new Promise(r => setTimeout(r, 800));
     let emitirOk = false;
     try {
-      const emitirResp = await blingFetch(`/nfe/${nfeId}/emitir`, { method:'POST', body:'{}' }, env);
+      const emitirResp = await blingFetch(`/nfe/${nfeId}/enviar`, { method:'POST', body:'{}' }, env);
       emitirOk = emitirResp.ok;
       const emitirBody = await emitirResp.text().catch(()=>'');
       await logBlingAudit(env, orderId, 'emitir_nfe', emitirOk ? 'success' : 'error', { bling_pedido_id: String(nfeId), error_message: `HTTP ${emitirResp.status}: ${emitirBody.substring(0,400)}` });
