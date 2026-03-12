@@ -1,5 +1,6 @@
-// v2.51.79
+// v2.51.80
 
+// v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
 // v2.51.79: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
@@ -335,6 +336,58 @@ async function getValidAccessToken(env) {
   if (now < expiresAt) return row.access_token;
   console.log('[token] Margem 10min atingida, renovando proativamente...');
   return await refreshBlingToken(env, row.refresh_token);
+}
+
+// ===== GOOGLE OAUTH TOKEN REFRESH =====
+async function refreshGoogleToken(env, refreshToken, clientId, clientSecret) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId, client_secret: clientSecret })
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error('Falha ao renovar token Google: ' + JSON.stringify(data));
+  return data;
+}
+
+async function getValidGoogleToken(env) {
+  const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
+  if (!row) throw new Error('Google não conectado');
+  const tokens = JSON.parse(row.value);
+  const now = Date.now();
+  // Renovar se expirar em menos de 5 minutos
+  if (tokens.expires_at && now > tokens.expires_at - 300000) {
+    if (!tokens.refresh_token) throw new Error('Token Google expirado. Reconecte sua conta Google.');
+    const clientId = env.MARKETING_GOOGLE_CLIENT_ID;
+    const clientSecret = env.MARKETING_GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) throw new Error('Credenciais Google não configuradas');
+    try {
+      const newData = await refreshGoogleToken(env, tokens.refresh_token, clientId, clientSecret);
+      const updated = { ...tokens, access_token: newData.access_token, expires_at: now + (newData.expires_in * 1000) };
+      await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?,datetime('now'))`).bind('marketing_google_tokens', JSON.stringify(updated)).run();
+      console.log('[google] Token renovado automaticamente');
+      return updated.access_token;
+    } catch(e) {
+      console.error('[google] Erro ao renovar token:', e.message);
+      throw new Error('Token Google expirado. Reconecte sua conta Google.');
+    }
+  }
+  return tokens.access_token;
+}
+
+// Helper: lista a primeira location GMB do usuário
+async function getGmbLocation(accessToken) {
+  const accsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${accessToken}` } });
+  const accs = await accsRes.json();
+  if (!accs.accounts?.length) throw new Error('Nenhuma conta Google Meu Negócio encontrada');
+  const accountName = accs.accounts[0].name; // ex: accounts/123456
+  const accountId = accountName.split('/')[1];
+  // Usar mybusinessbusinessinformation para listar locations (API correta)
+  const locsRes = await fetch(`https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=name,title,storefrontAddress`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const locs = await locsRes.json();
+  if (!locs.locations?.length) throw new Error('Nenhum local cadastrado no Google Meu Negócio');
+  const locationName = locs.locations[0].name; // ex: locations/789012
+  return { accountName, accountId, locationName, locationId: locationName.split('/')[1], title: locs.locations[0].title };
 }
 
 async function blingFetch(path, options = {}, env) {
@@ -8149,7 +8202,7 @@ export default {
         const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
         const profile = await profileRes.json();
         await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?,datetime('now'))`).bind('marketing_google_tokens', JSON.stringify({ access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, email: profile.email, expires_at: Date.now() + (tokenData.expires_in * 1000) })).run();
-        return new Response(null, { status: 302, headers: { Location: 'https://moskogas-app.pages.dev/config.html#marketingSection' } });
+        return new Response(null, { status: 302, headers: { Location: 'https://moskogas-app.pages.dev/marketing-gmb.html?connected=1' } });
       } catch(e) {
         return new Response('Erro OAuth: ' + e.message, { status: 500 });
       }
@@ -8159,7 +8212,8 @@ export default {
     if (path.startsWith('/api/marketing/')) {
       try {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
-      if (authCheck.error) return authCheck.error;
+      if (authCheck instanceof Response) return authCheck;
+      const user = authCheck;
 
       // --- Google OAuth ---
       if (path === '/api/marketing/google/auth-url' && method === 'GET') {
@@ -8179,7 +8233,9 @@ export default {
         const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
         if (!row) return json({ connected: false });
         const tokens = JSON.parse(row.value);
-        return json({ connected: true, email: tokens.email });
+        const now = Date.now();
+        const expired = tokens.expires_at && now > tokens.expires_at - 60000;
+        return json({ connected: true, email: tokens.email, token_expires_at: tokens.expires_at, token_expired: expired, has_refresh_token: !!tokens.refresh_token });
       }
 
       if (path === '/api/marketing/google/disconnect' && method === 'POST') {
@@ -8187,74 +8243,87 @@ export default {
         return json({ ok: true });
       }
 
-      // --- Google Meu Negócio: Reviews ---
+      // --- Google Meu Negócio: Reviews (com auto-refresh) ---
       if (path === '/api/marketing/gmb/reviews' && method === 'GET') {
-        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
-        if (!row) return err('Google não conectado', 401);
-        const tokens = JSON.parse(row.value);
-        // Lista contas GMB
-        const accsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-        const accs = await accsRes.json();
-        if (!accs.accounts || !accs.accounts.length) return json({ reviews: [] });
-        const accountName = accs.accounts[0].name;
-        // Lista locais
-        const locsRes = await fetch(`https://mybusinessaccountmanagement.googleapis.com/v1/${accountName}/locations`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-        const locs = await locsRes.json();
-        if (!locs.locations || !locs.locations.length) return json({ reviews: [] });
-        const locationName = locs.locations[0].name;
-        // Lista reviews
-        const revRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/reviews`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-        const revData = await revRes.json();
-        const reviews = (revData.reviews || []).slice(0, 10).map(r => ({
-          id: r.reviewId,
-          author: r.reviewer?.displayName || 'Anônimo',
-          rating: { ONE:1,TWO:2,THREE:3,FOUR:4,FIVE:5 }[r.starRating] || 0,
-          comment: r.comment || '',
-          reply: r.reviewReply?.comment || null
-        }));
-        return json({ reviews });
+        try {
+          const accessToken = await getValidGoogleToken(env);
+          const { locationName } = await getGmbLocation(accessToken);
+          const revRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/reviews?pageSize=20`, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const revData = await revRes.json();
+          if (revData.error) return err(revData.error.message || 'Erro ao buscar avaliações', 400);
+          const STARS = { ONE:1, TWO:2, THREE:3, FOUR:4, FIVE:5 };
+          const reviews = (revData.reviews || []).map(r => ({
+            id: r.reviewId,
+            author: r.reviewer?.displayName || 'Anônimo',
+            rating: STARS[r.starRating] || 0,
+            comment: r.comment || '',
+            reply: r.reviewReply?.comment || null,
+            date: r.createTime
+          }));
+          return json({ reviews, total: revData.totalReviewCount || reviews.length, avg: revData.averageRating || null });
+        } catch(e) {
+          return err(e.message, 401);
+        }
       }
 
       if (path.match(/^\/api\/marketing\/gmb\/reviews\/[^/]+\/reply$/) && method === 'POST') {
         const reviewId = path.split('/')[5];
         const body = await request.json();
-        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
-        if (!row) return err('Google não conectado', 401);
-        const tokens = JSON.parse(row.value);
-        const accsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-        const accs = await accsRes.json();
-        const accountName = accs.accounts[0].name;
-        const locsRes = await fetch(`https://mybusinessaccountmanagement.googleapis.com/v1/${accountName}/locations`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-        const locs = await locsRes.json();
-        const locationName = locs.locations[0].name;
-        await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/reviews/${reviewId}/reply`, {
-          method: 'PUT',
-          headers: { Authorization: `Bearer ${tokens.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ comment: body.text })
-        });
-        return json({ ok: true });
+        try {
+          const accessToken = await getValidGoogleToken(env);
+          const { locationName } = await getGmbLocation(accessToken);
+          const replyRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/reviews/${reviewId}/reply`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ comment: body.text })
+          });
+          const replyData = await replyRes.json();
+          if (replyData.error) return err(replyData.error.message, 400);
+          return json({ ok: true });
+        } catch(e) {
+          return err(e.message, 401);
+        }
       }
 
-      // --- GMB Post ---
+      // --- GMB Post (com auto-refresh) ---
       if (path === '/api/marketing/gmb/post' && method === 'POST') {
         const body = await request.json();
-        const row = await env.DB.prepare(`SELECT value FROM app_config WHERE key='marketing_google_tokens'`).first();
-        if (!row) return err('Google não conectado', 401);
-        const tokens = JSON.parse(row.value);
-        const accsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-        const accs = await accsRes.json();
-        const accountName = accs.accounts[0].name;
-        const locsRes = await fetch(`https://mybusinessaccountmanagement.googleapis.com/v1/${accountName}/locations`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-        const locs = await locsRes.json();
-        const locationName = locs.locations[0].name;
-        const postRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/localPosts`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${tokens.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ languageCode: 'pt-BR', summary: body.text, topicType: 'STANDARD' })
-        });
-        const postData = await postRes.json();
-        if (postData.name) return json({ ok: true, name: postData.name });
-        return err(postData.error?.message || 'Erro ao publicar', 400);
+        try {
+          const accessToken = await getValidGoogleToken(env);
+          const { locationName } = await getGmbLocation(accessToken);
+          const postRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/localPosts`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ languageCode: 'pt-BR', summary: body.text, topicType: 'STANDARD' })
+          });
+          const postData = await postRes.json();
+          if (postData.error) return err(postData.error.message || 'Erro ao publicar', 400);
+          if (postData.name) return json({ ok: true, name: postData.name });
+          return err('Resposta inesperada da API Google', 400);
+        } catch(e) {
+          return err(e.message, 400);
+        }
+      }
+
+      // --- GMB: Info do local (perfil) ---
+      if (path === '/api/marketing/gmb/location' && method === 'GET') {
+        try {
+          const accessToken = await getValidGoogleToken(env);
+          const { accountName, locationName, locationId, title } = await getGmbLocation(accessToken);
+          // Buscar reviews summary
+          const revRes = await fetch(`https://mybusiness.googleapis.com/v4/${locationName}/reviews?pageSize=1`, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const revData = await revRes.json();
+          return json({
+            ok: true,
+            location_name: locationName,
+            location_id: locationId,
+            title: title || 'MoskoGás',
+            total_reviews: revData.totalReviewCount || 0,
+            avg_rating: revData.averageRating || null
+          });
+        } catch(e) {
+          return err(e.message, 401);
+        }
       }
 
       // --- IA: Sugerir post (OpenAI) ---
