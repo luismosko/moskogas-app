@@ -1,9 +1,7 @@
-// v2.52.0
+// v2.52.2
 
-// v2.52.0: NF-e via Bling API v3 — emitirNFeBling(), ensureNFeTables(), customer_fiscal_config,
-//          endpoints: GET/POST /api/clientes/:phone/fiscal, POST /api/nfe/emitir/:orderId,
-//          GET /api/bling/naturezas-operacao (cache 24h). Suporta múltiplas naturezas por pedido.
-// v2.51.84: pix_receber — sem Pedido de Venda na entrega; fiscal escolhido em pagamentos
+// v2.52.2: Venda Agrupada — agrupamento por bling_contact_id > cpf_cnpj > nome (nunca phone_digits)
+// v2.52.1: fix sintaxe worker.js + fix template literal gestao.html
 // v2.51.83: GMB — restore sessão ANTES do checkAuth (fix logout); connectGoogle redirect direto c/ sessionStorage backup
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
@@ -5535,18 +5533,30 @@ export default {
 
       const grupos = {};
       for (const o of orders) {
-        const key = o.phone_digits || o.customer_name || 'sem_id_' + o.id;
-        if (!grupos[key]) {
-          // Se não achou bling_contact_id via phone (phone nulo), buscar por nome
-          let blingContactId = o.bling_contact_id || null;
-          if (!blingContactId && !o.phone_digits && o.customer_name) {
-            const byName = await env.DB.prepare(
-              `SELECT bling_contact_id FROM customers_cache WHERE LOWER(name) = LOWER(?) AND bling_contact_id IS NOT NULL LIMIT 1`
-            ).bind(o.customer_name).first().catch(() => null);
-            blingContactId = byName?.bling_contact_id || null;
-          }
-          grupos[key] = { cliente: o.customer_name, phone: o.phone_digits, bling_contact_id: blingContactId, cpf_cnpj: o.cpf_cnpj || null, pedidos: [], produtos: {}, total: 0 };
+        // Agrupar por bling_contact_id (mais confiável) → cpf_cnpj → customer_name
+        // NUNCA por phone_digits — telefone pode mudar e criar duplicata
+        let blingContactId = o.bling_contact_id || null;
+        // Se não veio via JOIN (phone pode estar errado), tenta buscar por nome exato
+        if (!blingContactId && o.customer_name) {
+          const byName = await env.DB.prepare(
+            `SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE LOWER(name) = LOWER(?) AND bling_contact_id IS NOT NULL LIMIT 1`
+          ).bind(o.customer_name).first().catch(() => null);
+          if (byName?.bling_contact_id) blingContactId = byName.bling_contact_id;
         }
+        const cpfCnpj = o.cpf_cnpj || null;
+        // Chave de agrupamento: bling_contact_id > cpf_cnpj > nome normalizado
+        const nomeNorm = (o.customer_name || '').trim().toUpperCase();
+        const key = blingContactId
+          ? 'bling_' + blingContactId
+          : cpfCnpj
+            ? 'doc_' + cpfCnpj.replace(/\D/g,'')
+            : 'nome_' + nomeNorm;
+
+        if (!grupos[key]) {
+          grupos[key] = { cliente: o.customer_name, phone: o.phone_digits, bling_contact_id: blingContactId, cpf_cnpj: cpfCnpj, pedidos: [], produtos: {}, total: 0 };
+        }
+        // Atualiza bling_contact_id no grupo se encontrado em pedido posterior
+        if (blingContactId && !grupos[key].bling_contact_id) grupos[key].bling_contact_id = blingContactId;
         grupos[key].pedidos.push(o);
         grupos[key].total += parseFloat(o.total_value) || 0;
         try {
