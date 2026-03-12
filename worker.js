@@ -1,5 +1,6 @@
-// v2.51.83
+// v2.51.84
 
+// v2.51.84: pix_receber — sem Pedido de Venda na entrega; fiscal escolhido em pagamentos
 // v2.51.83: GMB — restore sessão ANTES do checkAuth (fix logout); connectGoogle redirect direto c/ sessionStorage backup
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
@@ -4627,9 +4628,10 @@ export default {
 
       // ── v2.51.0: NFC-e para pagamentos à vista / Pedido de Venda para pix_receber ──
       // TIPOS_NFCE: emite NFC-e automática (dinheiro, pix, débito, crédito)
-      // TIPOS_PEDIDO: cria Pedido de Venda (pix_receber, vale_gas — sem emissão fiscal imediata)
+      // TIPOS_PEDIDO: cria Pedido de Venda (vale_gas — sem emissão fiscal imediata)
+      // pix_receber: NÃO cria nada na entrega — fiscal escolhido em pagamentos.html
       const TIPOS_NFCE   = ['dinheiro', 'pix_vista', 'debito', 'credito'];
-      const TIPOS_PEDIDO = ['pix_receber', 'vale_gas'];
+      const TIPOS_PEDIDO = ['vale_gas'];
       const TIPOS_BLING_ENTREGA = [...TIPOS_NFCE, ...TIPOS_PEDIDO];
 
       // Migrations NFC-e (idempotente)
