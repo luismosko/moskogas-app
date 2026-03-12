@@ -31,40 +31,32 @@
   .perm-label input[type=checkbox] { width:auto;margin:0;width:16px;height:16px;cursor:pointer; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
 
-  /* ── Hub Status Bar ── */
-  #hub-bar {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  /* HUB_CSS_DISABLED v2.14.4 — 09/03/2026 — migrado para Extensão Chrome
+     Para reabilitar: remover este bloco inteiro de comentário CSS
+  #hub-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
     padding: 10px 20px; display: flex; align-items: center; justify-content: space-between;
     cursor: pointer; font-size: 13px; font-weight: 700; transition: background 0.4s;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  }
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
   #hub-bar.desconectado { background: #dc2626; color: #fff; animation: pulse 2s infinite; }
-  #hub-bar.conectando   { background: #f59e0b; color: #fff; }
-  #hub-bar.conectado    { background: #16a34a; color: #fff; animation: none; }
-  #hub-bar.erro         { background: #7c3aed; color: #fff; animation: pulse 2s infinite; }
+  #hub-bar.conectando { background: #f59e0b; color: #fff; }
+  #hub-bar.conectado { background: #16a34a; color: #fff; animation: none; }
+  #hub-bar.erro { background: #7c3aed; color: #fff; animation: pulse 2s infinite; }
   #hub-bar.aguardando_2fa { background: #0284c7; color: #fff; animation: pulse 1s infinite; }
   body { padding-top: 44px; }
-
-  /* ── Modal Hub Login ── */
-  #hub-modal-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    z-index: 10000; align-items: center; justify-content: center;
-  }
+  #hub-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    z-index: 10000; align-items: center; justify-content: center; }
   #hub-modal-overlay.open { display: flex; }
-  #hub-modal {
-    background: #fff; border-radius: 16px; padding: 28px; width: 100%; max-width: 420px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3); margin: 16px;
-  }
+  #hub-modal { background: #fff; border-radius: 16px; padding: 28px; width: 100%; max-width: 420px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3); margin: 16px; }
   #hub-modal h3 { font-size: 18px; color: #1e293b; margin-bottom: 6px; }
-  #hub-modal p  { font-size: 13px; color: #64748b; margin-bottom: 20px; }
-  .hub-step { display: none; }
-  .hub-step.active { display: block; }
-  #hub-code-input {
-    width: 100%; padding: 16px; font-size: 28px; font-weight: 700; letter-spacing: 8px;
-    text-align: center; border: 3px solid #0284c7; border-radius: 10px; margin-bottom: 16px;
-  }
+  #hub-modal p { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+  .hub-step { display: none; } .hub-step.active { display: block; }
+  #hub-code-input { width: 100%; padding: 16px; font-size: 28px; font-weight: 700;
+    letter-spacing: 8px; text-align: center; border: 3px solid #0284c7;
+    border-radius: 10px; margin-bottom: 16px; }
   #hub-log { font-size: 11px; color: #64748b; background: #f8fafc; border-radius: 6px;
     padding: 8px; max-height: 80px; overflow-y: auto; font-family: monospace; margin-bottom: 12px; }
+  HUB_CSS_DISABLED_END */
   /* ── Config Tabs ── */
   .cfg-tab {
     padding: 8px 14px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700;
@@ -79,6 +71,8 @@
 </head>
 <body>
 
+<!-- HUB_HTML_DISABLED v2.14.4 — 09/03/2026 — migrado para Extensão Chrome -->
+<template id="hub-html-disabled">
 <!-- ── Hub Ultragaz Status Bar ── -->
 <div id="hub-bar" class="desconectado" onclick="hubBarClick()">
   <span id="hub-bar-text">⚪ Hub Ultragaz — Verificando...</span>
@@ -140,6 +134,7 @@
     </div>
   </div>
 </div>
+</template><!-- HUB_HTML_DISABLED_END -->
 
 <div id="nav-placeholder"></div>
 <div class="container">
@@ -351,7 +346,8 @@
     </div>
     <div id="pix-status" style="margin-top:10px"></div>
   </div>
-<!-- Ultragaz Hub Integration -->
+<!-- HUB_CREDENTIALS_DISABLED v2.14.4 — 09/03/2026 — migrado para Extensão Chrome -->
+  <template id="hub-credentials-disabled">
   <div class="card" id="ultragazSection">
     <h2>🔗 Ultragaz Hub — Integração Automática</h2>
     <p style="font-size:12px;color:#94a3b8;margin-bottom:16px">Credenciais para o robô de captura automática de pedidos do Hub Ultragaz. Os pedidos chegam em tempo real via WebSocket e são criados automaticamente no sistema.</p>
@@ -389,6 +385,7 @@
       <p style="font-size:11px;color:#64748b;margin:0">🤖 <strong>Robô no servidor:</strong> Após salvar, o robô no VPS buscará essas credenciais automaticamente. Os pedidos capturados aparecerão na gestão com status <span style="color:#ef4444;font-weight:600">NOVO</span> e você receberá alerta via WhatsApp.</p>
     </div>
   </div>
+  </template><!-- HUB_CREDENTIALS_DISABLED_END -->
   </div>
 
   <!-- ═══ WHATSAPP ═══ -->
@@ -1939,6 +1936,7 @@ async function salvarLembreteConfig() {
   finally { hideLoading(); }
 }
 
+/* HUB_CREDENTIALS_JS_DISABLED v2.14.4
 // ── Ultragaz Hub Config ──────────────────────────────────────
 async function loadUltragazConfig() {
   try {
@@ -2004,6 +2002,7 @@ async function testUltragazConfig() {
   }
 }
 
+HUB_CREDENTIALS_JS_DISABLED_END */
 // ── Relatório Diário Email Config ─────────────────────────────
 
 async function carregarRelatorioConfig() {
@@ -2290,8 +2289,9 @@ async function saveTz() {
 }
 
 // ══════════════════════════════════════════════════════
-// ── HUB ULTRAGAZ — Barra de Status + Modal de Login ──
-// ══════════════════════════════════════════════════════
+/* HUB_JS_DISABLED v2.14.4 — 09/03/2026 — migrado para Extensão Chrome
+   Para reabilitar: remover este bloco de comentário
+
 let hubPollInterval = null;
 let hubStep2PollInterval = null;
 
@@ -2459,8 +2459,12 @@ async function hubEnviarCodigo() {
 }
 
 // Inicia polling de status a cada 30 segundos
-hubCheckStatus();
-hubPollInterval = setInterval(hubCheckStatus, 30000);
+// HUB_INIT_DISABLED v2.14.4 — migrado para Extensão Chrome
+// hubCheckStatus();
+// hubPollInterval = setInterval(hubCheckStatus, 30000);
+
+
+HUB_JS_DISABLED_END */
 
 // Carregar conexões WhatsApp
 loadConexoes();
