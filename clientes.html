@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.0.2 — MoskoGás</title>
+  <title>Clientes v1.1.0 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -114,9 +114,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.0.2 — clientes</div>
+  <div class="version-badge" style="display:none">v1.1.0 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.0.2</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.1.0</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -201,14 +201,33 @@
     <!-- Info -->
     <div class="info-section" id="mc-info"></div>
 
-    <!-- Pedidos -->
-    <div class="ped-header">
-      <h3>📋 Histórico de Pedidos</h3>
-      <span style="font-size:12px;color:#94a3b8" id="ped-count"></span>
+    <!-- Tabs: Pedidos | Fiscal -->
+    <div style="display:flex;gap:2px;padding:0 24px;border-bottom:2px solid #e2e8f0;margin-top:12px">
+      <button id="tab-btn-pedidos" onclick="switchTab('pedidos')" style="background:#6366f1;color:#fff;border:none;border-radius:8px 8px 0 0;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer">📋 Pedidos</button>
+      <button id="tab-btn-fiscal" onclick="switchTab('fiscal')" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px 8px 0 0;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer">🧾 Fiscal (NF-e)</button>
     </div>
-    <div class="ped-list" id="ped-list">
-      <div style="text-align:center;padding:24px;color:#94a3b8">⏳ Carregando...</div>
+
+    <!-- Tab Pedidos -->
+    <div id="tab-pedidos">
+      <div class="ped-header">
+        <h3>📋 Histórico de Pedidos</h3>
+        <span style="font-size:12px;color:#94a3b8" id="ped-count"></span>
+      </div>
+      <div class="ped-list" id="ped-list">
+        <div style="text-align:center;padding:24px;color:#94a3b8">⏳ Carregando...</div>
+      </div>
     </div>
+
+    <!-- Tab Fiscal -->
+    <div id="tab-fiscal" style="display:none;padding:16px 24px">
+      <p style="font-size:12px;color:#64748b;margin:0 0 12px">Configure as naturezas de operação para NF-e deste cliente. Cada natureza pode ter produtos específicos vinculados.</p>
+      <div id="fiscal-configs-wrap"></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button onclick="salvarFiscalConfig()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">💾 Salvar Config Fiscal</button>
+      </div>
+      <div id="fiscal-status" style="font-size:12px;margin-top:8px;color:#64748b"></div>
+    </div>
+
     <div style="padding:12px 24px;border-top:1px solid #f1f5f9">
       <button onclick="closeModal()" style="background:#f1f5f9;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;color:#64748b">Fechar</button>
     </div>
@@ -361,10 +380,13 @@ function renderPagination(total, page, limit) {
 
 // ── Modal Detalhe ──
 async function openCliente(phone) {
+  window._currentClientePhone = phone;
   document.getElementById('modal-cliente').classList.add('open');
   document.getElementById('mc-nome').textContent = '⏳ Carregando...';
   document.getElementById('mc-sub').textContent = '';
   document.getElementById('ped-list').innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8">⏳ Carregando...</div>';
+  switchTab('pedidos');
+  _fiscalConfigs = [];
 
   try {
     const res = await api(`/api/clientes/${encodeURIComponent(phone)}`);
@@ -427,6 +449,15 @@ async function openCliente(phone) {
         <span><span class="status-pill ${statusClass[p.status]||'s-novo'}">${statusLabel[p.status]||p.status||'—'}</span></span>
       </div>`;
     }).join('');
+
+    // Carregar aba fiscal em paralelo (só clientes com vínculo Bling)
+    if (cliente.bling_contact_id) {
+      loadFiscalTab(phone).catch(e => console.warn('fiscal tab:', e.message));
+      document.getElementById('tab-btn-fiscal').style.display = '';
+    } else {
+      document.getElementById('tab-btn-fiscal').style.display = 'none';
+      document.getElementById('fiscal-configs-wrap').innerHTML = '<p style="font-size:12px;color:#94a3b8">Este cliente não tem vínculo com o Bling. Vincule primeiro para configurar NF-e.</p>';
+    }
   } catch(e) {
     document.getElementById('ped-list').innerHTML = `<div style="text-align:center;padding:24px;color:#dc2626">❌ ${e.message}</div>`;
   }
@@ -434,6 +465,157 @@ async function openCliente(phone) {
 
 function closeModal() {
   document.getElementById('modal-cliente').classList.remove('open');
+  window._currentClientePhone = null;
+}
+
+// ── TABS ──
+function switchTab(tab) {
+  document.getElementById('tab-pedidos').style.display = tab === 'pedidos' ? '' : 'none';
+  document.getElementById('tab-fiscal').style.display  = tab === 'fiscal'  ? '' : 'none';
+  document.getElementById('tab-btn-pedidos').style.background = tab === 'pedidos' ? '#6366f1' : '#f1f5f9';
+  document.getElementById('tab-btn-pedidos').style.color      = tab === 'pedidos' ? '#fff'    : '#64748b';
+  document.getElementById('tab-btn-fiscal').style.background  = tab === 'fiscal'  ? '#6366f1' : '#f1f5f9';
+  document.getElementById('tab-btn-fiscal').style.color       = tab === 'fiscal'  ? '#fff'    : '#64748b';
+}
+
+// ── FISCAL CONFIG ──
+let _naturezasCache = null;
+let _fiscalConfigs  = []; // [{ordem, natureza_id, natureza_nome, produtos:[]}]
+
+async function loadNaturezas() {
+  if (_naturezasCache) return _naturezasCache;
+  try {
+    const r = await api('/api/bling/naturezas-operacao');
+    _naturezasCache = r.naturezas || [];
+  } catch(e) {
+    _naturezasCache = [
+      { id:'572626158',   nome:'Venda de mercadorias' },
+      { id:'15109879203', nome:'Venda de mercadorias - MPMS Bebida' },
+      { id:'15108386621', nome:'Venda de mercadorias - Org bebida' },
+      { id:'15108383771', nome:'Venda de mercadorias - Org GLP' },
+    ];
+  }
+  return _naturezasCache;
+}
+
+async function loadFiscalTab(phone) {
+  const wrap = document.getElementById('fiscal-configs-wrap');
+  wrap.innerHTML = '<p style="font-size:12px;color:#94a3b8">⏳ Carregando...</p>';
+  const [naturezas, res] = await Promise.all([
+    loadNaturezas(),
+    api(`/api/clientes/${encodeURIComponent(phone)}/fiscal`).catch(() => ({ configs: [] }))
+  ]);
+  _fiscalConfigs = res.configs || [];
+  renderFiscalConfigs(naturezas);
+}
+
+function naturezaSelectHtml(currentId, idx) {
+  const opts = (_naturezasCache || []).map(n =>
+    `<option value="${n.id}" ${n.id === String(currentId) ? 'selected' : ''}>${escHtml(n.nome)}</option>`
+  ).join('');
+  return `<select onchange="fiscalNaturezaChange(${idx}, this.value, this.options[this.selectedIndex].text)"
+    style="width:100%;padding:7px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none">
+    <option value="">— Selecione —</option>${opts}</select>`;
+}
+
+function renderFiscalConfigs(naturezas) {
+  _naturezasCache = naturezas;
+  const wrap = document.getElementById('fiscal-configs-wrap');
+
+  // Garante pelo menos 1 bloco
+  if (_fiscalConfigs.length === 0) _fiscalConfigs = [{ ordem:1, natureza_id:'', natureza_nome:'', produtos:[] }];
+
+  wrap.innerHTML = _fiscalConfigs.map((cfg, idx) => `
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong style="font-size:12px;color:#374151">Natureza ${idx+1}</strong>
+        ${idx > 0 ? `<button onclick="removeFiscalConfig(${idx})" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕ Remover</button>` : ''}
+      </div>
+      ${naturezaSelectHtml(cfg.natureza_id, idx)}
+      <div style="margin-top:8px">
+        <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">
+          PRODUTOS VINCULADOS <span style="font-weight:400">(deixe vazio = todos os produtos)</span>
+        </label>
+        <div id="fiscal-prods-${idx}" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px">
+          ${renderProdutosTags(cfg.produtos || [], idx)}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input id="fiscal-prod-input-${idx}" type="text" placeholder="Nome do produto..." 
+            style="flex:1;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addProdutoTag(${idx})}"
+            onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+          <button onclick="addProdutoTag(${idx})" 
+            style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer">+ Add</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  if (_fiscalConfigs.length < 2) {
+    wrap.innerHTML += `<button onclick="addFiscalConfig()" 
+      style="background:#f0fdf4;color:#16a34a;border:2px dashed #86efac;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;width:100%">
+      + Adicionar 2ª Natureza de Operação</button>`;
+  }
+}
+
+function renderProdutosTags(produtos, idx) {
+  return (produtos || []).map((p, pi) =>
+    `<span style="background:#dbeafe;color:#1e40af;border-radius:20px;padding:3px 10px;font-size:11px;display:inline-flex;align-items:center;gap:4px">
+      ${escHtml(p.name || p)}
+      <button onclick="removeProdutoTag(${idx},${pi})" style="background:none;border:none;color:#1e40af;cursor:pointer;font-size:13px;line-height:1;padding:0">×</button>
+    </span>`
+  ).join('');
+}
+
+function fiscalNaturezaChange(idx, id, nome) {
+  _fiscalConfigs[idx].natureza_id   = id;
+  _fiscalConfigs[idx].natureza_nome = nome;
+}
+
+function addProdutoTag(idx) {
+  const input = document.getElementById(`fiscal-prod-input-${idx}`);
+  const val = (input.value || '').trim();
+  if (!val) return;
+  if (!_fiscalConfigs[idx].produtos) _fiscalConfigs[idx].produtos = [];
+  _fiscalConfigs[idx].produtos.push({ name: val });
+  input.value = '';
+  document.getElementById(`fiscal-prods-${idx}`).innerHTML = renderProdutosTags(_fiscalConfigs[idx].produtos, idx);
+}
+
+function removeProdutoTag(idx, pi) {
+  _fiscalConfigs[idx].produtos.splice(pi, 1);
+  document.getElementById(`fiscal-prods-${idx}`).innerHTML = renderProdutosTags(_fiscalConfigs[idx].produtos, idx);
+}
+
+function addFiscalConfig() {
+  _fiscalConfigs.push({ ordem: _fiscalConfigs.length + 1, natureza_id:'', natureza_nome:'', produtos:[] });
+  renderFiscalConfigs(_naturezasCache);
+}
+
+function removeFiscalConfig(idx) {
+  _fiscalConfigs.splice(idx, 1);
+  _fiscalConfigs.forEach((c, i) => c.ordem = i + 1);
+  renderFiscalConfigs(_naturezasCache);
+}
+
+async function salvarFiscalConfig() {
+  const phone = window._currentClientePhone;
+  if (!phone) return;
+  const configs = _fiscalConfigs.filter(c => c.natureza_id).map((c, i) => ({
+    ordem: i + 1,
+    natureza_id: c.natureza_id,
+    natureza_nome: c.natureza_nome,
+    produtos: c.produtos || []
+  }));
+  const st = document.getElementById('fiscal-status');
+  st.textContent = '⏳ Salvando...'; st.style.color = '#94a3b8';
+  try {
+    await api(`/api/clientes/${encodeURIComponent(phone)}/fiscal`, { method:'POST', body: JSON.stringify({ configs }) });
+    st.textContent = '✅ Config fiscal salva!'; st.style.color = '#16a34a';
+    setTimeout(() => { st.textContent = ''; }, 3000);
+  } catch(e) {
+    st.textContent = '❌ ' + e.message; st.style.color = '#dc2626';
+  }
 }
 
 // Fechar ao clicar no backdrop

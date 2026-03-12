@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestão 2.9.15 — MoskoGás</title>
+<title>Gestão 2.9.22 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -79,7 +79,7 @@
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
     -->
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.21</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.22</span>
   <span id="nfce-alert-badge" title="Pedidos entregues sem NFC-e" style="display:none;align-items:center;gap:6px;background:#fef2f2;border:1px solid #dc2626;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;color:#dc2626;animation:pulseRed 1.5s infinite">
     🧾 <span id="nfce-alert-count">0</span> pendente(s)
     <button onclick="gerarNFCePendentes()" id="btn-gerar-nfce" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700;cursor:pointer" title="Gerar NFC-e agora para todos os pedidos pendentes">▶ Gerar</button>
@@ -155,7 +155,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.21: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
+// v2.9.22: Detecta ?ultragaz=1 — limpa filtro de data e filtra status NOVO ao vir do banner Ultragaz
 // v2.9.13
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
@@ -437,6 +437,8 @@ function renderTable(rows) {
           ${o.tipo_pagamento==='pix_receber' && !o.pago ? `<button class="btn" style="font-size:11px;padding:4px 7px;background:#0891b2;color:#fff" title="Enviar PIX QR Code" onclick="abrirPixGestao(${o.id})">💠</button>` : ''}
           ${canWa      ? `<button class="btn btn-green" style="font-size:11px;padding:4px 7px" title="Enviar/Reenviar WhatsApp" onclick="openModal(${o.id})">📲</button>` : ''}
           ${canDeliver ? `<button class="btn btn-blue"  style="font-size:11px;padding:4px 7px" title="Marcar como entregue" onclick="markDelivered(${o.id})">✅</button>` : ''}
+          ${o.status==='entregue' && !o.nfe_ids_json ? `<button class="btn" style="font-size:11px;padding:4px 7px;background:#7c3aed;color:#fff" title="Emitir NF-e" onclick="abrirModalNfe(${o.id},'${escAttr(o.customer_name||'')}','${escAttr(o.phone_digits||'')}')">📄</button>` : ''}
+          ${o.nfe_ids_json ? `<span title="${'✅ NF-e ' + (() => { try { const arr=JSON.parse(o.nfe_ids_json); return arr.map(n=>n.nfe_numero||n.nfe_id).join(', '); } catch(_){return '?';} })()}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:18px;border-radius:4px;background:#7c3aed;color:#fff;font-size:8px;font-weight:800;vertical-align:middle;cursor:help">NFe</span>` : ''}
           <button class="btn btn-gray" style="font-size:11px;padding:4px 7px" title="Imprimir recibo" onclick="printOrder(${JSON.stringify(o).replace(/"/g,'&quot;')})">🖨️</button>
         </div>
       </td>
@@ -1339,5 +1341,136 @@ setInterval(autoCheckPixGestao, 20000);
   .pix-btn-close { background:#e2e8f0;color:#475569;border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:13px;margin-top:8px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
+
+<!-- ── MODAL NF-e ── -->
+<div id="modal-nfe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9800;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:14px;width:min(96vw,480px);box-shadow:0 20px 60px rgba(0,0,0,.3)" onclick="event.stopPropagation()">
+    <div style="padding:14px 18px;border-bottom:2px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;background:#7c3aed;border-radius:14px 14px 0 0">
+      <div>
+        <h2 style="font-size:15px;font-weight:800;color:#fff;margin:0">📄 Emitir NF-e</h2>
+        <p id="nfe-modal-sub" style="font-size:12px;color:#e9d5ff;margin:2px 0 0"></p>
+      </div>
+      <button onclick="fecharModalNfe()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div style="padding:18px;display:grid;gap:12px">
+
+      <!-- Aviso cliente sem config -->
+      <div id="nfe-aviso-config" style="display:none;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:10px;font-size:12px;color:#854d0e">
+        ⚠️ Este cliente não tem configuração fiscal salva. Selecione a natureza de operação manualmente.
+        <br><a href="clientes.html" target="_blank" style="color:#7c3aed;font-weight:700">→ Configurar em Clientes</a>
+      </div>
+
+      <!-- Natureza override (avulso) -->
+      <div id="nfe-natureza-wrap">
+        <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">NATUREZA DE OPERAÇÃO</label>
+        <select id="nfe-natureza-sel" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none"
+          onfocus="this.style.borderColor='#7c3aed'" onblur="this.style.borderColor='#e2e8f0'">
+          <option value="">— Usar config do cliente —</option>
+          <option value="572626158">Venda de mercadorias</option>
+          <option value="15109879203">Venda de mercadorias - MPMS Bebida</option>
+          <option value="15108386621">Venda de mercadorias - Org bebida</option>
+          <option value="15108383771">Venda de mercadorias - Org GLP</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">OBSERVAÇÃO EXTRA <span style="font-weight:400">(opcional)</span></label>
+        <input id="nfe-obs" type="text" placeholder="Empenho, nº contrato, etc..."
+          style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none"
+          onfocus="this.style.borderColor='#7c3aed'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+
+      <div id="nfe-resultado" style="display:none"></div>
+
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button id="nfe-emit-btn" onclick="confirmarEmitirNfe()"
+          style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">
+          📄 Emitir NF-e
+        </button>
+        <button onclick="fecharModalNfe()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _nfeOrderId   = null;
+let _nfeClientePhone = null;
+
+async function abrirModalNfe(orderId, nomePedido, phone) {
+  _nfeOrderId = orderId;
+  _nfeClientePhone = phone;
+  document.getElementById('nfe-modal-sub').textContent = `Pedido #${orderId} — ${nomePedido}`;
+  document.getElementById('nfe-obs').value = '';
+  document.getElementById('nfe-natureza-sel').value = '';
+  document.getElementById('nfe-resultado').style.display = 'none';
+  document.getElementById('nfe-emit-btn').disabled = false;
+  document.getElementById('nfe-emit-btn').textContent = '📄 Emitir NF-e';
+  document.getElementById('nfe-aviso-config').style.display = 'none';
+
+  const modal = document.getElementById('modal-nfe');
+  modal.style.display = 'flex';
+
+  // Checar se tem config fiscal salva
+  if (phone) {
+    try {
+      const r = await api(`/api/clientes/${encodeURIComponent(phone)}/fiscal`);
+      const temConfig = (r.configs || []).length > 0;
+      document.getElementById('nfe-aviso-config').style.display = temConfig ? 'none' : '';
+    } catch(_) {}
+  } else {
+    document.getElementById('nfe-aviso-config').style.display = '';
+  }
+}
+
+function fecharModalNfe() {
+  document.getElementById('modal-nfe').style.display = 'none';
+}
+
+async function confirmarEmitirNfe() {
+  if (!_nfeOrderId) return;
+  const btn = document.getElementById('nfe-emit-btn');
+  const res = document.getElementById('nfe-resultado');
+  btn.disabled = true;
+  btn.textContent = '⏳ Emitindo...';
+  res.style.display = 'none';
+
+  const natSel = document.getElementById('nfe-natureza-sel');
+  const natId  = natSel.value;
+  const natNome = natId ? natSel.options[natSel.selectedIndex].text : '';
+  const obs    = document.getElementById('nfe-obs').value.trim();
+
+  const body = {};
+  if (natId) { body.natureza_id = natId; body.natureza_nome = natNome; }
+  if (obs)   body.observacao_extra = obs;
+
+  try {
+    const data = await api(`/api/nfe/emitir/${_nfeOrderId}`, { method:'POST', body: JSON.stringify(body) });
+    const resultados = data.nfe_results || [];
+    const linhas = resultados.map(r => {
+      const icone = r.nfe_status === 'emitida' ? '✅' : '⏳';
+      return `<div style="font-size:12px;padding:6px 0;border-bottom:1px solid #f1f5f9">
+        ${icone} <strong>${r.natureza_nome || 'NF-e'}</strong> — Nº ${r.nfe_numero || r.nfe_id}<br>
+        <span style="color:#64748b;font-size:11px">Status: ${r.nfe_status} ${r.nfe_chave ? '| Chave: ' + r.nfe_chave.substring(0,20) + '...' : ''}</span>
+      </div>`;
+    }).join('');
+    res.innerHTML = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px">
+      <strong style="font-size:13px;color:#166534">✅ NF-e processada!</strong>
+      ${linhas}
+    </div>`;
+    res.style.display = '';
+    btn.textContent = '✅ Emitida';
+    toast(`✅ NF-e emitida para pedido #${_nfeOrderId}`, 'success');
+    setTimeout(() => { fecharModalNfe(); load(); }, 2500);
+  } catch(e) {
+    res.innerHTML = `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;font-size:12px;color:#991b1b">
+      ❌ Erro: ${e.message}
+    </div>`;
+    res.style.display = '';
+    btn.disabled = false;
+    btn.textContent = '📄 Tentar novamente';
+  }
+}
+</script>
 </body>
 </html>

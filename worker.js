@@ -1,5 +1,8 @@
-// v2.51.84
+// v2.52.0
 
+// v2.52.0: NF-e via Bling API v3 — emitirNFeBling(), ensureNFeTables(), customer_fiscal_config,
+//          endpoints: GET/POST /api/clientes/:phone/fiscal, POST /api/nfe/emitir/:orderId,
+//          GET /api/bling/naturezas-operacao (cache 24h). Suporta múltiplas naturezas por pedido.
 // v2.51.84: pix_receber — sem Pedido de Venda na entrega; fiscal escolhido em pagamentos
 // v2.51.83: GMB — restore sessão ANTES do checkAuth (fix logout); connectGoogle redirect direto c/ sessionStorage backup
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
@@ -863,7 +866,204 @@ async function pushInPayCheckStatus(env, txId) {
   return resp.json();
 }
 
-async function ensurePixColumns(env) {
+async function ensureNFeTables(env) {
+  // Tabela config fiscal por cliente
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS customer_fiscal_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone_digits TEXT NOT NULL,
+    ordem INTEGER NOT NULL DEFAULT 1,
+    natureza_id TEXT NOT NULL,
+    natureza_nome TEXT NOT NULL DEFAULT '',
+    produtos_json TEXT DEFAULT '[]',
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch()),
+    UNIQUE(phone_digits, ordem)
+  )`).run().catch(()=>{});
+  // Colunas NF-e na tabela orders
+  for (const col of [
+    'nfe_id TEXT', 'nfe_numero TEXT', 'nfe_chave TEXT',
+    'nfe_status TEXT', 'nfe_error TEXT', 'nfe_ids_json TEXT',
+    'nfe_emitida_at INTEGER'
+  ]) {
+    await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col}`).run().catch(()=>{});
+  }
+}
+
+// ── Emissão NF-e via API Bling v3 ──────────────────────────────
+// Agrupa itens por natureza de operação e emite uma NF-e por grupo
+async function emitirNFeBling(env, orderId, orderData, fiscalConfigs = [], naturezaOverride = null, obsExtra = '') {
+  const { name, items, total_value, tipo_pagamento, forma_pagamento_key, forma_pagamento_id,
+          bling_contact_id, cpf_cnpj, tipo_pessoa, bling_vendedor_id, created_at, delivered_at } = orderData;
+
+  const now = new Date();
+  const brtOffset = -3 * 60;
+  const brtNow = new Date(now.getTime() + (brtOffset - now.getTimezoneOffset()) * 60000);
+  const dataHoje = brtNow.toISOString().slice(0, 10);
+
+  // Montar itens com bling_id/codigo
+  const itensCompletos = [];
+  for (const item of (items || [])) {
+    const qty   = parseFloat(item.qty)   || 1;
+    const price = parseFloat(item.price) || 0;
+    let prod = null;
+    if (item.bling_id && Number(item.bling_id) > 0)
+      prod = await env.DB.prepare('SELECT bling_id, code, unidade FROM app_products WHERE bling_id=? AND ativo=1 LIMIT 1').bind(String(item.bling_id)).first().catch(()=>null);
+    if (!prod && item.code)
+      prod = await env.DB.prepare('SELECT bling_id, code, unidade FROM app_products WHERE code=? AND ativo=1 LIMIT 1').bind(String(item.code)).first().catch(()=>null);
+    if (!prod && item.name)
+      prod = await env.DB.prepare('SELECT bling_id, code, unidade FROM app_products WHERE name=? AND ativo=1 LIMIT 1').bind(String(item.name)).first().catch(()=>null);
+    const blingId     = (item.bling_id && Number(item.bling_id) > 0) ? Number(item.bling_id) : (prod?.bling_id ? Number(prod.bling_id) : null);
+    let blingCodigo   = prod?.code || null;
+    const blingUnidade = prod?.unidade || 'UN';
+    if (!blingCodigo && item.name) {
+      blingCodigo = String(item.name).toUpperCase().replace(/[^A-Z0-9]/g,'').substring(0,30) || 'PROD';
+    }
+    itensCompletos.push({
+      nome: String(item.name||'Produto').substring(0,120),
+      qty, price, blingId, blingCodigo, blingUnidade,
+    });
+  }
+
+  // Agrupar itens por natureza de operação
+  // Se tem config fiscal: cada item vai para a natureza cujos produtos_json inclui aquele produto
+  // Se não tem: todos vão para naturezaOverride ou natureza padrão "Venda de mercadorias"
+  const NATUREZA_PADRAO = { id: '572626158', nome: 'Venda de mercadorias' };
+  let grupos = []; // [{ natureza: {id, nome}, itens: [...] }]
+
+  if (fiscalConfigs.length > 0) {
+    // Mapear produto → natureza
+    const mapaGrupos = {};
+    for (const cfg of fiscalConfigs) {
+      const prods = JSON.parse(cfg.produtos_json || '[]');
+      const natureza = { id: cfg.natureza_id, nome: cfg.natureza_nome };
+      const key = cfg.natureza_id;
+      if (!mapaGrupos[key]) mapaGrupos[key] = { natureza, itens: [] };
+      // Itens cujo nome/bling_id está nos produtos deste grupo
+      for (const item of itensCompletos) {
+        const match = prods.length === 0 || prods.some(p =>
+          (p.bling_id && item.blingId && String(p.bling_id) === String(item.blingId)) ||
+          (p.name && item.nome.toLowerCase().includes(p.name.toLowerCase()))
+        );
+        if (match) mapaGrupos[key].itens.push(item);
+      }
+    }
+    // Itens sem grupo → natureza padrão
+    const itsemGrupo = itensCompletos.filter(item => {
+      return !Object.values(mapaGrupos).some(g => g.itens.includes(item));
+    });
+    grupos = Object.values(mapaGrupos).filter(g => g.itens.length > 0);
+    if (itsemGrupo.length > 0) {
+      const nat = naturezaOverride || NATUREZA_PADRAO;
+      const existing = grupos.find(g => g.natureza.id === nat.id);
+      if (existing) existing.itens.push(...itsemGrupo);
+      else grupos.push({ natureza: nat, itens: itsemGrupo });
+    }
+  } else {
+    // Sem config fiscal: 1 grupo com natureza override ou padrão
+    grupos = [{ natureza: naturezaOverride || NATUREZA_PADRAO, itens: itensCompletos }];
+  }
+
+  const fpId = getFormaPagamentoForTipo(tipo_pagamento, forma_pagamento_key, forma_pagamento_id);
+  const pedidoEpoch = delivered_at || created_at;
+  const pedidoDataStr = pedidoEpoch
+    ? new Date(pedidoEpoch * 1000).toLocaleString('pt-BR', { timeZone:'America/Campo_Grande', day:'2-digit', month:'2-digit', year:'numeric' })
+    : dataHoje.split('-').reverse().join('/');
+
+  const nfeResults = [];
+
+  for (const grupo of grupos) {
+    const itensNFe = grupo.itens.map(item => {
+      const nfeItem = {
+        descricao: item.nome,
+        quantidade: item.qty,
+        valor: item.price,
+        unidade: item.blingUnidade,
+        cfop: '5405',
+      };
+      if (item.blingId) nfeItem.produto = { id: item.blingId };
+      if (item.blingCodigo) nfeItem.codigo = String(item.blingCodigo);
+      return nfeItem;
+    });
+
+    const totalGrupo = Math.round(itensNFe.reduce((s,i) => s + i.valor * i.quantidade, 0) * 100) / 100 || parseFloat(total_value) || 0;
+
+    const obsArr = [`MoskoGás Pedido #${orderId}`, name || '', `Entregue: ${pedidoDataStr}`];
+    if (obsExtra) obsArr.push(obsExtra);
+    const observacoes = obsArr.filter(Boolean).join(' | ');
+
+    const nfeBody = {
+      naturezaOperacao: { id: parseInt(grupo.natureza.id) },
+      tipoNota: 2,           // 2 = Saída/Venda na NF-e (diferente da NFC-e que usa tipo:1)
+      contato: { id: parseInt(bling_contact_id) },
+      data: dataHoje,
+      dataSaida: dataHoje,
+      itens: itensNFe,
+      // Tentamos dataVencimento (doc) e data (descoberta NFC-e) — Bling aceita um dos dois
+      parcelas: [{ formaPagamento: { id: fpId }, valor: totalGrupo, dataVencimento: dataHoje, data: dataHoje }],
+      observacoes,
+    };
+    if (bling_vendedor_id) nfeBody.vendedor = { id: bling_vendedor_id };
+
+    await logEvent(env, orderId, 'nfe_payload', { natureza: grupo.natureza, itens: itensNFe, contato: nfeBody.contato }).catch(()=>{});
+
+    // PASSO 1: Criar NF-e (rascunho)
+    const criarResp = await blingFetch('/nfe', { method:'POST', body: JSON.stringify(nfeBody) }, env);
+    if (!criarResp.ok) {
+      const errText = await criarResp.text();
+      await logBlingAudit(env, orderId, 'criar_nfe', 'error', { request_payload: nfeBody, error_message: `HTTP ${criarResp.status}: ${errText.substring(0,600)}` });
+      throw new Error(`NF-e criar ${criarResp.status}: ${errText.substring(0,600)}`);
+    }
+    const criarData = await criarResp.json();
+    const nfeId = criarData.data?.id ?? null;
+    if (!nfeId) throw new Error('NF-e criada mas Bling não retornou ID: ' + JSON.stringify(criarData).substring(0,200));
+    await logBlingAudit(env, orderId, 'criar_nfe', 'success', { bling_pedido_id: String(nfeId), request_payload: nfeBody, response_data: criarData });
+
+    // PASSO 2: Emitir à SEFAZ
+    await new Promise(r => setTimeout(r, 800));
+    let emitirOk = false;
+    try {
+      const emitirResp = await blingFetch(`/nfe/${nfeId}/emitir`, { method:'POST', body:'{}' }, env);
+      emitirOk = emitirResp.ok;
+      const emitirBody = await emitirResp.text().catch(()=>'');
+      await logBlingAudit(env, orderId, 'emitir_nfe', emitirOk ? 'success' : 'error', { bling_pedido_id: String(nfeId), error_message: `HTTP ${emitirResp.status}: ${emitirBody.substring(0,400)}` });
+      console.log(`[NF-e] /emitir → HTTP ${emitirResp.status}: ${emitirBody.substring(0,200)}`);
+    } catch(e) {
+      console.error('[NF-e] /emitir falhou:', e.message);
+    }
+
+    // PASSO 3: GET para ler situação real
+    await new Promise(r => setTimeout(r, 1000));
+    let nfeNumero = criarData.data?.numero ?? null;
+    let nfeChave  = criarData.data?.chaveAcesso ?? null;
+    let nfeSituacao = criarData.data?.situacao?.id ?? null;
+    try {
+      const getResp = await blingFetch(`/nfe/${nfeId}`, { method:'GET' }, env);
+      if (getResp.ok) {
+        const d = (await getResp.json()).data || {};
+        nfeNumero   = d.numero    ?? nfeNumero;
+        nfeChave    = d.chaveAcesso ?? d.chave ?? nfeChave;
+        nfeSituacao = d.situacao?.id ?? d.situacao ?? nfeSituacao;
+      }
+    } catch(_) {}
+
+    const sitId = typeof nfeSituacao === 'object' ? nfeSituacao?.id : nfeSituacao;
+    const autorizada = sitId === 100 || sitId === '100' || String(sitId||'').includes('autoriza');
+    const status = autorizada ? 'emitida' : 'pendente_emissao';
+
+    console.log(`[NF-e] ✅ Pedido #${orderId} grupo "${grupo.natureza.nome}" → NF-e ${nfeNumero} | sit=${nfeSituacao} | ${status}`);
+    nfeResults.push({
+      nfe_id: String(nfeId),
+      nfe_numero: nfeNumero ? String(nfeNumero) : null,
+      nfe_chave: nfeChave ? String(nfeChave) : null,
+      nfe_status: status,
+      natureza_nome: grupo.natureza.nome,
+    });
+  }
+
+  return nfeResults;
+}
+
+
   const cols = [
     { name: 'pix_tx_id', def: 'TEXT' },
     { name: 'pix_qrcode', def: 'TEXT' },
@@ -3379,6 +3579,112 @@ export default {
         env.DB.prepare(countSql).bind(...params.slice(0, -2)).all(),
       ]);
       return json({ clientes: rows.results || [], total: countRes.results[0]?.total || 0, page, limit });
+    }
+
+    // GET /api/bling/naturezas-operacao — lista naturezas (cache 24h)
+    if (method === 'GET' && path === '/api/bling/naturezas-operacao') {
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      try {
+        // Cache 24h em app_config
+        const cached = await env.DB.prepare(`SELECT value, updated_at FROM app_config WHERE key='bling_naturezas_cache'`).first();
+        if (cached?.value) {
+          const age = (Date.now()/1000) - new Date(cached.updated_at).getTime()/1000;
+          if (age < 86400) return json({ ok:true, naturezas: JSON.parse(cached.value), cached:true });
+        }
+        const resp = await blingFetch('/naturezasoperacao?pagina=1&limite=100', { method:'GET' }, env);
+        if (!resp.ok) return json({ ok:false, error: `Bling ${resp.status}` }, 502);
+        const data = await resp.json();
+        const naturezas = (data.data || []).map(n => ({ id: String(n.id), nome: n.descricao || n.nome || String(n.id) }));
+        await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('bling_naturezas_cache', ?, datetime('now'))`).bind(JSON.stringify(naturezas)).run();
+        return json({ ok:true, naturezas });
+      } catch(e) {
+        // Fallback com naturezas hardcoded conhecidas
+        const fallback = [
+          { id: '572626158',   nome: 'Venda de mercadorias' },
+          { id: '15109879203', nome: 'Venda de mercadorias - MPMS Bebida' },
+          { id: '15108386621', nome: 'Venda de mercadorias - Org bebida' },
+          { id: '15108383771', nome: 'Venda de mercadorias - Org GLP' },
+        ];
+        return json({ ok:true, naturezas: fallback, cached:false, fallback:true });
+      }
+    }
+
+    // GET /api/clientes/:phone/fiscal — config fiscal do cliente
+    if (method === 'GET' && path.match(/^\/api\/clientes\/[^/]+\/fiscal$/)) {
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const phone = decodeURIComponent(path.replace('/api/clientes/','').replace('/fiscal',''));
+      await ensureNFeTables(env);
+      const rows = await env.DB.prepare(`SELECT * FROM customer_fiscal_config WHERE phone_digits=? ORDER BY ordem ASC`).bind(phone).all();
+      return json({ ok:true, configs: rows.results || [] });
+    }
+
+    // POST /api/clientes/:phone/fiscal — salvar config fiscal
+    if (method === 'POST' && path.match(/^\/api\/clientes\/[^/]+\/fiscal$/)) {
+      const authCheck = await requireAuth(request, env, ['admin','gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      const phone = decodeURIComponent(path.replace('/api/clientes/','').replace('/fiscal',''));
+      const body = await request.json();
+      await ensureNFeTables(env);
+      // body.configs = [{ordem:1, natureza_id, natureza_nome, produtos_json}, {ordem:2, ...}]
+      await env.DB.prepare(`DELETE FROM customer_fiscal_config WHERE phone_digits=?`).bind(phone).run();
+      for (const cfg of (body.configs || [])) {
+        if (!cfg.natureza_id) continue;
+        await env.DB.prepare(`INSERT INTO customer_fiscal_config (phone_digits, ordem, natureza_id, natureza_nome, produtos_json) VALUES (?,?,?,?,?)`)
+          .bind(phone, cfg.ordem||1, String(cfg.natureza_id), cfg.natureza_nome||'', JSON.stringify(cfg.produtos||[])).run();
+      }
+      return json({ ok:true });
+    }
+
+    // POST /api/nfe/emitir/:orderId — emite NF-e para um pedido
+    if (method === 'POST' && path.match(/^\/api\/nfe\/emitir\/\d+$/)) {
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const orderId = parseInt(path.split('/').pop());
+      const body = await request.json().catch(() => ({}));
+      // body pode ter: natureza_id, natureza_nome, observacao_extra
+      await ensureNFeTables(env);
+      const order = await env.DB.prepare(`SELECT o.*, c.bling_contact_id, c.cpf_cnpj, c.tipo_pessoa FROM orders o LEFT JOIN customers_cache c ON o.phone_digits=c.phone_digits WHERE o.id=?`).bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      if (order.nfe_ids_json) {
+        const existing = JSON.parse(order.nfe_ids_json||'[]');
+        if (existing.length > 0) return json({ ok:false, error:'NF-e já emitida para este pedido', nfe_ids: existing }, 400);
+      }
+      // Buscar config fiscal do cliente
+      let fiscalConfigs = [];
+      if (order.phone_digits) {
+        const cfgRows = await env.DB.prepare(`SELECT * FROM customer_fiscal_config WHERE phone_digits=? ORDER BY ordem ASC`).bind(order.phone_digits).all();
+        fiscalConfigs = cfgRows.results || [];
+      }
+      // Se veio natureza_id no body (override/avulso), usar ele
+      const naturezaOverride = body.natureza_id ? { id: body.natureza_id, nome: body.natureza_nome||'' } : null;
+
+      const vendedorRow = order.vendedor_id ? await env.DB.prepare(`SELECT bling_vendedor_id FROM app_users WHERE id=?`).bind(order.vendedor_id).first() : null;
+      const items = JSON.parse(order.items_json||'[]');
+
+      const obsExtra = body.observacao_extra || '';
+      const nfeResults = await emitirNFeBling(env, orderId, {
+        name: order.customer_name,
+        items,
+        total_value: order.total_value,
+        tipo_pagamento: order.tipo_pagamento,
+        forma_pagamento_key: order.forma_pagamento_key,
+        forma_pagamento_id: order.forma_pagamento_id,
+        bling_contact_id: order.bling_contact_id,
+        cpf_cnpj: order.cpf_cnpj,
+        tipo_pessoa: order.tipo_pessoa,
+        bling_vendedor_id: vendedorRow?.bling_vendedor_id || null,
+        created_at: order.created_at,
+        delivered_at: order.delivered_at,
+      }, fiscalConfigs, naturezaOverride, obsExtra);
+
+      // Salvar resultado nas colunas do pedido
+      const primeiroNfe = nfeResults[0] || {};
+      await env.DB.prepare(`UPDATE orders SET nfe_ids_json=?, nfe_id=?, nfe_numero=?, nfe_chave=?, nfe_status=? WHERE id=?`)
+        .bind(JSON.stringify(nfeResults), primeiroNfe.nfe_id||null, primeiroNfe.nfe_numero||null, primeiroNfe.nfe_chave||null, primeiroNfe.nfe_status||null, orderId).run();
+      await logEvent(env, orderId, 'nfe_emitida', { nfe_results: nfeResults });
+      return json({ ok:true, nfe_results: nfeResults });
     }
 
     // GET /api/clientes/:phone — detalhe + histórico de pedidos
