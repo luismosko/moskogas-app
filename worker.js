@@ -1,7 +1,7 @@
-// v2.51.80
+// v2.51.81
 
+// v2.51.81: GMB OAuth — popup em vez de redirect; callback fecha popup; não perde sessão MoskoApp
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
-// v2.51.79: Lembrete PIX — PushInPay standby; envia só mensagem + chave PIX texto
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
 // v2.51.73: Lembretes PIX manual — config.ativo não bloqueia envio individual (só cron)
 // v2.51.72: Consumidor Final — telefone não obrigatório; histórico último pedido por nome
@@ -8202,7 +8202,7 @@ export default {
         const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
         const profile = await profileRes.json();
         await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?,datetime('now'))`).bind('marketing_google_tokens', JSON.stringify({ access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, email: profile.email, expires_at: Date.now() + (tokenData.expires_in * 1000) })).run();
-        return new Response(null, { status: 302, headers: { Location: 'https://moskogas-app.pages.dev/marketing-gmb.html?connected=1' } });
+        return new Response(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Conectado!</title></head><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f0fdf4;margin:0"><div style="text-align:center;padding:40px;background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:340px"><div style="font-size:52px;margin-bottom:16px">✅</div><h2 style="color:#166534;margin:0 0 8px">Google conectado!</h2><p style="color:#64748b;font-size:14px;margin:0 0 20px">Conta autorizada com sucesso. Esta janela vai fechar automaticamente.</p><script>setTimeout(()=>window.close(),1800);</script></div></body></html>`, { status: 200, headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
       } catch(e) {
         return new Response('Erro OAuth: ' + e.message, { status: 500 });
       }
