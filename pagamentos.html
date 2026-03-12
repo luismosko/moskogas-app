@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.17</title>
+<title>Pagamentos — MoskoGás v1.9.18</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -68,7 +68,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.17 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.18 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -89,7 +89,7 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.17</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.18</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -263,17 +263,8 @@ function renderTable(rows) {
         const cnt=p.reminder_count||0;const badge=cnt>0?`<span class="rb">${cnt}</span>`:'';
         const hasPhone=p.phone_digits&&p.phone_digits.replace(/\D/g,'').length>=10;
         if(hasPhone){
-          // v1.9.17: cooldown 24h — botão desabilitado se já enviou hoje
-          const now=Math.floor(Date.now()/1000);
-          const lastAt=p.last_reminder_at||0;
-          const horasDesde=(now-lastAt)/3600;
-          const cooldownAtivo=lastAt>0&&horasDesde<24;
-          if(cooldownAtivo){
-            const faltaH=Math.ceil(24-horasDesde);
-            actionBtns+=`<button class="btn-lembrete" disabled title="Próximo lembrete em ${faltaH}h (enviado ${timeAgo(lastAt)} atrás)">🕐${faltaH}h${badge}</button>`;
-          } else {
-            actionBtns+=`<button class="btn-cobrar" onclick="enviarLembrete(${p.id})" title="Cobrar via WhatsApp${cnt?' — já enviado '+cnt+'x':''}">💬 Cobrar${badge}</button>`;
-          }
+          // cooldown removido — backend controla via config de lembretes
+          actionBtns+=`<button class="btn-cobrar" onclick="enviarLembrete(${p.id})" title="Cobrar via WhatsApp${cnt?' — já enviado '+cnt+'x':''}">💬 Cobrar${badge}</button>`;
         } else {
           actionBtns+=`<button class="btn-lembrete" disabled title="Sem telefone">📱</button>`;
         }
@@ -731,7 +722,7 @@ async function checkPixStatus(orderId){
 
 // ═══ LEMBRETES PIX ═══
 async function enviarLembrete(orderId, force){
-  // v1.9.17: sem confirm — clique direto envia; cooldown 24h aplicado no frontend
+  // v1.9.18: sem confirm — clique direto envia; cooldown 24h aplicado no frontend
   showLoading('Enviando cobrança via WhatsApp...');
   try{
     const opts = {method:'POST'};
