@@ -1,5 +1,6 @@
-// v2.52.9
+// v2.52.10
 
+// v2.52.10: Fix clientes sem telefone no Bling agora salvos (ID doc_/bid_); busca CNPJ normalizada
 // v2.52.9: bling_api_log — log automático de todas chamadas Bling em blingFetch (modulo, método, status, ms); endpoint /api/bling/api-log; purge 7d no cron
 // v2.52.8: /api/products/search usa D1 local (app_products) — NÃO bate no Bling
 // v2.52.7: /bling/ping TTL assimétrico — 5min ok=true, 30min ok=false (não bate em API bloqueada)
@@ -2267,12 +2268,19 @@ async function saveContactsCache(result, env) {
     await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => { });
   }
   for (const r of result) {
-    if (r.phone_digits) { // Só salva se tem telefone — sem telefone é inútil para pedidos
+    // Sem telefone: usar ID sintético baseado no CNPJ ou bling_contact_id para não perder o cadastro
+    let phoneKey = r.phone_digits;
+    if (!phoneKey) {
+      const docDigits = (r.cpf_cnpj || '').replace(/\D/g, '');
+      if (docDigits.length >= 11) phoneKey = `doc_${docDigits}`;
+      else if (r.bling_contact_id) phoneKey = `bid_${r.bling_contact_id}`;
+    }
+    if (phoneKey) {
       try {
         await env.DB.prepare(`
           INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, tipo_pessoa, email, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-        `).bind(r.phone_digits || null, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id || null, r.cpf_cnpj || null, r.tipo_pessoa || null, r.email || null).run();
+        `).bind(phoneKey, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id || null, r.cpf_cnpj || null, r.tipo_pessoa || null, r.email || null).run();
       } catch (_) { }
     }
   }
@@ -3678,8 +3686,10 @@ export default {
       if (q) {
         const words = q.toLowerCase().split(/\s+/).filter(Boolean);
         for (const w of words) {
-          where += ` AND (LOWER(cc.name) LIKE ? OR cc.phone_digits LIKE ? OR cc.cpf_cnpj LIKE ? OR LOWER(cc.address_line) LIKE ?)`;
-          params.push(`%${w}%`,`%${w}%`,`%${w}%`,`%${w}%`);
+          // Normaliza CNPJ/CPF (remove pontuação) para busca funcionar com ou sem formatação
+          const wDoc = w.replace(/[.\-\/]/g, '');
+          where += ` AND (LOWER(cc.name) LIKE ? OR cc.phone_digits LIKE ? OR cc.cpf_cnpj LIKE ? OR REPLACE(REPLACE(REPLACE(REPLACE(cc.cpf_cnpj,'.',''),'/',''),'-',''),' ','') LIKE ? OR LOWER(cc.address_line) LIKE ?)`;
+          params.push(`%${w}%`,`%${w}%`,`%${w}%`,`%${wDoc}%`,`%${w}%`);
         }
       }
       if (origem) { where += ` AND cc.origem = ?`; params.push(origem); }
