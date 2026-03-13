@@ -1,8 +1,7 @@
-// v2.52.3
+// v2.52.4
 
-// v2.52.3: NF-e — 3 correções confirmadas suporte Bling 12/03/2026:
-//          tipoNota:1 (saída), parcelas usa "data" (não dataVencimento), endpoint /enviar (não /emitir)
-// v2.52.2: Venda Agrupada — agrupamento por bling_contact_id > cpf_cnpj > nome
+// v2.52.4: vale_gas removido de TIPOS_PEDIDO e TIPOS_BLING — NF-e já emitida na geração do vale
+// v2.52.3: NF-e fix — tipoNota:1, parcelas.data, /enviar
 // v2.51.83: GMB — restore sessão ANTES do checkAuth (fix logout); connectGoogle redirect direto c/ sessionStorage backup
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
@@ -4933,10 +4932,10 @@ export default {
 
       // ── v2.51.0: NFC-e para pagamentos à vista / Pedido de Venda para pix_receber ──
       // TIPOS_NFCE: emite NFC-e automática (dinheiro, pix, débito, crédito)
-      // TIPOS_PEDIDO: cria Pedido de Venda (vale_gas — sem emissão fiscal imediata)
+      // vale_gas: NÃO cria nada na entrega — NF-e já emitida na geração do vale
       // pix_receber: NÃO cria nada na entrega — fiscal escolhido em pagamentos.html
       const TIPOS_NFCE   = ['dinheiro', 'pix_vista', 'debito', 'credito'];
-      const TIPOS_PEDIDO = ['vale_gas'];
+      const TIPOS_PEDIDO = []; // vale_gas removido: fiscal já emitido na geração do vale
       const TIPOS_BLING_ENTREGA = [...TIPOS_NFCE, ...TIPOS_PEDIDO];
 
       // Migrations NFC-e (idempotente)
@@ -5175,7 +5174,7 @@ export default {
       if (order.status !== 'entregue') return err('Pedido não está entregue', 400);
       if (order.bling_pedido_id) return json({ ok: true, msg: 'Já tem Bling #' + order.bling_pedido_num, already: true });
 
-      const TIPOS_BLING = ['dinheiro','pix_vista','debito','credito','vale_gas'];
+      const TIPOS_BLING = ['dinheiro','pix_vista','debito','credito']; // vale_gas excluído: fiscal já emitido na geração do vale
       if (!TIPOS_BLING.includes(order.tipo_pagamento)) return err(`Tipo ${order.tipo_pagamento} não gera Bling individual`, 400);
 
       const custData = order.phone_digits
