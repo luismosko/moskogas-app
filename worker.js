@@ -1,5 +1,6 @@
-// v2.52.8
+// v2.52.9
 
+// v2.52.9: bling_api_log — log automático de todas chamadas Bling em blingFetch (modulo, método, status, ms); endpoint /api/bling/api-log; purge 7d no cron
 // v2.52.8: /api/products/search usa D1 local (app_products) — NÃO bate no Bling
 // v2.52.7: /bling/ping TTL assimétrico — 5min ok=true, 30min ok=false (não bate em API bloqueada)
 // v2.52.6: refreshBlingToken com distributed lock (evita race condition → 429); cron threshold 240→60min
@@ -424,7 +425,25 @@ async function getGmbLocation(accessToken) {
   return { accountName, accountId, locationName, locationId: locationName.split('/')[1], title: locs.locations[0].title };
 }
 
+// v2.52.9: identifica o módulo pela URL do Bling (para log de auditoria)
+function blingPathToModulo(path) {
+  if (path.includes('/nfce'))            return 'fiscal_nfce';
+  if (path.includes('/nfe'))             return 'fiscal_nfe';
+  if (path.includes('/pedidos/vendas'))  return 'vendas';
+  if (path.includes('/contatos'))        return 'clientes';
+  if (path.includes('/produtos'))        return 'produtos';
+  if (path.includes('/vendedores'))      return 'vendedores';
+  if (path.includes('/formas-pagamentos')) return 'config_fp';
+  if (path.includes('/depositos'))       return 'config_dep';
+  if (path.includes('/naturezasoperacao')) return 'naturezas';
+  if (path.includes('/empresas'))        return 'config_emp';
+  if (path.includes('/lojas'))           return 'config_loja';
+  if (path.includes('/situacoes'))       return 'ping';
+  return 'outros';
+}
+
 async function blingFetch(path, options = {}, env) {
+  const _t0 = Date.now();
   const doRequest = async (token) => {
     return fetch(`https://www.bling.com.br/Api/v3${path}`, {
       ...options,
@@ -463,6 +482,15 @@ async function blingFetch(path, options = {}, env) {
     }
   }
 
+  // v2.52.9: log assíncrono (não bloqueia resposta)
+  try {
+    const dur = Date.now() - _t0;
+    const modulo = blingPathToModulo(path);
+    const method = (options.method || 'GET').toUpperCase();
+    env.DB.prepare(
+      `INSERT INTO bling_api_log (ts,path,method,status,duration_ms,modulo,ok) VALUES (unixepoch(),?,?,?,?,?,?)`
+    ).bind(path.substring(0,120), method, resp.status, dur, modulo, resp.ok ? 1 : 0).run().catch(() => {});
+  } catch(_) {}
   return resp;
 }
 
@@ -2450,6 +2478,39 @@ export default {
     if (method === 'GET' && path === '/health') {
       const db = await env.DB.prepare('SELECT 1').first().then(() => true).catch(() => false);
       return json({ ok: true, hasDB: db, hasBucket: !!env.BUCKET });
+    }
+
+    // v2.52.9: Log de chamadas Bling — auditoria de uso por módulo
+    if (method === 'GET' && path === '/api/bling/api-log') {
+      const authCheck = await requireAuth(request, env, ['admin','gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      const horas = parseInt(url.searchParams.get('horas') || '24');
+      const since = Math.floor(Date.now()/1000) - (horas * 3600);
+      // Totais por módulo
+      const porModulo = await env.DB.prepare(
+        `SELECT modulo, method, COUNT(*) as total, SUM(CASE WHEN ok=0 THEN 1 ELSE 0 END) as erros,
+         ROUND(AVG(duration_ms)) as avg_ms, MIN(ts) as primeiro, MAX(ts) as ultimo
+         FROM bling_api_log WHERE ts >= ? GROUP BY modulo, method ORDER BY total DESC`
+      ).bind(since).all().then(r => r.results || []);
+      // Totais por hora (para ver picos)
+      const porHora = await env.DB.prepare(
+        `SELECT strftime('%H', datetime(ts,'unixepoch','-3 hours')) as hora_brt,
+         COUNT(*) as total, SUM(CASE WHEN ok=0 THEN 1 ELSE 0 END) as erros
+         FROM bling_api_log WHERE ts >= ? GROUP BY hora_brt ORDER BY hora_brt`
+      ).bind(since).all().then(r => r.results || []);
+      // Últimas chamadas
+      const ultimas = await env.DB.prepare(
+        `SELECT ts, modulo, method, path, status, duration_ms, ok,
+         datetime(ts,'unixepoch','-3 hours') as hora_brt
+         FROM bling_api_log WHERE ts >= ? ORDER BY ts DESC LIMIT 100`
+      ).bind(since).all().then(r => r.results || []);
+      // Totais gerais
+      const geral = await env.DB.prepare(
+        `SELECT COUNT(*) as total, SUM(CASE WHEN ok=0 THEN 1 ELSE 0 END) as erros,
+         ROUND(AVG(duration_ms)) as avg_ms
+         FROM bling_api_log WHERE ts >= ?`
+      ).bind(since).all().then(r => r.results?.[0] || {});
+      return json({ horas, geral, por_modulo: porModulo, por_hora: porHora, ultimas });
     }
 
     if (method === 'GET' && path === '/api/bling/status') {
@@ -9840,6 +9901,10 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
     // Snapshot diário às 22h BRT (01:00 UTC)
     if (hour === 1) {
       ctx.waitUntil(dailyAuditSnapshot(env));
+      // v2.52.9: purge bling_api_log > 7 dias
+      ctx.waitUntil(
+        env.DB.prepare(`DELETE FROM bling_api_log WHERE ts < (unixepoch() - 604800)`).run().catch(() => {})
+      );
     }
     // Relatório diário por email — verifica config para hora + dedup
     try {
