@@ -1,5 +1,6 @@
-// v2.52.6
+// v2.52.7
 
+// v2.52.7: /bling/ping TTL assimétrico — 5min ok=true, 30min ok=false (não bate em API bloqueada)
 // v2.52.6: refreshBlingToken com distributed lock (evita race condition → 429); cron threshold 240→60min
 // v2.52.5: OAuth Bling callback — proteção contra duplo uso do código (429 rate limit)
 // v2.52.4: vale_gas removido de TIPOS_PEDIDO e TIPOS_BLING
@@ -2875,19 +2876,24 @@ export default {
         const lastChecked = cachedAt ? parseInt(cachedAt.value || '0') : 0;
         const cacheAge = now - lastChecked;
 
-        // Cache válido (< 5 min) — usa resultado cacheado (evita flickering)
-        if (cacheAge < 300 && cachedOk) {
-          const isOk = cachedOk.value === 'true';
-          return json({ ok: isOk, minutesLeft, cached: true, cacheAgeSeconds: cacheAge });
+        // v2.52.7: Cache assimétrico:
+        //   ok=true  → TTL 5 min (verifica com frequência quando conectado)
+        //   ok=false → TTL 30 min (NÃO bater na API bloqueada durante cooldown)
+        // Isso evita estender o bloqueio de 60min do Bling ao ficar fazendo ping
+        const isOkCached = cachedOk?.value === 'true';
+        const ttl = isOkCached ? 300 : 1800; // 5min se ok, 30min se desconectado
+        if (cacheAge < ttl && cachedOk) {
+          return json({ ok: isOkCached, minutesLeft, cached: true, cacheAgeSeconds: cacheAge, ttl });
         }
 
-        // Cache expirado ou ausente — faz chamada real à API Bling
+        // Cache expirado — faz chamada real à API Bling
+        // IMPORTANTE: só chega aqui se passou o TTL (5min ok / 30min desconectado)
         try {
           const testResp = await fetch('https://www.bling.com.br/Api/v3/situacoes/modulos', {
             headers: { Authorization: `Bearer ${row.access_token}`, 'Content-Type': 'application/json', 'enable-jwt': '1' },
           });
           if (testResp.status === 401) {
-            // Token revogado — tenta refresh uma vez
+            // Token revogado — tenta refresh uma vez (protegido pelo distributed lock)
             try {
               await refreshBlingToken(env, row.refresh_token);
               await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','true',datetime('now'))`).run();
@@ -2899,13 +2905,13 @@ export default {
               return json({ ok: false, error: 'token_revoked' });
             }
           }
-          // API respondeu OK (qualquer status não-401 significa token aceito)
+          // API respondeu OK
           await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','true',datetime('now'))`).run();
           await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
           return json({ ok: true, minutesLeft, verified: true });
         } catch (apiErr) {
-          // Erro de rede — usa timestamp local mas não atualiza cache
-          return json({ ok: true, minutesLeft, networkError: true });
+          // Erro de rede — não atualiza cache, retorna estado local
+          return json({ ok: isOkCached, minutesLeft, networkError: true });
         }
       } catch (e) { return json({ ok: false, error: e.message }); }
     }
