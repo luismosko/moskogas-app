@@ -1,7 +1,7 @@
-// v2.52.4
+// v2.52.5
 
-// v2.52.4: vale_gas removido de TIPOS_PEDIDO e TIPOS_BLING — NF-e já emitida na geração do vale
-// v2.52.3: NF-e fix — tipoNota:1, parcelas.data, /enviar
+// v2.52.5: OAuth Bling callback — proteção contra duplo uso do código (429 rate limit)
+// v2.52.4: vale_gas removido de TIPOS_PEDIDO e TIPOS_BLING
 // v2.51.83: GMB — restore sessão ANTES do checkAuth (fix logout); connectGoogle redirect direto c/ sessionStorage backup
 // v2.51.80: GMB — auto-refresh token Google; fix requireAuth; fix locations API; novo endpoint /gmb/location
 // v2.51.74: Lembrete PIX manual — skipSafety quando user presente; erros legíveis
@@ -2888,6 +2888,19 @@ export default {
     if (method === 'GET' && path === '/bling/oauth/callback') {
       const code = url.searchParams.get('code');
       if (!code) return err('missing code');
+
+      // ── Proteção contra duplo uso do código OAuth (código é de uso único no Bling) ──
+      const codeKey = 'bling_oauth_code_' + code.substring(0, 16);
+      const alreadyUsed = await env.DB.prepare(`SELECT value FROM app_config WHERE key=?`).bind(codeKey).first().catch(()=>null);
+      if (alreadyUsed) {
+        // Código já foi usado — verificar se token foi salvo com sucesso
+        const tokenOk = await env.DB.prepare(`SELECT id FROM bling_tokens WHERE id=1`).first().catch(()=>null);
+        const alreadyHtml = `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fef9c3"><div style="text-align:center"><h2>⚠️ Código já utilizado</h2><p>${tokenOk ? 'Token já foi salvo com sucesso na primeira tentativa.' : 'Feche esta aba e reconecte novamente.'}</p><button onclick="window.close()" style="margin-top:16px;padding:12px 24px;background:#ca8a04;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer">Fechar</button></div></body></html>`;
+        return new Response(alreadyHtml, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      }
+      // Marcar código como em uso (TTL: 10min)
+      await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?, datetime('now'))`).bind(codeKey, '1').run().catch(()=>{});
+
       const body = new URLSearchParams({ grant_type: 'authorization_code', code });
       const resp = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
         method: 'POST',
@@ -2895,6 +2908,8 @@ export default {
         body,
       });
       if (!resp.ok) {
+        // Remove a marca para permitir nova tentativa com novo código
+        await env.DB.prepare(`DELETE FROM app_config WHERE key=?`).bind(codeKey).run().catch(()=>{});
         const errHtml = `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fee2e2"><div style="text-align:center"><h2>❌ Falha na autenticação Bling</h2><p>Status: ${resp.status}</p><button onclick="window.close()" style="margin-top:16px;padding:12px 24px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer">Fechar</button></div></body></html>`;
         return new Response(errHtml, { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
