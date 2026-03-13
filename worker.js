@@ -1,5 +1,6 @@
-// v2.52.7
+// v2.52.8
 
+// v2.52.8: /api/products/search usa D1 local (app_products) — NÃO bate no Bling
 // v2.52.7: /bling/ping TTL assimétrico — 5min ok=true, 30min ok=false (não bate em API bloqueada)
 // v2.52.6: refreshBlingToken com distributed lock (evita race condition → 429); cron threshold 240→60min
 // v2.52.5: OAuth Bling callback — proteção contra duplo uso do código (429 rate limit)
@@ -3383,16 +3384,32 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/products/search') {
+      // v2.52.8: busca 100% local no D1 (app_products) — NÃO chama Bling
+      // Todos os produtos já estão sincronizados com bling_id, ncm, cfop, etc.
+      // Bling só é consultado em /api/products/sync-bling (ação manual em produtos.html)
       const q = (url.searchParams.get('q') || '').trim().toLowerCase();
       try {
-        const blingUrl = q.length >= 2 ? `/produtos?pagina=1&limite=50&criterio=1&pesquisa=${encodeURIComponent(q)}` : `/produtos?pagina=1&limite=50&criterio=1`;
-        const resp = await blingFetch(blingUrl, {}, env);
-        if (!resp.ok) { const errText = await resp.text().catch(() => ''); return json({ error: `Bling ${resp.status}: ${errText.substring(0, 200)}` }, 502); }
-        const data = await resp.json();
-        const all = (data.data || []);
-        const filtered = q ? all.filter(p => { const nome = (p.descricao || p.nome || '').toLowerCase(); return nome.includes(q); }) : all;
-        const produtos = (filtered.length ? filtered : all).map(p => ({ id: p.id, bling_id: p.id, name: p.descricao || p.nome || '', code: p.codigo || '', price: parseFloat(p.preco) || 0, unit: p.unidade || 'un' }));
-        return json(produtos.slice(0, 15));
+        let sql = 'SELECT * FROM app_products WHERE ativo=1';
+        const params = [];
+        if (q.length >= 2) {
+          // busca por nome e código
+          sql += ' AND (LOWER(name) LIKE ? OR LOWER(code) LIKE ?)';
+          params.push(`%${q}%`, `%${q}%`);
+        }
+        sql += ' ORDER BY is_favorite DESC, sort_order ASC, name ASC LIMIT 15';
+        const rows = await env.DB.prepare(sql).bind(...params).all().then(r => r.results || []);
+        const produtos = rows.map(p => ({
+          id: p.id,
+          bling_id: p.bling_id,
+          name: p.name || '',
+          code: p.code || '',
+          price: parseFloat(p.price) || 0,
+          unit: p.unidade || 'un',
+          ncm: p.ncm || '',
+          cfop: p.cfop || '',
+          icon_key: p.icon_key || null,
+        }));
+        return json(produtos);
       } catch (e) { return json({ error: e.message }, 500); }
     }
 
