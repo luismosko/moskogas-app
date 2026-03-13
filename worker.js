@@ -1,5 +1,6 @@
-// v2.52.5
+// v2.52.6
 
+// v2.52.6: refreshBlingToken com distributed lock (evita race condition → 429); cron threshold 240→60min
 // v2.52.5: OAuth Bling callback — proteção contra duplo uso do código (429 rate limit)
 // v2.52.4: vale_gas removido de TIPOS_PEDIDO e TIPOS_BLING
 // v2.51.83: GMB — restore sessão ANTES do checkAuth (fix logout); connectGoogle redirect direto c/ sessionStorage backup
@@ -309,25 +310,54 @@ async function saveToken(env, data) {
 }
 
 async function refreshBlingToken(env, refreshToken) {
-  const body = new URLSearchParams({
-    grant_type: 'refresh_token',
-    refresh_token: refreshToken,
-  });
-  const resp = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: 'Basic ' + btoa(`${env.BLING_CLIENT_ID}:${env.BLING_CLIENT_SECRET}`),
-    },
-    body,
-  });
-  if (!resp.ok) {
-    const errBody = await resp.text().catch(() => '');
-    throw new Error('bling_reauth_required:' + resp.status + ':' + errBody.substring(0, 100));
+  // === DISTRIBUTED LOCK — evita race condition entre Workers paralelos ===
+  // Sem isso, múltiplas instâncias simultâneas chamam oauth/token ao mesmo tempo → 429
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    const lockRow = await env.DB.prepare(`SELECT value FROM app_config WHERE key='bling_refresh_lock'`).first();
+    if (lockRow && lockRow.value && lockRow.value !== '0') {
+      const lockAge = now - parseInt(lockRow.value);
+      if (lockAge >= 0 && lockAge < 25) {
+        // Outra instância está renovando agora — aguarda e reutiliza o token dela
+        console.log(`[token] Lock ativo (${lockAge}s atrás), aguardando refresh de outra instância...`);
+        await new Promise(r => setTimeout(r, 2500 + Math.random() * 1000));
+        const freshRow = await getTokenRow(env);
+        // Se outra instância renovou com sucesso (obtained_at recente), usa o token dela
+        if (freshRow && (now - (freshRow.obtained_at || 0)) < 60) {
+          console.log('[token] Token renovado por outra instância, reutilizando.');
+          return freshRow.access_token;
+        }
+        // Caso contrário, prossegue para tentar renovar
+      }
+    }
+  } catch (_) {}
+  // Adquire o lock
+  await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_refresh_lock',?,datetime('now'))`).bind(String(now)).run().catch(() => {});
+
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    });
+    const resp = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: 'Basic ' + btoa(`${env.BLING_CLIENT_ID}:${env.BLING_CLIENT_SECRET}`),
+      },
+      body,
+    });
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => '');
+      throw new Error('bling_reauth_required:' + resp.status + ':' + errBody.substring(0, 100));
+    }
+    const data = await resp.json();
+    await saveToken(env, data);
+    return data.access_token;
+  } finally {
+    // Libera o lock sempre (mesmo em erro)
+    await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_refresh_lock','0',datetime('now'))`).run().catch(() => {});
   }
-  const data = await resp.json();
-  await saveToken(env, data);
-  return data.access_token;
 }
 
 async function getValidAccessToken(env) {
@@ -10663,9 +10693,9 @@ async function keepBlingTokenFresh(env) {
     const expiresAt = (row.obtained_at || 0) + (row.expires_in || 3600);
     const minutesLeft = Math.floor((expiresAt - now) / 60);
     console.log(`[cron] Token Bling expira em ${minutesLeft} minutos.`);
-    // v2.49.26: renovar quando restam menos de 240min (4h) — antes era 120min
-    // Cron a cada 30min garante que nunca chegamos perto de expirar
-    if (minutesLeft < 240) {
+    // v2.52.6: limiar 60min (era 240min — muito agressivo, causava renovações a cada 30min por 4h seguidas)
+    // Cron a cada 30min garante renovação com folga suficiente antes de expirar
+    if (minutesLeft < 60) {
       console.log('[cron] Renovando token Bling preventivamente...');
       try {
         const newToken = await refreshBlingToken(env, row.refresh_token);
