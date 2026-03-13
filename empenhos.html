@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.3</title>
+<title>Empenhos GOV — MoskoGás v1.0.4</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -68,7 +68,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .form-group input:focus, .form-group select:focus { border-color: #6366f1; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-.itens-editor { border: 1.5px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+.itens-editor { border: 1.5px solid #e2e8f0; border-radius: 10px; overflow: visible; }
 .itens-editor-head { background: #f8fafc; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: grid; grid-template-columns: 1fr 110px 100px 100px 36px; gap: 8px; }
 .item-edit-row { display: grid; grid-template-columns: 1fr 110px 100px 100px 36px; gap: 8px; padding: 8px 12px; border-top: 1px solid #f1f5f9; align-items: center; }
 .item-edit-row input, .item-edit-row select { padding: 6px 8px; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 12px; width: 100%; outline: none; }
@@ -78,7 +78,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .prod-search-wrap { position: relative; }
 .prod-search-input { width: 100%; padding: 6px 8px; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 12px; outline: none; }
 .prod-search-input:focus { border-color: #6366f1; }
-.prod-search-drop { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1.5px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px; z-index: 200; max-height: 200px; overflow-y: auto; box-shadow: 0 8px 20px rgba(0,0,0,.12); display: none; }
+.prod-search-drop { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1.5px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px; z-index: 9999; max-height: 200px; overflow-y: auto; box-shadow: 0 8px 20px rgba(0,0,0,.12); display: none; }
 .prod-search-item { padding: 8px 10px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .prod-search-item:hover { background: #f0f9ff; }
 .prod-selected-tag { background: #e0e7ff; color: #3730a3; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 4px; cursor: pointer; }
@@ -121,7 +121,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.3</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.4</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -252,7 +252,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.3
+// v1.0.4
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
