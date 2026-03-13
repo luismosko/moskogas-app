@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MoskoGás — Bling API Log v1.0.0</title>
+<script src="shared.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; }
+  .header { background: linear-gradient(135deg, #1e293b, #334155); color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  .header h1 { font-size: 18px; font-weight: 800; }
+  .badge { background: #6366f1; color: #fff; font-size: 10px; padding: 2px 7px; border-radius: 20px; font-weight: 700; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 18px; align-items: center; flex-wrap: wrap; }
+  .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 700; transition: opacity .2s; }
+  .btn:hover { opacity: .85; }
+  .btn-blue { background: #6366f1; color: #fff; }
+  .btn-gray { background: #e2e8f0; color: #475569; }
+  select { padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: #fff; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card-num { font-size: 28px; font-weight: 900; color: #1e293b; }
+  .card-label { font-size: 11px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; letter-spacing: .5px; }
+  .card-red .card-num { color: #dc2626; }
+  .card-green .card-num { color: #16a34a; }
+  .section { background: #fff; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .section h3 { font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 6px 10px; background: #f8fafc; color: #64748b; font-weight: 700; border-bottom: 2px solid #e2e8f0; font-size: 11px; text-transform: uppercase; }
+  td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tr:hover td { background: #f8fafc; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+  .pill-ok { background: #dcfce7; color: #16a34a; }
+  .pill-err { background: #fee2e2; color: #dc2626; }
+  .pill-get { background: #dbeafe; color: #1d4ed8; }
+  .pill-post { background: #fef3c7; color: #92400e; }
+  .pill-del { background: #fee2e2; color: #dc2626; }
+  .bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .bar { height: 12px; border-radius: 6px; background: #6366f1; min-width: 4px; transition: width .3s; }
+  .bar-err { background: #ef4444; }
+  .modulo-icon { font-size: 14px; margin-right: 4px; }
+  .hora-grid { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 60px; }
+  .hora-col { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .hora-bar { width: 100%; border-radius: 3px 3px 0 0; background: #6366f1; min-height: 2px; }
+  .hora-bar-err { background: #ef4444; }
+  .hora-label { font-size: 8px; color: #94a3b8; writing-mode: vertical-rl; transform: rotate(180deg); }
+  .path-cell { font-family: monospace; font-size: 10px; color: #64748b; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loading { text-align: center; padding: 40px; color: #94a3b8; }
+  #refresh-info { font-size: 11px; color: #94a3b8; margin-left: auto; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📡 Bling API Log <span class="badge">v1.0.0</span></h1>
+    <div style="font-size:11px;color:#94a3b8;margin-top:2px">Auditoria de chamadas à API do Bling em tempo real</div>
+  </div>
+  <div id="bling-indicator" style="margin-left:auto"></div>
+</div>
+
+<div class="container">
+  <div class="toolbar">
+    <select id="sel-horas" onchange="carregar()">
+      <option value="1">Última 1 hora</option>
+      <option value="6">Últimas 6 horas</option>
+      <option value="24" selected>Últimas 24 horas</option>
+      <option value="48">Últimas 48 horas</option>
+      <option value="168">Últimos 7 dias</option>
+    </select>
+    <button class="btn btn-blue" onclick="carregar()">🔄 Atualizar</button>
+    <button class="btn btn-gray" onclick="window.location='config.html'">← Config</button>
+    <span id="refresh-info">—</span>
+  </div>
+
+  <div id="loading" class="loading">⏳ Carregando...</div>
+  <div id="content" style="display:none">
+
+    <!-- Cards resumo -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-num" id="c-total">—</div>
+        <div class="card-label">Total de chamadas</div>
+      </div>
+      <div class="card card-red">
+        <div class="card-num" id="c-erros">—</div>
+        <div class="card-label">Com erro</div>
+      </div>
+      <div class="card card-green">
+        <div class="card-num" id="c-ms">—</div>
+        <div class="card-label">Latência média (ms)</div>
+      </div>
+      <div class="card">
+        <div class="card-num" id="c-por-hora">—</div>
+        <div class="card-label">Média por hora</div>
+      </div>
+      <div class="card">
+        <div class="card-num" id="c-limite">—</div>
+        <div class="card-label">% do limite diário</div>
+      </div>
+    </div>
+
+    <!-- Gráfico por hora -->
+    <div class="section">
+      <h3>📊 Chamadas por hora (BRT)</h3>
+      <div class="hora-grid" id="chart-horas"></div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:6px">Azul = OK &nbsp;|&nbsp; Vermelho = Erro</div>
+    </div>
+
+    <!-- Por módulo -->
+    <div class="section">
+      <h3>📦 Consumo por módulo</h3>
+      <table>
+        <thead><tr><th>Módulo</th><th>Método</th><th>Chamadas</th><th>Erros</th><th>Latência avg</th><th>Volume</th></tr></thead>
+        <tbody id="tb-modulos"></tbody>
+      </table>
+    </div>
+
+    <!-- Últimas chamadas -->
+    <div class="section">
+      <h3>🕐 Últimas 100 chamadas</h3>
+      <table>
+        <thead><tr><th>Hora BRT</th><th>Módulo</th><th>Método</th><th>Status</th><th>ms</th><th>Path</th></tr></thead>
+        <tbody id="tb-ultimas"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const MODULO_ICON = {
+  fiscal_nfce: '🧾', fiscal_nfe: '📄', vendas: '💰', clientes: '👥',
+  produtos: '📦', vendedores: '👤', config_fp: '💳', config_dep: '🏦',
+  naturezas: '⚙️', config_emp: '🏢', config_loja: '🏪', ping: '🔌', outros: '❓'
+};
+
+async function carregar() {
+  const horas = document.getElementById('sel-horas').value;
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('content').style.display = 'none';
+  try {
+    const d = await api(`/api/bling/api-log?horas=${horas}`);
+    renderizar(d);
+    document.getElementById('refresh-info').textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+  } catch(e) {
+    document.getElementById('loading').innerHTML = `<p style="color:#dc2626">Erro: ${e.message}</p>`;
+    return;
+  }
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('content').style.display = 'block';
+}
+
+function renderizar(d) {
+  const g = d.geral || {};
+  const total = g.total || 0;
+  document.getElementById('c-total').textContent = total.toLocaleString('pt-BR');
+  document.getElementById('c-erros').textContent = (g.erros || 0).toLocaleString('pt-BR');
+  document.getElementById('c-ms').textContent = g.avg_ms || '—';
+  const horas = parseInt(document.getElementById('sel-horas').value);
+  document.getElementById('c-por-hora').textContent = horas > 0 ? Math.round(total / horas) : '—';
+  const pctDia = horas <= 24 ? ((total / 120000) * 100).toFixed(2) + '%' : '—';
+  document.getElementById('c-limite').textContent = pctDia;
+
+  // Gráfico horas
+  const chartDiv = document.getElementById('chart-horas');
+  chartDiv.innerHTML = '';
+  const maxHora = Math.max(...(d.por_hora || []).map(h => h.total), 1);
+  // Garante 24 slots
+  const horaMap = {};
+  (d.por_hora || []).forEach(h => { horaMap[String(h.hora_brt).padStart(2,'0')] = h; });
+  for (let i = 0; i < 24; i++) {
+    const h = String(i).padStart(2,'0');
+    const row = horaMap[h] || { total: 0, erros: 0 };
+    const pct = Math.max((row.total / maxHora) * 100, 2);
+    const pctErr = row.erros > 0 ? Math.max((row.erros / maxHora) * 100, 2) : 0;
+    chartDiv.innerHTML += `
+      <div class="hora-col" title="${h}h: ${row.total} chamadas, ${row.erros} erros">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:100%">
+          ${row.total > 0 ? `<div class="hora-bar" style="height:${pct}%"></div>` : ''}
+          ${row.erros > 0 ? `<div class="hora-bar-err" style="height:${pctErr}%;margin-top:1px"></div>` : ''}
+        </div>
+        <div class="hora-label">${h}</div>
+      </div>`;
+  }
+
+  // Tabela módulos
+  const maxTotal = Math.max(...(d.por_modulo || []).map(m => m.total), 1);
+  const tbMod = document.getElementById('tb-modulos');
+  tbMod.innerHTML = (d.por_modulo || []).map(m => {
+    const pct = Math.round((m.total / maxTotal) * 100);
+    const icon = MODULO_ICON[m.modulo] || '❓';
+    const mClass = m.method === 'POST' ? 'pill-post' : m.method === 'DELETE' ? 'pill-del' : 'pill-get';
+    return `<tr>
+      <td><span class="modulo-icon">${icon}</span><strong>${m.modulo}</strong></td>
+      <td><span class="pill ${mClass}">${m.method}</span></td>
+      <td><strong>${m.total.toLocaleString('pt-BR')}</strong></td>
+      <td style="color:${m.erros > 0 ? '#dc2626' : '#16a34a'}">${m.erros}</td>
+      <td>${m.avg_ms || '—'} ms</td>
+      <td>
+        <div class="bar-wrap">
+          <div class="bar" style="width:${pct}px"></div>
+          <span style="font-size:11px;color:#94a3b8">${pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:#94a3b8;text-align:center;padding:20px">Nenhuma chamada no período</td></tr>';
+
+  // Tabela últimas
+  const tbUlt = document.getElementById('tb-ultimas');
+  tbUlt.innerHTML = (d.ultimas || []).map(r => {
+    const icon = MODULO_ICON[r.modulo] || '❓';
+    const mClass = r.method === 'POST' ? 'pill-post' : r.method === 'DELETE' ? 'pill-del' : 'pill-get';
+    const hora = (r.hora_brt || '').substring(11, 19);
+    return `<tr>
+      <td style="white-space:nowrap;font-size:11px">${hora}</td>
+      <td><span class="modulo-icon">${icon}</span>${r.modulo}</td>
+      <td><span class="pill ${mClass}">${r.method}</span></td>
+      <td><span class="pill ${r.ok ? 'pill-ok' : 'pill-err'}">${r.status || '—'}</span></td>
+      <td style="color:${(r.duration_ms||0) > 2000 ? '#dc2626' : '#475569'}">${r.duration_ms || '—'}</td>
+      <td class="path-cell" title="${r.path}">${r.path}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:#94a3b8;text-align:center;padding:20px">Nenhum registro</td></tr>';
+}
+
+// Init
+requireLogin(['admin','gerente']);
+initBlingMonitor('bling-indicator');
+carregar();
+// Auto-refresh a cada 2 minutos
+setInterval(carregar, 120000);
+</script>
+</body>
+</html>
