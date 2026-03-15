@@ -1,5 +1,6 @@
-// v2.52.10
+// v2.52.11
 
+// v2.52.11: Fix duplicata clientes sem telefone — saveContactsCache anti-dup por CNPJ/blingId; create-bling limpa doc_/bid_; dedup busca por CNPJ+nome normalizado
 // v2.52.10: Fix clientes sem telefone no Bling agora salvos (ID doc_/bid_); busca CNPJ normalizada
 // v2.52.9: bling_api_log — log automático de todas chamadas Bling em blingFetch (modulo, método, status, ms); endpoint /api/bling/api-log; purge 7d no cron
 // v2.52.8: /api/products/search usa D1 local (app_products) — NÃO bate no Bling
@@ -2268,21 +2269,40 @@ async function saveContactsCache(result, env) {
     await env.DB.prepare(`ALTER TABLE customers_cache ADD COLUMN ${col}`).run().catch(() => { });
   }
   for (const r of result) {
-    // Sem telefone: usar ID sintético baseado no CNPJ ou bling_contact_id para não perder o cadastro
+    // Sem telefone: usar ID sintético baseado no CNPJ ou bling_contact_id
     let phoneKey = r.phone_digits;
     if (!phoneKey) {
       const docDigits = (r.cpf_cnpj || '').replace(/\D/g, '');
       if (docDigits.length >= 11) phoneKey = `doc_${docDigits}`;
       else if (r.bling_contact_id) phoneKey = `bid_${r.bling_contact_id}`;
     }
-    if (phoneKey) {
-      try {
-        await env.DB.prepare(`
-          INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, tipo_pessoa, email, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-        `).bind(phoneKey, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id || null, r.cpf_cnpj || null, r.tipo_pessoa || null, r.email || null).run();
-      } catch (_) { }
-    }
+    if (!phoneKey) continue;
+
+    try {
+      // Anti-duplicata: se existe outro registro com mesmo bling_contact_id → apagar o antigo
+      if (r.bling_contact_id) {
+        const existing = await env.DB.prepare(
+          `SELECT phone_digits FROM customers_cache WHERE bling_contact_id = ? AND phone_digits != ? LIMIT 1`
+        ).bind(String(r.bling_contact_id), phoneKey).first().catch(() => null);
+        if (existing?.phone_digits) {
+          await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits = ?`).bind(existing.phone_digits).run().catch(() => {});
+        }
+      }
+      // Anti-duplicata: se existe outro registro com mesmo CNPJ → apagar o antigo
+      const docDigits = (r.cpf_cnpj || '').replace(/\D/g, '');
+      if (docDigits.length >= 11) {
+        const existingDoc = await env.DB.prepare(
+          `SELECT phone_digits FROM customers_cache WHERE REPLACE(REPLACE(REPLACE(cpf_cnpj,'.',''),'/',''),'-','') = ? AND phone_digits != ? LIMIT 1`
+        ).bind(docDigits, phoneKey).first().catch(() => null);
+        if (existingDoc?.phone_digits) {
+          await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits = ?`).bind(existingDoc.phone_digits).run().catch(() => {});
+        }
+      }
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, tipo_pessoa, email, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+      `).bind(phoneKey, r.name, r.address_line, r.bairro, r.complemento, r.bling_contact_id || null, r.cpf_cnpj || null, r.tipo_pessoa || null, r.email || null).run();
+    } catch (_) { }
   }
 }
 
@@ -3660,13 +3680,28 @@ export default {
       } catch (_) { }
       const cacheByName = await env.DB.prepare("SELECT * FROM customers_cache WHERE name LIKE ? ORDER BY name LIMIT 20").bind(`%${q}%`).all().then(r => r.results || []);
       const orderByName = await env.DB.prepare(`SELECT DISTINCT customer_name AS name, phone_digits, address_line, bairro, complemento, referencia FROM orders WHERE customer_name LIKE ? ORDER BY created_at DESC LIMIT 10`).bind(`%${q}%`).all().then(r => r.results || []);
-      const seenId = new Set(); const seenName = new Set(); const merged = [];
+      const seenId = new Set(); const seenName = new Set(); const seenDoc = new Set(); const merged = [];
       for (const r of [...blingByName, ...cacheByName, ...orderByName]) {
         const bid = r.bling_contact_id ? String(r.bling_contact_id) : null;
-        const nome = (r.name || '').trim().toLowerCase();
-        if (bid && seenId.has(bid)) continue; if (seenName.has(nome)) continue;
-        if (bid) seenId.add(bid); seenName.add(nome); merged.push(r);
+        // Normaliza nome: remove espaços duplos, normaliza dashes e caracteres unicode
+        const nome = (r.name || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[–—]/g, '-');
+        const doc = (r.cpf_cnpj || '').replace(/\D/g, '');
+        // Pular registros sintéticos doc_/bid_ se já existe versão com telefone real
+        const isSintetico = (r.phone_digits || '').startsWith('doc_') || (r.phone_digits || '').startsWith('bid_');
+        if (bid && seenId.has(bid)) continue;
+        if (seenName.has(nome)) continue;
+        if (doc.length >= 11 && seenDoc.has(doc)) continue;
+        if (bid) seenId.add(bid);
+        seenName.add(nome);
+        if (doc.length >= 11) seenDoc.add(doc);
+        merged.push(r);
       }
+      // Priorizar registros com telefone real (sem prefixo sintético) no sort
+      merged.sort((a, b) => {
+        const aS = (a.phone_digits || '').startsWith('doc_') || (a.phone_digits || '').startsWith('bid_') ? 1 : 0;
+        const bS = (b.phone_digits || '').startsWith('doc_') || (b.phone_digits || '').startsWith('bid_') ? 1 : 0;
+        return aS - bS;
+      });
       return json(merged.slice(0, 12));
     }
 
@@ -3906,11 +3941,29 @@ export default {
         const blingId = bData.data?.id;
         const digits = (celular || telefone || '').replace(/\D/g, '');
 
+        // Apagar registros sintéticos (doc_/bid_) com mesmo CNPJ ou bling_contact_id
+        const cnpjDigits = (numeroDocumento || '').replace(/\D/g, '');
+        if (cnpjDigits.length >= 11) {
+          await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits = ?`).bind(`doc_${cnpjDigits}`).run().catch(() => {});
+        }
+        if (blingId) {
+          await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits = ?`).bind(`bid_${blingId}`).run().catch(() => {});
+          // Apagar também qualquer outro registro com mesmo bling_contact_id
+          if (digits) {
+            await env.DB.prepare(`DELETE FROM customers_cache WHERE bling_contact_id = ? AND phone_digits != ?`).bind(String(blingId), digits).run().catch(() => {});
+          }
+        }
         if (digits) {
           await env.DB.prepare(`
             INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, email, email_nfe, tipo_pessoa, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
           `).bind(digits, nome, endereco ? `${endereco}, ${numero || 'S/N'}` : '', bairro || '', complemento || '', blingId, numeroDocumento || '', email || '', emailNfe || '', tipoPessoa || 'F').run();
+        } else if (cnpjDigits.length >= 11) {
+          // Sem telefone: salvar com chave doc_ para não perder o vínculo Bling
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, email, email_nfe, tipo_pessoa, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+          `).bind(`doc_${cnpjDigits}`, nome, endereco ? `${endereco}, ${numero || 'S/N'}` : '', bairro || '', complemento || '', blingId, numeroDocumento || '', email || '', emailNfe || '', tipoPessoa || 'F').run();
         }
 
         return json({ ok: true, bling_contact_id: blingId, nome, numeroDocumento });
