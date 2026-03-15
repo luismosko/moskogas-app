@@ -1,5 +1,6 @@
-// v2.52.11
+// v2.52.12
 
+// v2.52.12: Permissões expandidas — atendente/gerente controlam módulos (clientes,estoque,vales,empenhos,contratos,avaliacoes,marketing,pagamentos,nfce,whatsapp_safety); checkPermRole em pagamentos e criar-vendas-bling
 // v2.52.11: Fix duplicata clientes sem telefone — saveContactsCache anti-dup por CNPJ/blingId; create-bling limpa doc_/bid_; dedup busca por CNPJ+nome normalizado
 // v2.52.10: Fix clientes sem telefone no Bling agora salvos (ID doc_/bid_); busca CNPJ normalizada
 // v2.52.9: bling_api_log — log automático de todas chamadas Bling em blingFetch (modulo, método, status, ms); endpoint /api/bling/api-log; purge 7d no cron
@@ -261,21 +262,48 @@ async function checkPermRole(env, user, permKey) {
   const fullKey = `${role}_${permKey}`;
   // Se a chave não existir no banco, usa defaults sensatos por permissão
   const defaults = {
+    // ── Atendente: Pedidos ──────────────────────────────────
     atendente_reabrir_entregue:  true,
     atendente_reabrir_cancelado: false,
     atendente_cancelar:          true,
     atendente_editar_entregue:   false,
+    // ── Atendente: Relatórios/Dados ─────────────────────────
     atendente_relatorio:         true,
     atendente_dashboard:         true,
-    atendente_auditoria:         true,
+    atendente_auditoria:         false,
+    // ── Atendente: Módulos ──────────────────────────────────
+    atendente_clientes:          true,
+    atendente_estoque:           true,
+    atendente_vales:             true,
+    atendente_empenhos:          true,
+    atendente_contratos:         false,
+    atendente_avaliacoes:        true,
+    atendente_marketing:         false,
+    // ── Atendente: Financeiro ───────────────────────────────
+    atendente_pagamentos:        true,
+    atendente_nfce:              false,
+    atendente_whatsapp_safety:   false,
+    // ── Gerente: Pedidos ────────────────────────────────────
     gerente_reabrir_entregue:    true,
     gerente_reabrir_cancelado:   true,
     gerente_cancelar:            true,
     gerente_editar_entregue:     true,
-    gerente_criar_usuarios:      true,
+    // ── Gerente: Relatórios/Dados ───────────────────────────
     gerente_relatorio:           true,
     gerente_dashboard:           true,
     gerente_auditoria:           true,
+    // ── Gerente: Módulos ────────────────────────────────────
+    gerente_clientes:            true,
+    gerente_estoque:             true,
+    gerente_vales:               true,
+    gerente_empenhos:            true,
+    gerente_contratos:           true,
+    gerente_avaliacoes:          true,
+    gerente_marketing:           true,
+    // ── Gerente: Financeiro ─────────────────────────────────
+    gerente_pagamentos:          true,
+    gerente_nfce:                true,
+    gerente_criar_usuarios:      true,
     gerente_whatsapp_safety:     true,
   };
   return fullKey in perms ? perms[fullKey] : (defaults[fullKey] ?? false);
@@ -5542,6 +5570,10 @@ export default {
     // ══════════════════════════════════════════════════════════
 
     if (method === 'GET' && path === '/api/pagamentos') {
+      const authPag = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authPag instanceof Response) return authPag;
+      const allowedPag = await checkPermRole(env, authPag, 'pagamentos');
+      if (!allowedPag) return err('Sem permissão para acessar pagamentos', 403);
       await ensureAuditTable(env);
       await ensurePixColumns(env);
       const rows = await env.DB.prepare(`
@@ -5704,6 +5736,10 @@ export default {
     }
 
     if (method === 'POST' && path === '/api/pagamentos/criar-vendas-bling') {
+      const authCheckNfce = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authCheckNfce instanceof Response) return authCheckNfce;
+      const allowedNfce = await checkPermRole(env, authCheckNfce, 'nfce');
+      if (!allowedNfce) return err('Sem permissão para emitir NFC-e / criar vendas Bling', 403);
       const body = await request.json();
       const orderIds = body.order_ids || [];
       if (orderIds.length === 0) return err('Nenhum pedido selecionado');
