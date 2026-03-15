@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.25.1
+// shared.js — Utilitários compartilhados MoskoGás v1.25.2
+// v1.25.3: Rename módulo Gestão → Pedidos (nav label + textos)
 // v1.25.2: Menu ADM — Produtos adicionado (produtos.html); ícone Estoque atualizado
 // v1.25.0: Hub Monitor desabilitado (badge H + banner desconectado) — migrado para Extensão Chrome
 // v1.24.8: Hub badge azul=conectado/vermelho=desconectado; fix reload seenLS por ciclo
@@ -6,7 +7,7 @@
 // v1.24.6: Hub Monitor — banner automático em todas as telas quando Hub desconecta
 // v1.24.5: Alerta UG — persistência "já visto" no localStorage; cancelados só hoje+ontem; badge Hub na gestão
 // v1.24.4: Alerta de cancelamento Ultragaz — banner vermelho + polling /cancelamentos-recentes
-// v1.24.3: Banner Ultragaz — "Ver na Gestão" redireciona com ?ultragaz=1 para limpar filtro de data
+// v1.24.3: Banner Ultragaz — "Ver em Pedidos" redireciona com ?ultragaz=1 para limpar filtro de data
 // v1.24.1: Fix alerta Ultragaz — orders/list retorna array direto, não { orders: [] }
 // v1.24.3: Fix alerta Ultragaz — status=NOVO → status=novo (case-sensitive no D1)
 // v1.24.0: Fix alerta Ultragaz — corrige apiCall → api() no _checkUltragazAlerts
@@ -170,7 +171,7 @@ const NAV_ACTIVE = '#ffffff';
 
 const NAV_ITEMS = [
   { href: 'pedido.html', icon: '➕', label: 'Novo Pedido', roles: ['admin', 'gerente', 'atendente'] },
-  { href: 'gestao.html', icon: '📋', label: 'Gestão', roles: ['admin', 'gerente', 'atendente'] },
+  { href: 'gestao.html', icon: '📋', label: 'Pedidos', roles: ['admin', 'gerente', 'atendente'] },
 ];
 
 // Dropdowns — cada um com ID único para abrir/fechar independente
@@ -1426,7 +1427,7 @@ function initHubMonitor(badgeId) {
           '<strong>PEDIDO ULTRAGAZ — ' + (order.customer_name || 'Cliente N/D').toUpperCase() + '</strong>' +
           '<span>' + items + ' · ' + total + ' · ' + (order.address_line || 'Endereço N/D') + '</span>' +
         '</div>' +
-        '<button class="ug-btn ug-btn-ok" title="Ver pedido na Gestão" onclick="window.location.href=\'gestao.html?ultragaz=1\'">✅ Ver na Gestão</button>' +
+        '<button class="ug-btn ug-btn-ok" title="Ver pedido em Pedidos" onclick="window.location.href=\'gestao.html?ultragaz=1\'">✅ Ver em Pedidos</button>' +
         '<button class="ug-btn ug-btn-x" title="Fechar (não mostrar novamente)" onclick="(function(){var k=\'ug_seen_\'+new Date().toISOString().slice(0,10);var ex=(localStorage.getItem(k)||\'\').split(\',\').filter(Boolean);var rid=String(' + order.id + ');if(!ex.includes(rid)){ex.push(rid);localStorage.setItem(k,ex.join(\',\'));}var b=document.getElementById(\'' + existingId + '\');if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';})()">×</button>' +
       '</div>';
 
@@ -1540,7 +1541,7 @@ function initHubMonitor(badgeId) {
           ' · Hub #' + item.ultragaz_order_id,
         '</span>',
       '</div>',
-      '<a href="gestao.html?ultragaz=1" style="background:#fff;color:#dc2626;padding:6px 14px;border-radius:6px;font-weight:700;text-decoration:none;white-space:nowrap">👁 Ver na Gestão</a>',
+      '<a href="gestao.html?ultragaz=1" style="background:#fff;color:#dc2626;padding:6px 14px;border-radius:6px;font-weight:700;text-decoration:none;white-space:nowrap">👁 Ver em Pedidos</a>',
       '<button onclick="(function(btn){var b=btn.closest(\'[id^=ug-cancel-banner-]\');var ugId=b?b.id.replace(\'ug-cancel-banner-\',\'\'):\'\';if(ugId){var k=\'ug_seen_\'+new Date().toISOString().slice(0,10);var ex=(localStorage.getItem(k)||\'\').split(\',\').filter(Boolean);var ck=\'c_\'+ugId;if(!ex.includes(ck)){ex.push(ck);localStorage.setItem(k,ex.join(\',\'));}};if(b)b.remove();if(!document.querySelector(\'[id^=ug-banner-],[id^=ug-cancel-banner-]\'))document.body.style.paddingTop=\'\';  })(this)" style="background:rgba(0,0,0,0.25);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1" title="Fechar (não mostrar novamente)">×</button>'
     ].join('');
 
