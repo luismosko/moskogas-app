@@ -338,10 +338,14 @@ label { font-size: 12px; font-weight: 600; color: #475569; display: block; margi
 
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f1f5f9">
         <label>Logo da revenda</label>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;margin-bottom:6px">
           <input id="cfgLogo" placeholder="https://... ou faça upload">
-          <button onclick="document.getElementById('cfgLogoFile').click()" class="btn" style="white-space:nowrap">📁 Upload</button>
+        </div>
+        <div id="logoDropzone" style="border:2px dashed #e2e8f0;border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:all 0.15s;font-size:12px;color:#94a3b8" onclick="document.getElementById('cfgLogoFile').click()">
           <input type="file" id="cfgLogoFile" accept="image/*" style="display:none" onchange="uploadLogo(this)">
+          <span style="font-size:22px">🖼️</span><br>
+          <strong>Clique ou arraste</strong> a imagem do logo
+          <div style="font-size:11px;color:#cbd5e1;margin-top:2px">PNG, JPG, WEBP</div>
         </div>
         <div id="logoPreview" style="margin-top:8px;display:none">
           <img id="logoImg" style="height:60px;border-radius:8px;border:1px solid #e2e8f0">
@@ -1046,6 +1050,18 @@ async function testGenerate() {
     openTab('posts');
     toast('✨ Post de teste gerado!', 'success');
   } catch(e) { hideLoading(); toast('Erro: ' + e.message, 'error'); }
+}
+
+function initLogoDropzone() {
+  const zone = document.getElementById('logoDropzone');
+  if (!zone) return;
+  zone.addEventListener('dragenter', e => { e.preventDefault(); zone.style.borderColor='#6366f1'; zone.style.background='#f5f3ff'; });
+  zone.addEventListener('dragover',  e => { e.preventDefault(); });
+  zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) { zone.style.borderColor=''; zone.style.background=''; } });
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.style.borderColor=''; zone.style.background='';
+    if (e.dataTransfer.files[0]) { const dt = e.dataTransfer; document.getElementById('cfgLogoFile').files = dt.files; uploadLogo({ files: dt.files }); }
+  });
 }
 
 function uploadLogo(input) {

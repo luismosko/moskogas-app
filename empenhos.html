@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.4</title>
+<title>Empenhos GOV — MoskoGás v1.0.5</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -88,9 +88,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .arquivo-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
 .arquivo-nome { flex: 1; font-size: 12px; font-weight: 600; color: #1e293b; }
 .arquivo-size { font-size: 11px; color: #94a3b8; }
-.upload-area { border: 2px dashed #e2e8f0; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; color: #94a3b8; font-size: 13px; transition: border-color .2s; }
-.upload-area:hover { border-color: #6366f1; color: #6366f1; }
+.upload-area { border: 2px dashed #e2e8f0; border-radius: 10px; padding: 28px 20px; text-align: center; cursor: pointer; color: #94a3b8; font-size: 13px; transition: border-color .2s, background .2s, color .2s; user-select: none; }
+.upload-area:hover { border-color: #6366f1; color: #6366f1; background: #f5f3ff; }
+.upload-area.drag-over { border-color: #6366f1; background: #eef2ff; color: #4f46e5; border-style: solid; transform: scale(1.01); }
 .upload-area input { display: none; }
+.upload-area .upload-icon { font-size: 28px; display: block; margin-bottom: 6px; }
+.upload-area .upload-hint { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 
 .historico-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .historico-table th { background: #f8fafc; padding: 8px 10px; text-align: left; font-weight: 700; color: #475569; border-bottom: 2px solid #e2e8f0; }
@@ -121,7 +124,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.4</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.5</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -219,9 +222,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
         <p style="font-size:12px;color:#64748b;margin-bottom:12px">Anexe o(s) PDF(s) do empenho.</p>
         <div id="arquivos-existentes" class="arquivos-list"></div>
         <div style="margin-top:12px">
-          <div class="upload-area" onclick="document.getElementById('file-input').click()">
-            <input type="file" id="file-input" accept=".pdf" multiple onchange="onFilesSelected(this.files)">
-            📎 Clique para anexar PDF(s) do empenho
+          <div class="upload-area" id="upload-area-empenho" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" multiple onchange="onFilesSelected(this.files)">
+            <span class="upload-icon">📎</span>
+            <strong>Clique para anexar</strong> ou arraste os arquivos aqui
+            <div class="upload-hint">PDF, PNG, JPG — múltiplos arquivos suportados</div>
           </div>
           <div id="uploads-pendentes" class="arquivos-list" style="margin-top:8px"></div>
         </div>
@@ -252,7 +257,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.4
+// v1.0.5
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -408,7 +413,8 @@ function switchTab(tab) {
     document.getElementById('pane-' + t).style.display = t === tab ? 'block' : 'none';
     document.getElementById('tab-' + t).classList.toggle('active', t === tab);
   });
-  if (tab === 'arquivos' && editandoId) carregarArquivos(editandoId);
+  if (tab === 'arquivos' && editandoId) { carregarArquivos(editandoId); initUploadDragDrop(); }
+  else if (tab === 'arquivos') setTimeout(initUploadDragDrop, 50);
 }
 
 // ── Busca cliente ─────────────────────────────────────────────────
@@ -605,15 +611,32 @@ async function carregarArquivos(id) {
 }
 
 function onFilesSelected(files) {
+  const allowed = ['application/pdf','image/png','image/jpeg','image/jpg'];
   Array.from(files).forEach(f => {
+    if (!allowed.some(t => f.type === t) && !f.name.match(/\.(pdf|png|jpg|jpeg)$/i)) {
+      toast('⚠️ Formato não suportado: ' + f.name, 'warn'); return;
+    }
     pendingFiles.push(f);
     const el = document.getElementById('uploads-pendentes');
     const div = document.createElement('div');
     div.className = 'arquivo-item';
-    div.innerHTML = `<span>📄</span><span class="arquivo-nome">${f.name}</span><span class="arquivo-size">${formatBytes(f.size)} — será salvo ao salvar o empenho</span>`;
+    const icon = f.type.includes('pdf') ? '📄' : '🖼️';
+    div.innerHTML = `${icon} <span class="arquivo-nome">${f.name}</span><span class="arquivo-size">${formatBytes(f.size)} — será salvo ao salvar o empenho</span>`;
     el.appendChild(div);
   });
   document.getElementById('file-input').value = '';
+}
+
+function initUploadDragDrop() {
+  const area = document.getElementById('upload-area-empenho');
+  if (!area) return;
+  area.addEventListener('dragenter', e => { e.preventDefault(); area.classList.add('drag-over'); });
+  area.addEventListener('dragover',  e => { e.preventDefault(); area.classList.add('drag-over'); });
+  area.addEventListener('dragleave', e => { if (!area.contains(e.relatedTarget)) area.classList.remove('drag-over'); });
+  area.addEventListener('drop', e => {
+    e.preventDefault(); area.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) onFilesSelected(e.dataTransfer.files);
+  });
 }
 
 async function removerArquivo(empId, arqId) {
