@@ -1,5 +1,6 @@
-// v2.52.13
+// v2.52.14
 
+// v2.52.14: gestao.html badge 🛒 para pedidos do site; WA número interno configurável via app_config; resposta sem campo whatsapp_enviado
 // v2.52.13: POST /api/pub/pedido-site — integração loja virtual: cria pedido no D1 + WhatsApp interno 9333
 // v2.52.12: Permissões expandidas — atendente/gerente controlam módulos (clientes,estoque,vales,empenhos,contratos,avaliacoes,marketing,pagamentos,nfce,whatsapp_safety); checkPermRole em pagamentos e criar-vendas-bling
 // v2.52.11: Fix duplicata clientes sem telefone — saveContactsCache anti-dup por CNPJ/blingId; create-bling limpa doc_/bid_; dedup busca por CNPJ+nome normalizado
@@ -7122,9 +7123,11 @@ export default {
           ? `\n📅 Agendado: ${entrega.data_agendada} às ${entrega.hora_agendada}`
           : '';
 
-        const waMsg = [
+        const waMsgParts = [
           `🛒 *NOVO PEDIDO — SITE* #${orderId}`,
-          `${numero_pedido ? '_Ref: ' + numero_pedido + '_' : ''}`,
+        ];
+        if (numero_pedido) waMsgParts.push(`_Ref: ${numero_pedido}_`);
+        waMsgParts.push(
           '',
           `👤 *${cliente.nome}*`,
           `📱 ${cliente.telefone || 'Sem telefone'}`,
@@ -7136,25 +7139,26 @@ export default {
           `${pgDesc}${trocoInfo}`,
           '',
           entregaInfo,
-          agendadoInfo,
-          '',
-          `✅ Pedido #${orderId} criado na gestão`,
-        ].filter(l => l !== undefined).join('\n');
+        );
+        if (agendadoInfo) waMsgParts.push(agendadoInfo);
+        waMsgParts.push('', `✅ Pedido #${orderId} criado — moskogas.com.br`);
+        const waMsg = waMsgParts.join('\n');
 
-        // Enviar WhatsApp para número interno (9333-0303 = 5567933330303)
-        const waInternalTo = '5567933330303';
+        // Número interno: lê de app_config "site_whatsapp_interno" ou usa 9333-0303 fixo
+        const waCfg = await env.DB.prepare(`SELECT value FROM app_config WHERE key='site_whatsapp_interno'`).first().catch(() => null);
+        const waInternalTo = waCfg?.value || '5567933330303';
+
         const waResult = await sendWhatsApp(env, waInternalTo, waMsg, {
           category: 'interno',
-          skipSafety: true, // Alerta interno — não sujeito a rate limit de cliente
+          skipSafety: true,
         }).catch(e => ({ ok: false, error: e.message }));
 
-        console.log(`[pedido-site] #${orderId} criado — WA interno: ${waResult?.ok ? 'ok' : 'falhou'}`);
+        console.log(`[pedido-site] #${orderId} criado — WA interno: ${waResult?.ok ? 'ok' : 'falhou ('+waResult?.error+')'}`);
 
         return json({
           ok: true,
           pedido_id: orderId,
           mensagem: `Pedido #${orderId} recebido com sucesso!`,
-          whatsapp_enviado: waResult?.ok || false,
         });
 
       } catch (e) {
