@@ -1,5 +1,6 @@
-// v2.52.14
+// v2.52.15
 
+// v2.52.15: pedido-site: pix→pix_receber (nunca pago); data_hora ISO truncada p/ data_pedido; hora salva em notes
 // v2.52.14: gestao.html badge 🛒 para pedidos do site; WA número interno configurável via app_config; resposta sem campo whatsapp_enviado
 // v2.52.13: POST /api/pub/pedido-site — integração loja virtual: cria pedido no D1 + WhatsApp interno 9333
 // v2.52.12: Permissões expandidas — atendente/gerente controlam módulos (clientes,estoque,vales,empenhos,contratos,avaliacoes,marketing,pagamentos,nfce,whatsapp_safety); checkPermRole em pagamentos e criar-vendas-bling
@@ -7062,7 +7063,14 @@ export default {
         const referencia = '';
 
         // Mapear forma de pagamento
-        const pgMap = { 'dinheiro': 'dinheiro', 'pix': 'pix_vista', 'cartao_debito': 'debito', 'cartao_credito': 'credito' };
+        // Site: pagamento SEMPRE na entrega → pix nunca é pix_vista (pago), sempre pix_receber
+        const momento = pagamento?.momento || 'na_entrega';
+        const pgMap = {
+          'dinheiro':      'dinheiro',
+          'pix':           momento === 'online' ? 'pix_vista' : 'pix_receber',
+          'cartao_debito': 'debito',
+          'cartao_credito':'credito',
+        };
         const tipo_pagamento = pgMap[pagamento?.forma] || 'dinheiro';
 
         // Mapear itens para formato interno
@@ -7073,8 +7081,11 @@ export default {
         }));
 
         // Montar notes com dados extras do pedido
+        // Hora do pedido (extraída do data_hora ISO do site)
+        const _horaPedido = data_hora?.includes('T') ? data_hora.split('T')[1]?.substring(0,5) : null;
         const notesExtras = [
           numero_pedido ? `Pedido site: ${numero_pedido}` : '',
+          _horaPedido ? `Hora: ${_horaPedido}` : '',
           pagamento?.troco_para ? `Troco para: R$ ${pagamento.troco_para}` : '',
           entrega?.tipo === 'entrega' && entrega?.agendado ? `Agendado: ${entrega.data_agendada} ${entrega.hora_agendada}` : '',
           entrega?.tipo === 'retirada' ? 'Retirada na loja' : '',
@@ -7092,7 +7103,7 @@ export default {
         `).bind(
           phone_digits, cliente.nome, address_line, bairro, complemento, referencia,
           JSON.stringify(items_json), Number(total) || 0, notesExtras || null,
-          tipo_pagamento, data_hora || null
+          tipo_pagamento, data_hora ? data_hora.split('T')[0] : null
         ).run();
 
         const orderId = result.meta?.last_row_id;

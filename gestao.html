@@ -79,7 +79,7 @@
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
     -->
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.25</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.26</span>
   <span id="nfce-alert-badge" title="Pedidos entregues sem NFC-e" style="display:none;align-items:center;gap:6px;background:#fef2f2;border:1px solid #dc2626;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;color:#dc2626;animation:pulseRed 1.5s infinite">
     🧾 <span id="nfce-alert-count">0</span> pendente(s)
     <button onclick="gerarNFCePendentes()" id="btn-gerar-nfce" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700;cursor:pointer" title="Gerar NFC-e agora para todos os pedidos pendentes">▶ Gerar</button>
@@ -155,7 +155,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.25: NF-e botão + badge; Detecta ?ultragaz=1
+// v2.9.26: NF-e botão + badge; Detecta ?ultragaz=1
 // v2.9.13
 
 function nfeBtnHtml(o) {
@@ -404,8 +404,11 @@ function renderTable(rows) {
       ? '<span title="Pedido recebido pelo site moskogas.com.br" style="display:inline-block;background:#0ea5e9;color:#fff;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:800;margin-right:4px;vertical-align:middle">🛒</span>'
       : '';
 
-    const pgtoLabels = { dinheiro:'💵 Din', pix_vista:'✅ PIX Pago', pix_receber:'⏳ PIX Rec.', debito:'💳 Déb', credito:'💳 Créd', mensalista:'📅 Mensal', boleto:'🧾 Boleto', nfe:'📄 NFe', vale_gas:'🎫 Vale Gás', vale_gas_ultragaz:'🟠 Vale UG' };
-    const pgtoLabel = pgtoLabels[o.tipo_pagamento] || o.tipo_pagamento || '—';
+    const pgtoLabels = { dinheiro:'💵 Din', pix_vista:'✅ PIX Pago', pix_receber:'⏳ PIX Entrg.', debito:'💳 Déb', credito:'💳 Créd', mensalista:'📅 Mensal', boleto:'🧾 Boleto', nfe:'📄 NFe', vale_gas:'🎫 Vale Gás', vale_gas_ultragaz:'🟠 Vale UG' };
+    // Pedidos do site: pagamento sempre na entrega — label específico
+    const pgtoLabel = o.vendedor_nome === 'Site' && o.tipo_pagamento === 'pix_receber'
+      ? '⏳ PIX/Entrega'
+      : (pgtoLabels[o.tipo_pagamento] || o.tipo_pagamento || '—');
     const pagoFlag = o.pago ? '✅' : '';
 
     const driverOpts = `<option value="">—</option>` +
