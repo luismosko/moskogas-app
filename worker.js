@@ -1,5 +1,6 @@
-// v2.52.12
+// v2.52.13
 
+// v2.52.13: POST /api/pub/pedido-site — integração loja virtual: cria pedido no D1 + WhatsApp interno 9333
 // v2.52.12: Permissões expandidas — atendente/gerente controlam módulos (clientes,estoque,vales,empenhos,contratos,avaliacoes,marketing,pagamentos,nfce,whatsapp_safety); checkPermRole em pagamentos e criar-vendas-bling
 // v2.52.11: Fix duplicata clientes sem telefone — saveContactsCache anti-dup por CNPJ/blingId; create-bling limpa doc_/bid_; dedup busca por CNPJ+nome normalizado
 // v2.52.10: Fix clientes sem telefone no Bling agora salvos (ID doc_/bid_); busca CNPJ normalizada
@@ -7025,6 +7026,141 @@ export default {
         'SELECT id, pix_tx_id, pix_qrcode, pix_paid_at, pago, status, tipo_pagamento, total_value, cora_invoice_id, cora_qrcode, cora_paid_at FROM orders WHERE id=?'
       ).bind(orderId).first();
       return json({ ok: true, order: order || null, configured: isPixConfigured(env) });
+    }
+
+
+    // ══════════════════════════════════════════════════════════
+    // POST /api/pub/pedido-site — Recebe pedido da loja virtual
+    // Sem autenticação JWT — validado por SITE_API_SECRET no header X-Site-Key
+    // ══════════════════════════════════════════════════════════
+    if (method === 'POST' && path === '/api/pub/pedido-site') {
+      try {
+        // Validar secret do site (evita spam)
+        const siteKey = request.headers.get('X-Site-Key') || '';
+        const expectedKey = env.SITE_API_SECRET || '';
+        if (expectedKey && siteKey !== expectedKey) {
+          return json({ ok: false, error: 'Chave inválida' }, 401);
+        }
+
+        const body = await request.json();
+        const { numero_pedido, origem, data_hora, cliente, entrega, itens, total, pagamento } = body;
+
+        // Validações básicas
+        if (!cliente?.nome) return json({ ok: false, error: 'Nome do cliente obrigatório' }, 400);
+        if (!itens || itens.length === 0) return json({ ok: false, error: 'Pedido sem itens' }, 400);
+
+        // Normalizar telefone
+        const phone_digits = (cliente.telefone || '').replace(/\D/g, '');
+
+        // Montar endereço
+        const address_line = entrega?.tipo === 'entrega'
+          ? `${entrega.rua || ''}, ${entrega.numero || 'S/N'}`
+          : 'Retirada na loja';
+        const bairro = entrega?.bairro || '';
+        const complemento = '';
+        const referencia = '';
+
+        // Mapear forma de pagamento
+        const pgMap = { 'dinheiro': 'dinheiro', 'pix': 'pix_vista', 'cartao_debito': 'debito', 'cartao_credito': 'credito' };
+        const tipo_pagamento = pgMap[pagamento?.forma] || 'dinheiro';
+
+        // Mapear itens para formato interno
+        const items_json = (itens || []).map(it => ({
+          name: it.nome || it.produto_id || 'Produto',
+          qty: Number(it.quantidade) || 1,
+          price: Number(it.preco_unitario) || 0,
+        }));
+
+        // Montar notes com dados extras do pedido
+        const notesExtras = [
+          numero_pedido ? `Pedido site: ${numero_pedido}` : '',
+          pagamento?.troco_para ? `Troco para: R$ ${pagamento.troco_para}` : '',
+          entrega?.tipo === 'entrega' && entrega?.agendado ? `Agendado: ${entrega.data_agendada} ${entrega.hora_agendada}` : '',
+          entrega?.tipo === 'retirada' ? 'Retirada na loja' : '',
+          cliente?.email ? `E-mail: ${cliente.email}` : '',
+        ].filter(Boolean).join(' | ');
+
+        // Garantir colunas extras
+        const extraCols = ['forma_pagamento_id INTEGER', 'forma_pagamento_key TEXT', 'emitir_nfce INTEGER', 'nfce_gerada INTEGER', 'nfce_numero TEXT', 'nfce_chave TEXT', 'bling_pedido_id INTEGER', 'bling_pedido_num INTEGER', 'pago INTEGER DEFAULT 0', 'tipo_pagamento TEXT', 'vendedor_id INTEGER', 'vendedor_nome TEXT', 'foto_comprovante TEXT', 'observacao_entregador TEXT', 'tipo_pagamento_original TEXT', 'delivered_at TEXT', 'data_pedido TEXT'];
+        for (const col of extraCols) { await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col}`).run().catch(() => {}); }
+
+        // Inserir pedido no D1
+        const result = await env.DB.prepare(`
+          INSERT INTO orders (phone_digits, customer_name, address_line, bairro, complemento, referencia, items_json, total_value, notes, status, sync_status, tipo_pagamento, pago, vendedor_nome, data_pedido)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', 'pending', ?, 0, 'Site', ?)
+        `).bind(
+          phone_digits, cliente.nome, address_line, bairro, complemento, referencia,
+          JSON.stringify(items_json), Number(total) || 0, notesExtras || null,
+          tipo_pagamento, data_hora || null
+        ).run();
+
+        const orderId = result.meta?.last_row_id;
+        await logEvent(env, orderId, 'created', { origem: 'site', nome: cliente.nome, numero_pedido }).catch(() => {});
+
+        // Salvar/atualizar cliente no cache local
+        if (phone_digits && cliente.nome) {
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, updated_at)
+            VALUES (?, ?, ?, ?, unixepoch())
+          `).bind(phone_digits, cliente.nome, address_line, bairro).run().catch(() => {});
+        }
+
+        // Montar mensagem WhatsApp para o número interno (9333)
+        const itensTxt = (itens || []).map(it =>
+          `  • ${it.nome} x${it.quantidade} — R$ ${Number(it.subtotal || it.preco_unitario * it.quantidade).toFixed(2)}`
+        ).join('\n');
+
+        const pgDescMap = { dinheiro: '💵 Dinheiro', pix: '⚡ PIX', cartao_debito: '💳 Débito', cartao_credito: '💳 Crédito' };
+        const pgDesc = pgDescMap[pagamento?.forma] || pagamento?.forma || 'Não informado';
+        const trocoInfo = pagamento?.troco_para ? `\n💰 Troco para: R$ ${pagamento.troco_para}` : '';
+
+        const entregaInfo = entrega?.tipo === 'retirada'
+          ? '🏪 Retirada na loja'
+          : `📍 ${address_line}${bairro ? ', ' + bairro : ''}${entrega?.cep ? ' — CEP ' + entrega.cep : ''}`;
+
+        const agendadoInfo = entrega?.agendado
+          ? `\n📅 Agendado: ${entrega.data_agendada} às ${entrega.hora_agendada}`
+          : '';
+
+        const waMsg = [
+          `🛒 *NOVO PEDIDO — SITE* #${orderId}`,
+          `${numero_pedido ? '_Ref: ' + numero_pedido + '_' : ''}`,
+          '',
+          `👤 *${cliente.nome}*`,
+          `📱 ${cliente.telefone || 'Sem telefone'}`,
+          '',
+          `*Itens:*`,
+          itensTxt,
+          '',
+          `💲 *Total: R$ ${Number(total).toFixed(2)}*`,
+          `${pgDesc}${trocoInfo}`,
+          '',
+          entregaInfo,
+          agendadoInfo,
+          '',
+          `✅ Pedido #${orderId} criado na gestão`,
+        ].filter(l => l !== undefined).join('\n');
+
+        // Enviar WhatsApp para número interno (9333-0303 = 5567933330303)
+        const waInternalTo = '5567933330303';
+        const waResult = await sendWhatsApp(env, waInternalTo, waMsg, {
+          category: 'interno',
+          skipSafety: true, // Alerta interno — não sujeito a rate limit de cliente
+        }).catch(e => ({ ok: false, error: e.message }));
+
+        console.log(`[pedido-site] #${orderId} criado — WA interno: ${waResult?.ok ? 'ok' : 'falhou'}`);
+
+        return json({
+          ok: true,
+          pedido_id: orderId,
+          mensagem: `Pedido #${orderId} recebido com sucesso!`,
+          whatsapp_enviado: waResult?.ok || false,
+        });
+
+      } catch (e) {
+        console.error('[pedido-site]', e.message);
+        return json({ ok: false, error: e.message }, 500);
+      }
     }
 
     // Test: simular webhook (manual)
