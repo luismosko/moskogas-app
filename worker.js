@@ -1,5 +1,6 @@
-// v2.52.19
+// v2.52.20
 
+// v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
 // v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
@@ -484,7 +485,8 @@ function blingPathToModulo(path) {
 async function blingFetch(path, options = {}, env) {
   const _t0 = Date.now();
   const doRequest = async (token) => {
-    return fetch(`https://www.bling.com.br/Api/v3${path}`, {
+    // IMPORTANTE: Tokens JWT só funcionam via api.bling.com.br (não www.bling.com.br)
+    return fetch(`https://api.bling.com.br/Api/v3${path}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -2609,7 +2611,7 @@ export default {
         const row = await getTokenRow(env);
         if (!row || !row.access_token) return json({ ok: false, connected: false, error: 'no_token' });
 
-        const testResp = await fetch('https://www.bling.com.br/Api/v3/contatos?pagina=1&limite=1', {
+        const testResp = await fetch('https://api.bling.com.br/Api/v3/contatos?pagina=1&limite=1', {
           headers: { Authorization: `Bearer ${row.access_token}`, 'Content-Type': 'application/json', 'enable-jwt': '1' },
         });
 
@@ -2709,7 +2711,7 @@ export default {
       // Buscar IDs reais das formas de pagamento desta conta
       let fpIds = { dinheiro: 23368, pix: 3138153 };
       try {
-        const fpResp = await fetch('https://www.bling.com.br/Api/v3/formas-pagamentos?pagina=1&limite=50', {
+        const fpResp = await fetch('https://api.bling.com.br/Api/v3/formas-pagamentos?pagina=1&limite=50', {
           headers: { Authorization: `Bearer ${(await env.DB.prepare("SELECT access_token FROM bling_tokens ORDER BY id DESC LIMIT 1").first())||''}`, 'enable-jwt': '1' }
         });
         if (fpResp.ok) {
@@ -3028,7 +3030,7 @@ export default {
         // Cache expirado — faz chamada real à API Bling
         // IMPORTANTE: só chega aqui se passou o TTL (5min ok / 30min desconectado)
         try {
-          const testResp = await fetch('https://www.bling.com.br/Api/v3/situacoes/modulos', {
+          const testResp = await fetch('https://api.bling.com.br/Api/v3/situacoes/modulos', {
             headers: { Authorization: `Bearer ${row.access_token}`, 'Content-Type': 'application/json', 'enable-jwt': '1' },
           });
           
