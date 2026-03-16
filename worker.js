@@ -1,5 +1,6 @@
-// v2.52.23
+// v2.52.24
 
+// v2.52.24: pix_receber NÃO gera NFC-e automática — só no modal de Pagamentos ao confirmar
 // v2.52.23: Fix query NFC-e pendentes — usa nfce_status/nfce_numero em vez de nfce_id; adiciona pix_receber
 // v2.52.22: Validação pedido zerado — não permite criar pedido com items sem preço ou total R$ 0,00
 // v2.52.21: POST /api/bling/disconnect + /bling/ping com mais detalhes (token_type, real_ok, minutes_left)
@@ -6496,11 +6497,13 @@ export default {
          FROM integration_audit WHERE action IN ('criar_nfce','emitir_nfce')
          ORDER BY id DESC LIMIT 20`
       ).all().catch(() => ({ results: [] }));
+      // v2.52.24: pix_receber NÃO gera NFC-e automática ao entregar
+      // A NFC-e de pix_receber é gerada no modal de Pagamentos ao confirmar pagamento
       const pedidos_sem_nfce = await env.DB.prepare(
         `SELECT id, customer_name, status, tipo_pagamento, pago, total_value,
                 nfce_id, nfce_numero, nfce_status, bling_pedido_id, nfce_error, COALESCE(nfce_retry_count,0) as nfce_retry_count, created_at
          FROM orders WHERE status='entregue'
-         AND tipo_pagamento IN ('dinheiro','pix_vista','pix_receber','debito','credito')
+         AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
          AND (nfce_status IS NULL OR nfce_status NOT IN ('emitida','autorizada'))
          AND (nfce_numero IS NULL OR nfce_numero = '')
          ORDER BY id DESC LIMIT 50`
