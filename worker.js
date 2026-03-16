@@ -1,5 +1,6 @@
-// v2.52.20
+// v2.52.21
 
+// v2.52.21: POST /api/bling/disconnect + /bling/ping com mais detalhes (token_type, real_ok, minutes_left)
 // v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
@@ -2997,6 +2998,9 @@ export default {
         const now = Math.floor(Date.now() / 1000);
         const expiresAt = (row.obtained_at || 0) + (row.expires_in || 3600);
         const minutesLeft = Math.floor((expiresAt - now) / 60);
+        
+        // Detectar tipo de token: JWT (1000+ chars, começa com eyJ) vs Legacy (40 chars)
+        const tokenType = (row.access_token.length > 100 && row.access_token.startsWith('eyJ')) ? 'JWT' : 'legacy';
 
         // Token expirado ou próximo: tenta refresh
         if (minutesLeft <= 10) {
@@ -3004,7 +3008,8 @@ export default {
             const newToken = await refreshBlingToken(env, row.refresh_token);
             const newRow = await getTokenRow(env);
             const ml2 = Math.floor(((newRow.obtained_at || 0) + (newRow.expires_in || 3600) - now) / 60);
-            return json({ ok: true, minutesLeft: ml2, refreshed: true });
+            const newType = (newRow.access_token.length > 100 && newRow.access_token.startsWith('eyJ')) ? 'JWT' : 'legacy';
+            return json({ ok: true, minutes_left: ml2, refreshed: true, token_type: newType });
           } catch (re) {
             try { await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','false',datetime('now'))`).run(); } catch(_) {}
             return json({ ok: false, error: 'refresh_failed: ' + re.message });
@@ -3024,7 +3029,7 @@ export default {
         const isOkCached = cachedOk?.value === 'true';
         const ttl = isOkCached ? 300 : 1800; // 5min se ok, 30min se desconectado
         if (cacheAge < ttl && cachedOk) {
-          return json({ ok: isOkCached, minutesLeft, cached: true, cacheAgeSeconds: cacheAge, ttl });
+          return json({ ok: isOkCached, minutes_left: minutesLeft, cached: true, cache_age: cacheAge, ttl, token_type: tokenType, real_ok: isOkCached });
         }
 
         // Cache expirado — faz chamada real à API Bling
@@ -3051,22 +3056,39 @@ export default {
               await refreshBlingToken(env, row.refresh_token);
               await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','true',datetime('now'))`).run();
               await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
-              return json({ ok: true, minutesLeft, refreshed: true });
+              const newRow2 = await getTokenRow(env);
+              const newType2 = (newRow2?.access_token?.length > 100 && newRow2?.access_token?.startsWith('eyJ')) ? 'JWT' : 'legacy';
+              return json({ ok: true, minutes_left: minutesLeft, refreshed: true, token_type: newType2, real_ok: true });
             } catch (_) {
               await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','false',datetime('now'))`).run();
               await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
-              return json({ ok: false, error: 'token_revoked' });
+              return json({ ok: false, error: 'token_revoked', token_type: tokenType });
             }
           }
           // API respondeu OK
           await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_ok','true',datetime('now'))`).run();
           await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key,value,updated_at) VALUES ('bling_real_checked_at',?,datetime('now'))`).bind(String(now)).run();
-          return json({ ok: true, minutesLeft, verified: true });
+          return json({ ok: true, minutes_left: minutesLeft, verified: true, token_type: tokenType, real_ok: true });
         } catch (apiErr) {
           // Erro de rede — não atualiza cache, retorna estado local
-          return json({ ok: isOkCached, minutesLeft, networkError: true });
+          return json({ ok: isOkCached, minutes_left: minutesLeft, networkError: true, token_type: tokenType });
         }
       } catch (e) { return json({ ok: false, error: e.message }); }
+    }
+
+    // POST /api/bling/disconnect — Limpa token para forçar reconexão
+    if (method === 'POST' && path === '/api/bling/disconnect') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      try {
+        // Limpa tabela de tokens
+        await env.DB.prepare('DELETE FROM bling_tokens').run();
+        // Limpa cache de status
+        await env.DB.prepare(`DELETE FROM app_config WHERE key IN ('bling_real_ok','bling_real_checked_at','bling_refresh_lock')`).run();
+        return json({ ok: true, message: 'Token Bling removido. Faça nova autorização.' });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
     }
 
     if (method === 'GET' && path === '/bling/oauth/start') {

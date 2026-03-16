@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.14.6 — MoskoGás</title>
+<title>Config v2.14.7 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -138,8 +138,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.14.6 — config</div>
-  <h1>⚙️ Configurações v2.14.6</h1>
+  <div class="version-badge">v2.14.7 — config</div>
+  <h1>⚙️ Configurações v2.14.7</h1>
 
   <!-- ── ABAS DE CONFIGURAÇÃO ── -->
   <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
@@ -341,9 +341,10 @@
     <p style="font-size:13px;color:#64748b;margin-bottom:12px">Conecte sua conta Bling para sincronizar contatos e pedidos. Você precisa ter o APP configurado no Bling com a URL de callback apontando para <code>https://api.moskogas.com.br/bling/oauth/callback</code></p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a href="https://api.moskogas.com.br/bling/oauth/start" target="_blank" class="btn btn-green" style="display:inline-block;text-decoration:none">🚀 Autorizar no Bling</a>
-      <button class="btn btn-gray" onclick="testBling()">📡 Testar Token Bling</button>
+      <button class="btn btn-gray" onclick="testBling()">📡 Testar Conexão</button>
+      <button class="btn btn-orange" onclick="reconectarBling()" title="Força nova autorização OAuth (útil se o token estiver com problemas)">🔄 Reconectar</button>
     </div>
-    <div id="bling-status"></div>
+    <div id="bling-status" style="margin-top:12px"></div>
   </div>
 
   <!-- Entregadores: gerenciar em Usuários (app_users) -->
@@ -969,13 +970,47 @@ async function testHealth() {
 
 async function testBling() {
   const el = document.getElementById('bling-status');
-  el.innerHTML = '<div class="status">⏳ Testando token Bling...</div>';
+  el.innerHTML = '<div class="status">⏳ Testando conexão Bling...</div>';
   try {
     const r = await fetch('https://api.moskogas.com.br/bling/ping');
     const d = await r.json();
-    el.innerHTML = d.ok
-      ? '<div class="status ok">✅ Bling conectado!</div>'
-      : `<div class="status err">❌ Erro ${d.status} — <a href="https://api.moskogas.com.br/bling/oauth/start" target="_blank">Re-autorizar</a></div>`;
+    if (d.ok) {
+      // Mostrar detalhes do token
+      let details = '✅ <strong>Bling conectado!</strong>';
+      if (d.token_type) details += ` (${d.token_type})`;
+      if (d.minutes_left) details += ` — Expira em ${d.minutes_left} min`;
+      if (d.real_ok) details += ' — API verificada ✓';
+      el.innerHTML = `<div class="status ok">${details}</div>`;
+    } else {
+      let errMsg = d.error || d.message || 'Token inválido';
+      el.innerHTML = `<div class="status err">❌ ${errMsg} — <a href="https://api.moskogas.com.br/bling/oauth/start" target="_blank">Re-autorizar</a></div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function reconectarBling() {
+  if (!confirm('Isso vai forçar uma nova autorização OAuth no Bling.\n\nUse quando o token estiver com problemas (erros 401/403).\n\nDeseja continuar?')) return;
+  
+  const el = document.getElementById('bling-status');
+  el.innerHTML = '<div class="status">⏳ Limpando token antigo...</div>';
+  
+  try {
+    // Limpar o token antigo via API
+    const r = await api('/api/bling/disconnect', { method: 'POST' });
+    if (!r.ok && r.error !== 'no_token') {
+      el.innerHTML = `<div class="status err">❌ Erro ao limpar: ${r.error || 'desconhecido'}</div>`;
+      return;
+    }
+    
+    // Redirecionar para OAuth
+    el.innerHTML = '<div class="status">🔄 Redirecionando para Bling...</div>';
+    window.open('https://api.moskogas.com.br/bling/oauth/start', '_blank');
+    
+    setTimeout(() => {
+      el.innerHTML = '<div class="status">⏳ Aguardando nova autorização... <button class="btn btn-sm btn-gray" onclick="testBling()">Verificar</button></div>';
+    }, 2000);
   } catch(e) {
     el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
   }
@@ -2575,7 +2610,7 @@ async function loadDadosRevenda() {
   try {
     const r = await api('/api/config?key=dados_revenda');
     if (!r?.value) return;
-    // v2.14.6: Worker já retorna value parseado, não fazer JSON.parse duplo
+    // v2.14.7: Worker já retorna value parseado, não fazer JSON.parse duplo
     const d = typeof r.value === 'string' ? JSON.parse(r.value) : r.value;
     const set = (id, val) => { const el = document.getElementById(id); if(el && val) el.value = val; };
     set('rev-cnpj', d.cnpj);
