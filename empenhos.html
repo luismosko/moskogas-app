@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.7</title>
+<title>Empenhos GOV — MoskoGás v1.0.8</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,7 +125,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.7</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.8</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -258,7 +258,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.7: Fix variável empenhos na função gerarValesDoEmpenho
+// v1.0.8: Busca cliente com fallback Bling API direto (search-bling-nome)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -420,24 +420,44 @@ function switchTab(tab) {
 }
 
 // ── Busca cliente ─────────────────────────────────────────────────
+// v1.0.8: Busca em 2 etapas — cache local + fallback Bling API direto
 function buscarCliente(q) {
   clearTimeout(clienteSearchTimer);
   const drop = document.getElementById('sc-drop');
   if (q.length < 2) { drop.style.display = 'none'; return; }
   clienteSearchTimer = setTimeout(async () => {
     try {
-      const r = await api(`/api/customer/search-multi?name=${encodeURIComponent(q)}`);
-      // Só mostrar clientes com bling_contact_id
-      const comBling = (r || []).filter(c => c.bling_contact_id);
+      // 1) Busca no cache local primeiro
+      let comBling = [];
+      try {
+        const r = await api(`/api/customer/search-multi?name=${encodeURIComponent(q)}`);
+        comBling = (r || []).filter(c => c.bling_contact_id);
+      } catch(_) {}
+
+      // 2) Se não achou no cache, busca direto no Bling
+      if (comBling.length === 0) {
+        try {
+          const blingResults = await api(`/api/customer/search-bling-nome?q=${encodeURIComponent(q)}`);
+          // Converter formato Bling para formato esperado
+          comBling = (blingResults || []).map(c => ({
+            name: c.nome,
+            bling_contact_id: c.id,
+            phone_digits: c.telefone || '',
+            cpf_cnpj: c.numeroDocumento || '',
+            address_line: ''
+          }));
+        } catch(_) {}
+      }
+
       if (!comBling.length) {
-        drop.innerHTML = '<div class="sc-item" style="color:#94a3b8">Nenhum cliente com Bling encontrado</div>';
+        drop.innerHTML = '<div class="sc-item" style="color:#94a3b8">Nenhum cliente encontrado no Bling</div>';
         drop.style.display = 'block';
         return;
       }
       drop.innerHTML = comBling.slice(0, 10).map((c, i) => `
         <div class="sc-item" onclick="selecionarCliente(${i})">
-          <strong>${c.name || c.customer_name} <span class="bling-tag">B</span></strong>
-          <small>${c.phone_digits || ''} ${c.address_line ? '— '+c.address_line : ''}</small>
+          <strong>${c.name || c.nome || c.customer_name} <span class="bling-tag">B</span></strong>
+          <small>${c.cpf_cnpj ? 'Doc: '+c.cpf_cnpj+' ' : ''}${c.phone_digits || ''}</small>
         </div>`).join('');
       drop._data = comBling;
       drop.style.display = 'block';
@@ -448,12 +468,14 @@ function buscarCliente(q) {
 function selecionarCliente(i) {
   const drop = document.getElementById('sc-drop');
   const c = drop._data[i];
-  document.getElementById('emp-cliente-search').value = c.name || c.customer_name;
-  document.getElementById('emp-cliente-nome').value = c.name || c.customer_name;
-  document.getElementById('emp-cliente-phone').value = c.phone_digits || '';
-  document.getElementById('emp-bling-id').value = c.bling_contact_id || '';
+  const nome = c.name || c.nome || c.customer_name;
+  const blingId = c.bling_contact_id || c.id;
+  document.getElementById('emp-cliente-search').value = nome;
+  document.getElementById('emp-cliente-nome').value = nome;
+  document.getElementById('emp-cliente-phone').value = c.phone_digits || c.telefone || '';
+  document.getElementById('emp-bling-id').value = blingId;
   drop.style.display = 'none';
-  mostrarClienteSelecionado(c.name || c.customer_name, c.bling_contact_id);
+  mostrarClienteSelecionado(nome, blingId);
 }
 
 function mostrarClienteSelecionado(nome, blingId) {
