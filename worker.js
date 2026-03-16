@@ -1,5 +1,6 @@
-// v2.52.21
+// v2.52.22
 
+// v2.52.22: Validação pedido zerado — não permite criar pedido com items sem preço ou total R$ 0,00
 // v2.52.21: POST /api/bling/disconnect + /bling/ping com mais detalhes (token_type, real_ok, minutes_left)
 // v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
@@ -4641,6 +4642,19 @@ export default {
       const body = await request.json();
       const { phone, name, address_line, bairro, complemento, referencia, items, total_value, notes, emitir_nfce, forma_pagamento_key, forma_pagamento_id, bling_contact_id, tipo_pagamento, empenho_id, data_pedido, pix_data_prevista } = body;
       const digits = (phone || '').replace(/\D/g, '');
+
+      // v2.52.22: Validação de itens e valor total — não permite pedido zerado
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return json({ ok: false, error: 'Pedido deve ter pelo menos 1 produto' }, 400);
+      }
+      const itemSemPreco = items.find(i => !i.price || parseFloat(i.price) <= 0);
+      if (itemSemPreco) {
+        return json({ ok: false, error: `Produto "${itemSemPreco.name || 'sem nome'}" está com preço R$ 0,00` }, 400);
+      }
+      const totalCalculado = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseFloat(i.qty) || 1), 0);
+      if (totalCalculado <= 0) {
+        return json({ ok: false, error: 'Pedido não pode ter valor total R$ 0,00' }, 400);
+      }
 
       const cols = ['forma_pagamento_id INTEGER', 'forma_pagamento_key TEXT', 'emitir_nfce INTEGER', 'nfce_gerada INTEGER', 'nfce_numero TEXT', 'nfce_chave TEXT', 'bling_pedido_id INTEGER', 'bling_pedido_num INTEGER', 'pago INTEGER DEFAULT 0', 'tipo_pagamento TEXT', 'vendedor_id INTEGER', 'vendedor_nome TEXT', 'foto_comprovante TEXT', 'observacao_entregador TEXT', 'tipo_pagamento_original TEXT', 'delivered_at TEXT', 'data_pedido TEXT'];
       for (const col of cols) { await env.DB.prepare(`ALTER TABLE orders ADD COLUMN ${col}`).run().catch(() => { }); }
