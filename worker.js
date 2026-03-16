@@ -1,5 +1,6 @@
-// v2.52.15
+// v2.52.16
 
+// v2.52.16: Fix duplicata busca cliente — Bling agora verifica seenBling (órgãos sem telefone)
 // v2.52.15: pedido-site: pix→pix_receber (nunca pago); data_hora ISO truncada p/ data_pedido; hora salva em notes
 // v2.52.14: gestao.html badge 🛒 para pedidos do site; WA número interno configurável via app_config; resposta sem campo whatsapp_enviado
 // v2.52.13: POST /api/pub/pedido-site — integração loja virtual: cria pedido no D1 + WhatsApp interno 9333
@@ -3648,7 +3649,14 @@ export default {
               });
               const blingRows = mapContatos(filtrados);
               if (blingRows.length) await saveContactsCache(blingRows, env);
-              for (const r of blingRows) { if (!seenPhone.has(r.phone_digits)) { seenPhone.add(r.phone_digits); results.push(r); } }
+              // v2.52.16: Deduplicar também por bling_contact_id (fix órgãos sem telefone)
+              for (const r of blingRows) {
+                if (r.bling_contact_id && seenBling.has(r.bling_contact_id)) continue;
+                if (r.phone_digits && seenPhone.has(r.phone_digits)) continue;
+                if (r.phone_digits) seenPhone.add(r.phone_digits);
+                if (r.bling_contact_id) seenBling.add(r.bling_contact_id);
+                results.push(r);
+              }
             }
           }
         } catch (_) { }
