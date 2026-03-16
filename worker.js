@@ -1,5 +1,6 @@
-// v2.52.17
+// v2.52.18
 
+// v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
 // v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
 // v2.52.16: Fix duplicata busca cliente — Bling agora verifica seenBling (órgãos sem telefone)
 // v2.52.15: pedido-site: pix→pix_receber (nunca pago); data_hora ISO truncada p/ data_pedido; hora salva em notes
@@ -3084,10 +3085,17 @@ export default {
       // Marcar código como em uso (TTL: 10min)
       await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?, datetime('now'))`).bind(codeKey, '1').run().catch(()=>{});
 
+      // v2.52.18: Garantir JWT no token - header + body param
       const body = new URLSearchParams({ grant_type: 'authorization_code', code });
       const resp = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'enable-jwt': '1', Authorization: 'Basic ' + btoa(`${env.BLING_CLIENT_ID}:${env.BLING_CLIENT_SECRET}`) },
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded', 
+          'Accept': 'application/json', 
+          'enable-jwt': '1',
+          'Enable-JWT': '1',  // Também com capitalização
+          Authorization: 'Basic ' + btoa(`${env.BLING_CLIENT_ID}:${env.BLING_CLIENT_SECRET}`) 
+        },
         body,
       });
       if (!resp.ok) {
@@ -3097,6 +3105,19 @@ export default {
         return new Response(errHtml, { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
       const data = await resp.json();
+      
+      // v2.52.18: Verificar se recebeu JWT (começa com eyJ) ou token legacy
+      const isJwt = data.access_token && data.access_token.startsWith('eyJ');
+      console.log('[Bling OAuth] Token recebido:', isJwt ? 'JWT válido' : 'TOKEN LEGACY (40 chars)', 'len:', data.access_token?.length);
+      
+      if (!isJwt && data.access_token?.length < 100) {
+        // Token legacy - mostrar aviso
+        const warnHtml = `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fef3c7"><div style="text-align:center;max-width:500px"><h2>⚠️ Token em formato antigo</h2><p>O Bling retornou um token OAuth1 (legacy) em vez de JWT.</p><p>Isso pode indicar que o App no Bling precisa ser atualizado ou recriado com suporte a JWT.</p><p style="font-size:12px;color:#92400e;margin-top:16px">Token recebido: ${data.access_token?.substring(0,20)}... (${data.access_token?.length} chars)</p><button onclick="window.close()" style="margin-top:16px;padding:12px 24px;background:#d97706;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer">Fechar</button></div></body></html>`;
+        // Salva mesmo assim para não bloquear, mas avisa
+        await saveToken(env, data);
+        return new Response(warnHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      }
+      
       await saveToken(env, data);
       // Retorna HTML que notifica o opener (login/pedido) e fecha o popup
       const successHtml = `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#dcfce7"><div style="text-align:center"><h2>✅ Bling conectado!</h2><p>Token salvo com sucesso. Esta janela vai fechar automaticamente.</p></div><script>if(window.opener){window.opener.postMessage({type:'bling_connected'},'*')}setTimeout(()=>window.close(),2000)</script></body></html>`;
