@@ -1,5 +1,6 @@
-// v2.52.18
+// v2.52.19
 
+// v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
 // v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
 // v2.52.16: Fix duplicata busca cliente — Bling agora verifica seenBling (órgãos sem telefone)
@@ -383,6 +384,8 @@ async function refreshBlingToken(env, refreshToken) {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Authorization: 'Basic ' + btoa(`${env.BLING_CLIENT_ID}:${env.BLING_CLIENT_SECRET}`),
+        'enable-jwt': '1',      // OBRIGATÓRIO: força token JWT em vez de legacy
+        'Enable-JWT': '1',      // Capitalizado também (alguns proxies)
       },
       body,
     });
