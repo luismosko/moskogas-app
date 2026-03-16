@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.1.4 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.1.5 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.4</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.5</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
 
@@ -195,7 +195,45 @@
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 window.addEventListener('DOMContentLoaded', () => {
     if (typeof requireAdminOrAtendente === 'function') requireAdminOrAtendente();
+    // v1.1.5: Verifica se veio do empenho
+    setTimeout(() => checkFromEmpenho(), 300);
 });
+
+// v1.1.5: Integração com Empenhos — pré-preenche dados do empenho
+function checkFromEmpenho() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('from_empenho') !== '1') return;
+
+    const dadosStr = sessionStorage.getItem('empenho_para_vale');
+    if (!dadosStr) return;
+
+    try {
+        const dados = JSON.parse(dadosStr);
+        sessionStorage.removeItem('empenho_para_vale'); // Limpa após usar
+
+        // Abre o modal de nova nota
+        openNovaModal();
+
+        // Preenche campos
+        setTimeout(() => {
+            document.getElementById('searchName').value = dados.cliente_nome || '';
+            document.getElementById('n-cliente').value = dados.cliente_nome || '';
+            document.getElementById('n-empenho').value = dados.empenho_numero || '';
+            document.getElementById('n-validade').value = dados.validade || '';
+
+            // Adiciona itens
+            itens = [];
+            (dados.itens || []).forEach(it => {
+                itens.push({ produto: it.produto, qtd: it.quantidade });
+            });
+            renderItens();
+
+            toast(`🎫 Dados do empenho ${dados.empenho_numero} carregados!`);
+        }, 100);
+    } catch(e) {
+        console.error('Erro ao carregar dados do empenho:', e);
+    }
+}
 
 let notasData = [], currentViewId = null, searchTimer = null, itens = [], filtroAtual = 'todos';
 

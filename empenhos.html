@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.5</title>
+<title>Empenhos GOV — MoskoGás v1.0.6</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -21,6 +21,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .btn-primary { background: #6366f1; color: #fff; }
 .btn-success { background: #16a34a; color: #fff; }
 .btn-danger { background: #dc2626; color: #fff; }
+.btn-orange { background: #f97316; color: #fff; }
 .btn-ghost { background: #f1f5f9; color: #475569; border: 1.5px solid #e2e8f0; }
 .btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
 
@@ -124,7 +125,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.5</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.6</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -257,7 +258,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.5
+// v1.0.6: Integração com módulo Vale Gás — botão Gerar Vales
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -344,6 +345,7 @@ function renderCard(e) {
     <div class="card-footer">
       <button class="btn btn-ghost btn-sm" onclick="abrirDetalhe(${e.id})">🔍 Detalhe / Histórico</button>
       <button class="btn btn-primary btn-sm" onclick="abrirModalEditar(${e.id})">✏️ Editar</button>
+      ${e.status === 'ativo' && (e.itens || []).length > 0 ? `<button class="btn btn-orange btn-sm" onclick="gerarValesDoEmpenho(${e.id})" title="Gerar Vale Gás a partir deste empenho">🎫 Gerar Vales</button>` : ''}
       ${e.status === 'ativo' ? `<button class="btn btn-danger btn-sm" onclick="cancelarEmpenho(${e.id})">✕ Cancelar</button>` : ''}
     </div>
   </div>`;
@@ -781,6 +783,57 @@ async function cancelarEmpenho(id) {
     await carregarEmpenhos();
   } catch(e) { toast('❌ ' + e.message, 'error'); }
   finally { hideLoading(); }
+}
+
+// ── Gerar Vales do Empenho ─────────────────────────────────────────
+// v1.0.6: Integração com módulo Vale Gás
+function gerarValesDoEmpenho(id) {
+  const e = _empenhos.find(x => x.id === id);
+  if (!e) { toast('❌ Empenho não encontrado', 'error'); return; }
+  if (!e.itens || e.itens.length === 0) { toast('❌ Empenho sem produtos cadastrados', 'error'); return; }
+
+  // Mapeia produtos do empenho para formato do vale gás
+  // P13, P20, P45, Água 20L
+  const mapProduto = (nome) => {
+    const n = (nome || '').toLowerCase();
+    if (n.includes('p13') || n.includes('13kg') || n.includes('13 kg')) return 'P13';
+    if (n.includes('p20') || n.includes('20kg') || n.includes('20 kg')) return 'P20';
+    if (n.includes('p45') || n.includes('45kg') || n.includes('45 kg')) return 'P45';
+    if (n.includes('água') || n.includes('agua') || n.includes('20l') || n.includes('mineral')) return 'Água 20L';
+    return 'P13'; // default
+  };
+
+  const itens = e.itens.map(it => ({
+    produto: mapProduto(it.produto_nome),
+    produto_nome: it.produto_nome,
+    quantidade: it.quantidade_total - it.quantidade_usada, // Saldo disponível
+    preco_unitario: it.preco_unitario || 0
+  })).filter(it => it.quantidade > 0);
+
+  if (itens.length === 0) { toast('❌ Nenhum saldo disponível nos produtos do empenho', 'error'); return; }
+
+  // Formata validade
+  let validade = '';
+  if (e.data_validade) {
+    const parts = e.data_validade.slice(0,10).split('-');
+    validade = `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+
+  // Salva dados no sessionStorage para o vales.html ler
+  const dadosVale = {
+    cliente_nome: e.cliente_nome,
+    empenho_numero: e.numero,
+    empenho_id: e.id,
+    validade: validade,
+    itens: itens
+  };
+  sessionStorage.setItem('empenho_para_vale', JSON.stringify(dadosVale));
+
+  // Redireciona para vales.html
+  toast('🎫 Abrindo módulo Vale Gás...');
+  setTimeout(() => {
+    window.location.href = 'vales.html?from_empenho=1';
+  }, 500);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
