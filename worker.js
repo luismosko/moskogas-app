@@ -1,5 +1,6 @@
-// v2.52.16
+// v2.52.17
 
+// v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
 // v2.52.16: Fix duplicata busca cliente — Bling agora verifica seenBling (órgãos sem telefone)
 // v2.52.15: pedido-site: pix→pix_receber (nunca pago); data_hora ISO truncada p/ data_pedido; hora salva em notes
 // v2.52.14: gestao.html badge 🛒 para pedidos do site; WA número interno configurável via app_config; resposta sem campo whatsapp_enviado
@@ -503,6 +504,18 @@ async function blingFetch(path, options = {}, env) {
   }
 
   let resp = await doRequest(token);
+
+  // v2.52.17: Tratar 403 com mensagem "JWT" como token inválido (Bling às vezes retorna 403 em vez de 401)
+  if (resp.status === 403) {
+    try {
+      const cloned = resp.clone();
+      const body = await cloned.text();
+      if (body.includes('JWT') || body.includes('token') || body.includes('Token')) {
+        // É erro de token, não de permissão — tratar como 401
+        resp = { status: 401, _converted: true };
+      }
+    } catch(_) {}
+  }
 
   if (resp.status === 401) {
     try {
@@ -3014,7 +3027,19 @@ export default {
           const testResp = await fetch('https://www.bling.com.br/Api/v3/situacoes/modulos', {
             headers: { Authorization: `Bearer ${row.access_token}`, 'Content-Type': 'application/json', 'enable-jwt': '1' },
           });
-          if (testResp.status === 401) {
+          
+          // v2.52.17: Verificar 403 com mensagem JWT como token inválido
+          let isTokenError = testResp.status === 401;
+          if (testResp.status === 403) {
+            try {
+              const body = await testResp.clone().text();
+              if (body.includes('JWT') || body.includes('token') || body.includes('Token')) {
+                isTokenError = true;
+              }
+            } catch(_) {}
+          }
+          
+          if (isTokenError) {
             // Token revogado — tenta refresh uma vez (protegido pelo distributed lock)
             try {
               await refreshBlingToken(env, row.refresh_token);
