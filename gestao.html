@@ -401,7 +401,7 @@ function renderTable(rows) {
       ? '<span title="Pedido recebido via Hub Ultragaz" style="display:inline-block;background:#f97316;color:#fff;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:800;margin-right:4px;vertical-align:middle">UG</span>'
       : '';
     const siteBadge = o.vendedor_nome === 'Site'
-      ? '<span title="Pedido recebido pelo site moskogas.com.br" style="display:inline-block;background:#0ea5e9;color:#fff;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:800;margin-right:4px;vertical-align:middle">🛒</span>'
+      ? '<span title="Pedido recebido pelo site moskogas.com.br" style="display:inline-flex;align-items:center;gap:3px;background:#1d4ed8;color:#fff;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:800;margin-right:5px;vertical-align:middle"><svg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'#fff\'><path d=\'M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96C5 16.1 5.9 17 7 17h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63H19c.75 0 1.41-.41 1.75-1.03l3.58-6.49A1 1 0 0023.46 4H5.21l-.94-2H1zm16 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z\'/></svg>SITE</span>'
       : '';
 
     const pgtoLabels = { dinheiro:'💵 Din', pix_vista:'✅ PIX Pago', pix_receber:'⏳ PIX Entrg.', debito:'💳 Déb', credito:'💳 Créd', mensalista:'📅 Mensal', boleto:'🧾 Boleto', nfe:'📄 NFe', vale_gas:'🎫 Vale Gás', vale_gas_ultragaz:'🟠 Vale UG' };
