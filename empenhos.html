@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.6</title>
+<title>Empenhos GOV — MoskoGás v1.0.7</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,7 +125,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.6</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.7</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -258,7 +258,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.6: Integração com módulo Vale Gás — botão Gerar Vales
+// v1.0.7: Fix variável empenhos na função gerarValesDoEmpenho
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -788,7 +788,7 @@ async function cancelarEmpenho(id) {
 // ── Gerar Vales do Empenho ─────────────────────────────────────────
 // v1.0.6: Integração com módulo Vale Gás
 function gerarValesDoEmpenho(id) {
-  const e = _empenhos.find(x => x.id === id);
+  const e = empenhos.find(x => x.id === id);
   if (!e) { toast('❌ Empenho não encontrado', 'error'); return; }
   if (!e.itens || e.itens.length === 0) { toast('❌ Empenho sem produtos cadastrados', 'error'); return; }
 
