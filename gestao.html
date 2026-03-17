@@ -69,6 +69,30 @@
     </div>
   </div>
   <div id="statusOverlay" onclick="closeStatusMenu()" style="display:none;position:fixed;inset:0;z-index:199"></div>
+
+  <!-- Filtro Pagamento -->
+  <div style="position:relative">
+    <button id="pgtoBtn" onclick="togglePgtoMenu()" style="background:#fff;border:2px solid #e2e8f0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;min-width:130px;text-align:left">
+      <span id="pgtoLabel">Pagamento ▾</span>
+    </button>
+    <div id="pgtoMenu" style="display:none;position:absolute;top:42px;left:0;z-index:200;background:#fff;border:2px solid #6366f1;border-radius:8px;padding:8px;min-width:210px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="dinheiro"           onchange="updatePgtoFilter()" checked> 💵 Dinheiro</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="pix_vista"           onchange="updatePgtoFilter()" checked> ✅ PIX Pago</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="pix_receber"        onchange="updatePgtoFilter()" checked> ⏳ PIX a Receber</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="debito"             onchange="updatePgtoFilter()" checked> 💳 Débito</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="credito"            onchange="updatePgtoFilter()" checked> 💳 Crédito</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="mensalista"         onchange="updatePgtoFilter()" checked> 📅 Mensalista</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="boleto"             onchange="updatePgtoFilter()" checked> 🧾 Boleto</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="vale_gas"          onchange="updatePgtoFilter()" checked> 🎫 Vale Gás</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:5px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><input type="checkbox" value="vale_gas_ultragaz"  onchange="updatePgtoFilter()" checked> 🟠 Vale UG</label>
+      <div style="border-top:1px solid #f1f5f9;margin-top:4px;padding-top:4px;display:flex;gap:6px">
+        <button onclick="selectAllPgto(true)"  style="flex:1;font-size:11px;padding:3px 0;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer;background:#f8fafc">Todos</button>
+        <button onclick="selectAllPgto(false)" style="flex:1;font-size:11px;padding:3px 0;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer;background:#f8fafc">Nenhum</button>
+      </div>
+    </div>
+  </div>
+  <div id="pgtoOverlay" onclick="closePgtoMenu()" style="display:none;position:fixed;inset:0;z-index:199"></div>
+
   <select id="fDriver" onchange="load()">
     <option value="">Todos entregadores</option>
   </select>
@@ -79,7 +103,7 @@
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
     -->
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.28</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.29</span>
   <span id="nfce-alert-badge" title="Pedidos entregues sem NFC-e" style="display:none;align-items:center;gap:6px;background:#fef2f2;border:1px solid #dc2626;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;color:#dc2626;animation:pulseRed 1.5s infinite">
     🧾 <span id="nfce-alert-count">0</span> pendente(s)
     <button onclick="gerarNFCePendentes()" id="btn-gerar-nfce" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700;cursor:pointer" title="Gerar NFC-e agora para todos os pedidos pendentes">▶ Gerar</button>
@@ -155,7 +179,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.28: NF-e botão + badge; Detecta ?ultragaz=1
+// v2.9.29: NF-e botão + badge; Detecta ?ultragaz=1
 // v2.9.13
 
 function nfeBtnHtml(o) {
@@ -295,6 +319,38 @@ function updateStatusFilter() {
 
 const STATUS_ORDER = { novo: 0, encaminhado: 1, whatsapp_enviado: 2, entregue: 3, cancelado: 4 };
 
+// Filtro de pagamento
+const ALL_PGTO = ['dinheiro','pix_vista','pix_receber','debito','credito','mensalista','boleto','vale_gas','vale_gas_ultragaz'];
+let activePgtos = new Set(ALL_PGTO);
+
+function togglePgtoMenu() {
+  const m = document.getElementById('pgtoMenu');
+  const ov = document.getElementById('pgtoOverlay');
+  const isOpen = m.style.display !== 'none';
+  m.style.display  = isOpen ? 'none' : 'block';
+  ov.style.display = isOpen ? 'none' : 'block';
+}
+function closePgtoMenu() {
+  document.getElementById('pgtoMenu').style.display  = 'none';
+  document.getElementById('pgtoOverlay').style.display = 'none';
+}
+function selectAllPgto(checked) {
+  document.querySelectorAll('#pgtoMenu input[type=checkbox]').forEach(b => b.checked = checked);
+  updatePgtoFilter();
+}
+function updatePgtoFilter() {
+  const boxes = document.querySelectorAll('#pgtoMenu input[type=checkbox]');
+  activePgtos = new Set([...boxes].filter(b => b.checked).map(b => b.value));
+  const count = activePgtos.size;
+  const total = ALL_PGTO.length;
+  const lbl = count === total ? 'Pagamento ▾' : count === 0 ? 'Nenhum pgto ▾' : `${count} pgto(s) ▾`;
+  const btn = document.getElementById('pgtoBtn');
+  btn.querySelector('span').textContent = lbl;
+  btn.style.borderColor = count === total ? '#e2e8f0' : '#6366f1';
+  btn.style.background  = count === total ? '#fff' : '#eef2ff';
+  load();
+}
+
 async function _load() {
   const dateFrom = document.getElementById('fDateFrom').value;
   const dateTo   = document.getElementById('fDateTo').value;
@@ -330,6 +386,10 @@ async function _load() {
   }
 
   rows = rows.filter(r => activeStatuses.has(r.status));
+  // Filtro de pagamento — trata null/undefined como 'dinheiro'
+  if (activePgtos.size < ALL_PGTO.length) {
+    rows = rows.filter(r => activePgtos.has(r.tipo_pagamento || 'dinheiro'));
+  }
   rows.sort((a, b) => {
     const sd = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
     if (sd !== 0) return sd;
