@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.2.0 — MoskoGás</title>
+  <title>Clientes v1.2.1 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -108,15 +108,21 @@
       .ped-row { grid-template-columns:50px 80px 1fr 80px; }
       .ped-pgto, .ped-row > :nth-child(6) { display:none; }
     }
+
+    /* Opções de pagamento preferencial */
+    .pg-opt { display:flex;align-items:center;gap:4px;padding:6px 10px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;cursor:pointer;transition:all .15s;font-size:12px;font-weight:600;color:#64748b }
+    .pg-opt:hover { border-color:#6366f1;background:#f5f3ff }
+    .pg-opt input { display:none }
+    .pg-opt:has(input:checked) { background:#6366f1;color:#fff;border-color:#6366f1 }
   </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.2.0 — clientes</div>
+  <div class="version-badge" style="display:none">v1.2.1 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.0</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.1</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -273,6 +279,22 @@
             <input type="radio" name="cobranca_tipo" value="mensalista" id="edit-cobranca-mensalista" onchange="updateCobrancaStyle()">
             <span style="font-size:13px;font-weight:600;color:#374151">📅 Mensalista</span>
           </label>
+        </div>
+        <!-- FORMA DE PAGAMENTO PREFERENCIAL -->
+        <div style="margin-top:10px">
+          <label style="font-size:10px;font-weight:700;color:#94a3b8;display:block;margin-bottom:6px">💳 FORMA DE PAGAMENTO PREFERENCIAL</label>
+          <div id="pagamento-opcoes-entrega" style="display:flex;flex-wrap:wrap;gap:6px">
+            <label class="pg-opt" data-pg="dinheiro"><input type="radio" name="pagamento_pref" value="dinheiro"><span>💵 Dinheiro</span></label>
+            <label class="pg-opt" data-pg="pix_vista"><input type="radio" name="pagamento_pref" value="pix_vista"><span>⚡ PIX</span></label>
+            <label class="pg-opt" data-pg="debito"><input type="radio" name="pagamento_pref" value="debito"><span>💳 Débito</span></label>
+            <label class="pg-opt" data-pg="credito"><input type="radio" name="pagamento_pref" value="credito"><span>💳 Crédito</span></label>
+          </div>
+          <div id="pagamento-opcoes-mensalista" style="display:none;flex-wrap:wrap;gap:6px">
+            <label class="pg-opt" data-pg="pix_receber"><input type="radio" name="pagamento_pref" value="pix_receber"><span>⏳ PIX a Receber</span></label>
+            <label class="pg-opt" data-pg="boleto"><input type="radio" name="pagamento_pref" value="boleto"><span>🧾 Boleto</span></label>
+            <label class="pg-opt" data-pg="mensalista"><input type="radio" name="pagamento_pref" value="mensalista"><span>📅 Mensalista</span></label>
+          </div>
+          <div id="edit-last-sale-info" style="display:none;margin-top:6px"></div>
         </div>
       </div>
 
@@ -745,6 +767,9 @@ function updateCobrancaStyle() {
   lblE.style.background = entrega ? '#f0fdf4' : '#f8fafc';
   lblM.style.borderColor = !entrega ? '#7c3aed' : '#e2e8f0';
   lblM.style.background = !entrega ? '#f5f3ff' : '#f8fafc';
+  // Mostrar/esconder opções de pagamento
+  document.getElementById('pagamento-opcoes-entrega').style.display = entrega ? 'flex' : 'none';
+  document.getElementById('pagamento-opcoes-mensalista').style.display = !entrega ? 'flex' : 'none';
 }
 
 async function editCliente(phone, nome) {
@@ -776,6 +801,21 @@ async function editCliente(phone, nome) {
     document.getElementById('edit-cobranca-mensalista').checked = (tipo === 'mensalista');
     updateCobrancaStyle();
     
+    // Forma de pagamento preferencial
+    const pgPref = c.pagamento_preferencial || '';
+    document.querySelectorAll('input[name="pagamento_pref"]').forEach(r => r.checked = (r.value === pgPref));
+    
+    // v1.2.1: Mostrar se veio da última venda
+    const lastSaleInfo = document.getElementById('edit-last-sale-info');
+    if (lastSaleInfo) {
+      if (c.ultima_venda && !c.pagamento_preferencial_salvo) {
+        lastSaleInfo.innerHTML = `<small style="color:#059669">📋 Baseado na última venda (${c.ultima_venda.data})</small>`;
+        lastSaleInfo.style.display = 'block';
+      } else {
+        lastSaleInfo.style.display = 'none';
+      }
+    }
+    
     // Produtos preferidos
     _editProdutos = (c.produtos_preferidos || []).map(p => ({
       product_id: p.product_id,
@@ -803,6 +843,7 @@ async function saveEditCliente() {
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
     // Salvar dados básicos do cliente
+    const pgPrefSel = document.querySelector('input[name="pagamento_pref"]:checked');
     await api('/api/customer/upsert', {
       method: 'POST',
       body: JSON.stringify({
@@ -815,6 +856,7 @@ async function saveEditCliente() {
         cpf_cnpj:    document.getElementById('edit-cpf').value.trim(),
         email:       document.getElementById('edit-email').value.trim(),
         cobranca_tipo: document.getElementById('edit-cobranca-mensalista').checked ? 'mensalista' : 'entrega',
+        pagamento_preferencial: pgPrefSel ? pgPrefSel.value : '',
       })
     });
     

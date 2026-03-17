@@ -1,6 +1,6 @@
-// v2.52.26
+// v2.52.27
 
-// v2.52.26: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
+// v2.52.27: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
 // v2.52.25: Query NFC-e pendentes exclui pedidos com nfce_id (já criados no Bling, só falta sync)
 // v2.52.24: pix_receber NÃO gera NFC-e automática — só no modal de Pagamentos ao confirmar
 // v2.52.23: Fix query NFC-e pendentes — usa nfce_status/nfce_numero em vez de nfce_id; adiciona pix_receber
@@ -4000,7 +4000,27 @@ export default {
           ? ped.filter(p=>p.status==='entregue').reduce((s,p)=>s+(p.total_value||0),0) / ped.filter(p=>p.status==='entregue').length
           : 0,
       };
-      // v2.52.26: Incluir produtos preferidos do cliente
+      // v2.52.27: Auto-preencher tipo cobrança e pagamento preferencial da última venda
+      const ultimaVendaEntregue = ped.find(p => p.status === 'entregue' && p.tipo_pagamento);
+      if (ultimaVendaEntregue) {
+        // Se não tem preferência salva, usar da última venda
+        if (!cliente.cobranca_tipo) {
+          // Inferir tipo de cobrança pelo tipo de pagamento
+          const tiposMensalista = ['mensalista', 'boleto', 'pix_receber'];
+          cliente.cobranca_tipo = tiposMensalista.includes(ultimaVendaEntregue.tipo_pagamento) ? 'mensalista' : 'entrega';
+        }
+        if (!cliente.pagamento_preferencial) {
+          cliente.pagamento_preferencial = ultimaVendaEntregue.tipo_pagamento;
+        }
+        // Incluir info da última venda para referência
+        cliente.ultima_venda = {
+          id: ultimaVendaEntregue.id,
+          data: ultimaVendaEntregue.data_pedido || new Date(ultimaVendaEntregue.created_at * 1000).toISOString().slice(0,10),
+          tipo_pagamento: ultimaVendaEntregue.tipo_pagamento,
+          total: ultimaVendaEntregue.total_value,
+        };
+      }
+      // v2.52.27: Incluir produtos preferidos do cliente
       cliente.produtos_preferidos = produtos.results || [];
       return json({ cliente, pedidos: ped, stats });
     }
@@ -4661,20 +4681,21 @@ export default {
 
     if (method === 'POST' && path === '/api/customer/upsert') {
       const body = await request.json();
-      const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo } = body;
+      const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial } = body;
       const digits = (phone || '').replace(/\D/g, '');
 
-      // v2.52.26: Preservar campos existentes se não fornecidos
-      const existing = digits ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj, email, cobranca_tipo FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null) : null;
+      // v2.52.27: Preservar campos existentes se não fornecidos
+      const existing = digits ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null) : null;
       const finalBlingId = bling_contact_id || existing?.bling_contact_id || null;
       const finalCpf = cpf_cnpj || existing?.cpf_cnpj || null;
       const finalEmail = email !== undefined ? email : (existing?.email || null);
       const finalCobranca = cobranca_tipo || existing?.cobranca_tipo || 'entrega';
+      const finalPgPref = pagamento_preferencial !== undefined ? pagamento_preferencial : (existing?.pagamento_preferencial || '');
 
-      await env.DB.prepare(`INSERT INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-        ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, updated_at=unixepoch()`)
-        .bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf, finalEmail, finalCobranca).run();
+      await env.DB.prepare(`INSERT INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial, updated_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+        ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, pagamento_preferencial=excluded.pagamento_preferencial, updated_at=unixepoch()`)
+        .bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf, finalEmail, finalCobranca, finalPgPref).run();
       return json({ ok: true, bling_contact_id: finalBlingId });
     }
 
