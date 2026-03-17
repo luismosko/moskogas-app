@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.14.7 — MoskoGás</title>
+<title>Config v2.14.8 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -138,8 +138,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.14.7 — config</div>
-  <h1>⚙️ Configurações v2.14.7</h1>
+  <div class="version-badge">v2.14.8 — config</div>
+  <h1>⚙️ Configurações v2.14.8</h1>
 
   <!-- ── ABAS DE CONFIGURAÇÃO ── -->
   <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
@@ -1031,11 +1031,16 @@ async function loadConexoes() {
   try {
     // Usa fetch direto para não acionar o logout automático do api() em caso de erro
     const token = getSessionToken();
+    if (!token) {
+      lista.innerHTML = `<div style="color:#dc2626;padding:12px">❌ Token de sessão não encontrado. Faça login novamente.</div>`;
+      return;
+    }
     const resp = await fetch(API_BASE + '/api/wa/conexoes', {
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
     });
     if (!resp.ok) {
-      lista.innerHTML = `<div style="color:#94a3b8;padding:12px;font-size:12px">⚠️ Não foi possível carregar conexões (${resp.status})</div>`;
+      const errText = await resp.text().catch(() => '');
+      lista.innerHTML = `<div style="color:#dc2626;padding:12px">❌ Erro ${resp.status}: ${errText || 'Acesso negado'}</div>`;
       return;
     }
     const rows = await resp.json();
@@ -1076,7 +1081,8 @@ async function loadConexoes() {
       </div>`;
     }).join('');
   } catch(e) {
-    lista.innerHTML = `<div style="color:#dc2626;padding:12px">❌ ${e.message}</div>`;
+    lista.innerHTML = `<div style="color:#dc2626;padding:12px">❌ Erro: ${e.message}</div>`;
+    console.error('loadConexoes error:', e);
   }
 }
 
@@ -2610,7 +2616,7 @@ async function loadDadosRevenda() {
   try {
     const r = await api('/api/config?key=dados_revenda');
     if (!r?.value) return;
-    // v2.14.7: Worker já retorna value parseado, não fazer JSON.parse duplo
+    // v2.14.8: Worker já retorna value parseado, não fazer JSON.parse duplo
     const d = typeof r.value === 'string' ? JSON.parse(r.value) : r.value;
     const set = (id, val) => { const el = document.getElementById(id); if(el && val) el.value = val; };
     set('rev-cnpj', d.cnpj);
