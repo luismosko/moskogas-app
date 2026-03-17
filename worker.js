@@ -12,6 +12,7 @@
 // v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
+// v2.52.18: GET /api/pagamentos inclui nfce_id/nfce_numero/nfce_status — botão Fiscal some quando NFC-e já emitida
 // v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
 // v2.52.17: fix catMap WA — category entrega→interno (usa Disk/conexão interna, não externo); contrato→interno
 // v2.52.16: Fix duplicata busca cliente — Bling agora verifica seenBling (órgãos sem telefone)
@@ -5834,6 +5835,7 @@ export default {
           o.forma_pagamento_key, o.forma_pagamento_id,
           o.pix_tx_id, o.pix_qrcode, o.pix_qrcode_base64, o.pix_paid_at,
           o.cora_invoice_id, o.cora_qrcode, o.cora_paid_at,
+          o.nfce_id, o.nfce_numero, o.nfce_status,
           cc.bling_contact_id,
           (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
           (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
