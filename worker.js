@@ -1,5 +1,6 @@
-// v2.52.25
+// v2.52.26
 
+// v2.52.26: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
 // v2.52.25: Query NFC-e pendentes exclui pedidos com nfce_id (já criados no Bling, só falta sync)
 // v2.52.24: pix_receber NÃO gera NFC-e automática — só no modal de Pagamentos ao confirmar
 // v2.52.23: Fix query NFC-e pendentes — usa nfce_status/nfce_numero em vez de nfce_id; adiciona pix_receber
@@ -3976,15 +3977,16 @@ export default {
     }
 
     // GET /api/clientes/:phone — detalhe + histórico de pedidos
-    if (request.method === 'GET' && path.startsWith('/api/clientes/')) {
+    if (request.method === 'GET' && path.startsWith('/api/clientes/') && !path.includes('/fiscal') && !path.includes('/produtos')) {
       const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
       if (authCheck instanceof Response) return authCheck;
       const phone = decodeURIComponent(path.replace('/api/clientes/', ''));
       if (!phone) return err('phone obrigatório');
 
-      const [cliente, pedidos] = await Promise.all([
+      const [cliente, pedidos, produtos] = await Promise.all([
         env.DB.prepare(`SELECT * FROM customers_cache WHERE phone_digits = ?`).bind(phone).first(),
         env.DB.prepare(`SELECT id, data_pedido, created_at, items_json, total_value, tipo_pagamento, status, pago, driver_name_cache, bling_pedido_num FROM orders WHERE phone_digits = ? ORDER BY created_at DESC LIMIT 100`).bind(phone).all(),
+        env.DB.prepare(`SELECT * FROM customer_products WHERE phone_digits = ? AND ativo = 1`).bind(phone).all().catch(() => ({ results: [] })),
       ]);
       if (!cliente) return err('Cliente não encontrado', 404);
 
@@ -3998,7 +4000,39 @@ export default {
           ? ped.filter(p=>p.status==='entregue').reduce((s,p)=>s+(p.total_value||0),0) / ped.filter(p=>p.status==='entregue').length
           : 0,
       };
+      // v2.52.26: Incluir produtos preferidos do cliente
+      cliente.produtos_preferidos = produtos.results || [];
       return json({ cliente, pedidos: ped, stats });
+    }
+
+    // GET /api/clientes/:phone/produtos — produtos preferidos do cliente
+    if (method === 'GET' && path.match(/^\/api\/clientes\/[^/]+\/produtos$/)) {
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const phone = decodeURIComponent(path.replace('/api/clientes/','').replace('/produtos',''));
+      const produtos = await env.DB.prepare(`SELECT * FROM customer_products WHERE phone_digits = ? AND ativo = 1`).bind(phone).all().catch(() => ({ results: [] }));
+      return json({ produtos: produtos.results || [] });
+    }
+
+    // POST /api/clientes/:phone/produtos — salvar produtos preferidos
+    if (method === 'POST' && path.match(/^\/api\/clientes\/[^/]+\/produtos$/)) {
+      const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const phone = decodeURIComponent(path.replace('/api/clientes/','').replace('/produtos',''));
+      const body = await request.json();
+      const { produtos } = body;
+      
+      // Remover todos os produtos existentes
+      await env.DB.prepare(`DELETE FROM customer_products WHERE phone_digits = ?`).bind(phone).run();
+      
+      // Inserir novos produtos
+      if (produtos && produtos.length > 0) {
+        for (const p of produtos) {
+          await env.DB.prepare(`INSERT INTO customer_products (phone_digits, product_id, product_name, preco_negociado, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, 1, unixepoch(), unixepoch())`)
+            .bind(phone, p.product_id, p.product_name, p.preco_negociado).run();
+        }
+      }
+      return json({ ok: true, count: produtos?.length || 0 });
     }
 
     // ── CADASTRO COMPLETO DE CLIENTE NO BLING (PF/PJ) ──────
@@ -4627,15 +4661,20 @@ export default {
 
     if (method === 'POST' && path === '/api/customer/upsert') {
       const body = await request.json();
-      const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj } = body;
+      const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo } = body;
       const digits = (phone || '').replace(/\D/g, '');
 
-      // v2.28.8: Preservar bling_contact_id existente se não fornecido
-      const existing = digits ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null) : null;
+      // v2.52.26: Preservar campos existentes se não fornecidos
+      const existing = digits ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj, email, cobranca_tipo FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null) : null;
       const finalBlingId = bling_contact_id || existing?.bling_contact_id || null;
       const finalCpf = cpf_cnpj || existing?.cpf_cnpj || null;
+      const finalEmail = email !== undefined ? email : (existing?.email || null);
+      const finalCobranca = cobranca_tipo || existing?.cobranca_tipo || 'entrega';
 
-      await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`).bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf).run();
+      await env.DB.prepare(`INSERT INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, updated_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+        ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, updated_at=unixepoch()`)
+        .bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf, finalEmail, finalCobranca).run();
       return json({ ok: true, bling_contact_id: finalBlingId });
     }
 

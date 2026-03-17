@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.1.0 — MoskoGás</title>
+  <title>Clientes v1.2.0 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -114,9 +114,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.1.0 — clientes</div>
+  <div class="version-badge" style="display:none">v1.2.0 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.1.0</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.0</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -235,8 +235,8 @@
 </div>
 
 <!-- ── MODAL EDITAR CLIENTE ── -->
-<div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#fff;border-radius:14px;width:min(96vw,520px);box-shadow:0 20px 60px rgba(0,0,0,.3)" onclick="event.stopPropagation()">
+<div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="background:#fff;border-radius:14px;width:min(96vw,580px);box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto" onclick="event.stopPropagation()">
     <div style="padding:16px 20px;border-bottom:2px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;background:#1e293b;border-radius:14px 14px 0 0">
       <h2 style="font-size:16px;font-weight:800;color:#fff">✏️ Editar Cliente</h2>
       <button onclick="closeEditModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:18px;cursor:pointer">✕</button>
@@ -260,6 +260,35 @@
         <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:3px">E-MAIL</label>
         <input id="edit-email" type="email" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:14px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
       </div>
+
+      <!-- TIPO DE COBRANÇA -->
+      <div style="border-top:1px solid #f1f5f9;padding-top:10px">
+        <label style="font-size:10px;font-weight:700;color:#94a3b8;display:block;margin-bottom:8px">💰 TIPO DE COBRANÇA</label>
+        <div style="display:flex;gap:10px">
+          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;background:#f8fafc;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;transition:all .15s" id="lbl-entrega">
+            <input type="radio" name="cobranca_tipo" value="entrega" id="edit-cobranca-entrega" onchange="updateCobrancaStyle()">
+            <span style="font-size:13px;font-weight:600;color:#374151">💵 Paga na Entrega</span>
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;background:#f8fafc;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;transition:all .15s" id="lbl-mensalista">
+            <input type="radio" name="cobranca_tipo" value="mensalista" id="edit-cobranca-mensalista" onchange="updateCobrancaStyle()">
+            <span style="font-size:13px;font-weight:600;color:#374151">📅 Mensalista</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- PRODUTOS PREFERIDOS -->
+      <div style="border-top:1px solid #f1f5f9;padding-top:10px">
+        <label style="font-size:10px;font-weight:700;color:#94a3b8;display:block;margin-bottom:8px">🛒 PRODUTOS PREFERIDOS (preços negociados)</label>
+        <div id="edit-prods-list" style="display:grid;gap:6px;margin-bottom:8px;max-height:200px;overflow-y:auto"></div>
+        <div style="display:flex;gap:6px">
+          <select id="edit-prod-select" style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none">
+            <option value="">— Selecione produto —</option>
+          </select>
+          <input id="edit-prod-preco" type="number" step="0.01" min="0" placeholder="Preço" style="width:90px;padding:8px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none;text-align:right">
+          <button onclick="addProdutoCliente()" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:8px 12px;font-size:13px;cursor:pointer;white-space:nowrap">+ Add</button>
+        </div>
+      </div>
+
       <div style="border-top:1px solid #f1f5f9;padding-top:10px">
         <label style="font-size:10px;font-weight:700;color:#94a3b8;display:block;margin-bottom:8px">📍 ENDEREÇO</label>
         <div style="display:grid;gap:8px">
@@ -632,8 +661,100 @@ function escAttr(s) {
 
 // ── Modal Editar Cliente ──
 let _editPhone = null;
+let _editProdutos = []; // produtos preferidos do cliente
+let _allProducts = [];  // todos os produtos do sistema
+
+// Carregar lista de produtos do sistema
+async function loadAllProducts() {
+  if (_allProducts.length > 0) return _allProducts;
+  try {
+    const res = await api('/api/app-products');
+    _allProducts = res.products || [];
+    return _allProducts;
+  } catch(e) {
+    console.warn('Erro ao carregar produtos:', e);
+    return [];
+  }
+}
+
+function renderProdutoSelect() {
+  const sel = document.getElementById('edit-prod-select');
+  sel.innerHTML = '<option value="">— Selecione produto —</option>' +
+    _allProducts.filter(p => p.ativo !== 0).map(p =>
+      `<option value="${p.id}" data-price="${p.price}" data-name="${escHtml(p.name)}">${escHtml(p.name)} (R$ ${(p.price||0).toFixed(2)})</option>`
+    ).join('');
+}
+
+function renderProdutosCliente() {
+  const list = document.getElementById('edit-prods-list');
+  if (_editProdutos.length === 0) {
+    list.innerHTML = '<p style="font-size:12px;color:#94a3b8;text-align:center;padding:8px">Nenhum produto preferido cadastrado</p>';
+    return;
+  }
+  list.innerHTML = _editProdutos.map((p, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+      <span style="flex:1;font-size:13px;font-weight:600;color:#1e293b">${escHtml(p.product_name)}</span>
+      <input type="number" step="0.01" min="0" value="${p.preco_negociado}" 
+        onchange="updatePrecoProduto(${i}, this.value)"
+        style="width:85px;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;outline:none">
+      <button onclick="removeProdutoCliente(${i})" title="Remover" 
+        style="background:#fee2e2;color:#dc2626;border:none;width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px">✕</button>
+    </div>
+  `).join('');
+}
+
+function addProdutoCliente() {
+  const sel = document.getElementById('edit-prod-select');
+  const precoInput = document.getElementById('edit-prod-preco');
+  const productId = parseInt(sel.value);
+  if (!productId) { toast('Selecione um produto', 'error'); return; }
+  
+  // Verifica se já existe
+  if (_editProdutos.some(p => p.product_id === productId)) {
+    toast('Produto já adicionado', 'error'); return;
+  }
+  
+  const opt = sel.options[sel.selectedIndex];
+  const preco = parseFloat(precoInput.value) || parseFloat(opt.dataset.price) || 0;
+  
+  _editProdutos.push({
+    product_id: productId,
+    product_name: opt.dataset.name,
+    preco_negociado: preco
+  });
+  
+  sel.value = '';
+  precoInput.value = '';
+  renderProdutosCliente();
+}
+
+function removeProdutoCliente(idx) {
+  _editProdutos.splice(idx, 1);
+  renderProdutosCliente();
+}
+
+function updatePrecoProduto(idx, valor) {
+  _editProdutos[idx].preco_negociado = parseFloat(valor) || 0;
+}
+
+function updateCobrancaStyle() {
+  const entrega = document.getElementById('edit-cobranca-entrega').checked;
+  const lblE = document.getElementById('lbl-entrega');
+  const lblM = document.getElementById('lbl-mensalista');
+  lblE.style.borderColor = entrega ? '#16a34a' : '#e2e8f0';
+  lblE.style.background = entrega ? '#f0fdf4' : '#f8fafc';
+  lblM.style.borderColor = !entrega ? '#7c3aed' : '#e2e8f0';
+  lblM.style.background = !entrega ? '#f5f3ff' : '#f8fafc';
+}
+
 async function editCliente(phone, nome) {
   _editPhone = phone;
+  _editProdutos = [];
+  
+  // Carregar produtos do sistema
+  await loadAllProducts();
+  renderProdutoSelect();
+  
   // Busca dados completos
   showLoading('Carregando...');
   try {
@@ -648,6 +769,21 @@ async function editCliente(phone, nome) {
     document.getElementById('edit-bairro').value= c.bairro || '';
     document.getElementById('edit-comp').value  = c.complemento || '';
     document.getElementById('edit-ref').value   = c.referencia || '';
+    
+    // Tipo de cobrança
+    const tipo = c.cobranca_tipo || 'entrega';
+    document.getElementById('edit-cobranca-entrega').checked = (tipo === 'entrega');
+    document.getElementById('edit-cobranca-mensalista').checked = (tipo === 'mensalista');
+    updateCobrancaStyle();
+    
+    // Produtos preferidos
+    _editProdutos = (c.produtos_preferidos || []).map(p => ({
+      product_id: p.product_id,
+      product_name: p.product_name,
+      preco_negociado: p.preco_negociado
+    }));
+    renderProdutosCliente();
+    
     document.getElementById('edit-status').textContent = '';
     document.getElementById('modal-editar').style.display = 'flex';
   } catch(e) {
@@ -666,6 +802,7 @@ async function saveEditCliente() {
   const btn = document.getElementById('edit-save-btn');
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
+    // Salvar dados básicos do cliente
     await api('/api/customer/upsert', {
       method: 'POST',
       body: JSON.stringify({
@@ -677,8 +814,17 @@ async function saveEditCliente() {
         referencia:  document.getElementById('edit-ref').value.trim(),
         cpf_cnpj:    document.getElementById('edit-cpf').value.trim(),
         email:       document.getElementById('edit-email').value.trim(),
+        cobranca_tipo: document.getElementById('edit-cobranca-mensalista').checked ? 'mensalista' : 'entrega',
       })
     });
+    
+    // Salvar produtos preferidos
+    const phone = document.getElementById('edit-tel').value.replace(/\D/g,'');
+    await api(`/api/clientes/${encodeURIComponent(phone)}/produtos`, {
+      method: 'POST',
+      body: JSON.stringify({ produtos: _editProdutos })
+    });
+    
     toast('✅ Cliente atualizado!', 'success');
     closeEditModal();
     loadPage(_page);
