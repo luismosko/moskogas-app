@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.25.2
+// shared.js — Utilitários compartilhados MoskoGás v1.25.4
+// v1.25.4: Modal de confirmação Bling Reconectar — aparece automaticamente em qualquer erro 401/no_token; _showBlingReconnectConfirm() global
 // v1.25.3: Rename módulo Gestão → Pedidos (nav label + textos)
 // v1.25.2: Menu ADM — Produtos adicionado (produtos.html); ícone Estoque atualizado
 // v1.25.0: Hub Monitor desabilitado (badge H + banner desconectado) — migrado para Extensão Chrome
@@ -1127,7 +1128,9 @@ function _showBlingDisconnectBanner() {
   b.id = 'bling-disconnect-banner';
   b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
   b.innerHTML = '<span>⚠️ Bling desconectado — pedidos serão salvos mas SEM venda no Bling!</span>'
-    + '<button onclick="_reconnectBlingFromBanner()" style="background:#fff;color:#dc2626;padding:6px 16px;border-radius:8px;font-weight:700;border:none;cursor:pointer;margin-left:12px;white-space:nowrap;font-size:13px">🔑 Reconectar Agora</button>';
+    + '<div style="display:flex;gap:8px;margin-left:12px">'
+    + '<button onclick="_showBlingReconnectConfirm()" style="background:#fff;color:#dc2626;padding:6px 16px;border-radius:8px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;font-size:13px">🔑 Reconectar Agora</button>'
+    + '</div>';
   document.body.prepend(b);
   document.body.style.paddingTop = '52px';
   // Esconder banner legado se existir
@@ -1148,10 +1151,48 @@ function _hideBlingDisconnectBanner() {
 }
 
 async function _reconnectBlingFromBanner() {
+  // Chamado diretamente (sem confirmação) — por compatibilidade
+  await _doBlingReconnect();
+}
+
+function _showBlingReconnectConfirm() {
+  // Modal de confirmação antes de reconectar
+  const existing = document.getElementById('bling-confirm-modal');
+  if (existing) { existing.remove(); }
+
+  const m = document.createElement('div');
+  m.id = 'bling-confirm-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:999999;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif';
+  m.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:400px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,0.35);text-align:center">
+      <div style="font-size:52px;margin-bottom:12px">🔗</div>
+      <div style="font-size:19px;font-weight:800;color:#1e293b;margin-bottom:8px">Bling Desconectado</div>
+      <div style="font-size:14px;color:#64748b;margin-bottom:6px;line-height:1.6">
+        O token de acesso ao Bling expirou ou foi revogado.<br>
+        Pedidos continuam sendo salvos normalmente,<br>
+        mas <strong>vendas e NFC-e não serão criados no Bling</strong>.
+      </div>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-size:12px;color:#b91c1c;margin:14px 0;text-align:left">
+        ⚡ Clicar em <strong>Reconectar</strong> abrirá uma janela do Bling para autorização.<br>
+        Leva menos de 30 segundos.
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:4px">
+        <button onclick="document.getElementById('bling-confirm-modal').remove()" style="flex:1;padding:11px 0;border:2px solid #e2e8f0;border-radius:9px;background:#fff;color:#64748b;font-size:14px;font-weight:600;cursor:pointer">
+          Agora não
+        </button>
+        <button onclick="document.getElementById('bling-confirm-modal').remove();_doBlingReconnect()" style="flex:1;padding:11px 0;border:none;border-radius:9px;background:#dc2626;color:#fff;font-size:14px;font-weight:700;cursor:pointer">
+          🔑 Reconectar
+        </button>
+      </div>
+    </div>`;
+  // Fechar ao clicar fora — NÃO (regra do projeto: modais não fecham ao clicar fora)
+  document.body.appendChild(m);
+}
+
+async function _doBlingReconnect() {
   const ok = await ensureBling();
   if (ok) {
     _blingConnected = true;
-    // Atualizar todos os badges na página
     ['bling-indicator', 'blingBadge'].forEach(id => {
       const el = document.getElementById(id);
       if (el) _updateBlingBadge(el, true);
@@ -1167,13 +1208,17 @@ async function _reconnectBlingFromBanner() {
  */
 function checkBlingReauth(err) {
   const msg = (err?.message || String(err) || '').toLowerCase();
-  if (msg.includes('reauth') || msg.includes('invalid_token') || msg.includes('bling 401') || msg.includes('bling_reauth') || (msg.includes('token') && msg.includes('expir'))) {
+  if (msg.includes('reauth') || msg.includes('invalid_token') || msg.includes('bling 401') || msg.includes('bling_reauth') || (msg.includes('no_token')) || (msg.includes('token') && msg.includes('expir'))) {
     _blingConnected = false;
     ['bling-indicator', 'blingBadge'].forEach(id => {
       const el = document.getElementById(id);
       if (el) _updateBlingBadge(el, false);
     });
     _showBlingDisconnectBanner();
+    // Mostrar modal de confirmação automaticamente na primeira detecção
+    if (!document.getElementById('bling-confirm-modal') && !document.getElementById('bling-recovery-overlay')?.style?.display?.includes('flex')) {
+      setTimeout(() => _showBlingReconnectConfirm(), 400);
+    }
     return true;
   }
   return false;
