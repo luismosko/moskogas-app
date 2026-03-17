@@ -14,6 +14,7 @@
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
 // v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
 // v2.52.16: Fix duplicata busca cliente — Bling agora verifica seenBling (órgãos sem telefone)
+// v2.52.16: CRÍTICO fix saveToken UPDATE→INSERT OR REPLACE; getTokenRow auto-cria tabela/linha; callback garante estrutura antes de salvar
 // v2.52.15: pedido-site: pix→pix_receber (nunca pago); data_hora ISO truncada p/ data_pedido; hora salva em notes
 // v2.52.14: gestao.html badge 🛒 para pedidos do site; WA número interno configurável via app_config; resposta sem campo whatsapp_enviado
 // v2.52.13: POST /api/pub/pedido-site — integração loja virtual: cria pedido no D1 + WhatsApp interno 9333
@@ -358,16 +359,26 @@ async function requireAuth(request, env, allowedRoles = null) {
 // ── Token Bling ───────────────────────────────────────────────
 
 async function getTokenRow(env) {
+  // Garante que tabela e linha existem (evita null pointer em instalações novas)
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bling_tokens (
+    id INTEGER PRIMARY KEY,
+    access_token TEXT,
+    refresh_token TEXT,
+    expires_in INTEGER DEFAULT 3600,
+    obtained_at INTEGER DEFAULT 0
+  )`).run().catch(()=>{});
+  await env.DB.prepare(`INSERT OR IGNORE INTO bling_tokens (id) VALUES (1)`).run().catch(()=>{});
   const row = await env.DB.prepare('SELECT * FROM bling_tokens WHERE id=1').first();
   return row;
 }
 
 async function saveToken(env, data) {
   const now = Math.floor(Date.now() / 1000);
+  // INSERT OR REPLACE garante que salva mesmo se a linha id=1 não existir
+  // (pode sumir após DELETE no disconnect ou nunca ter sido criada)
   await env.DB.prepare(`
-    UPDATE bling_tokens SET
-      access_token=?, refresh_token=?, expires_in=?, obtained_at=?
-    WHERE id=1
+    INSERT OR REPLACE INTO bling_tokens (id, access_token, refresh_token, expires_in, obtained_at)
+    VALUES (1, ?, ?, ?, ?)
   `).bind(data.access_token, data.refresh_token, data.expires_in || 3600, now).run();
   // Marca verificação real como OK para que /bling/ping reflita estado real
   try {
@@ -3122,6 +3133,15 @@ export default {
     }
 
     if (method === 'GET' && path === '/bling/oauth/callback') {
+      // Garantir que a tabela e linha id=1 existem antes do INSERT OR REPLACE
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bling_tokens (
+        id INTEGER PRIMARY KEY,
+        access_token TEXT,
+        refresh_token TEXT,
+        expires_in INTEGER DEFAULT 3600,
+        obtained_at INTEGER DEFAULT 0
+      )`).run().catch(()=>{});
+      await env.DB.prepare(`INSERT OR IGNORE INTO bling_tokens (id) VALUES (1)`).run().catch(()=>{});
       const code = url.searchParams.get('code');
       if (!code) return err('missing code');
 
