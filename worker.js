@@ -1,5 +1,6 @@
-// v2.52.28
+// v2.52.29
 
+// v2.52.29: POST /api/vales/validar-para-pedido + baixa automática de vales ao criar pedido
 // v2.52.28: DELETE /api/clientes/:phone (admin only) + normalizePhone() para consistência de prefixo 55
 // v2.52.27: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
 // v2.52.25: Query NFC-e pendentes exclui pedidos com nfce_id (já criados no Bling, só falta sync)
@@ -8993,6 +8994,117 @@ export default {
 
         await env.DB.prepare('UPDATE vales SET status="resgatado", resgatado_em=unixepoch(), resgatado_por=? WHERE id=?').bind(authCheck.nome, valeId).run();
         return json({ ok: true, message: 'Baixa efetuada com sucesso!' });
+      }
+
+      // v2.52.29: POST /api/vales/validar-para-pedido — valida IDs de vales e retorna cliente e itens
+      if (method === 'POST' && path === '/api/vales/validar-para-pedido') {
+        const body = await request.json();
+        const { ids } = body; // Array de IDs (números de série)
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+          return err('Informe pelo menos um ID de vale');
+        }
+        
+        // Buscar todos os vales pelos IDs
+        const placeholders = ids.map(() => '?').join(',');
+        const vales = await env.DB.prepare(
+          `SELECT v.id, v.nota_id, v.numero, v.produto, v.status, v.resgatado_em, v.resgatado_por,
+                  n.cliente_nome, n.cliente_doc, n.validade
+           FROM vales v
+           JOIN notas_vales n ON v.nota_id = n.id
+           WHERE v.id IN (${placeholders})
+           ORDER BY v.id ASC`
+        ).bind(...ids.map(id => parseInt(id))).all().then(r => r.results || []);
+        
+        // Verificar se todos os IDs foram encontrados
+        const idsEncontrados = vales.map(v => v.id);
+        const idsNaoEncontrados = ids.filter(id => !idsEncontrados.includes(parseInt(id)));
+        if (idsNaoEncontrados.length > 0) {
+          return json({ 
+            ok: false, 
+            error: `Vale(s) não encontrado(s): ${idsNaoEncontrados.join(', ')}`,
+            ids_nao_encontrados: idsNaoEncontrados 
+          }, 400);
+        }
+        
+        // Verificar se algum vale já foi resgatado
+        const valesResgatados = vales.filter(v => v.status === 'resgatado');
+        if (valesResgatados.length > 0) {
+          const msgs = valesResgatados.map(v => 
+            `#${v.id} (${v.numero}) — resgatado em ${new Date(v.resgatado_em * 1000).toLocaleDateString('pt-BR')} por ${v.resgatado_por}`
+          );
+          return json({ 
+            ok: false, 
+            error: `Vale(s) já resgatado(s):\n${msgs.join('\n')}`,
+            vales_resgatados: valesResgatados.map(v => v.id)
+          }, 400);
+        }
+        
+        // Verificar se todos são do mesmo cliente (mesma nota_id)
+        const notaIds = [...new Set(vales.map(v => v.nota_id))];
+        const clientes = [...new Set(vales.map(v => v.cliente_nome))];
+        if (notaIds.length > 1 || clientes.length > 1) {
+          return json({ 
+            ok: false, 
+            error: `Os vales são de CLIENTES DIFERENTES:\n${vales.map(v => `#${v.id}: ${v.cliente_nome}`).join('\n')}\n\nDigite apenas vales do mesmo cliente.`,
+            clientes_diferentes: true,
+            vales_por_cliente: vales.map(v => ({ id: v.id, numero: v.numero, cliente: v.cliente_nome }))
+          }, 400);
+        }
+        
+        // Montar itens do pedido (agrupar por produto)
+        const itemsMap = {};
+        for (const v of vales) {
+          if (!itemsMap[v.produto]) {
+            itemsMap[v.produto] = { produto: v.produto, quantidade: 0, vales_ids: [] };
+          }
+          itemsMap[v.produto].quantidade++;
+          itemsMap[v.produto].vales_ids.push(v.id);
+        }
+        const items = Object.values(itemsMap);
+        
+        // Retornar dados para preencher o pedido
+        return json({
+          ok: true,
+          cliente_nome: vales[0].cliente_nome,
+          cliente_doc: vales[0].cliente_doc,
+          vales: vales.map(v => ({ 
+            id: v.id, 
+            numero: v.numero, 
+            produto: v.produto,
+            validade: v.validade
+          })),
+          items,
+          total_vales: vales.length
+        });
+      }
+
+      // v2.52.29: POST /api/vales/baixa-lote — dar baixa em múltiplos vales de uma vez
+      if (method === 'POST' && path === '/api/vales/baixa-lote') {
+        const body = await request.json();
+        const { ids, pedido_id } = body;
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+          return err('Informe pelo menos um ID de vale');
+        }
+        
+        const results = [];
+        for (const id of ids) {
+          const valeId = parseInt(id);
+          const vale = await env.DB.prepare('SELECT * FROM vales WHERE id=?').bind(valeId).first();
+          if (!vale) {
+            results.push({ id: valeId, ok: false, error: 'Vale não encontrado' });
+            continue;
+          }
+          if (vale.status === 'resgatado') {
+            results.push({ id: valeId, ok: false, error: 'Já resgatado' });
+            continue;
+          }
+          await env.DB.prepare('UPDATE vales SET status="resgatado", resgatado_em=unixepoch(), resgatado_por=? WHERE id=?')
+            .bind(authCheck.nome + (pedido_id ? ` (Pedido #${pedido_id})` : ''), valeId).run();
+          results.push({ id: valeId, ok: true });
+        }
+        
+        const sucessos = results.filter(r => r.ok).length;
+        return json({ ok: true, message: `${sucessos} vale(s) baixado(s) com sucesso!`, results });
       }
 
       return err(`Endpoint vales não encontrado (${method} ${path})`, 404);
