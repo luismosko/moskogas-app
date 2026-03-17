@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.2.1 — MoskoGás</title>
+  <title>Clientes v1.2.2 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.2.1 — clientes</div>
+  <div class="version-badge" style="display:none">v1.2.2 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.1</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.2</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -323,9 +323,11 @@
         </div>
       </div>
       <div id="edit-status" style="font-size:12px;color:#64748b;text-align:center"></div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button id="edit-save-btn" onclick="saveEditCliente()" style="flex:1;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">💾 Salvar</button>
         <button onclick="closeEditModal()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer">Cancelar</button>
+        <!-- v1.2.2: Botão deletar (admin only) -->
+        <button id="edit-delete-btn" onclick="deleteCliente()" style="display:none;background:#fee2e2;color:#dc2626;border:2px solid #fecaca;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer" title="Deletar cliente (apenas se não tiver pedidos)">🗑️ Deletar</button>
       </div>
     </div>
   </div>
@@ -780,6 +782,11 @@ async function editCliente(phone, nome) {
   await loadAllProducts();
   renderProdutoSelect();
   
+  // v1.2.2: Mostrar botão deletar apenas para admin
+  const deleteBtn = document.getElementById('edit-delete-btn');
+  const user = JSON.parse(localStorage.getItem('mg_user') || '{}');
+  if (deleteBtn) deleteBtn.style.display = (user.role === 'admin') ? 'block' : 'none';
+  
   // Busca dados completos
   showLoading('Carregando...');
   try {
@@ -842,12 +849,14 @@ async function saveEditCliente() {
   const btn = document.getElementById('edit-save-btn');
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
-    // Salvar dados básicos do cliente
+    // v1.2.2: Enviar original_phone para o backend migrar se telefone foi alterado
+    const newPhone = document.getElementById('edit-tel').value.replace(/\D/g,'');
     const pgPrefSel = document.querySelector('input[name="pagamento_pref"]:checked');
-    await api('/api/customer/upsert', {
+    const result = await api('/api/customer/upsert', {
       method: 'POST',
       body: JSON.stringify({
-        phone: document.getElementById('edit-tel').value.replace(/\D/g,''),
+        phone: newPhone,
+        original_phone: _editPhone, // telefone original antes da edição
         name:  document.getElementById('edit-nome').value.trim(),
         address_line: document.getElementById('edit-rua').value.trim(),
         bairro:  document.getElementById('edit-bairro').value.trim(),
@@ -860,9 +869,11 @@ async function saveEditCliente() {
       })
     });
     
-    // Salvar produtos preferidos
-    const phone = document.getElementById('edit-tel').value.replace(/\D/g,'');
-    await api(`/api/clientes/${encodeURIComponent(phone)}/produtos`, {
+    // Usar o phone_digits retornado pelo backend (normalizado)
+    const finalPhone = result.phone_digits || newPhone;
+    
+    // Salvar produtos preferidos (usar telefone normalizado)
+    await api(`/api/clientes/${encodeURIComponent(finalPhone)}/produtos`, {
       method: 'POST',
       body: JSON.stringify({ produtos: _editProdutos })
     });
@@ -874,6 +885,26 @@ async function saveEditCliente() {
     toast('❌ ' + e.message, 'error');
   } finally {
     btn.disabled = false; btn.textContent = '💾 Salvar';
+  }
+}
+
+// v1.2.2: Deletar cliente (admin only)
+async function deleteCliente() {
+  if (!_editPhone) return;
+  const nome = document.getElementById('edit-nome').value || 'este cliente';
+  if (!confirm(`⚠️ ATENÇÃO!\n\nDeseja realmente DELETAR o cliente "${nome}"?\n\nEsta ação é IRREVERSÍVEL e só funciona se o cliente não tiver pedidos vinculados.`)) return;
+  
+  const btn = document.getElementById('edit-delete-btn');
+  btn.disabled = true; btn.textContent = '⏳ Deletando...';
+  try {
+    const res = await api(`/api/clientes/${encodeURIComponent(_editPhone)}`, { method: 'DELETE' });
+    toast(`✅ Cliente "${res.name}" deletado com sucesso!`, 'success');
+    closeEditModal();
+    loadPage(_page);
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '🗑️ Deletar';
   }
 }
 

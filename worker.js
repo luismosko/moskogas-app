@@ -1,5 +1,6 @@
-// v2.52.27
+// v2.52.28
 
+// v2.52.28: DELETE /api/clientes/:phone (admin only) + normalizePhone() para consistência de prefixo 55
 // v2.52.27: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
 // v2.52.25: Query NFC-e pendentes exclui pedidos com nfce_id (já criados no Bling, só falta sync)
 // v2.52.24: pix_receber NÃO gera NFC-e automática — só no modal de Pagamentos ao confirmar
@@ -164,6 +165,23 @@ function json(data, status = 200) {
 
 function err(msg, status = 400) {
   return json({ ok: false, error: msg }, status);
+}
+
+// v2.52.28: Normaliza telefone para formato consistente (sempre com prefixo 55 para celulares/fixos brasileiros)
+function normalizePhone(phone) {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (!digits) return '';
+  // Se já tem 55 no início e tem 12-13 dígitos (55 + DDD + número), mantém
+  if (digits.startsWith('55') && digits.length >= 12 && digits.length <= 13) {
+    return digits;
+  }
+  // Se tem 10-11 dígitos (DDD + número), adiciona 55
+  if (digits.length >= 10 && digits.length <= 11) {
+    return '55' + digits;
+  }
+  // Outros casos (documentos como CPF/CNPJ usados como ID, ou números incompletos), retorna como está
+  return digits;
 }
 
 // ── Auth: Password hashing (PBKDF2) ──────────────────────────
@@ -4025,6 +4043,32 @@ export default {
       return json({ cliente, pedidos: ped, stats });
     }
 
+    // v2.52.28: DELETE /api/clientes/:phone — remover cliente (admin only)
+    if (request.method === 'DELETE' && path.startsWith('/api/clientes/') && !path.includes('/fiscal') && !path.includes('/produtos')) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const phone = decodeURIComponent(path.replace('/api/clientes/', ''));
+      if (!phone) return err('phone obrigatório');
+      
+      // Verificar se cliente existe
+      const cliente = await env.DB.prepare(`SELECT phone_digits, name FROM customers_cache WHERE phone_digits = ?`).bind(phone).first();
+      if (!cliente) return err('Cliente não encontrado', 404);
+      
+      // Verificar se tem pedidos vinculados
+      const pedidosCount = await env.DB.prepare(`SELECT COUNT(*) as total FROM orders WHERE phone_digits = ?`).bind(phone).first();
+      if (pedidosCount?.total > 0) {
+        return json({ ok: false, error: `Cliente tem ${pedidosCount.total} pedido(s) vinculado(s). Remova os pedidos primeiro ou desative o cliente.`, pedidos: pedidosCount.total }, 400);
+      }
+      
+      // Remover produtos preferidos, config fiscal, endereços e cache
+      await env.DB.prepare(`DELETE FROM customer_products WHERE phone_digits = ?`).bind(phone).run().catch(() => {});
+      await env.DB.prepare(`DELETE FROM customer_fiscal_config WHERE phone_digits = ?`).bind(phone).run().catch(() => {});
+      await env.DB.prepare(`DELETE FROM customer_addresses WHERE phone_digits = ?`).bind(phone).run().catch(() => {});
+      await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits = ?`).bind(phone).run();
+      
+      return json({ ok: true, deleted: phone, name: cliente.name });
+    }
+
     // GET /api/clientes/:phone/produtos — produtos preferidos do cliente
     if (method === 'GET' && path.match(/^\/api\/clientes\/[^/]+\/produtos$/)) {
       const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
@@ -4681,8 +4725,29 @@ export default {
 
     if (method === 'POST' && path === '/api/customer/upsert') {
       const body = await request.json();
-      const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial } = body;
-      const digits = (phone || '').replace(/\D/g, '');
+      const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial, original_phone } = body;
+      // v2.52.28: Usar normalizePhone para garantir prefixo 55 consistente
+      const digits = normalizePhone(phone);
+      const originalDigits = original_phone ? normalizePhone(original_phone) : null;
+
+      // v2.52.28: Se o telefone foi alterado, precisamos migrar os dados
+      if (originalDigits && originalDigits !== digits && originalDigits !== '') {
+        const oldCustomer = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits=?').bind(originalDigits).first().catch(() => null);
+        if (oldCustomer) {
+          // Migrar dados do cliente antigo para o novo telefone
+          await env.DB.prepare(`INSERT INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial, origem, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+            ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, pagamento_preferencial=excluded.pagamento_preferencial, updated_at=unixepoch()`)
+            .bind(digits, name || oldCustomer.name, address_line || oldCustomer.address_line, bairro || oldCustomer.bairro, complemento || oldCustomer.complemento, referencia || oldCustomer.referencia, bling_contact_id || oldCustomer.bling_contact_id, cpf_cnpj || oldCustomer.cpf_cnpj, email !== undefined ? email : oldCustomer.email, cobranca_tipo || oldCustomer.cobranca_tipo || 'entrega', pagamento_preferencial !== undefined ? pagamento_preferencial : oldCustomer.pagamento_preferencial, oldCustomer.origem || 'manual').run();
+          // Migrar produtos preferidos
+          await env.DB.prepare(`UPDATE customer_products SET phone_digits=? WHERE phone_digits=?`).bind(digits, originalDigits).run().catch(() => {});
+          // Atualizar pedidos para novo telefone
+          await env.DB.prepare(`UPDATE orders SET phone_digits=? WHERE phone_digits=?`).bind(digits, originalDigits).run().catch(() => {});
+          // Remover cliente antigo
+          await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits=?`).bind(originalDigits).run();
+          return json({ ok: true, migrated: true, from: originalDigits, to: digits });
+        }
+      }
 
       // v2.52.27: Preservar campos existentes se não fornecidos
       const existing = digits ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial FROM customers_cache WHERE phone_digits=?').bind(digits).first().catch(() => null) : null;
@@ -4696,7 +4761,7 @@ export default {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
         ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, pagamento_preferencial=excluded.pagamento_preferencial, updated_at=unixepoch()`)
         .bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf, finalEmail, finalCobranca, finalPgPref).run();
-      return json({ ok: true, bling_contact_id: finalBlingId });
+      return json({ ok: true, bling_contact_id: finalBlingId, phone_digits: digits });
     }
 
     // ── PEDIDOS ──────────────────────────────────────────────
