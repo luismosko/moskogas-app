@@ -45,6 +45,44 @@
   .empty-report { text-align: center; padding: 60px; color: #94a3b8; font-size: 16px; }
 
   /* ── PRINT ── */
+  /* Assinaturas */
+  .assinaturas-block {
+    display: flex;
+    gap: 40px;
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 2px dashed #cbd5e1;
+    page-break-inside: avoid;
+  }
+  .assinatura-col {
+    flex: 1;
+    text-align: center;
+  }
+  .assinatura-titulo {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 32px;
+  }
+  .assinatura-nome {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 6px;
+    min-height: 20px;
+  }
+  .assinatura-linha {
+    border-bottom: 1.5px solid #1e293b;
+    width: 100%;
+    margin-bottom: 4px;
+  }
+  .assinatura-label {
+    font-size: 10px;
+    color: #94a3b8;
+  }
+
   @media print {
     body { background: #fff; }
     .toolbar, #nav-placeholder { display: none !important; }
@@ -61,14 +99,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.7</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.8</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.7</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.8</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -81,7 +119,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.7
+// v1.2.8
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -311,6 +349,24 @@ async function gerarRelatorio() {
   }
 
   html += `</div>`;
+
+  // ── Bloco de assinaturas ──────────────────────────────────────
+  const nomeEntregadorAssinatura = driverId ? driverName : '____________________________';
+  html += `
+  <div class="assinaturas-block">
+    <div class="assinatura-col">
+      <div class="assinatura-titulo">Conferido pelo Entregador</div>
+      <div class="assinatura-nome">${nomeEntregadorAssinatura}</div>
+      <div class="assinatura-linha"></div>
+      <div class="assinatura-label">Assinatura</div>
+    </div>
+    <div class="assinatura-col">
+      <div class="assinatura-titulo">Conferido pelo Administrativo</div>
+      <div class="assinatura-nome">____________________________</div>
+      <div class="assinatura-linha"></div>
+      <div class="assinatura-label">Assinatura</div>
+    </div>
+  </div>`;
 
   document.getElementById('report-content').innerHTML = html;
   hideLoading();
