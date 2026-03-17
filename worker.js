@@ -13,6 +13,7 @@
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
 // v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
+// v2.52.17: fix catMap WA — category entrega→interno (usa Disk/conexão interna, não externo); contrato→interno
 // v2.52.16: Fix duplicata busca cliente — Bling agora verifica seenBling (órgãos sem telefone)
 // v2.52.16: CRÍTICO fix saveToken UPDATE→INSERT OR REPLACE; getTokenRow auto-cria tabela/linha; callback garante estrutura antes de salvar
 // v2.52.15: pedido-site: pix→pix_receber (nunca pago); data_hora ISO truncada p/ data_pedido; hora salva em notes
@@ -1387,11 +1388,12 @@ async function getWATokenForCategory(env, category) {
       'sistema':      'interno',
       'admin_alerta': 'interno',
       'entregador':   'interno',
+      'entrega':      'interno',   // mensagens ao entregador → conexão interna (Disk)
+      'contrato':     'interno',
       'geral':        'externo',
       'externo':      'externo',
       'interno':      'interno',
       'financeiro':   'financeiro',
-      'marketing':    'marketing',
     };
     const catFinal = catMap[cat] || 'externo';
 
