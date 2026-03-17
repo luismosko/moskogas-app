@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.50</title>
+<title>Novo Pedido — MoskoGás v2.11.51</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,12 +51,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.50 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.51 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.50</span></h1>
+    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.51</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -89,20 +89,23 @@
     <div style="font-size:11px;color:#94a3b8;margin-top:4px">💡 Você pode combinar campos — ex: nome <strong>"luis"</strong> + endereço <strong>"afonso"</strong></div>
     <div id="suggestions" style="display:none;position:relative;"></div>
     
-    <!-- v2.11.50: Campo Vale Gás -->
-    <div style="margin-top:12px;padding-top:12px;border-top:2px dashed #e2e8f0">
+    <!-- v2.11.51: Campo Vale Gás - Criar pedido direto -->
+    <div style="margin-top:12px;padding-top:12px;border-top:2px dashed #c4b5fd;background:#faf5ff;margin:-16px;margin-top:12px;padding:16px;border-radius:0 0 12px 12px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <label style="margin:0;font-size:12px;color:#7c3aed">🎫 VALE GÁS</label>
+        <label style="margin:0;font-size:13px;font-weight:800;color:#7c3aed">🎫 VALE GÁS</label>
         <div style="flex:1;position:relative;min-width:200px">
-          <input id="valeGasIds" type="text" placeholder="IDs separados por vírgula: 101, 102, 103" 
-            style="width:100%;padding:8px 90px 8px 10px;border:2px solid #c4b5fd;border-radius:8px;font-size:14px;background:#faf5ff"
-            oninput="limparValeGasValidado()">
-          <button onclick="validarValeGas()" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">
-            🔍 Validar
-          </button>
+          <input id="valeGasIds" type="text" placeholder="Digite os IDs: 101, 102, 103..." 
+            style="width:100%;padding:10px 14px;border:2px solid #a78bfa;border-radius:8px;font-size:15px;font-weight:600;background:#fff"
+            onkeypress="if(event.key==='Enter'){criarPedidoValeGas();event.preventDefault()}">
         </div>
+        <button onclick="criarPedidoValeGas()" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px">
+          🚀 CRIAR PEDIDO
+        </button>
       </div>
-      <div id="valeGasStatus" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px"></div>
+      <div style="font-size:11px;color:#6b21a8;margin-top:6px">
+        Digite os números de série dos vales separados por vírgula. O pedido será criado automaticamente e os vales serão baixados.
+      </div>
+      <div id="valeGasStatus" style="display:none;margin-top:10px;padding:12px 14px;border-radius:10px;font-size:13px"></div>
     </div>
   </div>
 
@@ -1423,12 +1426,6 @@ async function saveOrder() {
     return;
   }
 
-  // v2.11.50: Se tem vales validados, mostrar modal de confirmação
-  if (window._valeGasValidado && tipoPgto === 'vale_gas') {
-    abrirModalConfirmarValeGas();
-    return;
-  }
-
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
   btn.textContent = '⏳ Salvando...';
@@ -1514,10 +1511,6 @@ async function saveOrder() {
       // Reset PIX a receber
       document.getElementById('pix-receber-data').style.display = 'none';
       document.getElementById('pix-data-input').value = '';
-      // v2.11.50: Reset Vale Gás
-      document.getElementById('valeGasIds').value = '';
-      window._valeGasValidado = null;
-      document.getElementById('valeGasStatus').style.display = 'none';
       // Reset variáveis
       window._lastBlingContactId = null;
       // Reativar botão
@@ -1544,23 +1537,14 @@ async function saveOrder() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// v2.11.50: VALE GÁS — Validação e preenchimento automático de cliente
+// v2.11.51: VALE GÁS — Criar pedido direto (sem preencher formulário)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Estado do vale gás validado
-window._valeGasValidado = null;
-
-function limparValeGasValidado() {
-  window._valeGasValidado = null;
-  const statusEl = document.getElementById('valeGasStatus');
-  statusEl.style.display = 'none';
-  statusEl.innerHTML = '';
-}
-
-async function validarValeGas() {
+async function criarPedidoValeGas() {
   const input = document.getElementById('valeGasIds').value.trim();
   if (!input) {
     toast('Digite os IDs dos vales separados por vírgula', 'error');
+    document.getElementById('valeGasIds').focus();
     return;
   }
   
@@ -1573,49 +1557,66 @@ async function validarValeGas() {
   
   const statusEl = document.getElementById('valeGasStatus');
   statusEl.style.display = 'block';
-  statusEl.style.background = '#f1f5f9';
-  statusEl.style.border = '1px solid #e2e8f0';
-  statusEl.innerHTML = '⏳ Validando vales...';
+  statusEl.style.background = '#ede9fe';
+  statusEl.style.border = '2px solid #a78bfa';
+  statusEl.style.color = '#5b21b6';
+  statusEl.innerHTML = '⏳ Criando pedido e baixando vales...';
+  
+  showLoading('Criando pedido Vale Gás...');
   
   try {
-    const result = await api('/api/vales/validar-para-pedido', {
+    const result = await api('/api/vales/criar-pedido-direto', {
       method: 'POST',
       body: JSON.stringify({ ids })
     });
     
-    // Sucesso - todos os vales são do mesmo cliente
-    window._valeGasValidado = result;
+    hideLoading();
     
+    // Sucesso!
     statusEl.style.background = '#dcfce7';
     statusEl.style.border = '2px solid #86efac';
     statusEl.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="flex:1">
-          <div style="font-weight:800;color:#166534;font-size:14px">✅ ${result.total_vales} vale(s) válido(s)</div>
-          <div style="color:#15803d;margin-top:2px"><strong>Cliente:</strong> ${result.cliente_nome}</div>
-          <div style="color:#15803d;font-size:11px;margin-top:2px">
-            Produtos: ${result.items.map(i => `${i.quantidade}x ${i.produto}`).join(', ')}
-          </div>
+      <div style="text-align:center;padding:10px 0">
+        <div style="font-size:40px;margin-bottom:8px">🎉</div>
+        <div style="font-weight:800;color:#166534;font-size:18px;margin-bottom:6px">
+          Pedido #${result.pedido_id} criado!
         </div>
-        <button onclick="preencherClienteValeGas()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">
-          ✅ Preencher Cliente e Itens
-        </button>
+        <div style="color:#15803d;font-size:13px;margin-bottom:4px">
+          <strong>Cliente:</strong> ${result.cliente}
+        </div>
+        <div style="color:#15803d;font-size:12px;margin-bottom:8px">
+          ${result.items.map(i => `${i.qty}x ${i.name}`).join(' + ')} = <strong>R$ ${result.total_value.toFixed(2)}</strong>
+        </div>
+        <div style="background:#bbf7d0;border-radius:8px;padding:6px 12px;display:inline-block;font-size:12px;color:#166534;font-weight:700;margin-bottom:10px">
+          ✅ ${result.total_vales} vale(s) baixado(s): ${result.vales_baixados.map(id => '#' + id).join(', ')}
+        </div>
+        <div style="margin-top:10px">
+          <a href="gestao.html" style="background:#16a34a;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block">
+            📋 Ver no Gestão
+          </a>
+        </div>
       </div>
     `;
     
-    toast(`✅ ${result.total_vales} vale(s) do cliente "${result.cliente_nome}" validado(s)!`);
+    toast(`✅ Pedido #${result.pedido_id} criado com ${result.total_vales} vale(s)!`, 'success');
+    
+    // Limpar campo após sucesso
+    document.getElementById('valeGasIds').value = '';
     
   } catch (e) {
-    window._valeGasValidado = null;
+    hideLoading();
     
-    // Verificar se é erro de clientes diferentes
+    // Verificar tipo de erro para mostrar mensagem apropriada
     if (e.message && e.message.includes('CLIENTES DIFERENTES')) {
       statusEl.style.background = '#fef3c7';
       statusEl.style.border = '2px solid #f59e0b';
       statusEl.innerHTML = `
         <div style="color:#92400e">
-          <div style="font-weight:800;font-size:14px">⚠️ ATENÇÃO: Vales de clientes diferentes!</div>
-          <div style="margin-top:6px;white-space:pre-line">${e.message}</div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:8px">⚠️ VALES DE CLIENTES DIFERENTES!</div>
+          <div style="white-space:pre-line;font-size:12px;line-height:1.5">${e.message}</div>
+          <div style="margin-top:10px;font-size:11px;background:#fff;padding:8px;border-radius:6px;border:1px solid #fbbf24">
+            <strong>💡 Dica:</strong> Digite apenas vales do mesmo cliente por vez.
+          </div>
         </div>
       `;
     } else if (e.message && e.message.includes('resgatado')) {
@@ -1623,8 +1624,18 @@ async function validarValeGas() {
       statusEl.style.border = '2px solid #fca5a5';
       statusEl.innerHTML = `
         <div style="color:#b91c1c">
-          <div style="font-weight:800;font-size:14px">❌ Vale(s) já resgatado(s)!</div>
-          <div style="margin-top:6px;white-space:pre-line">${e.message}</div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:8px">❌ VALE(S) JÁ RESGATADO(S)</div>
+          <div style="font-size:12px">${e.message}</div>
+        </div>
+      `;
+    } else if (e.message && e.message.includes('não encontrado')) {
+      statusEl.style.background = '#fee2e2';
+      statusEl.style.border = '2px solid #fca5a5';
+      statusEl.innerHTML = `
+        <div style="color:#b91c1c">
+          <div style="font-weight:800;font-size:15px;margin-bottom:8px">❌ VALE NÃO ENCONTRADO</div>
+          <div style="font-size:12px">${e.message}</div>
+          <div style="margin-top:8px;font-size:11px">Verifique se digitou o número de série correto.</div>
         </div>
       `;
     } else {
@@ -1632,101 +1643,13 @@ async function validarValeGas() {
       statusEl.style.border = '2px solid #fca5a5';
       statusEl.innerHTML = `
         <div style="color:#b91c1c">
-          <div style="font-weight:800;font-size:14px">❌ Erro na validação</div>
-          <div style="margin-top:6px">${e.message || 'Erro desconhecido'}</div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:8px">❌ Erro</div>
+          <div style="font-size:12px">${e.message || 'Erro desconhecido'}</div>
         </div>
       `;
     }
     
-    toast(e.message || 'Erro ao validar vales', 'error');
-  }
-}
-
-async function preencherClienteValeGas() {
-  const data = window._valeGasValidado;
-  if (!data) {
-    toast('Valide os vales primeiro', 'error');
-    return;
-  }
-  
-  // Preencher nome do cliente
-  document.getElementById('cName').value = data.cliente_nome;
-  
-  // Selecionar pagamento como Vale Gás
-  const pgtoBtn = document.querySelector('.tipo-pgto-btn[data-tipo="vale_gas"]');
-  if (pgtoBtn) pgtoBtn.click();
-  
-  // Limpar itens atuais e adicionar produtos dos vales
-  items = [];
-  
-  // Buscar preços dos produtos
-  const productMap = {
-    'P13': { name: 'GÁS GLP P13', code: 'P13' },
-    'P20': { name: 'GLP P20', code: 'P20' },
-    'P45': { name: 'GÁS P45 (recarga)', code: 'P45' },
-    'Água 20L': { name: 'AGUA MINERAL 20L', code: 'A20' }
-  };
-  
-  // Buscar produtos do sistema para pegar preços
-  try {
-    const prodResult = await api('/api/app-products');
-    const produtos = prodResult.products || [];
-    
-    for (const item of data.items) {
-      const prodInfo = productMap[item.produto] || { name: item.produto, code: item.produto };
-      
-      // Buscar preço do produto
-      const prodDB = produtos.find(p => 
-        p.nome.toUpperCase().includes(item.produto.toUpperCase()) ||
-        p.codigo === prodInfo.code
-      );
-      
-      // Preço padrão baseado no tipo (se não encontrar no banco)
-      let preco = 0;
-      if (prodDB) {
-        preco = parseFloat(prodDB.preco) || 0;
-      } else {
-        // Preços de fallback
-        const precosFallback = { 'P13': 125, 'P20': 220, 'P45': 495, 'Água 20L': 18 };
-        preco = precosFallback[item.produto] || 0;
-      }
-      
-      items.push({
-        id: prodDB?.bling_id || null,
-        name: prodDB?.nome || prodInfo.name,
-        code: prodDB?.codigo || prodInfo.code,
-        qty: item.quantidade,
-        price: preco
-      });
-    }
-    
-    renderItems();
-    updateTotal();
-    
-    // Atualizar status para mostrar que está pronto
-    const statusEl = document.getElementById('valeGasStatus');
-    statusEl.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="flex:1">
-          <div style="font-weight:800;color:#166534;font-size:14px">✅ Cliente e itens preenchidos!</div>
-          <div style="color:#15803d">Cliente: <strong>${data.cliente_nome}</strong></div>
-          <div style="color:#15803d;font-size:11px">
-            Vales: ${data.vales.map(v => `#${v.id}`).join(', ')} — serão baixados ao salvar
-          </div>
-        </div>
-        <span style="background:#dcfce7;color:#166534;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700">
-          🎫 ${data.total_vales} VALE(S)
-        </span>
-      </div>
-    `;
-    
-    toast('✅ Cliente e produtos preenchidos! Complete o endereço e salve.', 'success');
-    
-    // Focar no endereço
-    document.getElementById('cAddr').focus();
-    
-  } catch (e) {
-    toast('Erro ao buscar produtos: ' + e.message, 'error');
+    toast(e.message || 'Erro ao criar pedido', 'error');
   }
 }
 
@@ -2595,154 +2518,6 @@ async function confirmQuickDeliver() {
     btn.disabled = false;
     btn.textContent = '✅ Sim, marcar entregue!';
     toast('Erro ao finalizar: ' + (e.message || e), 'error');
-  }
-}
-</script>
-
-<!-- v2.11.50: MODAL CONFIRMAR VALE GÁS -->
-<div id="modal-confirmar-vale-gas" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2010;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#fff;border-radius:16px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="padding:20px 24px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #f1f5f9">
-      <div>
-        <h2 style="font-size:17px;font-weight:800;color:#7c3aed">🎫 Confirmar Baixa de Vale Gás</h2>
-      </div>
-      <button onclick="fecharModalValeGas()" style="background:#f1f5f9;border:none;border-radius:8px;width:34px;height:34px;font-size:18px;cursor:pointer">✕</button>
-    </div>
-    <div id="modal-vale-gas-body" style="padding:20px 24px">
-      <!-- Conteúdo gerado por JS -->
-    </div>
-    <div style="padding:14px 24px 20px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #f1f5f9">
-      <button onclick="fecharModalValeGas()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer">Cancelar</button>
-      <button onclick="confirmarPedidoValeGas()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:800;cursor:pointer">
-        ✅ Confirmar e Baixar Vales
-      </button>
-    </div>
-  </div>
-</div>
-
-<script>
-// v2.11.50: Funções do modal de Vale Gás
-
-function abrirModalConfirmarValeGas() {
-  const data = window._valeGasValidado;
-  if (!data) return;
-  
-  const modal = document.getElementById('modal-confirmar-vale-gas');
-  const body = document.getElementById('modal-vale-gas-body');
-  
-  body.innerHTML = `
-    <div style="background:#f5f3ff;border:2px solid #c4b5fd;border-radius:12px;padding:16px;margin-bottom:16px">
-      <div style="font-size:14px;font-weight:800;color:#5b21b6;margin-bottom:8px">Cliente:</div>
-      <div style="font-size:16px;font-weight:700;color:#1e293b">${data.cliente_nome}</div>
-      ${data.cliente_doc ? `<div style="font-size:12px;color:#64748b;margin-top:2px">${data.cliente_doc}</div>` : ''}
-    </div>
-    
-    <div style="margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px">Vales que serão baixados:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${data.vales.map(v => `
-          <span style="background:#dcfce7;color:#166534;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700">
-            #${v.id} • ${v.numero}
-          </span>
-        `).join('')}
-      </div>
-    </div>
-    
-    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:10px;padding:12px">
-      <div style="font-size:12px;font-weight:700;color:#92400e">⚠️ Ao confirmar:</div>
-      <ul style="margin:8px 0 0 18px;font-size:12px;color:#78350f;padding:0">
-        <li>O pedido será criado para o cliente acima</li>
-        <li>Os ${data.total_vales} vale(s) serão marcados como <strong>RESGATADOS</strong></li>
-        <li>Esta ação não pode ser desfeita</li>
-      </ul>
-    </div>
-  `;
-  
-  modal.style.display = 'flex';
-}
-
-function fecharModalValeGas() {
-  document.getElementById('modal-confirmar-vale-gas').style.display = 'none';
-}
-
-async function confirmarPedidoValeGas() {
-  const data = window._valeGasValidado;
-  if (!data) return;
-  
-  fecharModalValeGas();
-  
-  const btn = document.getElementById('btn-save');
-  btn.disabled = true;
-  btn.textContent = '⏳ Salvando...';
-  showLoading('Criando pedido e baixando vales...');
-  
-  try {
-    const name = document.getElementById('cName').value.trim();
-    const addrRua = document.getElementById('cAddr').value.trim();
-    const addrNum = document.getElementById('cNum') ? document.getElementById('cNum').value.trim() : '';
-    const addr = addrNum ? addrRua + ', ' + addrNum : addrRua;
-    const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-    
-    // 1. Criar o pedido
-    const result = await api('/api/order/create', {
-      method: 'POST',
-      body: JSON.stringify({
-        phone: document.getElementById('cPhone').value.replace(/\D/g, ''),
-        name,
-        address_line: addr,
-        bairro: document.getElementById('cBairro').value,
-        complemento: document.getElementById('cComp').value,
-        referencia: document.getElementById('cRef').value,
-        items: items.map(i => ({ name: i.name, qty: i.qty, price: i.price, bling_id: i.id, code: i.code || '' })),
-        total_value: total || null,
-        notes: document.getElementById('notes').value + `\n[Vale Gás: ${data.vales.map(v => '#' + v.id).join(', ')}]`,
-        tipo_pagamento: 'vale_gas',
-        forma_pagamento_key: document.getElementById('forma_pagamento_key').value,
-        bling_contact_id: window._lastBlingContactId || null,
-        data_pedido: getDataPedido(),
-      }),
-    });
-    
-    // 2. Dar baixa nos vales
-    const valeIds = data.vales.map(v => v.id);
-    const baixaResult = await api('/api/vales/baixa-lote', {
-      method: 'POST',
-      body: JSON.stringify({ ids: valeIds, pedido_id: result.id })
-    });
-    
-    hideLoading();
-    toast(`✅ Pedido #${result.id} criado! ${baixaResult.results?.filter(r => r.ok).length || 0} vale(s) baixado(s).`, 'success');
-    
-    // Limpar formulário
-    setTimeout(() => {
-      // Limpar cliente
-      ['cName','cPhone','cAddr','cBairro','cComp','cRef'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-      const numEl = document.getElementById('cNum'); if (numEl) numEl.value = '';
-      // Limpar itens
-      items = [];
-      renderItems();
-      // Limpar pagamento e notas
-      document.getElementById('tipo_pagamento').value = '';
-      document.getElementById('forma_pagamento_key').value = '';
-      document.getElementById('notes').value = '';
-      // Reset botões pagamento
-      document.querySelectorAll('.pgto-btn').forEach(b => b.classList.remove('selected'));
-      // Reset Vale Gás
-      document.getElementById('valeGasIds').value = '';
-      window._valeGasValidado = null;
-      document.getElementById('valeGasStatus').style.display = 'none';
-      // Reativar botão
-      btn.disabled = false;
-      btn.textContent = '✅ SALVAR PEDIDO';
-      setDataPedido(0);
-      document.getElementById('searchPhone').focus();
-    }, 1200);
-    
-  } catch (e) {
-    hideLoading();
-    toast(e.message || 'Erro ao criar pedido', 'error');
-    btn.disabled = false;
-    btn.textContent = '✅ SALVAR PEDIDO';
   }
 }
 </script>

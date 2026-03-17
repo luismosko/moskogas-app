@@ -1,5 +1,6 @@
-// v2.52.29
+// v2.52.30
 
+// v2.52.30: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
 // v2.52.29: POST /api/vales/validar-para-pedido + baixa automática de vales ao criar pedido
 // v2.52.28: DELETE /api/clientes/:phone (admin only) + normalizePhone() para consistência de prefixo 55
 // v2.52.27: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
@@ -9075,6 +9076,161 @@ export default {
           })),
           items,
           total_vales: vales.length
+        });
+      }
+
+      // v2.52.30: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
+      if (method === 'POST' && path === '/api/vales/criar-pedido-direto') {
+        const body = await request.json();
+        const { ids, endereco_override } = body; // endereco_override opcional para sobrescrever
+        
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+          return err('Informe pelo menos um ID de vale');
+        }
+        
+        // 1. Buscar todos os vales
+        const placeholders = ids.map(() => '?').join(',');
+        const vales = await env.DB.prepare(
+          `SELECT v.id, v.nota_id, v.numero, v.produto, v.status, v.resgatado_em, v.resgatado_por,
+                  n.cliente_nome, n.cliente_doc, n.validade, n.nota_fiscal, n.empenho
+           FROM vales v
+           JOIN notas_vales n ON v.nota_id = n.id
+           WHERE v.id IN (${placeholders})
+           ORDER BY v.id ASC`
+        ).bind(...ids.map(id => parseInt(id))).all().then(r => r.results || []);
+        
+        // 2. Validar IDs encontrados
+        const idsEncontrados = vales.map(v => v.id);
+        const idsNaoEncontrados = ids.filter(id => !idsEncontrados.includes(parseInt(id)));
+        if (idsNaoEncontrados.length > 0) {
+          return json({ ok: false, error: `Vale(s) não encontrado(s): ${idsNaoEncontrados.join(', ')}` }, 400);
+        }
+        
+        // 3. Verificar se algum já foi resgatado
+        const valesResgatados = vales.filter(v => v.status === 'resgatado');
+        if (valesResgatados.length > 0) {
+          const msgs = valesResgatados.map(v => `#${v.id} (resgatado em ${new Date(v.resgatado_em * 1000).toLocaleDateString('pt-BR')})`);
+          return json({ ok: false, error: `Vale(s) já resgatado(s): ${msgs.join(', ')}` }, 400);
+        }
+        
+        // 4. Verificar se todos são do mesmo cliente
+        const clientes = [...new Set(vales.map(v => v.cliente_nome))];
+        if (clientes.length > 1) {
+          return json({ 
+            ok: false, 
+            error: `Os vales são de CLIENTES DIFERENTES:\n${vales.map(v => `#${v.id}: ${v.cliente_nome}`).join('\n')}\n\nDigite apenas vales do mesmo cliente.`,
+            clientes_diferentes: true
+          }, 400);
+        }
+        
+        const clienteNome = vales[0].cliente_nome;
+        const notaFiscal = vales[0].nota_fiscal || '';
+        const empenho = vales[0].empenho || '';
+        
+        // 5. Buscar dados do cliente no cache (telefone, endereço)
+        let clienteCache = await env.DB.prepare(
+          'SELECT * FROM customers_cache WHERE UPPER(name) = ? LIMIT 1'
+        ).bind(clienteNome.toUpperCase()).first();
+        
+        // Se não encontrou exato, tenta busca parcial
+        if (!clienteCache) {
+          const palavras = clienteNome.split(/\s+/).filter(p => p.length > 3);
+          if (palavras.length > 0) {
+            clienteCache = await env.DB.prepare(
+              `SELECT * FROM customers_cache WHERE UPPER(name) LIKE ? LIMIT 1`
+            ).bind(`%${palavras[0].toUpperCase()}%`).first();
+          }
+        }
+        
+        // 6. Buscar preços dos produtos
+        const produtos = await env.DB.prepare('SELECT * FROM app_products WHERE ativo = 1').all().then(r => r.results || []);
+        const precoMap = {};
+        for (const p of produtos) {
+          // Mapear por código ou nome
+          if (p.codigo) precoMap[p.codigo.toUpperCase()] = parseFloat(p.preco) || 0;
+          if (p.nome) {
+            if (p.nome.toUpperCase().includes('P13')) precoMap['P13'] = parseFloat(p.preco) || 0;
+            if (p.nome.toUpperCase().includes('P20')) precoMap['P20'] = parseFloat(p.preco) || 0;
+            if (p.nome.toUpperCase().includes('P45')) precoMap['P45'] = parseFloat(p.preco) || 0;
+            if (p.nome.toUpperCase().includes('AGUA') || p.nome.toUpperCase().includes('ÁGUA')) precoMap['A20'] = parseFloat(p.preco) || 0;
+          }
+        }
+        // Fallback de preços se não encontrou
+        if (!precoMap['P13']) precoMap['P13'] = 125;
+        if (!precoMap['P20']) precoMap['P20'] = 220;
+        if (!precoMap['P45']) precoMap['P45'] = 495;
+        if (!precoMap['A20']) precoMap['A20'] = 25;
+        precoMap['ÁGUA 20L'] = precoMap['A20'];
+        
+        // 7. Montar itens do pedido (agrupar por produto)
+        const itemsMap = {};
+        for (const v of vales) {
+          const prodKey = v.produto.toUpperCase().replace('ÁGUA 20L', 'A20');
+          if (!itemsMap[v.produto]) {
+            itemsMap[v.produto] = { 
+              name: v.produto === 'P13' ? 'GÁS GLP P13' : 
+                    v.produto === 'P20' ? 'GLP P20' : 
+                    v.produto === 'P45' ? 'GÁS P45 (recarga)' : 
+                    v.produto === 'Água 20L' ? 'AGUA MINERAL 20L' : v.produto,
+              qty: 0, 
+              price: precoMap[prodKey] || precoMap[v.produto] || 0,
+              code: prodKey
+            };
+          }
+          itemsMap[v.produto].qty++;
+        }
+        const items = Object.values(itemsMap);
+        const totalValue = items.reduce((s, i) => s + (i.price * i.qty), 0);
+        
+        // 8. Determinar dados finais do pedido
+        const phone = endereco_override?.phone || clienteCache?.phone_digits || '';
+        const addressLine = endereco_override?.address || clienteCache?.address_line || 'VALE GÁS - Confirmar endereço';
+        const bairro = endereco_override?.bairro || clienteCache?.bairro || '';
+        const complemento = endereco_override?.complemento || clienteCache?.complemento || '';
+        const referencia = endereco_override?.referencia || clienteCache?.referencia || '';
+        
+        // 9. Criar o pedido
+        const valeIds = vales.map(v => v.id);
+        const notesText = `[Vale Gás: ${valeIds.map(id => '#' + id).join(', ')}]${notaFiscal ? ` NF: ${notaFiscal}` : ''}${empenho ? ` Emp: ${empenho}` : ''}`;
+        
+        const orderResult = await env.DB.prepare(`
+          INSERT INTO orders (
+            phone_digits, customer_name, address_line, bairro, complemento, referencia,
+            items_json, total_value, notes, status, sync_status, tipo_pagamento,
+            pago, vendedor_id, vendedor_nome, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', 'pendente', 'vale_gas', 1, ?, ?, unixepoch())
+        `).bind(
+          phone,
+          clienteNome,
+          addressLine,
+          bairro,
+          complemento,
+          referencia,
+          JSON.stringify(items),
+          totalValue,
+          notesText,
+          authCheck.id,
+          authCheck.nome
+        ).run();
+        
+        const pedidoId = orderResult.meta?.last_row_id;
+        
+        // 10. Dar baixa nos vales
+        for (const valeId of valeIds) {
+          await env.DB.prepare(
+            'UPDATE vales SET status="resgatado", resgatado_em=unixepoch(), resgatado_por=? WHERE id=?'
+          ).bind(`${authCheck.nome} (Pedido #${pedidoId})`, valeId).run();
+        }
+        
+        return json({
+          ok: true,
+          pedido_id: pedidoId,
+          cliente: clienteNome,
+          total_vales: vales.length,
+          total_value: totalValue,
+          items: items,
+          vales_baixados: valeIds,
+          message: `Pedido #${pedidoId} criado! ${vales.length} vale(s) baixado(s).`
         });
       }
 
