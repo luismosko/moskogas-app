@@ -1,5 +1,5 @@
-// v2.52.32
-
+// v2.52.33
+// v2.52.33: Fix deploy — wa/conexoes permitir admin/gerente/atendente
 // v2.52.32: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
 // v2.52.29: POST /api/vales/validar-para-pedido + baixa automática de vales ao criar pedido
 // v2.52.28: DELETE /api/clientes/:phone (admin only) + normalizePhone() para consistência de prefixo 55
