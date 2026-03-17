@@ -1,6 +1,6 @@
-// v2.52.30
+// v2.52.31
 
-// v2.52.30: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
+// v2.52.31: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
 // v2.52.29: POST /api/vales/validar-para-pedido + baixa automática de vales ao criar pedido
 // v2.52.28: DELETE /api/clientes/:phone (admin only) + normalizePhone() para consistência de prefixo 55
 // v2.52.27: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
@@ -5676,7 +5676,7 @@ export default {
     // ── WHATSAPP CONEXÕES MÚLTIPLAS ────────────────────────────────────────
     // GET /api/wa/conexoes
     if (method === 'GET' && path === '/api/wa/conexoes') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const rows = await env.DB.prepare('SELECT id,nome,ativo,categorias,descricao,created_at,updated_at FROM whatsapp_connections ORDER BY id ASC').all();
       return json(rows.results || []);
@@ -5684,7 +5684,7 @@ export default {
 
     // POST /api/wa/conexoes
     if (method === 'POST' && path === '/api/wa/conexoes') {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const body = await request.json();
       const { nome, token, categorias = [], descricao = '' } = body;
@@ -5699,7 +5699,7 @@ export default {
     // PUT /api/wa/conexoes/:id
     const waConnMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)$/);
     if (method === 'PUT' && waConnMatch) {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waConnMatch[1]);
       const body = await request.json();
@@ -5717,7 +5717,7 @@ export default {
     // PATCH /api/wa/conexoes/:id/toggle — liga/desliga
     const waToggleMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)\/toggle$/);
     if (method === 'POST' && waToggleMatch) {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waToggleMatch[1]);
       const now = Math.floor(Date.now()/1000);
@@ -5729,7 +5729,7 @@ export default {
     // DELETE /api/wa/conexoes/:id
     const waDelMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)$/);
     if (method === 'DELETE' && waDelMatch) {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waDelMatch[1]);
       await env.DB.prepare('DELETE FROM whatsapp_connections WHERE id=?').bind(id).run();
@@ -5739,7 +5739,7 @@ export default {
     // POST /api/wa/conexoes/:id/testar — testa conexão
     const waTestarMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)\/testar$/);
     if (method === 'POST' && waTestarMatch) {
-      const authCheck = await requireAuth(request, env, ['admin']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waTestarMatch[1]);
       const body = await request.json().catch(() => ({}));
@@ -9079,7 +9079,7 @@ export default {
         });
       }
 
-      // v2.52.30: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
+      // v2.52.31: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
       if (method === 'POST' && path === '/api/vales/criar-pedido-direto') {
         const body = await request.json();
         const { ids, endereco_override } = body; // endereco_override opcional para sobrescrever
