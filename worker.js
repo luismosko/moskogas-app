@@ -1,6 +1,6 @@
-// v2.52.31
+// v2.52.32
 
-// v2.52.31: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
+// v2.52.32: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
 // v2.52.29: POST /api/vales/validar-para-pedido + baixa automática de vales ao criar pedido
 // v2.52.28: DELETE /api/clientes/:phone (admin only) + normalizePhone() para consistência de prefixo 55
 // v2.52.27: Tipo de cobrança (mensalista/entrega) + Produtos preferidos por cliente
@@ -3532,10 +3532,10 @@ export default {
       // - Só admin pode criar/editar admin e gerente
       // - Gerente pode criar/editar atendente e entregador
       // - Atendente pode criar/editar atendente e entregador
-      if (!isAdmin && ['admin', 'gerente'].includes(role)) return err('Sem permissão para criar/editar este nível de acesso', 403);
+      if (!isAdmin && ['admin', 'gerente', 'atendente'].includes(role)) return err('Sem permissão para criar/editar este nível de acesso', 403);
       if (!isAdmin && id) {
         const target = await env.DB.prepare('SELECT role FROM app_users WHERE id=?').bind(id).first();
-        if (target && ['admin', 'gerente'].includes(target.role)) return err('Sem permissão para editar este usuário', 403);
+        if (target && ['admin', 'gerente', 'atendente'].includes(target.role)) return err('Sem permissão para editar este usuário', 403);
       }
 
       if (id) {
@@ -5696,7 +5696,7 @@ export default {
     // ── WHATSAPP CONEXÕES MÚLTIPLAS ────────────────────────────────────────
     // GET /api/wa/conexoes
     if (method === 'GET' && path === '/api/wa/conexoes') {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const rows = await env.DB.prepare('SELECT id,nome,ativo,categorias,descricao,created_at,updated_at FROM whatsapp_connections ORDER BY id ASC').all();
       return json(rows.results || []);
@@ -5704,7 +5704,7 @@ export default {
 
     // POST /api/wa/conexoes
     if (method === 'POST' && path === '/api/wa/conexoes') {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const body = await request.json();
       const { nome, token, categorias = [], descricao = '' } = body;
@@ -5719,7 +5719,7 @@ export default {
     // PUT /api/wa/conexoes/:id
     const waConnMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)$/);
     if (method === 'PUT' && waConnMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waConnMatch[1]);
       const body = await request.json();
@@ -5737,7 +5737,7 @@ export default {
     // PATCH /api/wa/conexoes/:id/toggle — liga/desliga
     const waToggleMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)\/toggle$/);
     if (method === 'POST' && waToggleMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waToggleMatch[1]);
       const now = Math.floor(Date.now()/1000);
@@ -5749,7 +5749,7 @@ export default {
     // DELETE /api/wa/conexoes/:id
     const waDelMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)$/);
     if (method === 'DELETE' && waDelMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waDelMatch[1]);
       await env.DB.prepare('DELETE FROM whatsapp_connections WHERE id=?').bind(id).run();
@@ -5759,7 +5759,7 @@ export default {
     // POST /api/wa/conexoes/:id/testar — testa conexão
     const waTestarMatch = path.match(/^\/api\/wa\/conexoes\/(\d+)\/testar$/);
     if (method === 'POST' && waTestarMatch) {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const id = parseInt(waTestarMatch[1]);
       const body = await request.json().catch(() => ({}));
@@ -6118,14 +6118,14 @@ export default {
     // ══════════════════════════════════════════════════════════
 
     if (method === 'GET' && path === '/api/whatsapp/safety-config') {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const config = await getWhatsAppSafetyConfig(env);
       return json(config);
     }
 
     if (method === 'POST' && path === '/api/whatsapp/safety-config') {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureWhatsAppTables(env);
       const body = await request.json();
@@ -7049,7 +7049,7 @@ export default {
 
     // ── NFC-e: Retry em lote (manual) ──────────────────────────────
     if (method === 'POST' && path === '/api/nfce/retry-bulk') {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       let limite = 5; // max 5 por chamada — evita timeout Worker (30s)
       try { const b = await request.clone().json(); if (b?.limite) limite = parseInt(b.limite); } catch {}
@@ -7194,7 +7194,7 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/auditoria/conciliacao-bling') {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
 
       const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
@@ -7240,7 +7240,7 @@ export default {
     }
 
     if (method === 'GET' && path === '/api/auditoria/log-detalhado') {
-      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       await ensureAuditTable(env);
       const orderId = url.searchParams.get('order_id');
@@ -9099,7 +9099,7 @@ export default {
         });
       }
 
-      // v2.52.31: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
+      // v2.52.32: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
       if (method === 'POST' && path === '/api/vales/criar-pedido-direto') {
         const body = await request.json();
         const { ids, endereco_override } = body; // endereco_override opcional para sobrescrever
@@ -10333,7 +10333,7 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
 
       // POST /api/ultragaz/product-map — criar ou atualizar entrada
       if (path === '/api/ultragaz/product-map' && method === 'POST') {
-        const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+        const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
         if (authCheck instanceof Response) return authCheck;
         const { ultragaz_sku, moskogas_name, moskogas_product_id, bling_id, price_override, ativo } = await request.json();
         if (!ultragaz_sku || !moskogas_name) return err('ultragaz_sku e moskogas_name são obrigatórios');
