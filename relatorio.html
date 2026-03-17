@@ -45,42 +45,47 @@
   .empty-report { text-align: center; padding: 60px; color: #94a3b8; font-size: 16px; }
 
   /* ── PRINT ── */
-  /* Assinaturas */
-  .assinaturas-block {
-    display: flex;
-    gap: 40px;
-    margin-top: 40px;
-    padding-top: 24px;
-    border-top: 2px dashed #cbd5e1;
-    page-break-inside: avoid;
-  }
-  .assinatura-col {
+  /* Assinaturas inline no pgto-summary */
+  .assinatura-inline {
     flex: 1;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 16px;
+    padding-left: 16px;
+    border-left: 1px dashed #cbd5e1;
+    min-width: 160px;
   }
-  .assinatura-titulo {
-    font-size: 11px;
+  .assinatura-inline-col {
+    flex: 1;
+  }
+  .assinatura-inline-titulo {
+    font-size: 9px;
     font-weight: 700;
     color: #64748b;
     text-transform: uppercase;
-    letter-spacing: .5px;
-    margin-bottom: 32px;
+    letter-spacing: .4px;
+    margin-bottom: 20px;
   }
-  .assinatura-nome {
-    font-size: 13px;
+  .assinatura-inline-nome {
+    font-size: 12px;
     font-weight: 700;
     color: #1e293b;
-    margin-bottom: 6px;
-    min-height: 20px;
-  }
-  .assinatura-linha {
-    border-bottom: 1.5px solid #1e293b;
-    width: 100%;
     margin-bottom: 4px;
+    min-height: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .assinatura-label {
-    font-size: 10px;
+  .assinatura-inline-linha {
+    border-bottom: 1.5px solid #334155;
+    width: 100%;
+    margin-bottom: 3px;
+  }
+  .assinatura-inline-label {
+    font-size: 9px;
     color: #94a3b8;
+    text-align: center;
   }
 
   @media print {
@@ -99,14 +104,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.8</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.9</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.8</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.9</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -119,7 +124,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.8
+// v1.2.9
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -348,25 +353,25 @@ async function gerarRelatorio() {
     </div>`;
   }
 
-  html += `</div>`;
-
-  // ── Bloco de assinaturas ──────────────────────────────────────
-  const nomeEntregadorAssinatura = driverId ? driverName : '____________________________';
+  // Assinaturas — terceira coluna dentro do pgto-summary
+  const nomeEntregadorAssinatura = driverId ? driverName : '';
   html += `
-  <div class="assinaturas-block">
-    <div class="assinatura-col">
-      <div class="assinatura-titulo">Conferido pelo Entregador</div>
-      <div class="assinatura-nome">${nomeEntregadorAssinatura}</div>
-      <div class="assinatura-linha"></div>
-      <div class="assinatura-label">Assinatura</div>
-    </div>
-    <div class="assinatura-col">
-      <div class="assinatura-titulo">Conferido pelo Administrativo</div>
-      <div class="assinatura-nome">____________________________</div>
-      <div class="assinatura-linha"></div>
-      <div class="assinatura-label">Assinatura</div>
-    </div>
-  </div>`;
+    <div class="assinatura-inline">
+      <div class="assinatura-inline-col">
+        <div class="assinatura-inline-titulo">Conferido pelo Entregador</div>
+        <div class="assinatura-inline-nome">${nomeEntregadorAssinatura}</div>
+        <div class="assinatura-inline-linha"></div>
+        <div class="assinatura-inline-label">Assinatura</div>
+      </div>
+      <div class="assinatura-inline-col" style="margin-top:24px">
+        <div class="assinatura-inline-titulo">Conferido pelo ADM</div>
+        <div class="assinatura-inline-nome"></div>
+        <div class="assinatura-inline-linha"></div>
+        <div class="assinatura-inline-label">Assinatura</div>
+      </div>
+    </div>`;
+
+  html += `</div>`;
 
   document.getElementById('report-content').innerHTML = html;
   hideLoading();
