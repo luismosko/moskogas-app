@@ -1,4 +1,5 @@
-// v2.52.34
+// v2.52.35
+// v2.52.35: Fix /api/address/list para clientes doc_CNPJ — não remover prefixo doc_
 // v2.52.34: Fix bling-detail criando duplicados customers_cache — verifica bling_contact_id antes de INSERT
 // v2.52.33: Fix deploy — wa/conexoes permitir admin/gerente/atendente
 // v2.52.32: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
@@ -2934,7 +2935,9 @@ export default {
     // ── ENDEREÇOS MÚLTIPLOS ─────────────────────────────────
 
     if (method === 'GET' && path === '/api/address/list') {
-      const phone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
+      // v2.52.35: Aceitar doc_CNPJ (preservar prefixo) ou phone normal (só dígitos)
+      const rawPhone = (url.searchParams.get('phone') || '').trim();
+      const phone = rawPhone.startsWith('doc_') ? rawPhone : rawPhone.replace(/\D/g, '');
       if (!phone) return json([]);
       const rows = await env.DB.prepare('SELECT * FROM customer_addresses WHERE phone_digits=? ORDER BY obs ASC').bind(phone).all().then(r => r.results);
       return json(rows);
