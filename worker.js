@@ -1,4 +1,5 @@
-// v2.52.35
+// v2.52.36
+// v2.52.36: Não gera NFC-e/Bling para pedidos R$ 0 (Vale Gás Hub Ultragaz)
 // v2.52.35: Fix /api/address/list para clientes doc_CNPJ — não remover prefixo doc_
 // v2.52.34: Fix bling-detail criando duplicados customers_cache — verifica bling_contact_id antes de INSERT
 // v2.52.33: Fix deploy — wa/conexoes permitir admin/gerente/atendente
@@ -5440,7 +5441,9 @@ export default {
 
       let blingResult = null;
       // v2.49.26: skip_bling=true → Vale Gás com NF já emitida
-      if (!order.bling_pedido_id && !order.nfce_id && TIPOS_BLING_ENTREGA.includes(tipoFinal) && !skipBling) {
+      // v2.52.36: Não gera NFC-e/Bling para pedidos com valor R$ 0 (Vale Gás Hub Ultragaz)
+      const valorPedido = parseFloat(order.total_value) || 0;
+      if (!order.bling_pedido_id && !order.nfce_id && TIPOS_BLING_ENTREGA.includes(tipoFinal) && !skipBling && valorPedido > 0) {
         try {
           const custData = order.phone_digits
             ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first()
