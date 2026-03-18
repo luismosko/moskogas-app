@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.1.5 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.1.6 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.5</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.6</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
 
@@ -195,11 +195,11 @@
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 window.addEventListener('DOMContentLoaded', () => {
     if (typeof requireAdminOrAtendente === 'function') requireAdminOrAtendente();
-    // v1.1.5: Verifica se veio do empenho
+    // v1.1.6: Verifica se veio do empenho
     setTimeout(() => checkFromEmpenho(), 300);
 });
 
-// v1.1.5: Integração com Empenhos — pré-preenche dados do empenho
+// v1.1.6: Integração com Empenhos — pré-preenche dados do empenho
 function checkFromEmpenho() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('from_empenho') !== '1') return;
@@ -292,7 +292,7 @@ function renderTable() {
             '<td>' + badge + '</td>' +
             '<td style="font-size:11px;color:#475569">' + (docs.join('<br>') || '—') + '</td>' +
             '<td><button class="btn btn-blue" onclick="event.stopPropagation(); window.open(\'print-vales.html?id=' + n.id + '\', \'_blank\')" style="padding:4px 8px;font-size:11px">🖨️ Imprimir</button>' +
-            (isAdmin() ? ' <button class="btn btn-red" onclick="event.stopPropagation(); apagarNota(' + n.id + ')" style="padding:4px 8px;font-size:11px" title="Apagar nota (admin)">🗑️</button>' : '') +
+            '' +
             '</td>' +
             '</tr>';
     }).join('');
@@ -415,7 +415,7 @@ async function viewNota(id) {
         document.getElementById('det-vales-list').innerHTML = grid;
         // Botão apagar só para admin
         document.getElementById('det-btn-apagar').innerHTML = isAdmin()
-            ? '<button class="btn btn-red" onclick="apagarNota(' + id + ')" style="margin-right:auto">🗑️ Apagar Nota</button>'
+            ? ''
             : '';
         document.getElementById('modal-view').classList.add('open');
     } catch(e) { toast(e.message, 'error'); }

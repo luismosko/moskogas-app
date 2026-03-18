@@ -10,6 +10,7 @@
 // v2.52.22: Validação pedido zerado — não permite criar pedido com items sem preço ou total R$ 0,00
 // v2.52.21: POST /api/bling/disconnect + /bling/ping com mais detalhes (token_type, real_ok, minutes_left)
 // v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
+// v2.52.20: DELETE /api/vales/notas desabilitado — vales são registros fiscais e não podem ser apagados
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
 // v2.52.19: GET /api/relatorio/entregadores — performance por entregador (admin only)
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
@@ -9086,15 +9087,10 @@ export default {
         return json({ ok: true, nota_id: notaId });
       }
 
-      // DELETE /api/vales/notas/:id — apagar nota e seus vales (admin only)
+      // DELETE /api/vales/notas/:id — DESABILITADO (vales nunca podem ser apagados)
       const delNotaMatch = path.match(/^\/api\/vales\/notas\/(\d+)$/);
       if (method === 'DELETE' && delNotaMatch) {
-        const adminCheck = await requireAuth(request, env, ['admin']);
-        if (adminCheck instanceof Response) return adminCheck;
-        const notaId = parseInt(delNotaMatch[1]);
-        await env.DB.prepare('DELETE FROM vales WHERE nota_id=?').bind(notaId).run();
-        await env.DB.prepare('DELETE FROM notas_vales WHERE id=?').bind(notaId).run();
-        return json({ ok: true, message: 'Nota e vales apagados com sucesso.' });
+        return json({ ok: false, error: 'Exclusão de Vale Gás não permitida. Registros fiscais não podem ser apagados.' }, 403);
       }
 
       // PATCH /api/vales/:id/baixa - Dar baixa
