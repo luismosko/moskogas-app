@@ -9,6 +9,7 @@
 // v2.52.23: Fix query NFC-e pendentes — usa nfce_status/nfce_numero em vez de nfce_id; adiciona pix_receber
 // v2.52.22: Validação pedido zerado — não permite criar pedido com items sem preço ou total R$ 0,00
 // v2.52.21: POST /api/bling/disconnect + /bling/ping com mais detalhes (token_type, real_ok, minutes_left)
+// v2.52.21: DELETE /api/empenhos/:id bloqueado com 403 — só PATCH status=cancelado permitido
 // v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
 // v2.52.20: DELETE /api/vales/notas desabilitado — vales são registros fiscais e não podem ser apagados
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
@@ -8619,6 +8620,11 @@ export default {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const user = authCheck;
+
+      // DELETE de empenhos NUNCA permitido — só inativar via PATCH status='cancelado'
+      if (method === 'DELETE' && /^\/api\/empenhos\/\d+$/.test(path)) {
+        return json({ ok: false, error: 'Exclusão de empenhos não permitida. Use Inativar para manter o histórico fiscal.' }, 403);
+      }
 
       // ── Helpers ──────────────────────────────────────────
       async function getEmpenhoComSaldo(id) {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.8</title>
+<title>Empenhos GOV — MoskoGás v1.0.9</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,7 +125,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.8</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.9</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -258,7 +258,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.8: Busca cliente com fallback Bling API direto (search-bling-nome)
+// v1.0.9: Busca cliente com fallback Bling API direto (search-bling-nome)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -346,7 +346,7 @@ function renderCard(e) {
       <button class="btn btn-ghost btn-sm" onclick="abrirDetalhe(${e.id})">🔍 Detalhe / Histórico</button>
       <button class="btn btn-primary btn-sm" onclick="abrirModalEditar(${e.id})">✏️ Editar</button>
       ${e.status === 'ativo' && (e.itens || []).length > 0 ? `<button class="btn btn-orange btn-sm" onclick="gerarValesDoEmpenho(${e.id})" title="Gerar Vale Gás a partir deste empenho">🎫 Gerar Vales</button>` : ''}
-      ${e.status === 'ativo' ? `<button class="btn btn-danger btn-sm" onclick="cancelarEmpenho(${e.id})">✕ Cancelar</button>` : ''}
+      ${e.status === 'ativo' ? `<button class="btn btn-danger btn-sm" onclick="inativarEmpenho(${e.id})" title="Inativar empenho — mantém histórico">⊘ Inativar</button>` : ''}
     </div>
   </div>`;
 }
@@ -420,7 +420,7 @@ function switchTab(tab) {
 }
 
 // ── Busca cliente ─────────────────────────────────────────────────
-// v1.0.8: Busca em 2 etapas — cache local + fallback Bling API direto
+// v1.0.9: Busca em 2 etapas — cache local + fallback Bling API direto
 function buscarCliente(q) {
   clearTimeout(clienteSearchTimer);
   const drop = document.getElementById('sc-drop');
@@ -795,17 +795,20 @@ async function abrirDetalhe(id) {
 }
 
 // ── Cancelar ──────────────────────────────────────────────────────
-async function cancelarEmpenho(id) {
-  const motivo = prompt('Motivo do cancelamento:');
-  if (motivo === null) return;
-  showLoading('Cancelando...');
+async function inativarEmpenho(id) {
+  const motivo = prompt('Motivo da inativação:\n\nO empenho será inativado mas permanecerá no histórico.');
+  if (motivo === null) return; // cancelou
+  if (!motivo.trim()) { toast('⚠️ Informe o motivo', 'warn'); return; }
+  showLoading('Inativando...');
   try {
     await api(`/api/empenhos/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelado', observacoes: motivo }) });
-    toast('✅ Empenho cancelado');
+    toast('✅ Empenho inativado — histórico preservado');
     await carregarEmpenhos();
   } catch(e) { toast('❌ ' + e.message, 'error'); }
   finally { hideLoading(); }
 }
+// Alias de compatibilidade
+const cancelarEmpenho = inativarEmpenho;
 
 // ── Gerar Vales do Empenho ─────────────────────────────────────────
 // v1.0.6: Integração com módulo Vale Gás
