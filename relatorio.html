@@ -50,11 +50,11 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 16px;
+    justify-content: space-around;
+    gap: 8px;
     padding-left: 16px;
     border-left: 1px dashed #cbd5e1;
-    min-width: 160px;
+    min-width: 150px;
   }
   .assinatura-inline-col {
     flex: 1;
@@ -65,18 +65,9 @@
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: .4px;
-    margin-bottom: 20px;
+    margin-bottom: 28px;
   }
-  .assinatura-inline-nome {
-    font-size: 12px;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 4px;
-    min-height: 18px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+  .assinatura-inline-nome { display: none; }
   .assinatura-inline-linha {
     border-bottom: 1.5px solid #334155;
     width: 100%;
@@ -104,14 +95,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.9</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.10</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.9</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.10</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -124,7 +115,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.9
+// v1.2.10
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -336,7 +327,8 @@ async function gerarRelatorio() {
     </tr></thead>
     <tbody>`;
   sortedProd.forEach(([nome, qty]) => {
-    html += `<tr><td style="white-space:nowrap">${nome}</td><td style="text-align:center;font-weight:700">${qty}</td></tr>`;
+    const nomeTrunc = nome.length > 28 ? nome.substring(0, 26) + '…' : nome;
+    html += `<tr><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nome}">${nomeTrunc}</td><td style="text-align:center;font-weight:700">${qty}</td></tr>`;
   });
   html += `<tr class="pgto-total">
       <td style="font-weight:900">TOTAL</td>
@@ -354,18 +346,15 @@ async function gerarRelatorio() {
   }
 
   // Assinaturas — terceira coluna dentro do pgto-summary
-  const nomeEntregadorAssinatura = driverId ? driverName : '';
   html += `
     <div class="assinatura-inline">
       <div class="assinatura-inline-col">
         <div class="assinatura-inline-titulo">Conferido pelo Entregador</div>
-        <div class="assinatura-inline-nome">${nomeEntregadorAssinatura}</div>
         <div class="assinatura-inline-linha"></div>
         <div class="assinatura-inline-label">Assinatura</div>
       </div>
-      <div class="assinatura-inline-col" style="margin-top:24px">
+      <div class="assinatura-inline-col">
         <div class="assinatura-inline-titulo">Conferido pelo ADM</div>
-        <div class="assinatura-inline-nome"></div>
         <div class="assinatura-inline-linha"></div>
         <div class="assinatura-inline-label">Assinatura</div>
       </div>
