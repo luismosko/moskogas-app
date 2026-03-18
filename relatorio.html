@@ -95,14 +95,14 @@
 
 <!-- TOOLBAR -->
 <div class="toolbar">
-  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.10</span>
+  <span style="font-size:15px;font-weight:700;color:#1e293b">📋 Relatório do Entregador v1.2.11</span>
   <input type="date" id="fDate" style="width:155px">
   <select id="fDriver" style="min-width:160px">
     <option value="">Todos entregadores</option>
   </select>
   <button class="btn btn-orange" onclick="gerarRelatorio()" title="Gerar relatório">📊 Gerar</button>
   <button class="btn btn-blue" onclick="window.print()" title="Imprimir relatório">🖨️ Imprimir</button>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.10</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v1.2.11</span>
 </div>
 
 <!-- RELATÓRIO -->
@@ -115,7 +115,7 @@
 
 <script src="shared.js"></script>
 <script>
-// v1.2.10
+// v1.2.11
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -247,7 +247,7 @@ async function gerarRelatorio() {
 
     const phone = o.phone_digits ? formatPhone(o.phone_digits) : '—';
     const endFull = (o.address_line || '') + (o.complemento ? ', ' + o.complemento : '');
-    const endTrunc = truncAddr(endFull, 50);
+    const endTrunc = truncAddr(endFull, 28);
 
     items.forEach((it, i) => {
       const isFirst = i === 0;
@@ -260,8 +260,8 @@ async function gerarRelatorio() {
         ${isFirst ? `<td rowspan="${items.length}" style="font-weight:600;vertical-align:middle;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${truncText(o.customer_name, 25) || '—'}</td>` : ''}
         ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle;white-space:nowrap">${pgtoLabel}</td>` : ''}
         ${isFirst ? `<td rowspan="${items.length}" style="font-size:9px;vertical-align:middle;white-space:nowrap">${phone}</td>` : ''}
-        ${isFirst ? `<td rowspan="${items.length}" style="vertical-align:middle;white-space:nowrap;font-size:9px" title="${(o.address_line||'') + (o.complemento ? ', '+o.complemento : '')}">${endTrunc}</td>` : ''}
-        <td style="white-space:nowrap;font-size:9px" title="${it.name || ''}">${truncText(it.name, 35)}</td>
+        ${isFirst ? `<td rowspan="${items.length}" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;white-space:nowrap;font-size:9px" title="${(o.address_line||'') + (o.complemento ? ', '+o.complemento : '')}">${endTrunc}</td>` : ''}
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px" title="${it.name || ''}">${truncText(it.name, 22)}</td>
         <td style="text-align:center;font-weight:700;white-space:nowrap">${qty}</td>
         <td class="price-col">${price.toFixed(2)}</td>
         <td class="price-col" style="font-weight:700">${sub.toFixed(2)}</td>
