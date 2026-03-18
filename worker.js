@@ -11,6 +11,7 @@
 // v2.52.21: POST /api/bling/disconnect + /bling/ping com mais detalhes (token_type, real_ok, minutes_left)
 // v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
 // v2.52.19: FIX CRÍTICO — enable-jwt no refreshBlingToken() evita token legacy após refresh automático
+// v2.52.19: GET /api/relatorio/entregadores — performance por entregador (admin only)
 // v2.52.18: Debug OAuth callback - detectar token legacy vs JWT; header Enable-JWT duplicado
 // v2.52.18: GET /api/pagamentos inclui nfce_id/nfce_numero/nfce_status — botão Fiscal some quando NFC-e já emitida
 // v2.52.17: Fix falso positivo Bling OK — tratar 403 JWT como token inválido (blingFetch + /bling/ping)
@@ -6546,6 +6547,93 @@ export default {
     // ══════════════════════════════════════════════════════════
     // RELATÓRIO DIÁRIO POR E-MAIL (v2.29.0)
     // ══════════════════════════════════════════════════════════
+
+
+    // ══════════════════════════════════════════════════════════
+    // GET /api/relatorio/entregadores — Performance por entregador
+    // ══════════════════════════════════════════════════════════
+    if (method === 'GET' && path === '/api/relatorio/entregadores') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const dateFrom = url.searchParams.get('date_from'); // YYYY-MM-DD
+      const dateTo   = url.searchParams.get('date_to');
+      const driverId = url.searchParams.get('driver_id');
+
+      // Converter datas BRT para epoch UTC
+      const epochFrom = dateFrom ? Math.floor(new Date(dateFrom + 'T00:00:00-04:00').getTime() / 1000) : 0;
+      const epochTo   = dateTo   ? Math.floor(new Date(dateTo   + 'T23:59:59-04:00').getTime() / 1000) : Math.floor(Date.now() / 1000);
+
+      let where = `WHERE o.status='entregue' AND o.delivered_at IS NOT NULL AND o.driver_name_cache IS NOT NULL AND o.driver_name_cache != ''`;
+      const params = [];
+      if (epochFrom) { where += ` AND o.delivered_at >= ?`; params.push(epochFrom); }
+      where += ` AND o.delivered_at <= ?`; params.push(epochTo);
+      if (driverId) { where += ` AND o.driver_id = ?`; params.push(driverId); }
+
+      // Resumo por entregador
+      const resumoSql = `
+        SELECT
+          o.driver_id,
+          o.driver_name_cache AS nome,
+          COUNT(*) AS total_entregas,
+          COALESCE(SUM(o.total_value), 0) AS total_valor,
+          COUNT(DISTINCT date(o.delivered_at, 'unixepoch', '-4 hours')) AS dias_trabalhados,
+          MIN(o.delivered_at) AS primeira_entrega,
+          MAX(o.delivered_at) AS ultima_entrega
+        FROM orders o
+        ${where}
+        GROUP BY o.driver_name_cache
+        ORDER BY total_entregas DESC`;
+
+      const resumo = await env.DB.prepare(resumoSql).bind(...params).all().then(r => r.results || []);
+
+      // Calcular total de itens por entregador (precisa iterar items_json)
+      const detalhesSql = `
+        SELECT o.driver_name_cache AS nome, o.items_json, o.id, o.total_value, o.tipo_pagamento,
+               o.delivered_at, o.customer_name, o.address_line, o.bairro
+        FROM orders o
+        ${where}
+        ORDER BY o.delivered_at DESC`;
+
+      const detalhes = await env.DB.prepare(detalhesSql).bind(...params).all().then(r => r.results || []);
+
+      // Agregar itens por entregador
+      const itensPorEntregador = {};
+      const pedidosPorEntregador = {};
+      for (const row of detalhes) {
+        const nome = row.nome;
+        if (!itensPorEntregador[nome]) itensPorEntregador[nome] = {};
+        if (!pedidosPorEntregador[nome]) pedidosPorEntregador[nome] = [];
+        try {
+          const items = JSON.parse(row.items_json || '[]');
+          let totalQty = 0;
+          for (const it of items) {
+            const qty = parseInt(it.qty) || 1;
+            totalQty += qty;
+            const nomeProd = (it.name || 'Produto').trim();
+            itensPorEntregador[nome][nomeProd] = (itensPorEntregador[nome][nomeProd] || 0) + qty;
+          }
+          pedidosPorEntregador[nome].push({
+            id: row.id, customer_name: row.customer_name,
+            address_line: row.address_line, bairro: row.bairro,
+            total_value: row.total_value, tipo_pagamento: row.tipo_pagamento,
+            delivered_at: row.delivered_at, total_itens: totalQty,
+          });
+        } catch (_) {}
+      }
+
+      // Montar resultado final
+      const resultado = resumo.map(r => ({
+        ...r,
+        total_itens: Object.values(itensPorEntregador[r.nome] || {}).reduce((s, q) => s + q, 0),
+        produtos: itensPorEntregador[r.nome] || {},
+        pedidos: pedidosPorEntregador[r.nome] || [],
+        media_valor: r.total_entregas > 0 ? (r.total_valor / r.total_entregas) : 0,
+        media_por_dia: r.dias_trabalhados > 0 ? (r.total_entregas / r.dias_trabalhados) : 0,
+      }));
+
+      return json({ ok: true, entregadores: resultado, periodo: { date_from: dateFrom, date_to: dateTo } });
+    }
 
     if (method === 'GET' && path === '/api/relatorio/email-config') {
       const authCheck = await requireAuth(request, env, ['admin']);

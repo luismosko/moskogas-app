@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance Entregadores v1.0.0 — MoskoGás</title>
+<link rel="icon" href="icone64.png">
+<script src="shared.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui,-apple-system,sans-serif; background: #f1f5f9; color: #1e293b; }
+  .page-header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: #fff; padding: 20px 24px 16px; }
+  .page-header h1 { font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+  .badge-version { background: rgba(255,255,255,.15); border-radius: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+
+  /* Toolbar */
+  .toolbar { background: #fff; padding: 12px 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+  .toolbar input, .toolbar select { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: #f8fafc; }
+  .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 700; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-blue   { background: #3b82f6; color: #fff; }
+  .btn-gray   { background: #e2e8f0; color: #64748b; }
+  .period-btn { padding: 6px 12px; border: 2px solid #e2e8f0; border-radius: 7px; background: #fff; font-size: 12px; font-weight: 700; cursor: pointer; color: #475569; }
+  .period-btn.active { background: #f97316; color: #fff; border-color: #f97316; }
+
+  /* Cards de ranking */
+  .ranking-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; padding: 20px; }
+  .driver-card { background: #fff; border-radius: 14px; border: 2px solid #e2e8f0; overflow: hidden; transition: box-shadow .15s; cursor: pointer; }
+  .driver-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.1); border-color: #f97316; }
+  .driver-card.gold   { border-color: #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fff 60%); }
+  .driver-card.silver { border-color: #94a3b8; background: linear-gradient(135deg, #f8fafc 0%, #fff 60%); }
+  .driver-card.bronze { border-color: #d97706; background: linear-gradient(135deg, #fff7ed 0%, #fff 60%); }
+  .card-header { padding: 14px 16px 10px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f1f5f9; }
+  .rank-badge { font-size: 28px; min-width: 36px; text-align: center; }
+  .driver-name { font-size: 16px; font-weight: 800; color: #1e293b; }
+  .driver-dias { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .card-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 12px 16px; gap: 8px; }
+  .stat-item { text-align: center; }
+  .stat-val { font-size: 20px; font-weight: 900; color: #1e293b; }
+  .stat-label { font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+  .stat-item.highlight .stat-val { color: #16a34a; }
+  .card-footer { padding: 8px 16px 12px; display: flex; gap: 8px; }
+  .mini-stat { flex: 1; background: #f8fafc; border-radius: 7px; padding: 6px 8px; text-align: center; }
+  .mini-val { font-size: 12px; font-weight: 700; color: #1e293b; }
+  .mini-label { font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: .3px; }
+
+  /* Comparativo bar chart */
+  .comparativo { background: #fff; margin: 0 20px 20px; border-radius: 14px; border: 2px solid #e2e8f0; padding: 20px; }
+  .comparativo h2 { font-size: 15px; font-weight: 800; color: #1e293b; margin-bottom: 16px; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .bar-name { width: 130px; font-size: 12px; font-weight: 700; text-align: right; flex-shrink: 0; color: #475569; }
+  .bar-track { flex: 1; background: #f1f5f9; border-radius: 6px; height: 28px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 10px; transition: width .6s ease; }
+  .bar-val { font-size: 11px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .bar-val-outside { font-size: 11px; font-weight: 700; color: #475569; margin-left: 8px; }
+
+  /* Tabs de métrica */
+  .metric-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .metric-tab { padding: 6px 14px; border-radius: 8px; border: 2px solid #e2e8f0; background: #fff; font-size: 12px; font-weight: 700; cursor: pointer; color: #64748b; }
+  .metric-tab.active { background: #1e293b; color: #fff; border-color: #1e293b; }
+
+  /* Modal detalhado */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; overflow-y: auto; padding: 20px; }
+  .modal { background: #fff; border-radius: 16px; max-width: 860px; margin: 0 auto; overflow: hidden; }
+  .modal-head { background: linear-gradient(135deg, #1e293b, #334155); color: #fff; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; }
+  .modal-head h2 { font-size: 18px; font-weight: 800; }
+  .modal-close { background: rgba(255,255,255,.15); border: none; color: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 16px; }
+  .modal-body { padding: 20px 24px; }
+  .modal-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .mstat { background: #f8fafc; border-radius: 10px; padding: 14px; text-align: center; }
+  .mstat-val { font-size: 22px; font-weight: 900; color: #1e293b; }
+  .mstat-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; margin-top: 3px; }
+  .produtos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+  .prod-row { display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+  .prod-nome { font-weight: 600; color: #334155; }
+  .prod-qty { font-weight: 800; color: #f97316; font-size: 14px; }
+  .pedidos-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .pedidos-table th { background: #f8fafc; padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; }
+  .pedidos-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
+  .pedidos-table tr:last-child td { border: none; }
+
+  /* Empty / loading */
+  .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  #loading-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.8); z-index: 9999; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: #f97316; }
+
+  @media print {
+    .toolbar, .page-header { display: none; }
+    .ranking-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div id="loading-overlay">⏳ Carregando...</div>
+
+<div class="page-header">
+  <h1>🏆 Performance Entregadores <span class="badge-version">v1.0.0</span></h1>
+</div>
+
+<div class="toolbar">
+  <input type="date" id="fDateFrom" style="width:140px">
+  <span style="color:#94a3b8;font-size:12px">até</span>
+  <input type="date" id="fDateTo" style="width:140px">
+  <button class="period-btn" onclick="setPeriod('hoje')" id="btn-hoje">Hoje</button>
+  <button class="period-btn active" onclick="setPeriod('mes')" id="btn-mes">Este Mês</button>
+  <button class="period-btn" onclick="setPeriod('7d')" id="btn-7d">7 dias</button>
+  <button class="period-btn" onclick="setPeriod('30d')" id="btn-30d">30 dias</button>
+  <button class="btn btn-orange" onclick="gerar()">📊 Gerar</button>
+  <button class="btn btn-blue" onclick="window.print()">🖨️ Imprimir</button>
+  <span style="font-size:11px;color:#94a3b8;margin-left:auto" id="periodo-label"></span>
+</div>
+
+<!-- Gráfico comparativo -->
+<div class="comparativo" id="comparativo-section" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+    <h2 style="margin:0">📊 Comparativo</h2>
+    <div class="metric-tabs">
+      <button class="metric-tab active" onclick="setMetric('entregas')" id="tab-entregas">Entregas</button>
+      <button class="metric-tab" onclick="setMetric('valor')" id="tab-valor">Valor R$</button>
+      <button class="metric-tab" onclick="setMetric('itens')" id="tab-itens">Qtd Itens</button>
+      <button class="metric-tab" onclick="setMetric('media')" id="tab-media">Média/dia</button>
+    </div>
+  </div>
+  <div id="bars-container"></div>
+</div>
+
+<!-- Cards de ranking -->
+<div class="ranking-grid" id="ranking-grid">
+  <div class="empty-state" style="grid-column:1/-1">
+    <div class="icon">🏆</div>
+    <div>Selecione o período e clique em <strong>Gerar</strong></div>
+  </div>
+</div>
+
+<!-- Modal detalhado -->
+<div class="modal-overlay" id="modalDetalhe">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-titulo">Detalhes</h2>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+checkAuth(['admin']);
+let _dados = [];
+let _metrica = 'entregas';
+let _activeBtn = 'btn-mes';
+
+const COLORS = ['#f97316','#3b82f6','#10b981','#8b5cf6','#f43f5e','#06b6d4','#84cc16','#f59e0b'];
+
+function setPeriod(p) {
+  ['hoje','mes','7d','30d'].forEach(x => document.getElementById('btn-'+x)?.classList.remove('active'));
+  const today = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  let from, to = fmt(today);
+  if (p==='hoje') { from = to; }
+  else if (p==='mes') { from = `${today.getFullYear()}-${pad(today.getMonth()+1)}-01`; }
+  else if (p==='7d') { const d=new Date(today); d.setDate(d.getDate()-6); from=fmt(d); }
+  else if (p==='30d') { const d=new Date(today); d.setDate(d.getDate()-29); from=fmt(d); }
+  document.getElementById('fDateFrom').value = from;
+  document.getElementById('fDateTo').value = to;
+  document.getElementById('btn-'+p)?.classList.add('active');
+}
+
+function setMetric(m) {
+  _metrica = m;
+  ['entregas','valor','itens','media'].forEach(x => document.getElementById('tab-'+x)?.classList.remove('active'));
+  document.getElementById('tab-'+m)?.classList.add('active');
+  renderBars(_dados);
+}
+
+async function gerar() {
+  const from = document.getElementById('fDateFrom').value;
+  const to   = document.getElementById('fDateTo').value;
+  if (!from || !to) { showToast('Selecione o período', 'error'); return; }
+
+  document.getElementById('loading-overlay').style.display = 'flex';
+  try {
+    const data = await api(`/api/relatorio/entregadores?date_from=${from}&date_to=${to}`);
+    _dados = (data.entregadores || []).filter(d => d.nome !== '🏢 Venda Portaria');
+    document.getElementById('periodo-label').textContent = `${from.split('-').reverse().join('/')} → ${to.split('-').reverse().join('/')}`;
+    document.getElementById('comparativo-section').style.display = _dados.length ? 'block' : 'none';
+    renderBars(_dados);
+    renderCards(_dados);
+  } catch(e) {
+    showToast('Erro: ' + e.message, 'error');
+  } finally {
+    document.getElementById('loading-overlay').style.display = 'none';
+  }
+}
+
+function renderBars(dados) {
+  const container = document.getElementById('bars-container');
+  if (!dados.length) { container.innerHTML = ''; return; }
+  const vals = { entregas: d => d.total_entregas, valor: d => d.total_valor, itens: d => d.total_itens, media: d => parseFloat((d.media_por_dia||0).toFixed(1)) };
+  const fmts = {
+    entregas: v => v + ' pedidos',
+    valor:    v => 'R$ ' + v.toFixed(2),
+    itens:    v => v + ' itens',
+    media:    v => v.toFixed(1) + '/dia',
+  };
+  const fn = vals[_metrica];
+  const fmt = fmts[_metrica];
+  const sorted = [...dados].sort((a,b) => fn(b) - fn(a));
+  const max = Math.max(...sorted.map(fn), 1);
+  container.innerHTML = sorted.map((d, i) => {
+    const v = fn(d);
+    const pct = Math.max(4, Math.round(v / max * 100));
+    const color = COLORS[i % COLORS.length];
+    return `<div class="bar-row">
+      <div class="bar-name">${d.nome.length > 16 ? d.nome.slice(0,14)+'…' : d.nome}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${pct}%;background:${color}">
+          ${pct > 25 ? `<span class="bar-val">${fmt(v)}</span>` : ''}
+        </div>
+      </div>
+      ${pct <= 25 ? `<span class="bar-val-outside">${fmt(v)}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderCards(dados) {
+  const grid = document.getElementById('ranking-grid');
+  if (!dados.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><div>Nenhum dado neste período</div></div>';
+    return;
+  }
+  const sorted = [...dados].sort((a,b) => b.total_entregas - a.total_entregas);
+  const medals = ['🥇','🥈','🥉'];
+  const classes = ['gold','silver','bronze'];
+  grid.innerHTML = sorted.map((d, i) => {
+    const rankClass = i < 3 ? classes[i] : '';
+    const medal = i < 3 ? medals[i] : `<span style="font-size:16px;color:#94a3b8">#${i+1}</span>`;
+    const mediaEntregas = d.media_por_dia.toFixed(1);
+    const mediaValor = d.total_entregas > 0 ? (d.total_valor / d.total_entregas).toFixed(2) : '0.00';
+    const topProd = Object.entries(d.produtos || {}).sort((a,b)=>b[1]-a[1]).slice(0,1)[0];
+    return `<div class="driver-card ${rankClass}" onclick="abrirDetalhe(${JSON.stringify(JSON.stringify(d)).slice(1,-1)})">
+      <div class="card-header">
+        <div class="rank-badge">${medal}</div>
+        <div>
+          <div class="driver-name">${d.nome}</div>
+          <div class="driver-dias">📅 ${d.dias_trabalhados} dia(s) trabalhado(s)</div>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-val">${d.total_entregas}</div>
+          <div class="stat-label">Entregas</div>
+        </div>
+        <div class="stat-item highlight">
+          <div class="stat-val">R$${(d.total_valor/1000).toFixed(1)}k</div>
+          <div class="stat-label">Faturado</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-val">${d.total_itens}</div>
+          <div class="stat-label">Itens</div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="mini-stat">
+          <div class="mini-val">${mediaEntregas}/dia</div>
+          <div class="mini-label">Média entregas</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-val">R$${mediaValor}</div>
+          <div class="mini-label">Ticket médio</div>
+        </div>
+        ${topProd ? `<div class="mini-stat">
+          <div class="mini-val">${topProd[1]}x</div>
+          <div class="mini-label">${topProd[0].slice(0,10)}…</div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function abrirDetalhe(jsonStr) {
+  let d;
+  try { d = JSON.parse(jsonStr); } catch(e) { return; }
+  document.getElementById('modal-titulo').textContent = '🚚 ' + d.nome;
+
+  const mediaTicket = d.total_entregas > 0 ? (d.total_valor / d.total_entregas).toFixed(2) : '0.00';
+  const prodsSorted = Object.entries(d.produtos || {}).sort((a,b)=>b[1]-a[1]);
+  const pgtoLabels = { dinheiro:'💵 Din', pix_vista:'✅ PIX', pix_receber:'⏳ PIX Rec', debito:'💳 Déb', credito:'💳 Créd', mensalista:'📅 Mensal', boleto:'🧾 Bol' };
+
+  let html = `<div class="modal-stats">
+    <div class="mstat"><div class="mstat-val">${d.total_entregas}</div><div class="mstat-label">Entregas</div></div>
+    <div class="mstat"><div class="mstat-val" style="color:#16a34a">R$ ${Number(d.total_valor).toFixed(2)}</div><div class="mstat-label">Total faturado</div></div>
+    <div class="mstat"><div class="mstat-val">${d.total_itens}</div><div class="mstat-label">Itens entregues</div></div>
+    <div class="mstat"><div class="mstat-val">R$ ${mediaTicket}</div><div class="mstat-label">Ticket médio</div></div>
+  </div>`;
+
+  if (prodsSorted.length) {
+    html += `<h3 style="font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📦 Produtos Entregues</h3>
+    <div class="produtos-grid">
+      ${prodsSorted.map(([nome,qty]) => `<div class="prod-row"><span class="prod-nome">${nome.length > 30 ? nome.slice(0,28)+'…' : nome}</span><span class="prod-qty">${qty}x</span></div>`).join('')}
+    </div>`;
+  }
+
+  const pedidos = (d.pedidos || []).slice(0, 50);
+  if (pedidos.length) {
+    html += `<h3 style="font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 10px">📋 Pedidos (últimos ${pedidos.length})</h3>
+    <div style="overflow-x:auto">
+    <table class="pedidos-table">
+      <thead><tr><th>#</th><th>Cliente</th><th>Horário</th><th>Pgto</th><th>Valor</th><th>Itens</th></tr></thead>
+      <tbody>
+        ${pedidos.map(p => {
+          const dt = p.delivered_at ? new Date(p.delivered_at*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+          const dtFull = p.delivered_at ? new Date(p.delivered_at*1000).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',timeZone:'America/Campo_Grande'})+' '+dt : '—';
+          const pgto = pgtoLabels[p.tipo_pagamento] || p.tipo_pagamento || '—';
+          const cliente = (p.customer_name||'').length > 20 ? p.customer_name.slice(0,18)+'…' : p.customer_name;
+          return `<tr><td style="font-weight:700;color:#f97316">#${p.id}</td><td>${cliente}</td><td style="font-size:11px">${dtFull}</td><td style="font-size:11px">${pgto}</td><td style="font-weight:700">R$ ${Number(p.total_value).toFixed(2)}</td><td style="text-align:center">${p.total_itens}</td></tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+  }
+
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modalDetalhe').style.display = 'block';
+}
+
+function fecharModal() {
+  document.getElementById('modalDetalhe').style.display = 'none';
+}
+
+// Init
+setPeriod('mes');
+gerar();
+</script>
+</body>
+</html>

@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.25.4
+// shared.js — Utilitários compartilhados MoskoGás v1.25.5
+// v1.25.5: Menu Relatório — Performance Entregadores (admin only)
 // v1.25.4: Modal de confirmação Bling Reconectar — aparece automaticamente em qualquer erro 401/no_token; _showBlingReconnectConfirm() global
 // v1.25.3: Rename módulo Gestão → Pedidos (nav label + textos)
 // v1.25.2: Menu ADM — Produtos adicionado (produtos.html); ícone Estoque atualizado
@@ -209,6 +210,7 @@ const NAV_DROPDOWNS = [
     id: 'relatorio', icon: '📊', label: 'Relatório', roles: ['admin', 'gerente', 'atendente'],
     children: [
       { href: 'relatorio.html', icon: '📊', label: 'Relatório do Dia' },
+      { href: 'relatorio-entregadores.html', icon: '🏆', label: 'Performance Entregadores', roles: ['admin'] },
       { href: 'entregador.html', icon: '🚚', label: 'Painel Entregador' },
       { href: 'auditoria.html', icon: '🔍', label: 'Auditoria' },
       { href: 'consulta-pedidos.html', icon: '🔎', label: 'Consulta Pedidos' },
