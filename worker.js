@@ -1,4 +1,5 @@
-// v2.52.33
+// v2.52.34
+// v2.52.34: Fix bling-detail criando duplicados customers_cache — verifica bling_contact_id antes de INSERT
 // v2.52.33: Fix deploy — wa/conexoes permitir admin/gerente/atendente
 // v2.52.32: POST /api/vales/criar-pedido-direto — cria pedido + baixa vales em uma única ação
 // v2.52.29: POST /api/vales/validar-para-pedido + baixa automática de vales ao criar pedido
@@ -3013,8 +3014,19 @@ export default {
           situacao: c.situacao || '', obs: c.obs || c.observacoes || '',
           bling_url: `https://www.bling.com.br/contatos.php#edit/${c.id}`,
         };
+        // v2.52.34: Fix duplicados — verificar se já existe pelo bling_contact_id antes de criar
         if (phone || address_line) {
-          await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch())`).bind(phone || null, result.name, address_line, result.bairro, result.complemento, c.id).run();
+          const existing = await env.DB.prepare(`SELECT phone_digits FROM customers_cache WHERE bling_contact_id=?`).bind(c.id).first().catch(() => null);
+          if (existing && existing.phone_digits) {
+            // Já existe: só atualiza dados mantendo phone_digits original
+            await env.DB.prepare(`UPDATE customers_cache SET name=?, address_line=?, bairro=?, complemento=?, updated_at=unixepoch() WHERE bling_contact_id=?`).bind(result.name, address_line, result.bairro, result.complemento, c.id).run();
+          } else if (!existing) {
+            // Não existe: criar com phone ou doc_CNPJ
+            const phoneKey = phone || (result.numeroDocumento ? `doc_${result.numeroDocumento.replace(/\D/g,'')}` : null);
+            if (phoneKey) {
+              await env.DB.prepare(`INSERT OR REPLACE INTO customers_cache (phone_digits, name, address_line, bairro, complemento, bling_contact_id, cpf_cnpj, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())`).bind(phoneKey, result.name, address_line, result.bairro, result.complemento, c.id, result.numeroDocumento || null).run();
+            }
+          }
         }
         return json(result);
       } catch (e) { return json({ error: e.message }, 500); }
