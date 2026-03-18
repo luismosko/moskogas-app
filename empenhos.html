@@ -962,7 +962,7 @@ async function confirmarEmissaoVale() {
     toast(`✅ ${itensPayload.reduce((s,i)=>s+i.quantidade,0)} vales gerados! Nota #${res.nota_id}`);
     // Abrir impressão dos vales gerados
     setTimeout(() => {
-      window.open(`print-vales.html?nota_id=${res.nota_id}`, '_blank');
+      window.open(`print-vales.html?id=${res.nota_id}`, '_blank');
     }, 600);
   } catch(e) {
     toast('❌ ' + e.message, 'error');
