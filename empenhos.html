@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.9</title>
+<title>Empenhos GOV — MoskoGás v1.0.10</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,7 +125,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.9</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.10</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -256,9 +256,52 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   </div>
 </div>
 
+<!-- ══ MODAL EMITIR VALE GÁS DO EMPENHO ══════════════════════════════════ -->
+<div class="modal-overlay" id="modalValeEmpenho">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head">
+      <span style="font-size:16px;font-weight:800">🎫 Emitir Vale Gás</span>
+      <button class="modal-close" onclick="fecharModal('modalValeEmpenho')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="ve-info" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">Cliente</label>
+          <input id="ve-cliente" type="text" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px" readonly>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">NF / Nº Empenho</label>
+          <input id="ve-nf" type="text" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">Validade dos Vales</label>
+          <input id="ve-validade" type="text" placeholder="DD/MM/AAAA" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">Forma de Pagamento</label>
+          <select id="ve-pgto" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px">
+            <option value="empenho">🏛️ Empenho GOV</option>
+            <option value="boleto">🧾 Boleto</option>
+            <option value="dinheiro">💵 Dinheiro</option>
+            <option value="pix">⚡ PIX</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:8px">📦 Produtos e Quantidades (saldo disponível)</div>
+      <div id="ve-itens" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+      <div id="ve-total" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;color:#15803d;text-align:right"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal('modalValeEmpenho')">Cancelar</button>
+      <button class="btn btn-success" id="btn-emitir-vale" onclick="confirmarEmissaoVale()">🎫 Emitir Vales</button>
+    </div>
+  </div>
+</div>
+
 <script src="shared.js"></script>
 <script>
-// v1.0.9: Busca cliente com fallback Bling API direto (search-bling-nome)
+// v1.0.10: Busca cliente com fallback Bling API direto (search-bling-nome)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -420,7 +463,7 @@ function switchTab(tab) {
 }
 
 // ── Busca cliente ─────────────────────────────────────────────────
-// v1.0.9: Busca em 2 etapas — cache local + fallback Bling API direto
+// v1.0.10: Busca em 2 etapas — cache local + fallback Bling API direto
 function buscarCliente(q) {
   clearTimeout(clienteSearchTimer);
   const drop = document.getElementById('sc-drop');
@@ -810,55 +853,123 @@ async function inativarEmpenho(id) {
 // Alias de compatibilidade
 const cancelarEmpenho = inativarEmpenho;
 
-// ── Gerar Vales do Empenho ─────────────────────────────────────────
-// v1.0.6: Integração com módulo Vale Gás
+// ── Gerar Vales do Empenho — Modal Inline (v1.0.10) ────────────────
+let _valeEmpenhoAtual = null;
+
 function gerarValesDoEmpenho(id) {
   const e = empenhos.find(x => x.id === id);
   if (!e) { toast('❌ Empenho não encontrado', 'error'); return; }
   if (!e.itens || e.itens.length === 0) { toast('❌ Empenho sem produtos cadastrados', 'error'); return; }
 
-  // Mapeia produtos do empenho para formato do vale gás
-  // P13, P20, P45, Água 20L
   const mapProduto = (nome) => {
     const n = (nome || '').toLowerCase();
     if (n.includes('p13') || n.includes('13kg') || n.includes('13 kg')) return 'P13';
     if (n.includes('p20') || n.includes('20kg') || n.includes('20 kg')) return 'P20';
     if (n.includes('p45') || n.includes('45kg') || n.includes('45 kg')) return 'P45';
     if (n.includes('água') || n.includes('agua') || n.includes('20l') || n.includes('mineral')) return 'Água 20L';
-    return 'P13'; // default
+    return 'P13';
   };
 
   const itens = e.itens.map(it => ({
     produto: mapProduto(it.produto_nome),
     produto_nome: it.produto_nome,
-    quantidade: it.quantidade_total - it.quantidade_usada, // Saldo disponível
-    preco_unitario: it.preco_unitario || 0
+    quantidade: it.quantidade_total - it.quantidade_usada,
+    preco_unitario: it.preco_unitario || 0,
   })).filter(it => it.quantidade > 0);
 
-  if (itens.length === 0) { toast('❌ Nenhum saldo disponível nos produtos do empenho', 'error'); return; }
+  if (itens.length === 0) { toast('❌ Nenhum saldo disponível neste empenho', 'error'); return; }
 
-  // Formata validade
   let validade = '';
   if (e.data_validade) {
-    const parts = e.data_validade.slice(0,10).split('-');
-    validade = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    const [y,m,d] = e.data_validade.slice(0,10).split('-');
+    validade = `${d}/${m}/${y}`;
   }
 
-  // Salva dados no sessionStorage para o vales.html ler
-  const dadosVale = {
-    cliente_nome: e.cliente_nome,
-    empenho_numero: e.numero,
-    empenho_id: e.id,
-    validade: validade,
-    itens: itens
-  };
-  sessionStorage.setItem('empenho_para_vale', JSON.stringify(dadosVale));
+  _valeEmpenhoAtual = { empenho: e, itens };
 
-  // Redireciona para vales.html
-  toast('🎫 Abrindo módulo Vale Gás...');
-  setTimeout(() => {
-    window.location.href = 'vales.html?from_empenho=1';
-  }, 500);
+  // Preencher campos do modal
+  document.getElementById('ve-cliente').value = e.cliente_nome || '';
+  document.getElementById('ve-nf').value = e.numero || '';
+  document.getElementById('ve-validade').value = validade;
+
+  // Info do empenho
+  const totalSaldo = itens.reduce((s, it) => s + it.quantidade, 0);
+  document.getElementById('ve-info').innerHTML = `
+    <strong>🏛️ ${e.numero}</strong> — ${e.cliente_nome}<br>
+    <span style="color:#1d4ed8">📦 ${totalSaldo} vales serão gerados a partir do saldo disponível</span>
+    ${e.data_validade ? ` · ⏳ Validade empenho: ${validade}` : ''}`;
+
+  // Renderizar itens com controle de quantidade
+  const itensDiv = document.getElementById('ve-itens');
+  itensDiv.innerHTML = itens.map((it, i) => `
+    <div style="display:flex;align-items:center;gap:10px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px">
+      <div style="flex:1;font-size:13px;font-weight:600">${it.produto_nome}</div>
+      <div style="font-size:11px;color:#64748b;white-space:nowrap">Saldo: <strong>${it.quantidade}</strong></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:11px;color:#64748b">Qtd vales:</label>
+        <input type="number" id="ve-qty-${i}" value="${it.quantidade}" min="1" max="${it.quantidade}"
+          style="width:70px;padding:5px 8px;border:1.5px solid #6366f1;border-radius:6px;font-size:13px;font-weight:700;text-align:center"
+          oninput="atualizarTotalVale()">
+      </div>
+    </div>`).join('');
+
+  atualizarTotalVale();
+  document.getElementById('modalValeEmpenho').classList.add('open');
+}
+
+function atualizarTotalVale() {
+  if (!_valeEmpenhoAtual) return;
+  const total = _valeEmpenhoAtual.itens.reduce((s, it, i) => {
+    const qty = parseInt(document.getElementById(`ve-qty-${i}`)?.value) || 0;
+    return s + qty;
+  }, 0);
+  document.getElementById('ve-total').innerHTML =
+    `🎫 Total de vales a emitir: <strong style="font-size:18px">${total}</strong>`;
+}
+
+async function confirmarEmissaoVale() {
+  if (!_valeEmpenhoAtual) return;
+  const { empenho, itens } = _valeEmpenhoAtual;
+
+  const cliente_nome = document.getElementById('ve-cliente').value.trim();
+  const nota_fiscal  = document.getElementById('ve-nf').value.trim();
+  const validade     = document.getElementById('ve-validade').value.trim();
+  const forma_pgto   = document.getElementById('ve-pgto').value;
+
+  const itensPayload = itens.map((it, i) => ({
+    produto: it.produto,
+    quantidade: parseInt(document.getElementById(`ve-qty-${i}`)?.value) || 0,
+  })).filter(it => it.quantidade > 0);
+
+  if (!itensPayload.length) { toast('⚠️ Informe a quantidade de pelo menos um produto', 'warn'); return; }
+
+  document.getElementById('btn-emitir-vale').disabled = true;
+  showLoading('Gerando vales...');
+  try {
+    const res = await api('/api/vales/notas', {
+      method: 'POST',
+      body: JSON.stringify({
+        cliente_nome,
+        itens: itensPayload,
+        forma_pagamento: forma_pgto,
+        nota_fiscal: nota_fiscal,
+        empenho: nota_fiscal,
+        validade,
+      }),
+    });
+    if (!res.nota_id) throw new Error(res.error || 'Erro ao criar nota');
+    fecharModal('modalValeEmpenho');
+    toast(`✅ ${itensPayload.reduce((s,i)=>s+i.quantidade,0)} vales gerados! Nota #${res.nota_id}`);
+    // Abrir impressão dos vales gerados
+    setTimeout(() => {
+      window.open(`print-vales.html?nota_id=${res.nota_id}`, '_blank');
+    }, 600);
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    hideLoading();
+    document.getElementById('btn-emitir-vale').disabled = false;
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
