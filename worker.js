@@ -8,6 +8,7 @@
 // v2.52.24: pix_receber NÃO gera NFC-e automática — só no modal de Pagamentos ao confirmar
 // v2.52.23: Fix query NFC-e pendentes — usa nfce_status/nfce_numero em vez de nfce_id; adiciona pix_receber
 // v2.52.22: Validação pedido zerado — não permite criar pedido com items sem preço ou total R$ 0,00
+// v2.52.22: POST /api/vales/notas bloqueia duplicata por empenho_gov_id (409); coluna + índice único no D1
 // v2.52.21: POST /api/bling/disconnect + /bling/ping com mais detalhes (token_type, real_ok, minutes_left)
 // v2.52.21: DELETE /api/empenhos/:id bloqueado com 403 — só PATCH status=cancelado permitido
 // v2.52.20: FIX CRÍTICO — usar api.bling.com.br em vez de www.bling.com.br para chamadas API (JWT exige)
@@ -9064,17 +9065,32 @@ export default {
       // POST /api/vales/notas - Criar Nota e Vales
       if (method === 'POST' && path === '/api/vales/notas') {
         const body = await request.json();
-        const { cliente_nome, itens, forma_pagamento, nota_fiscal, empenho, validade } = body;
+        const { cliente_nome, itens, forma_pagamento, nota_fiscal, empenho, validade, empenho_gov_id } = body;
         if (!cliente_nome) return err('Nome do cliente obrigatório');
         if (!itens || !Array.isArray(itens) || itens.length === 0) return err('Adicione pelo menos um produto');
         const quantidade = itens.reduce((s, it) => s + parseInt(it.quantidade || 0), 0);
         if (quantidade < 1) return err('Quantidade total deve ser maior que zero');
+
+        // Bloqueio: 1 emissão de vale por empenho
+        if (empenho_gov_id) {
+          await env.DB.prepare('ALTER TABLE notas_vales ADD COLUMN empenho_gov_id INTEGER DEFAULT NULL').run().catch(() => {});
+          const jaEmitido = await env.DB.prepare(
+            'SELECT id, created_at FROM notas_vales WHERE empenho_gov_id = ? LIMIT 1'
+          ).bind(parseInt(empenho_gov_id)).first().catch(() => null);
+          if (jaEmitido) {
+            const dt = new Date(jaEmitido.created_at * 1000).toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' });
+            return err(`Vale já emitido para este empenho (Nota #${jaEmitido.id} em ${dt}). Um empenho só pode ter uma emissão de vales.`, 409);
+          }
+        }
+
         let notaResult;
         try {
+          await env.DB.prepare('ALTER TABLE notas_vales ADD COLUMN empenho_gov_id INTEGER DEFAULT NULL').run().catch(() => {});
           notaResult = await env.DB.prepare(
-            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, itens_json, validade, created_by, created_by_nome) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)'
-          ).bind(cliente_nome, '', quantidade, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', JSON.stringify(itens), validade || '', authCheck.id, authCheck.nome).run();
+            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, itens_json, validade, empenho_gov_id, created_by, created_by_nome) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(cliente_nome, '', quantidade, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', JSON.stringify(itens), validade || '', empenho_gov_id ? parseInt(empenho_gov_id) : null, authCheck.id, authCheck.nome).run();
         } catch (dbErr) {
+          if (dbErr.message?.includes('UNIQUE')) return err('Vale já emitido para este empenho.', 409);
           return err('Erro ao salvar nota: ' + dbErr.message, 500);
         }
         const notaId = notaResult.meta?.last_row_id;

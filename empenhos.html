@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.10</title>
+<title>Empenhos GOV — MoskoGás v1.0.11</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,7 +125,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.10</span></h1>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.11</span></h1>
   <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
@@ -301,7 +301,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 <script src="shared.js"></script>
 <script>
-// v1.0.10: Busca cliente com fallback Bling API direto (search-bling-nome)
+// v1.0.11: Busca cliente com fallback Bling API direto (search-bling-nome)
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -314,6 +314,19 @@ let clienteSearchTimer = null;
 // ── Init ──────────────────────────────────────────────────────────
 carregarEmpenhos();
 
+// Cache de notas por empenho_gov_id
+let _notasEmpenhoCache = {};
+
+async function carregarNotasCache() {
+  try {
+    const res = await api('/api/vales/notas');
+    _notasEmpenhoCache = {};
+    for (const n of (res.notas || [])) {
+      if (n.empenho_gov_id) _notasEmpenhoCache[n.empenho_gov_id] = n.id;
+    }
+  } catch(_) {}
+}
+
 async function carregarEmpenhos() {
   const status = document.getElementById('filtroStatus').value;
   const q = document.getElementById('filtroQ').value;
@@ -323,6 +336,8 @@ async function carregarEmpenhos() {
     const params = new URLSearchParams({ status });
     if (q) params.set('q', q);
     empenhos = await api(`/api/empenhos?${params}`);
+    // Enriquecer com nota_vale_id (já carregado em _notasEmpenhoCache)
+    empenhos = empenhos.map(e => ({ ...e, nota_vale_id: _notasEmpenhoCache[e.id] || null }));
     renderGrid();
   } catch(e) {
     grid.innerHTML = `<div class="loading-state">❌ Erro: ${e.message}</div>`;
@@ -388,7 +403,11 @@ function renderCard(e) {
     <div class="card-footer">
       <button class="btn btn-ghost btn-sm" onclick="abrirDetalhe(${e.id})">🔍 Detalhe / Histórico</button>
       <button class="btn btn-primary btn-sm" onclick="abrirModalEditar(${e.id})">✏️ Editar</button>
-      ${e.status === 'ativo' && (e.itens || []).length > 0 ? `<button class="btn btn-orange btn-sm" onclick="gerarValesDoEmpenho(${e.id})" title="Gerar Vale Gás a partir deste empenho">🎫 Gerar Vales</button>` : ''}
+      ${e.status === 'ativo' && (e.itens || []).length > 0 
+  ? e.nota_vale_id 
+    ? `<button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="window.open('vales.html','_blank')" title="Vale já emitido — Nota #${e.nota_vale_id}">✅ Vale #${e.nota_vale_id}</button>`
+    : `<button class="btn btn-orange btn-sm" onclick="gerarValesDoEmpenho(${e.id})" title="Gerar Vale Gás a partir deste empenho">🎫 Gerar Vales</button>`
+  : ''}
       ${e.status === 'ativo' ? `<button class="btn btn-danger btn-sm" onclick="inativarEmpenho(${e.id})" title="Inativar empenho — mantém histórico">⊘ Inativar</button>` : ''}
     </div>
   </div>`;
@@ -463,7 +482,7 @@ function switchTab(tab) {
 }
 
 // ── Busca cliente ─────────────────────────────────────────────────
-// v1.0.10: Busca em 2 etapas — cache local + fallback Bling API direto
+// v1.0.11: Busca em 2 etapas — cache local + fallback Bling API direto
 function buscarCliente(q) {
   clearTimeout(clienteSearchTimer);
   const drop = document.getElementById('sc-drop');
@@ -759,7 +778,7 @@ async function salvarEmpenho() {
     }
     toast(`✅ Empenho ${numero} salvo!`);
     fecharModal('modalEmp');
-    await carregarEmpenhos();
+    await Promise.all([carregarEmpenhos(), carregarNotasCache()]);
   } catch(e) {
     toast('❌ ' + e.message, 'error');
   } finally { hideLoading(); }
@@ -853,7 +872,7 @@ async function inativarEmpenho(id) {
 // Alias de compatibilidade
 const cancelarEmpenho = inativarEmpenho;
 
-// ── Gerar Vales do Empenho — Modal Inline (v1.0.10) ────────────────
+// ── Gerar Vales do Empenho — Modal Inline (v1.0.11) ────────────────
 let _valeEmpenhoAtual = null;
 
 function gerarValesDoEmpenho(id) {
@@ -886,6 +905,14 @@ function gerarValesDoEmpenho(id) {
   }
 
   _valeEmpenhoAtual = { empenho: e, itens };
+
+  // Verificar se já existe nota para este empenho
+  const jaTemNota = e.nota_vale_id || false;
+  if (jaTemNota) {
+    if (!confirm(`⚠️ Este empenho já possui uma emissão de vales (Nota #${jaTemNota}).\n\nDeseja visualizar os vales existentes na página de Vale Gás?`)) return;
+    window.open('vales.html', '_blank');
+    return;
+  }
 
   // Preencher campos do modal
   document.getElementById('ve-cliente').value = e.cliente_nome || '';
@@ -946,6 +973,7 @@ async function confirmarEmissaoVale() {
   document.getElementById('btn-emitir-vale').disabled = true;
   showLoading('Gerando vales...');
   try {
+    const empId = _valeEmpenhoAtual?.empenho?.id || null;
     const res = await api('/api/vales/notas', {
       method: 'POST',
       body: JSON.stringify({
@@ -955,6 +983,7 @@ async function confirmarEmissaoVale() {
         nota_fiscal: nota_fiscal,
         empenho: nota_fiscal,
         validade,
+        empenho_gov_id: empId,
       }),
     });
     if (!res.nota_id) throw new Error(res.error || 'Erro ao criar nota');
