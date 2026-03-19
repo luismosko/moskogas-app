@@ -1,4 +1,5 @@
-// v2.52.39
+// v2.52.40
+// v2.52.40: Relatório email — pedidos organizados por seção (Pendentes > Cancelados > Entregues), faturamento só entregues
 // v2.52.39: Bloqueio crítico — NFC-e com valor R$0 bloqueada + alerta WhatsApp para admins
 // v2.52.38: Retry NFC-e exclui pedidos com valor R$0 (Vale Hub)
 // v2.52.37: Tipo pagamento vale_hub (Vale Gás Hub Ultragaz) — valor R$0, pago=1, sem NFC-e
@@ -11378,6 +11379,7 @@ async function getResendKey(env, bodyKey) {
 async function generateDailyReport(env, dateStr) {
   // dateStr = 'YYYY-MM-DD'
   // v2.50.2: pedidos ENTREGUES filtrados por delivered_at; demais por created_at
+  // v2.52.40: Ordenação por seção — pendentes primeiro, cancelados segundo, entregues terceiro
   const dayStart = Math.floor(new Date(dateStr + 'T00:00:00-04:00').getTime() / 1000);
   const dayEnd = dayStart + 86400;
 
@@ -11393,12 +11395,24 @@ async function generateDailyReport(env, dateStr) {
     ORDER BY o.id ASC
   `).bind(dayStart, dayEnd, dayStart, dayEnd).all().then(r => r.results || []);
 
+  // v2.52.40: Ordenar por seção — PENDENTES primeiro, CANCELADOS segundo, ENTREGUES terceiro
+  const statusPriority = { 'novo': 1, 'encaminhado': 1, 'whatsapp_enviado': 1, 'cancelado': 2, 'entregue': 3 };
+  orders.sort((a, b) => {
+    const prioA = statusPriority[a.status] || 1;
+    const prioB = statusPriority[b.status] || 1;
+    if (prioA !== prioB) return prioA - prioB; // Pendentes < Cancelados < Entregues
+    // Dentro da mesma seção, ordenar por ID crescente
+    return a.id - b.id;
+  });
+
   // ── Resumo ──
   const total = orders.length;
   const entreguesArr = orders.filter(o => o.status === 'entregue');
   const entregues = entreguesArr.length;
-  const cancelados = orders.filter(o => o.status === 'cancelado').length;
-  const pendentes = total - entregues - cancelados;
+  const canceladosArr = orders.filter(o => o.status === 'cancelado');
+  const cancelados = canceladosArr.length;
+  const pendentesArr = orders.filter(o => o.status !== 'entregue' && o.status !== 'cancelado');
+  const pendentes = pendentesArr.length;
   // v2.50.2: faturamento = somente pedidos ENTREGUES (cancelados excluídos)
   const totalValor = entreguesArr.reduce((s, o) => s + (parseFloat(o.total_value) || 0), 0);
   const pagos = entreguesArr.filter(o => o.pago === 1).length;
@@ -11473,7 +11487,8 @@ function buildReportHTML(report) {
   };
   const pgtoLabel = {
     dinheiro: '💵 Dinheiro', pix_vista: '⚡ PIX Vista', pix_receber: '⏳ PIX Aberto',
-    debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista', boleto: '🧾 Boleto'
+    debito: '💳 Débito', credito: '💳 Crédito', mensalista: '📅 Mensalista', boleto: '🧾 Boleto',
+    vale_gas: '🎫 Vale Gás', vale_hub: '🚚 Vale Hub', nfe: '📄 NFe'
   };
 
   let html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
@@ -11551,8 +11566,14 @@ function buildReportHTML(report) {
   }
 
   // Lista detalhada
-  html += `<h3 style="margin:24px 0 8px;font-size:15px;color:#1e40af">📋 Lista Detalhada (${report.orders.length} pedidos)</h3>
-  <table style="width:100%;border-collapse:collapse;font-size:11px;line-height:1.4">
+  // v2.52.40: Separar em 3 seções — Pendentes, Cancelados, Entregues
+  const pendentesOrders = report.orders.filter(o => o.status !== 'entregue' && o.status !== 'cancelado');
+  const canceladosOrders = report.orders.filter(o => o.status === 'cancelado');
+  const entreguesOrders = report.orders.filter(o => o.status === 'entregue');
+  
+  const fmtValorSecao = arr => 'R$ ' + arr.reduce((s, o) => s + (parseFloat(o.total_value) || 0), 0).toFixed(2).replace('.', ',');
+  
+  const tableHeader = `<table style="width:100%;border-collapse:collapse;font-size:11px;line-height:1.4">
     <thead><tr style="background:#1e40af;color:#fff">
       <th style="padding:6px 4px">#</th>
       <th style="padding:6px 4px">Status</th>
@@ -11568,17 +11589,16 @@ function buildReportHTML(report) {
       <th style="padding:6px 4px">Entregador</th>
       <th style="padding:6px 4px">Hora</th>
     </tr></thead><tbody>`;
-
-  for (const o of report.orders) {
+  
+  const renderOrderRow = (o) => {
     let itensStr = '';
     try {
       const items = JSON.parse(o.items_json || '[]');
       itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
     } catch { }
-    const bg = o.status === 'cancelado' ? '#fef2f2' : (o.status === 'entregue' ? '#f0fdf4' : '#fff');
-    // v2.50.2: entregues mostram horário de entrega; demais mostram horário de criação
+    const bg = o.status === 'cancelado' ? '#fef2f2' : (o.status === 'entregue' ? '#f0fdf4' : '#fff7ed');
     const horaExibir = o.status === 'entregue' ? fmtEpoch(o.delivered_at || o.created_at) : fmtEpoch(o.created_at);
-    html += `<tr style="background:${bg};border-bottom:1px solid #e2e8f0">
+    return `<tr style="background:${bg};border-bottom:1px solid #e2e8f0">
       <td style="padding:4px;font-weight:700">${o.id}</td>
       <td style="padding:4px;font-size:10px">${statusLabel[o.status] || o.status}</td>
       <td style="padding:4px">${o.customer_name || '—'}</td>
@@ -11593,14 +11613,49 @@ function buildReportHTML(report) {
       <td style="padding:4px;font-size:10px">${o.driver_name_cache || '—'}</td>
       <td style="padding:4px;font-size:10px">${horaExibir}</td>
     </tr>`;
+  };
+  
+  // ══ SEÇÃO 1: PENDENTES (NÃO ENTREGUES) ══
+  if (pendentesOrders.length > 0) {
+    html += `<div style="margin-top:24px;padding:12px 16px;background:#fef3c7;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0">
+      <h3 style="margin:0;font-size:15px;color:#92400e">🔴 PENDENTES — ${pendentesOrders.length} pedido(s) NÃO entregue(s)</h3>
+      <p style="margin:4px 0 0;font-size:12px;color:#b45309">⚠️ Estes pedidos ainda não foram finalizados e <strong>NÃO entram no faturamento</strong></p>
+    </div>`;
+    html += tableHeader;
+    for (const o of pendentesOrders) html += renderOrderRow(o);
+    html += `</tbody></table>`;
+  }
+  
+  // ══ SEÇÃO 2: CANCELADOS ══
+  if (canceladosOrders.length > 0) {
+    html += `<div style="margin-top:24px;padding:12px 16px;background:#f1f5f9;border-left:4px solid #64748b;border-radius:0 8px 8px 0">
+      <h3 style="margin:0;font-size:15px;color:#475569">⚫ CANCELADOS — ${canceladosOrders.length} pedido(s)</h3>
+      <p style="margin:4px 0 0;font-size:12px;color:#64748b">Estes pedidos foram cancelados e <strong>NÃO entram no faturamento</strong></p>
+    </div>`;
+    html += tableHeader;
+    for (const o of canceladosOrders) html += renderOrderRow(o);
+    html += `</tbody></table>`;
+  }
+  
+  // ══ SEÇÃO 3: ENTREGUES ══
+  html += `<div style="margin-top:24px;padding:12px 16px;background:#dcfce7;border-left:4px solid #16a34a;border-radius:0 8px 8px 0">
+    <h3 style="margin:0;font-size:15px;color:#166534">✅ ENTREGUES — ${entreguesOrders.length} pedido(s) — ${fmtValorSecao(entreguesOrders)}</h3>
+    <p style="margin:4px 0 0;font-size:12px;color:#15803d">Somente estes pedidos entram no <strong>faturamento total</strong></p>
+  </div>`;
+  if (entreguesOrders.length > 0) {
+    html += tableHeader;
+    for (const o of entreguesOrders) html += renderOrderRow(o);
+    html += `</tbody></table>`;
+  } else {
+    html += `<p style="text-align:center;color:#64748b;padding:20px">Nenhum pedido entregue neste dia.</p>`;
   }
 
-  html += `</tbody></table></div>
+  html += `</div>
 
 <!-- Footer -->
 <div style="padding:16px 32px;background:#f1f5f9;text-align:center;font-size:11px;color:#94a3b8">
   MoskoGás — Relatório automático gerado em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })}<br>
-  Sistema: moskogas-app.pages.dev | API: api.moskogas.com.br
+  Sistema: <a href="https://moskogas-app.pages.dev" style="color:#3b82f6">moskogas-app.pages.dev</a> | API: <a href="https://api.moskogas.com.br" style="color:#3b82f6">api.moskogas.com.br</a>
 </div>
 </div></body></html>`;
 
