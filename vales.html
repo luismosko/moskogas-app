@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.1.6 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.2.0 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.1.6</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.2.0</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
 
@@ -109,12 +109,48 @@
         <div class="search-wrap">
             <input type="text" id="searchName" placeholder="Digite o nome para buscar..." autocomplete="off" oninput="buscaCliente()">
             <input type="hidden" id="n-cliente">
+            <input type="hidden" id="n-cliente-phone">
+            <input type="hidden" id="n-cliente-bling-id">
+            <input type="hidden" id="n-cliente-tipo">
             <div id="suggestions"></div>
         </div>
 
-        <div style="display:flex;gap:12px">
-            <div style="flex:1"><label>Nº Nota Fiscal (Opc.)</label><input type="text" id="n-nf" placeholder="Ex: 54321"></div>
-            <div style="flex:1"><label>Nº Empenho (Opc.)</label><input type="text" id="n-empenho" placeholder="Ex: 2025NE00012"></div>
+        <!-- v1.2.0: Seção de emissão fiscal -->
+        <div style="background:#f0f9ff;border:2px solid #7dd3fc;border-radius:10px;padding:14px;margin-bottom:14px">
+            <label style="margin:0 0 10px 0;font-size:13px;color:#0369a1;font-weight:800">📄 EMISSÃO DE NOTA FISCAL</label>
+            <div style="display:flex;flex-direction:column;gap:8px" id="nf-options">
+                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;margin:0" onclick="selNfOpcao('externa')">
+                    <input type="radio" name="nf-opcao" value="externa" checked style="margin-top:3px;width:18px;height:18px;accent-color:#2563eb">
+                    <div>
+                        <strong style="color:#1e293b">📁 NF já foi emitida (externa)</strong>
+                        <div style="font-size:12px;color:#64748b;margin-top:2px">Empenho, lote anterior, ou NF de outro sistema</div>
+                    </div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;margin:0" onclick="selNfOpcao('nfce')">
+                    <input type="radio" name="nf-opcao" value="nfce" style="margin-top:3px;width:18px;height:18px;accent-color:#16a34a">
+                    <div>
+                        <strong style="color:#16a34a">🧾 Emitir NFC-e agora (Pessoa Física)</strong>
+                        <div style="font-size:12px;color:#64748b;margin-top:2px">Consumidor Final — gera NFC-e automaticamente</div>
+                    </div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;margin:0" onclick="selNfOpcao('venda_bling')">
+                    <input type="radio" name="nf-opcao" value="venda_bling" style="margin-top:3px;width:18px;height:18px;accent-color:#f97316">
+                    <div>
+                        <strong style="color:#f97316">🏢 Gerar Venda Bling (Pessoa Jurídica)</strong>
+                        <div style="font-size:12px;color:#64748b;margin-top:2px">Empresa cadastrada no Bling — NF-e manual depois</div>
+                    </div>
+                </label>
+            </div>
+            <div id="nf-alerta-pj" style="display:none;margin-top:10px;padding:10px;background:#fef3c7;border:2px solid #f59e0b;border-radius:8px;font-size:12px;color:#92400e">
+                ⚠️ <strong>Atenção:</strong> Para emitir NF-e, o cliente deve estar cadastrado e sincronizado no Bling.
+            </div>
+        </div>
+
+        <div id="nf-externa-fields">
+            <div style="display:flex;gap:12px">
+                <div style="flex:1"><label>Nº Nota Fiscal (Opc.)</label><input type="text" id="n-nf" placeholder="Ex: 54321"></div>
+                <div style="flex:1"><label>Nº Empenho (Opc.)</label><input type="text" id="n-empenho" placeholder="Ex: 2025NE00012"></div>
+            </div>
         </div>
         <div style="display:flex;gap:12px">
             <div style="flex:1"><label>Validade (Opc.)</label><input type="text" id="n-validade" placeholder="Ex: 31/12/2025 ou Dez/2025"></div>
@@ -126,10 +162,9 @@
                 <div>
                     <label>Produto</label>
                     <select id="add-produto">
-                        <option value="P13">🔴 P13 — Botijão 13kg</option>
-                        <option value="P20">🟠 P20 — Botijão 20kg</option>
-                        <option value="P45">🟡 P45 — Botijão 45kg</option>
-                        <option value="Água 20L">💧 Água Mineral 20L</option>
+                        <option value="P13" data-bling="572628371" data-preco="125">🔴 P13 — Botijão 13kg (R$ 125)</option>
+                        <option value="P45" data-bling="591856471" data-preco="495">🟡 P45 — Botijão 45kg (R$ 495)</option>
+                        <option value="Água 20L" data-bling="629495768" data-preco="25">💧 Água Mineral 20L (R$ 25)</option>
                     </select>
                 </div>
                 <div style="flex:0 0 90px"><label>Quantidade</label><input type="number" id="add-qtd" value="10" min="1" max="500"></div>
@@ -152,7 +187,7 @@
 
         <div class="total-bar">
             <span style="color:#fff">Total de Vales:</span>
-            <span id="n-total-vales">0 vales</span>
+            <span><span id="n-total-vales">0 vales</span><span id="n-total-valor" style="display:none;color:#4ade80;margin-left:8px"></span></span>
         </div>
 
         <div class="modal-footer">
@@ -300,15 +335,55 @@ function renderTable() {
 
 function openNewModal() {
     itens = [];
-    ['n-cliente','n-nf','n-empenho','n-validade'].forEach(id => document.getElementById(id).value = '');
+    ['n-cliente','n-nf','n-empenho','n-validade','n-cliente-phone','n-cliente-bling-id','n-cliente-tipo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
     document.getElementById('searchName').value = '';
     document.getElementById('add-qtd').value = '10';
     document.getElementById('add-produto').value = 'P13';
     document.getElementById('n-pgto').value = 'dinheiro';
     document.getElementById('suggestions').style.display = 'none';
+    // v1.2.0: Reset opção NF para externa
+    const radioExterna = document.querySelector('input[name="nf-opcao"][value="externa"]');
+    if (radioExterna) radioExterna.checked = true;
+    selNfOpcao('externa');
     renderItens();
     document.getElementById('modal-nova').classList.add('open');
     setTimeout(() => document.getElementById('searchName').focus(), 100);
+}
+
+// v1.2.0: Controle de opções de NF
+function selNfOpcao(opcao) {
+    const externaFields = document.getElementById('nf-externa-fields');
+    const alertaPj = document.getElementById('nf-alerta-pj');
+    
+    // Mostrar/esconder campos de NF externa
+    if (externaFields) {
+        externaFields.style.display = opcao === 'externa' ? 'block' : 'none';
+    }
+    
+    // Mostrar alerta PJ se venda_bling
+    if (alertaPj) {
+        alertaPj.style.display = opcao === 'venda_bling' ? 'block' : 'none';
+    }
+    
+    // Atualizar total com valor se não for externa
+    renderItens();
+}
+
+function checkPjAlerta() {
+    const nfOpcao = document.querySelector('input[name="nf-opcao"]:checked')?.value || 'externa';
+    const alertaPj = document.getElementById('nf-alerta-pj');
+    const blingId = document.getElementById('n-cliente-bling-id')?.value || '';
+    
+    if (alertaPj && nfOpcao === 'venda_bling') {
+        if (blingId) {
+            alertaPj.style.display = 'none';
+        } else {
+            alertaPj.style.display = 'block';
+        }
+    }
 }
 
 function closeNovaModal() { document.getElementById('modal-nova').classList.remove('open'); }
@@ -338,7 +413,13 @@ function selecionaCliente(i) {
     const nome = c.name || c.customer_name || '';
     document.getElementById('n-cliente').value = nome;
     document.getElementById('searchName').value = nome;
+    // v1.2.0: Salvar dados extras para NFC-e/Venda Bling
+    document.getElementById('n-cliente-phone').value = c.phone_digits || '';
+    document.getElementById('n-cliente-bling-id').value = c.bling_contact_id || '';
+    document.getElementById('n-cliente-tipo').value = c.tipo_pessoa || 'F';
     document.getElementById('suggestions').style.display = 'none';
+    // Mostrar alerta se PJ selecionado e opção venda_bling
+    checkPjAlerta();
 }
 
 document.addEventListener('click', e => {
@@ -349,11 +430,16 @@ document.addEventListener('click', e => {
 });
 
 function addItem() {
-    const produto = document.getElementById('add-produto').value;
+    const sel = document.getElementById('add-produto');
+    const produto = sel.value;
+    const opt = sel.options[sel.selectedIndex];
+    const preco = parseFloat(opt.dataset.preco) || 0;
+    const blingId = opt.dataset.bling || '';
     const qtd = parseInt(document.getElementById('add-qtd').value) || 0;
     if (qtd < 1) return toast('Quantidade deve ser maior que zero', 'error');
     const existing = itens.find(it => it.produto === produto);
-    if (existing) { existing.quantidade += qtd; } else { itens.push({ produto, quantidade: qtd }); }
+    if (existing) { existing.quantidade += qtd; } 
+    else { itens.push({ produto, quantidade: qtd, preco, bling_id: blingId }); }
     renderItens();
     document.getElementById('add-qtd').value = '10';
 }
@@ -362,36 +448,75 @@ function removeItem(idx) { itens.splice(idx, 1); renderItens(); }
 
 function renderItens() {
     const list = document.getElementById('item-list');
-    const total = itens.reduce((s, it) => s + it.quantidade, 0);
-    document.getElementById('n-total-vales').textContent = total + ' vales';
+    const totalQtd = itens.reduce((s, it) => s + it.quantidade, 0);
+    const totalVal = itens.reduce((s, it) => s + (it.quantidade * (it.preco || 0)), 0);
+    document.getElementById('n-total-vales').textContent = totalQtd + ' vales';
+    // Mostrar total em R$ se for NFC-e ou Venda Bling
+    const nfOpcao = document.querySelector('input[name="nf-opcao"]:checked')?.value || 'externa';
+    const showTotal = nfOpcao !== 'externa' && totalVal > 0;
+    const totalEl = document.getElementById('n-total-valor');
+    if (totalEl) {
+        totalEl.textContent = showTotal ? ' — R$ ' + totalVal.toFixed(2) : '';
+        totalEl.style.display = showTotal ? 'inline' : 'none';
+    }
     if (!itens.length) { list.innerHTML = '<div class="empty-items">Nenhum produto adicionado ainda.</div>'; return; }
-    const icons = { P13:'🔴', P20:'🟠', P45:'🟡', 'Água 20L':'💧' };
-    list.innerHTML = itens.map((it, i) =>
-        '<div class="item-row"><div style="display:flex;align-items:center"><span class="item-qtd">' + it.quantidade + 'x</span>' +
-        '<span class="item-name">' + (icons[it.produto] || '📦') + ' ' + it.produto + '</span></div>' +
-        '<button class="rm-btn" onclick="removeItem(' + i + ')" title="Remover">&times;</button></div>'
-    ).join('');
+    const icons = { P13:'🔴', P45:'🟡', 'Água 20L':'💧' };
+    list.innerHTML = itens.map((it, i) => {
+        const subtotal = (it.quantidade * (it.preco || 0)).toFixed(2);
+        return '<div class="item-row"><div style="display:flex;align-items:center"><span class="item-qtd">' + it.quantidade + 'x</span>' +
+            '<span class="item-name">' + (icons[it.produto] || '📦') + ' ' + it.produto + '</span>' +
+            (it.preco ? '<span style="color:#64748b;font-size:12px;margin-left:8px">(R$ ' + subtotal + ')</span>' : '') +
+            '</div><button class="rm-btn" onclick="removeItem(' + i + ')" title="Remover">&times;</button></div>';
+    }).join('');
 }
 
 async function salvarNota() {
     const cli = document.getElementById('n-cliente').value.trim() || document.getElementById('searchName').value.trim();
     if (!cli) return toast('Insira o nome do cliente', 'error');
     if (!itens.length) return toast('Adicione pelo menos um produto', 'error');
+    
+    const nfOpcao = document.querySelector('input[name="nf-opcao"]:checked')?.value || 'externa';
+    const clienteBlingId = document.getElementById('n-cliente-bling-id')?.value || '';
+    const clientePhone = document.getElementById('n-cliente-phone')?.value || '';
+    
+    // Validação para Venda Bling (PJ)
+    if (nfOpcao === 'venda_bling' && !clienteBlingId) {
+        return toast('⚠️ Para gerar Venda Bling, o cliente deve estar cadastrado e sincronizado no Bling!', 'error');
+    }
+    
     const btn = document.getElementById('n-btn-save');
-    btn.disabled = true; btn.textContent = 'Aguarde...';
+    btn.disabled = true; 
+    btn.textContent = nfOpcao === 'externa' ? 'Aguarde...' : '⏳ Emitindo NF...';
+    showLoading(nfOpcao === 'nfce' ? 'Gerando NFC-e...' : nfOpcao === 'venda_bling' ? 'Criando Venda Bling...' : 'Salvando...');
+    
     try {
-        const res = await api('/api/vales/notas', { method: 'POST', body: JSON.stringify({
-            cliente_nome: cli, itens,
+        const payload = {
+            cliente_nome: cli, 
+            itens,
             forma_pagamento: document.getElementById('n-pgto').value,
             nota_fiscal: document.getElementById('n-nf').value.trim(),
             empenho: document.getElementById('n-empenho').value.trim(),
-            validade: document.getElementById('n-validade').value.trim()
-        })});
-        toast('✅ Nota #' + res.nota_id + ' emitida com sucesso!');
+            validade: document.getElementById('n-validade').value.trim(),
+            // v1.2.0: Novos campos
+            nf_origem: nfOpcao,
+            cliente_telefone: clientePhone,
+            bling_contact_id: clienteBlingId
+        };
+        
+        const res = await api('/api/vales/notas', { method: 'POST', body: JSON.stringify(payload) });
+        
+        let msg = '✅ Nota #' + res.nota_id + ' emitida com sucesso!';
+        if (res.nfce_numero) msg += ' NFC-e: ' + res.nfce_numero;
+        if (res.bling_pedido_num) msg += ' Pedido Bling: ' + res.bling_pedido_num;
+        
+        toast(msg);
         closeNovaModal(); load();
         setTimeout(() => window.open('print-vales.html?id=' + res.nota_id, '_blank'), 500);
     } catch(e) { toast(e.message, 'error'); }
-    finally { btn.disabled = false; btn.textContent = '✅ Confirmar Emissão'; }
+    finally { 
+        hideLoading();
+        btn.disabled = false; btn.textContent = '✅ Confirmar Emissão'; 
+    }
 }
 
 async function viewNota(id) {

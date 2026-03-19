@@ -1,4 +1,5 @@
-// v2.52.40
+// v2.52.41
+// v2.52.41: Vale Gás — emissão NFC-e ou Venda Bling direto do módulo de vales
 // v2.52.40: Relatório email — pedidos organizados por seção (Pendentes > Cancelados > Entregues), faturamento só entregues
 // v2.52.39: Bloqueio crítico — NFC-e com valor R$0 bloqueada + alerta WhatsApp para admins
 // v2.52.38: Retry NFC-e exclui pedidos com valor R$0 (Vale Hub)
@@ -9124,13 +9125,20 @@ export default {
       }
 
       // POST /api/vales/notas - Criar Nota e Vales
+      // v2.52.41: Suporte a emissão NFC-e e Venda Bling
       if (method === 'POST' && path === '/api/vales/notas') {
         const body = await request.json();
-        const { cliente_nome, itens, forma_pagamento, nota_fiscal, empenho, validade, empenho_gov_id } = body;
+        const { 
+          cliente_nome, itens, forma_pagamento, nota_fiscal, empenho, validade, empenho_gov_id,
+          nf_origem, cliente_telefone, bling_contact_id  // v2.52.41
+        } = body;
         if (!cliente_nome) return err('Nome do cliente obrigatório');
         if (!itens || !Array.isArray(itens) || itens.length === 0) return err('Adicione pelo menos um produto');
         const quantidade = itens.reduce((s, it) => s + parseInt(it.quantidade || 0), 0);
         if (quantidade < 1) return err('Quantidade total deve ser maior que zero');
+
+        // Calcular valor total (para NFC-e/Venda Bling)
+        const valorTotal = itens.reduce((s, it) => s + (parseInt(it.quantidade || 0) * parseFloat(it.preco || 0)), 0);
 
         // Bloqueio: 1 emissão de vale por empenho
         if (empenho_gov_id) {
@@ -9144,12 +9152,149 @@ export default {
           }
         }
 
+        // Validação para Venda Bling (PJ) — precisa ter bling_contact_id
+        if (nf_origem === 'venda_bling' && !bling_contact_id) {
+          return err('Para gerar Venda Bling, o cliente deve estar cadastrado e sincronizado no Bling!');
+        }
+
+        let orderId = null;
+        let nfceId = null;
+        let nfceNumero = null;
+        let blingPedidoId = null;
+        let blingPedidoNum = null;
+
+        // v2.52.41: Processar conforme nf_origem
+        if (nf_origem === 'nfce' || nf_origem === 'venda_bling') {
+          // Montar items no formato do pedido
+          const orderItems = itens.map(it => ({
+            id: it.bling_id || '',
+            name: it.produto === 'P13' ? 'GÁS GLP P13' : it.produto === 'P45' ? 'GÁS P45 (recarga)' : it.produto === 'Água 20L' ? 'AGUA MINERAL 20L' : it.produto,
+            qty: parseInt(it.quantidade || 0),
+            price: parseFloat(it.preco || 0),
+            code: ''
+          }));
+
+          // Criar pedido na tabela orders
+          const orderResult = await env.DB.prepare(
+            `INSERT INTO orders (
+              phone_digits, customer_name, address_line, bairro, complemento, referencia,
+              items_json, total_value, notes, status, sync_status,
+              tipo_pagamento, pago, vendedor_id, vendedor_nome, created_at
+            ) VALUES (?, ?, 'VALE GÁS - VENDA ANTECIPADA', '', '', '',
+              ?, ?, 'Vale Gás - Entrega Futura', 'entregue', 'pending',
+              ?, 1, ?, ?, unixepoch())`
+          ).bind(
+            cliente_telefone || '',
+            cliente_nome,
+            JSON.stringify(orderItems),
+            valorTotal,
+            forma_pagamento || 'dinheiro',
+            authCheck.id,
+            authCheck.nome
+          ).run();
+
+          orderId = orderResult.meta?.last_row_id;
+
+          if (nf_origem === 'nfce') {
+            // Emitir NFC-e automaticamente (Consumidor Final)
+            try {
+              const nfceData = await emitirNFCeBling(env, orderId, {
+                name: 'Consumidor Final',
+                items: orderItems,
+                total_value: valorTotal,
+                tipo_pagamento: forma_pagamento || 'dinheiro',
+                forma_pagamento_key: forma_pagamento || 'dinheiro',
+                forma_pagamento_id: null,
+                bling_contact_id: null, // Consumidor Final
+                cpf_cnpj: null,
+                bling_vendedor_id: null,
+                vendedor_nome: authCheck.nome,
+                delivered_at: Math.floor(Date.now() / 1000),
+                created_at: Math.floor(Date.now() / 1000),
+                observacoes: 'VALE GÁS - VENDA ANTECIPADA - RETIRADA FUTURA'
+              });
+
+              nfceId = nfceData.nfce_id;
+              nfceNumero = nfceData.nfce_numero;
+
+              // Atualizar pedido com dados da NFC-e
+              await env.DB.prepare(
+                `UPDATE orders SET nfce_id=?, nfce_numero=?, nfce_status=?, nfce_emitida_at=unixepoch(), 
+                 sync_status='synced', delivered_at=unixepoch() WHERE id=?`
+              ).bind(nfceId, nfceNumero, nfceData.nfce_status || 'pendente_emissao', orderId).run();
+
+              await logEvent(env, orderId, 'vale_gas_nfce', { nfce_id: nfceId, nfce_numero: nfceNumero, valor: valorTotal }).catch(() => {});
+            } catch (nfceErr) {
+              console.error('[Vale Gás NFC-e]', nfceErr);
+              // Continua mesmo com erro — nota de vale será criada, NFC-e fica pendente
+              await env.DB.prepare(`UPDATE orders SET nfce_error=? WHERE id=?`).bind(nfceErr.message?.substring(0, 500), orderId).run().catch(() => {});
+            }
+          } else if (nf_origem === 'venda_bling') {
+            // Criar Venda/Pedido no Bling (para NF-e manual depois)
+            try {
+              const blingResult = await criarPedidoBling(env, orderId, {
+                name: cliente_nome,
+                items: orderItems,
+                total_value: valorTotal,
+                forma_pagamento_key: forma_pagamento || 'dinheiro',
+                forma_pagamento_id: null,
+                bling_contact_id: bling_contact_id,
+                tipo_pagamento: forma_pagamento || 'dinheiro',
+                bling_vendedor_id: authCheck.bling_vendedor_id || null,
+                vendedor_nome: authCheck.nome,
+                cpf_cnpj: null // PJ usa contato direto
+              });
+
+              blingPedidoId = blingResult.bling_pedido_id;
+              blingPedidoNum = blingResult.bling_pedido_num;
+
+              // Atualizar pedido com dados do Bling
+              await env.DB.prepare(
+                `UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status='synced' WHERE id=?`
+              ).bind(blingPedidoId, blingPedidoNum, orderId).run();
+
+              await logEvent(env, orderId, 'vale_gas_bling', { bling_pedido_id: blingPedidoId, bling_pedido_num: blingPedidoNum, valor: valorTotal }).catch(() => {});
+            } catch (blingErr) {
+              console.error('[Vale Gás Bling]', blingErr);
+              // Continua mesmo com erro
+              await env.DB.prepare(`UPDATE orders SET sync_status='error', notes=COALESCE(notes,'') || ' | Erro Bling: ' || ? WHERE id=?`)
+                .bind(blingErr.message?.substring(0, 200), orderId).run().catch(() => {});
+            }
+          }
+        }
+
+        // Criar nota de vales
         let notaResult;
         try {
-          await env.DB.prepare('ALTER TABLE notas_vales ADD COLUMN empenho_gov_id INTEGER DEFAULT NULL').run().catch(() => {});
           notaResult = await env.DB.prepare(
-            'INSERT INTO notas_vales (cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, nota_fiscal, empenho, itens_json, validade, empenho_gov_id, created_by, created_by_nome) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)'
-          ).bind(cliente_nome, '', quantidade, forma_pagamento || 'dinheiro', nota_fiscal || '', empenho || '', JSON.stringify(itens), validade || '', empenho_gov_id ? parseInt(empenho_gov_id) : null, authCheck.id, authCheck.nome).run();
+            `INSERT INTO notas_vales (
+              cliente_nome, cliente_doc, quantidade, valor_unit, total, forma_pagamento, 
+              nota_fiscal, empenho, itens_json, validade, empenho_gov_id, 
+              nf_origem, nfce_id, nfce_numero, order_id, cliente_telefone, bling_contact_id,
+              bling_pedido_id, bling_pedido_num,
+              created_by, created_by_nome
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(
+            cliente_nome, '', quantidade, 
+            valorTotal > 0 ? (valorTotal / quantidade) : 0, 
+            valorTotal,
+            forma_pagamento || 'dinheiro', 
+            nfceNumero || nota_fiscal || '', 
+            empenho || '', 
+            JSON.stringify(itens), 
+            validade || '', 
+            empenho_gov_id ? parseInt(empenho_gov_id) : null,
+            nf_origem || 'externa',
+            nfceId || null,
+            nfceNumero || null,
+            orderId,
+            cliente_telefone || null,
+            bling_contact_id || null,
+            blingPedidoId || null,
+            blingPedidoNum || null,
+            authCheck.id, 
+            authCheck.nome
+          ).run();
         } catch (dbErr) {
           if (dbErr.message?.includes('UNIQUE')) return err('Vale já emitido para este empenho.', 409);
           return err('Erro ao salvar nota: ' + dbErr.message, 500);
@@ -9167,7 +9312,16 @@ export default {
           }
         }
 
-        return json({ ok: true, nota_id: notaId });
+        return json({ 
+          ok: true, 
+          nota_id: notaId,
+          order_id: orderId,
+          nfce_id: nfceId,
+          nfce_numero: nfceNumero,
+          bling_pedido_id: blingPedidoId,
+          bling_pedido_num: blingPedidoNum,
+          valor_total: valorTotal
+        });
       }
 
       // DELETE /api/vales/notas/:id — DESABILITADO (vales nunca podem ser apagados)
