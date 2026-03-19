@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.56</title>
+<title>Novo Pedido — MoskoGás v2.11.57</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,12 +51,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.56 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.57 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.56</span></h1>
+    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.57</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -1113,8 +1113,8 @@ function hideAddInModal() {
 async function saveAddrInModal() {
   const obs  = document.getElementById('m-obs').value.trim();
   const rua  = document.getElementById('m-addr').value.trim();
-  const num  = document.getElementById('m-num').value.trim(); // v2.11.56: incluir número
-  const line = num ? `${rua}, ${num}` : rua; // v2.11.56: concatena rua + número
+  const num  = document.getElementById('m-num').value.trim(); // v2.11.57: incluir número
+  const line = num ? `${rua}, ${num}` : rua; // v2.11.57: concatena rua + número
   document.getElementById('m-obs').style.borderColor  = '';
   document.getElementById('m-addr').style.borderColor = '';
   if (!obs)  { document.getElementById('m-obs').style.borderColor  = '#dc2626'; document.getElementById('m-obs').focus(); return; }
@@ -1376,6 +1376,30 @@ function selTipoPgto(btn) {
   const isPix = btn.dataset.tipo === 'pix_receber';
   document.getElementById('pix-receber-data').style.display = isPix ? 'block' : 'none';
   if (isPix && !document.getElementById('pix-data-input').value) setPixData(1); // default amanhã
+  
+  // v2.11.57: Vale Hub zera preços automaticamente
+  if (btn.dataset.tipo === 'vale_hub') {
+    zerarPrecosValeHub();
+  }
+}
+
+// v2.11.57: Zerar preços para Vale Hub
+function zerarPrecosValeHub() {
+  if (items.length === 0) return;
+  
+  let zerou = false;
+  items.forEach(item => {
+    if (parseFloat(item.price) > 0) {
+      item.price = 0;
+      zerou = true;
+    }
+  });
+  
+  if (zerou) {
+    renderItems();
+    renderTotal();
+    toast('🚚 Vale Hub: preços zerados automaticamente (R$ 0,00)', 'info');
+  }
 }
 
 function setPixData(dias) {
@@ -1418,7 +1442,7 @@ async function saveOrder() {
 
   if (!items.length) { toast('⚠️ Adicione pelo menos 1 produto ao pedido', 'error'); return; }
 
-  // v2.11.56: Validar itens com preço 0 (exceto Vale Hub que sempre é R$ 0)
+  // v2.11.57: Validar itens com preço 0 (exceto Vale Hub que sempre é R$ 0)
   const tipoPgto = document.getElementById('tipo_pagamento').value;
   const isValeHub = tipoPgto === 'vale_hub';
   
