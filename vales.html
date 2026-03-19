@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.2.0 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.2.1 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.2.0</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.2.1</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
 
@@ -316,10 +316,19 @@ function renderTable() {
             itensHtml = its.map(it => '<span style="font-size:11px;background:#f1f5f9;padding:1px 6px;border-radius:8px;margin-right:3px">' + it.produto + ': ' + it.quantidade + '</span>').join('');
         } catch(_) { itensHtml = '<span style="font-size:12px;color:#64748b">' + n.quantidade + ' vales</span>'; }
         const docs = [];
-        if (n.nota_fiscal) docs.push('<strong>NF:</strong> ' + n.nota_fiscal);
+        // v1.2.0: Mostrar origem da NF
+        if (n.nf_origem === 'nfce' && n.nfce_numero) {
+            docs.push('<span style="background:#16a34a;color:#fff;font-size:9px;padding:1px 5px;border-radius:4px">🧾 NFC-e ' + n.nfce_numero + '</span>');
+        } else if (n.nf_origem === 'venda_bling' && n.bling_pedido_num) {
+            docs.push('<span style="background:#f97316;color:#fff;font-size:9px;padding:1px 5px;border-radius:4px">🏢 Bling #' + n.bling_pedido_num + '</span>');
+        } else if (n.nota_fiscal) {
+            docs.push('<strong>NF:</strong> ' + n.nota_fiscal);
+        }
         if (n.empenho) docs.push('<strong>Emp:</strong> ' + n.empenho);
+        // Mostrar valor total se houver
+        const valorInfo = n.total > 0 ? '<div style="font-size:10px;color:#16a34a;font-weight:700">R$ ' + parseFloat(n.total).toFixed(2) + '</div>' : '';
         return '<tr onclick="viewNota(' + n.id + ')">' +
-            '<td><strong style="color:#2563eb">#' + n.id + '</strong></td>' +
+            '<td><strong style="color:#2563eb">#' + n.id + '</strong>' + valorInfo + '</td>' +
             '<td style="font-size:12px">' + d + '</td>' +
             '<td><strong>' + n.cliente_nome + '</strong></td>' +
             '<td>' + itensHtml + '</td>' +
