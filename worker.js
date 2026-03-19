@@ -1,4 +1,5 @@
-// v2.52.37
+// v2.52.38
+// v2.52.38: Retry NFC-e exclui pedidos com valor R$0 (Vale Hub)
 // v2.52.37: Tipo pagamento vale_hub (Vale Gás Hub Ultragaz) — valor R$0, pago=1, sem NFC-e
 // v2.52.36: Não gera NFC-e/Bling para pedidos R$ 0 (Vale Gás Hub Ultragaz)
 // v2.52.35: Fix /api/address/list para clientes doc_CNPJ — não remover prefixo doc_
@@ -2460,6 +2461,7 @@ async function retryNFCePendentes(env, limite = 20) {
 
   // Busca pedidos ENTREGUES com tipos que devem ter NFC-e, sem NFC-e ainda
   // Limita a 30 dias atrás para cobrir reprocessamentos históricos
+  // v2.52.38: Exclui pedidos com valor R$0 (Vale Hub) e tipo vale_hub
   const sevenDaysAgo = Math.floor(Date.now() / 1000) - 30 * 86400;
   const pendentes = await env.DB.prepare(
     `SELECT id, customer_name, phone_digits, items_json, total_value,
@@ -2471,6 +2473,7 @@ async function retryNFCePendentes(env, limite = 20) {
        AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
        AND (nfce_id IS NULL OR nfce_id = '' OR nfce_id LIKE 'error%')
        AND COALESCE(nfce_retry_count,0) < 5
+       AND COALESCE(total_value,0) > 0
        AND created_at >= ?
      ORDER BY id DESC
      LIMIT ?`
