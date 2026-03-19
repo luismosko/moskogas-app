@@ -1,4 +1,5 @@
-// v2.52.38
+// v2.52.39
+// v2.52.39: Bloqueio crítico — NFC-e com valor R$0 bloqueada + alerta WhatsApp para admins
 // v2.52.38: Retry NFC-e exclui pedidos com valor R$0 (Vale Hub)
 // v2.52.37: Tipo pagamento vale_hub (Vale Gás Hub Ultragaz) — valor R$0, pago=1, sem NFC-e
 // v2.52.36: Não gera NFC-e/Bling para pedidos R$ 0 (Vale Gás Hub Ultragaz)
@@ -723,6 +724,43 @@ async function criarPedidoBling(env, orderId, orderData) {
 async function emitirNFCeBling(env, orderId, orderData) {
   const { name, items, total_value, forma_pagamento_key, forma_pagamento_id,
           bling_contact_id, tipo_pagamento, bling_vendedor_id, cpf_cnpj, created_at, delivered_at } = orderData;
+
+  // v2.52.39: BLOQUEIO CRÍTICO — Não emitir NFC-e com valor R$ 0,00
+  const valorTotal = parseFloat(total_value) || 0;
+  if (valorTotal <= 0) {
+    // Alerta WhatsApp para admins
+    const alertMsg = `⚠️ *ALERTA SISTEMA*\n\n` +
+      `Tentativa de emitir NFC-e com valor R$ 0,00!\n\n` +
+      `📋 Pedido: #${orderId}\n` +
+      `👤 Cliente: ${name || 'N/A'}\n` +
+      `💰 Valor: R$ ${valorTotal.toFixed(2)}\n` +
+      `💳 Tipo Pgto: ${tipo_pagamento || 'N/A'}\n\n` +
+      `❌ NFC-e BLOQUEADA — verifique se o pedido deveria ser Vale Hub ou se houve erro de inserção.`;
+    
+    // Enviar para admins
+    try {
+      const admins = await env.DB.prepare(
+        "SELECT telefone FROM app_users WHERE role='admin' AND ativo=1 AND telefone IS NOT NULL AND telefone != ''"
+      ).all().catch(() => ({ results: [] }));
+      
+      for (const admin of (admins.results || [])) {
+        if (admin.telefone) {
+          await sendWhatsApp(env, admin.telefone, alertMsg, { category: 'interno' }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.error('[NFC-e] Erro enviando alerta admin:', e.message);
+    }
+    
+    // Log do evento
+    await logEvent(env, orderId, 'nfce_bloqueada_valor_zero', { 
+      valor: valorTotal, 
+      tipo_pagamento, 
+      cliente: name 
+    }).catch(() => {});
+    
+    throw new Error(`NFC-e BLOQUEADA: valor R$ 0,00 não permitido. Pedido #${orderId} precisa de correção.`);
+  }
 
   // Data de hoje em BRT (SEFAZ exige data atual — não pode ser data anterior)
   const now = new Date();
