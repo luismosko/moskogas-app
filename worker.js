@@ -1,4 +1,5 @@
-// v2.52.36
+// v2.52.37
+// v2.52.37: Tipo pagamento vale_hub (Vale Gás Hub Ultragaz) — valor R$0, pago=1, sem NFC-e
 // v2.52.36: Não gera NFC-e/Bling para pedidos R$ 0 (Vale Gás Hub Ultragaz)
 // v2.52.35: Fix /api/address/list para clientes doc_CNPJ — não remover prefixo doc_
 // v2.52.34: Fix bling-detail criando duplicados customers_cache — verifica bling_contact_id antes de INSERT
@@ -4922,7 +4923,7 @@ export default {
 
       // 1) Criar pedido como ENTREGUE direto
       const items = JSON.parse(itemsJson);
-      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas'];
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas', 'vale_hub'];
       const pago = TIPOS_PAGO_IMEDIATO.includes(tipoPagamento) ? 1 : 0;
 
       const result = await env.DB.prepare(`
@@ -5071,7 +5072,7 @@ export default {
       }
 
       const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'debito', 'credito']; // pix_receber: tratado na tela de pagamentos
-      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas'];
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas', 'vale_hub'];
 
       const oldTipo = currentOrder.tipo_pagamento || '';
       const newTipo = tipo_pagamento !== undefined ? tipo_pagamento : oldTipo;
@@ -5416,7 +5417,7 @@ export default {
       }
 
       // Marcar pago se tipo imediato
-      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito'];
+      const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas', 'vale_hub'];
       if (TIPOS_PAGO_IMEDIATO.includes(tipoFinal)) {
         sql += `, pago=1`;
       }

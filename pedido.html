@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.53</title>
+<title>Novo Pedido — MoskoGás v2.11.54</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,12 +51,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.53 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.54 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.53</span></h1>
+    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.54</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -236,16 +236,17 @@
     </div>
 
     <label style="font-size:12px;font-weight:800;color:#4f46e5;letter-spacing:.5px">💳 PAGAMENTO <span style="color:#dc2626">*</span></label>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:6px" id="pgto-grid">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-top:6px" id="pgto-grid">
       <button type="button" class="tipo-pgto-btn" data-tipo="dinheiro"     data-key="dinheiro" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💵 Dinheiro</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="pix_vista"    data-key="pix" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">✅ PIX Pago</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="pix_receber"  data-key="pix_aguardando" onclick="selTipoPgto(this)" title="Aguarda confirmação de pagamento PIX">⏳ PIX a Receber</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="pix_receber"  data-key="pix_aguardando" onclick="selTipoPgto(this)" title="Aguarda confirmação de pagamento PIX">⏳ PIX Rec.</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="debito"       data-key="debito" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💳 Débito</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="credito"      data-key="credito" onclick="selTipoPgto(this)" title="Pago na hora — cria venda no Bling">💳 Crédito</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="mensalista"   data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📅 Mensalista</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="mensalista"   data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📅 Mensal.</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="boleto"       data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">🧾 Boleto</button>
       <button type="button" class="tipo-pgto-btn" data-tipo="nfe"          data-key="fiado" onclick="selTipoPgto(this)" title="Não cria venda — aparece em Pagamentos">📄 NFe</button>
-      <button type="button" class="tipo-pgto-btn" data-tipo="vale_gas"      data-key="dinheiro" onclick="selTipoPgto(this)" title="Vale Gás — pago adiantado. Pergunta sobre NF ao entregar.">🎫 Vale Gás</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="vale_gas"     data-key="dinheiro" onclick="selTipoPgto(this)" title="Vale Gás interno — pago adiantado">🎫 Vale Gás</button>
+      <button type="button" class="tipo-pgto-btn" data-tipo="vale_hub"     data-key="dinheiro" onclick="selTipoPgto(this)" title="Vale Gás Hub Ultragaz — valor R$0, sem NFC-e" style="background:#fff7ed;border-color:#fdba74">🚚 Hub</button>
     </div>
     <input type="hidden" id="tipo_pagamento" value="">
     <input type="hidden" id="forma_pagamento_key" value="">
@@ -284,8 +285,8 @@
 
   <style>
   .tipo-pgto-btn {
-    padding:5px 2px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;
-    font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;color:#374151;line-height:1.2;
+    padding:4px 1px;border-radius:6px;border:2px solid #e2e8f0;background:#f8fafc;
+    font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;color:#374151;line-height:1.2;
   }
   .tipo-pgto-btn.sel {
     border-color:#6366f1;background:#ede9fe;color:#4f46e5;
@@ -1112,8 +1113,8 @@ function hideAddInModal() {
 async function saveAddrInModal() {
   const obs  = document.getElementById('m-obs').value.trim();
   const rua  = document.getElementById('m-addr').value.trim();
-  const num  = document.getElementById('m-num').value.trim(); // v2.11.53: incluir número
-  const line = num ? `${rua}, ${num}` : rua; // v2.11.53: concatena rua + número
+  const num  = document.getElementById('m-num').value.trim(); // v2.11.54: incluir número
+  const line = num ? `${rua}, ${num}` : rua; // v2.11.54: concatena rua + número
   document.getElementById('m-obs').style.borderColor  = '';
   document.getElementById('m-addr').style.borderColor = '';
   if (!obs)  { document.getElementById('m-obs').style.borderColor  = '#dc2626'; document.getElementById('m-obs').focus(); return; }
@@ -1488,7 +1489,8 @@ async function saveOrder() {
       mensalista: 'Mensalista 📋',
       boleto: 'Boleto/Órgão 🧾',
       nfe: 'NFe 📄',
-      vale_gas: 'Vale Gás 🎫 (pago adiantado)'
+      vale_gas: 'Vale Gás 🎫 (pago adiantado)',
+      vale_hub: 'Vale Hub 🚚 (R$0 sem NFC-e)'
     };
     const statusMsg = msgs[tipoPgto] || '';
     
