@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Empenhos GOV — MoskoGás v1.0.11</title>
+<title>Empenhos GOV — MoskoGás v1.0.12</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -125,8 +125,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 <div id="nav-placeholder"></div>
 
 <div class="page-header">
-  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.11</span></h1>
-  <button class="btn btn-primary" onclick="abrirModalNovo()">＋ Novo Empenho</button>
+  <h1>🏛️ Empenhos GOV <span class="badge-version">v1.0.12</span></h1>
+  <button class="btn btn-primary" id="btn-novo-empenho" onclick="abrirModalNovo()">＋ Novo Empenho</button>
 </div>
 
 <div class="toolbar">
@@ -310,6 +310,10 @@ let editandoId = null;
 let currentTab = 'dados';
 let pendingFiles = [];
 let clienteSearchTimer = null;
+// v1.0.12: Controle de permissão — não-admin só edita observações e arquivos
+const _user = JSON.parse(localStorage.getItem('mg_user') || '{}');
+const isAdmin = _user.role === 'admin';
+const isGerente = _user.role === 'gerente';
 
 // ── Init ──────────────────────────────────────────────────────────
 carregarEmpenhos();
@@ -449,8 +453,59 @@ function abrirModalEditar(id) {
   rows.innerHTML = '';
   (e.itens || []).forEach(it => addItemRow(it));
 
+  // v1.0.12: Controle de permissão — não-admin só edita observações e arquivos
+  aplicarPermissoesEdicao();
+
   switchTab('dados');
   document.getElementById('modalEmp').classList.add('open');
+}
+
+// v1.0.12: Aplica permissões de edição conforme role
+function aplicarPermissoesEdicao() {
+  const podeEditarTudo = isAdmin || isGerente;
+  
+  // Campos que só admin/gerente podem editar
+  const camposRestritos = ['emp-numero', 'emp-status', 'emp-cliente-search', 'emp-data-emissao', 'emp-data-validade', 'emp-valor'];
+  camposRestritos.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.disabled = !podeEditarTudo;
+      el.style.opacity = podeEditarTudo ? '1' : '0.7';
+      el.style.cursor = podeEditarTudo ? '' : 'not-allowed';
+      el.style.background = podeEditarTudo ? '' : '#f1f5f9';
+    }
+  });
+  
+  // Esconder botão de adicionar item se não pode editar
+  const btnAddItem = document.querySelector('.btn-add-item');
+  if (btnAddItem) btnAddItem.style.display = podeEditarTudo ? '' : 'none';
+  
+  // Desabilitar inputs de itens existentes
+  document.querySelectorAll('#itens-rows input, #itens-rows select').forEach(el => {
+    el.disabled = !podeEditarTudo;
+    el.style.opacity = podeEditarTudo ? '1' : '0.7';
+  });
+  
+  // Esconder botões de remover item
+  document.querySelectorAll('#itens-rows .btn-del-item').forEach(el => {
+    el.style.display = podeEditarTudo ? '' : 'none';
+  });
+  
+  // Mostrar aviso se não tem permissão total
+  let aviso = document.getElementById('aviso-permissao');
+  if (!podeEditarTudo) {
+    if (!aviso) {
+      aviso = document.createElement('div');
+      aviso.id = 'aviso-permissao';
+      aviso.style.cssText = 'background:#fef3c7;color:#92400e;padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:12px;border:1px solid #fcd34d';
+      aviso.innerHTML = '🔒 <strong>Acesso limitado:</strong> Você pode editar apenas <strong>Observações</strong> e <strong>Arquivos</strong>. Os demais campos são somente leitura.';
+      const modalBody = document.querySelector('#modalEmp .modal-body');
+      if (modalBody) modalBody.insertBefore(aviso, modalBody.firstChild);
+    }
+    aviso.style.display = 'block';
+  } else if (aviso) {
+    aviso.style.display = 'none';
+  }
 }
 
 function fecharModal(id) {
@@ -1012,6 +1067,14 @@ function formatBytes(b) {
   if (b > 1024*1024) return (b/1024/1024).toFixed(1) + ' MB';
   return (b/1024).toFixed(0) + ' KB';
 }
+
+// v1.0.12: Init — controle de permissões
+(function initPermissoes() {
+  const podeEditarTudo = isAdmin || isGerente;
+  // Esconder botão Novo Empenho para não-admin
+  const btnNovo = document.getElementById('btn-novo-empenho');
+  if (btnNovo && !podeEditarTudo) btnNovo.style.display = 'none';
+})();
 </script>
 </body>
 </html>
