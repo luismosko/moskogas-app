@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.2.3 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.2.4 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.2.3</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.2.4</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
 
@@ -640,13 +640,13 @@ async function salvarNovoCliente() {
     try {
         const phone = telefone.length === 11 ? '55' + telefone : telefone.length === 10 ? '5567' + telefone.slice(2) : '55' + telefone;
         const payload = {
-            phone_digits: phone,
+            phone: phone,  // endpoint espera 'phone', não 'phone_digits'
             name: nome,
-            cpf_cnpj: doc,
-            tipo_pessoa: tipo,
-            address_line: endereco,
-            bairro: bairro,
-            origem: 'manual'
+            cpf_cnpj: doc || null,
+            address_line: endereco || null,
+            bairro: bairro || null,
+            complemento: null,
+            referencia: null
         };
         
         await api('/api/customer/upsert', { method: 'POST', body: JSON.stringify(payload) });
