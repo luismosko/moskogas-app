@@ -1,4 +1,5 @@
-// v2.52.41
+// v2.52.42
+// v2.52.42: IzChat CRM API — sync contatos MoskoGás→IzChat, bina virtual, config token
 // v2.52.41: Vale Gás — emissão NFC-e ou Venda Bling direto do módulo de vales
 // v2.52.40: Relatório email — pedidos organizados por seção (Pendentes > Cancelados > Entregues), faturamento só entregues
 // v2.52.39: Bloqueio crítico — NFC-e com valor R$0 bloqueada + alerta WhatsApp para admins
@@ -7833,6 +7834,315 @@ export default {
       await logEvent(env, orderId, 'pix_manual_confirm', { confirmed_by: 'admin' });
       return json({ ok: true, action: 'marked_paid', order_id: orderId });
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // ── IzChat CRM API — Sincronização de Contatos ──────────────
+    // ══════════════════════════════════════════════════════════════
+
+    // GET/POST /api/izchat/config — Token da empresa IzChat
+    if (path === '/api/izchat/config') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      if (method === 'GET') {
+        const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='izchat_company_token'").first();
+        const tokenMasked = row?.value ? (row.value.slice(0, 8) + '...' + row.value.slice(-8)) : null;
+        return json({ ok: true, token_configured: !!row?.value, token_masked: tokenMasked });
+      }
+
+      if (method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const token = (body.token || '').trim();
+        if (!token) return err('Token é obrigatório', 400);
+
+        // Testar token fazendo uma chamada simples
+        const testResp = await fetch('https://chatapi.izchat.com.br/api/external/connections', {
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!testResp.ok) {
+          const errBody = await testResp.text().catch(() => '');
+          return err(`Token inválido: ${testResp.status} ${errBody.slice(0, 100)}`, 400);
+        }
+
+        await env.DB.prepare(`INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('izchat_company_token', ?, datetime('now'))`).bind(token).run();
+        return json({ ok: true, message: 'Token salvo com sucesso' });
+      }
+      return err('Method not allowed', 405);
+    }
+
+    // GET /api/izchat/contacts/search?phone= — Buscar contato no IzChat
+    if (method === 'GET' && path === '/api/izchat/contacts/search') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const phone = url.searchParams.get('phone') || '';
+      if (!phone) return err('phone é obrigatório', 400);
+
+      const tokenRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='izchat_company_token'").first();
+      if (!tokenRow?.value) return err('Token IzChat não configurado', 400);
+
+      const resp = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/search?phone=${encodeURIComponent(phone)}`, {
+        headers: { 'Authorization': `Bearer ${tokenRow.value}`, 'Content-Type': 'application/json' }
+      });
+
+      if (resp.status === 404) return json({ ok: true, found: false, contact: null });
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => '');
+        return err(`IzChat API error: ${resp.status}`, resp.status >= 500 ? 503 : 400);
+      }
+
+      const data = await resp.json();
+      return json({ ok: true, found: true, contact: data?.data || data });
+    }
+
+    // GET /api/izchat/contacts/:id — Detalhes do contato no IzChat
+    const izchatContactDetailMatch = path.match(/^\/api\/izchat\/contacts\/(\d+)$/);
+    if (method === 'GET' && izchatContactDetailMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const contactId = izchatContactDetailMatch[1];
+      const tokenRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='izchat_company_token'").first();
+      if (!tokenRow?.value) return err('Token IzChat não configurado', 400);
+
+      const resp = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/${contactId}`, {
+        headers: { 'Authorization': `Bearer ${tokenRow.value}`, 'Content-Type': 'application/json' }
+      });
+
+      if (!resp.ok) return err(`IzChat: ${resp.status}`, resp.status >= 500 ? 503 : 400);
+      const data = await resp.json();
+      return json({ ok: true, contact: data?.data || data });
+    }
+
+    // POST /api/izchat/contacts/sync — Sincronizar cliente MoskoGás → IzChat
+    if (method === 'POST' && path === '/api/izchat/contacts/sync') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const tokenRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='izchat_company_token'").first();
+      if (!tokenRow?.value) return err('Token IzChat não configurado', 400);
+      const izToken = tokenRow.value;
+
+      const body = await request.json().catch(() => ({}));
+      const phone = (body.phone || '').replace(/\D/g, '');
+      if (!phone || phone.length < 10) return err('Telefone inválido', 400);
+
+      // Buscar cliente no MoskoGás
+      const customer = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits=?').bind(phone).first();
+      if (!customer) return err('Cliente não encontrado no MoskoGás', 404);
+
+      // Buscar contato no IzChat
+      const searchResp = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/search?phone=${phone}`, {
+        headers: { 'Authorization': `Bearer ${izToken}`, 'Content-Type': 'application/json' }
+      });
+
+      let izContact = null;
+      let action = 'none';
+
+      if (searchResp.status === 404) {
+        // Contato não existe — criar
+        const createBody = {
+          name: customer.name || phone,
+          number: phone,
+          email: customer.email || '',
+          extraInfo: []
+        };
+
+        // Montar extraInfo com dados do MoskoGás
+        if (customer.address_line) createBody.extraInfo.push({ name: 'Endereco', value: customer.address_line });
+        if (customer.bairro) createBody.extraInfo.push({ name: 'Bairro', value: customer.bairro });
+        if (customer.complemento) createBody.extraInfo.push({ name: 'Complemento', value: customer.complemento });
+        if (customer.referencia) createBody.extraInfo.push({ name: 'Referencia', value: customer.referencia });
+        if (customer.cpf_cnpj) createBody.extraInfo.push({ name: 'CPF_CNPJ', value: customer.cpf_cnpj });
+        if (customer.ultima_compra_glp) createBody.extraInfo.push({ name: 'Ultima_Compra', value: customer.ultima_compra_glp });
+
+        const createResp = await fetch('https://chatapi.izchat.com.br/api/external/contacts', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${izToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(createBody)
+        });
+
+        if (createResp.status === 409) {
+          // Conflito: já existe — tentar buscar novamente e atualizar
+          action = 'conflict_retry';
+        } else if (!createResp.ok) {
+          const errBody = await createResp.text().catch(() => '');
+          return err(`Erro ao criar contato: ${createResp.status} ${errBody.slice(0, 100)}`, 503);
+        } else {
+          const created = await createResp.json();
+          izContact = created?.data || created;
+          action = 'created';
+        }
+      }
+
+      if (searchResp.ok || action === 'conflict_retry') {
+        // Contato existe — atualizar
+        let existingData;
+        if (action === 'conflict_retry') {
+          // Buscar de novo
+          const retrySearch = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/search?phone=${phone}`, {
+            headers: { 'Authorization': `Bearer ${izToken}`, 'Content-Type': 'application/json' }
+          });
+          if (retrySearch.ok) existingData = await retrySearch.json();
+        } else {
+          existingData = await searchResp.json();
+        }
+
+        const existing = existingData?.data || existingData;
+        if (existing?.id) {
+          const updateBody = {
+            name: customer.name || existing.name || phone,
+            email: customer.email || existing.email || '',
+            extraInfo: []
+          };
+
+          // Atualizar extraInfo
+          if (customer.address_line) updateBody.extraInfo.push({ name: 'Endereco', value: customer.address_line });
+          if (customer.bairro) updateBody.extraInfo.push({ name: 'Bairro', value: customer.bairro });
+          if (customer.complemento) updateBody.extraInfo.push({ name: 'Complemento', value: customer.complemento });
+          if (customer.referencia) updateBody.extraInfo.push({ name: 'Referencia', value: customer.referencia });
+          if (customer.cpf_cnpj) updateBody.extraInfo.push({ name: 'CPF_CNPJ', value: customer.cpf_cnpj });
+          if (customer.ultima_compra_glp) updateBody.extraInfo.push({ name: 'Ultima_Compra', value: customer.ultima_compra_glp });
+
+          const updateResp = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/${existing.id}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${izToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateBody)
+          });
+
+          if (!updateResp.ok) {
+            const errBody = await updateResp.text().catch(() => '');
+            return err(`Erro ao atualizar contato: ${updateResp.status}`, 503);
+          }
+
+          const updated = await updateResp.json();
+          izContact = updated?.data || existing;
+          action = action === 'conflict_retry' ? 'created_then_updated' : 'updated';
+        }
+      }
+
+      return json({ ok: true, action, izchat_contact: izContact, moskogas_customer: customer });
+    }
+
+    // POST /api/izchat/contacts/sync-batch — Sincronização em lote
+    if (method === 'POST' && path === '/api/izchat/contacts/sync-batch') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const tokenRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='izchat_company_token'").first();
+      if (!tokenRow?.value) return err('Token IzChat não configurado', 400);
+      const izToken = tokenRow.value;
+
+      const body = await request.json().catch(() => ({}));
+      const limit = Math.min(parseInt(body.limit) || 50, 200);
+      const offset = parseInt(body.offset) || 0;
+      const onlyWithName = body.only_with_name !== false; // default true
+
+      // Buscar clientes do MoskoGás
+      let query = 'SELECT * FROM customers_cache';
+      if (onlyWithName) query += " WHERE name IS NOT NULL AND name != '' AND name != phone_digits";
+      query += ` ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
+
+      const customers = await env.DB.prepare(query).bind(limit, offset).all();
+      
+      const results = { total: customers.results.length, created: 0, updated: 0, skipped: 0, errors: [] };
+
+      for (const customer of customers.results) {
+        const phone = customer.phone_digits;
+        if (!phone || phone.length < 10) { results.skipped++; continue; }
+
+        try {
+          // Verificar se existe no IzChat
+          const searchResp = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/search?phone=${phone}`, {
+            headers: { 'Authorization': `Bearer ${izToken}`, 'Content-Type': 'application/json' }
+          });
+
+          const extraInfo = [];
+          if (customer.address_line) extraInfo.push({ name: 'Endereco', value: customer.address_line });
+          if (customer.bairro) extraInfo.push({ name: 'Bairro', value: customer.bairro });
+          if (customer.complemento) extraInfo.push({ name: 'Complemento', value: customer.complemento });
+          if (customer.referencia) extraInfo.push({ name: 'Referencia', value: customer.referencia });
+          if (customer.cpf_cnpj) extraInfo.push({ name: 'CPF_CNPJ', value: customer.cpf_cnpj });
+          if (customer.ultima_compra_glp) extraInfo.push({ name: 'Ultima_Compra', value: customer.ultima_compra_glp });
+
+          if (searchResp.status === 404) {
+            // Criar
+            const createResp = await fetch('https://chatapi.izchat.com.br/api/external/contacts', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${izToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: customer.name || phone,
+                number: phone,
+                email: customer.email || '',
+                extraInfo
+              })
+            });
+            if (createResp.ok || createResp.status === 409) results.created++;
+            else results.errors.push({ phone, error: `create:${createResp.status}` });
+          } else if (searchResp.ok) {
+            // Atualizar
+            const existing = (await searchResp.json())?.data;
+            if (existing?.id) {
+              const updateResp = await fetch(`https://chatapi.izchat.com.br/api/external/contacts/${existing.id}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${izToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: customer.name || existing.name,
+                  email: customer.email || existing.email || '',
+                  extraInfo
+                })
+              });
+              if (updateResp.ok) results.updated++;
+              else results.errors.push({ phone, error: `update:${updateResp.status}` });
+            }
+          } else {
+            results.skipped++;
+          }
+
+          // Rate limit: pequeno delay entre chamadas
+          await new Promise(r => setTimeout(r, 100));
+        } catch (e) {
+          results.errors.push({ phone, error: e.message });
+        }
+      }
+
+      return json({ ok: true, ...results, next_offset: offset + limit });
+    }
+
+    // GET /api/izchat/stats — Estatísticas da sincronização
+    if (method === 'GET' && path === '/api/izchat/stats') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+
+      const tokenRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='izchat_company_token'").first();
+      const tokenConfigured = !!tokenRow?.value;
+
+      // Contar clientes no MoskoGás
+      const mgCount = await env.DB.prepare('SELECT COUNT(*) as c FROM customers_cache').first();
+      const mgWithName = await env.DB.prepare("SELECT COUNT(*) as c FROM customers_cache WHERE name IS NOT NULL AND name != '' AND name != phone_digits").first();
+
+      let izCount = null;
+      if (tokenConfigured) {
+        // Buscar contagem do IzChat (primeira página para ter o count)
+        const resp = await fetch('https://chatapi.izchat.com.br/api/external/contacts?pageNumber=1', {
+          headers: { 'Authorization': `Bearer ${tokenRow.value}`, 'Content-Type': 'application/json' }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          izCount = data?.count || data?.data?.length || null;
+        }
+      }
+
+      return json({
+        ok: true,
+        token_configured: tokenConfigured,
+        moskogas_total: mgCount?.c || 0,
+        moskogas_with_name: mgWithName?.c || 0,
+        izchat_count: izCount
+      });
+    }
+
+
 
     // ══════════════════════════════════════════════════════════════
     // ── Webhook IzChat — mensagens recebidas (PÚBLICO — sem auth) ──

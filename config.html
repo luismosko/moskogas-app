@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.14.9 — MoskoGás</title>
+<title>Config v2.15.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -138,8 +138,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.14.9 — config</div>
-  <h1>⚙️ Configurações v2.14.9</h1>
+  <div class="version-badge">v2.15.0 — config</div>
+  <h1>⚙️ Configurações v2.15.0</h1>
 
   <!-- ── ABAS DE CONFIGURAÇÃO ── -->
   <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
@@ -361,6 +361,57 @@
     </div>
     <div id="pix-status" style="margin-top:10px"></div>
   </div>
+
+<!-- IzChat CRM — Sincronização de Contatos -->
+  <div class="card">
+    <h2>💬 IzChat CRM — Sincronização</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Sincronize os dados dos clientes do MoskoGás com o IzChat. Nome, endereço, bairro e última compra aparecem nos "Dados Adicionais" do contato.</p>
+    
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Token da Empresa (company_token)</label>
+      <div style="display:flex;gap:8px">
+        <input type="password" id="iz-token" placeholder="Cole o token aqui..." style="flex:1;padding:9px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:monospace">
+        <button class="btn" onclick="toggleIzTokenVisibility()" style="background:#64748b;color:#fff;min-width:40px" title="Mostrar/ocultar">👁️</button>
+      </div>
+      <p style="font-size:11px;color:#94a3b8;margin:6px 0 0">📍 Encontre em: IzChat → ADMINISTRAÇÃO → API / Webhooks</p>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn" onclick="saveIzChatToken()" style="background:#10b981;color:#fff">💾 Salvar Token</button>
+      <button class="btn" onclick="testIzChatConnection()" style="background:#6366f1;color:#fff">📡 Testar Conexão</button>
+      <button class="btn" onclick="loadIzChatStats()" style="background:#64748b;color:#fff">📊 Estatísticas</button>
+    </div>
+
+    <div id="iz-status" style="margin-bottom:16px"></div>
+
+    <!-- Sincronização em Lote -->
+    <div style="padding:14px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0">
+      <h3 style="font-size:14px;font-weight:700;margin:0 0 10px;color:#334155">🔄 Sincronização em Lote</h3>
+      <p style="font-size:12px;color:#64748b;margin:0 0 12px">Envie os dados dos clientes do MoskoGás para o IzChat. Clientes sem nome são ignorados.</p>
+      
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;color:#64748b">Lote de:</label>
+        <select id="iz-batch-size" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+          <option value="25">25 clientes</option>
+          <option value="50" selected>50 clientes</option>
+          <option value="100">100 clientes</option>
+          <option value="200">200 clientes</option>
+        </select>
+        <button class="btn" onclick="startIzChatBatchSync()" style="background:#f59e0b;color:#fff">▶️ Iniciar Sincronização</button>
+        <button class="btn" onclick="stopIzChatBatchSync()" id="iz-stop-btn" style="background:#dc2626;color:#fff;display:none">⏹️ Parar</button>
+      </div>
+      
+      <div id="iz-batch-progress" style="margin-top:12px;display:none">
+        <div style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden">
+          <div id="iz-progress-bar" style="height:100%;background:linear-gradient(90deg,#10b981,#059669);width:0%;transition:width 0.3s"></div>
+        </div>
+        <p id="iz-progress-text" style="font-size:11px;color:#64748b;margin:6px 0 0;text-align:center">0 / 0</p>
+      </div>
+
+      <div id="iz-batch-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+
 <!-- HUB_CREDENTIALS_DISABLED v2.14.5 — 09/03/2026 — migrado para Extensão Chrome -->
   <template id="hub-credentials-disabled">
   <div class="card" id="ultragazSection">
@@ -1264,6 +1315,166 @@ async function testIzChat() {
     el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
   }
 }
+
+
+// ── IzChat CRM — Sincronização ─────────────────────────────────
+
+function toggleIzTokenVisibility() {
+  const inp = document.getElementById('iz-token');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function saveIzChatToken() {
+  const token = document.getElementById('iz-token').value.trim();
+  if (!token) return toast('Digite o token', 'error');
+  
+  const el = document.getElementById('iz-status');
+  el.innerHTML = '<div class="status">⏳ Salvando e testando token...</div>';
+  
+  try {
+    const r = await api('/api/izchat/config', 'POST', { token });
+    if (r.ok) {
+      el.innerHTML = '<div class="status ok">✅ Token salvo e validado com sucesso!</div>';
+      document.getElementById('iz-token').value = '';
+      toast('Token IzChat salvo!', 'ok');
+    } else {
+      el.innerHTML = `<div class="status err">❌ ${r.error || 'Erro ao salvar'}</div>`;
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function testIzChatConnection() {
+  const el = document.getElementById('iz-status');
+  el.innerHTML = '<div class="status">⏳ Testando conexão com IzChat...</div>';
+  
+  try {
+    const r = await api('/api/izchat/config');
+    if (!r.token_configured) {
+      el.innerHTML = '<div class="status err">❌ Token não configurado. Salve o token primeiro.</div>';
+      return;
+    }
+    el.innerHTML = `<div class="status ok">✅ Conexão OK! Token: ${r.token_masked}</div>`;
+    toast('Conexão IzChat OK!', 'ok');
+  } catch (e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+async function loadIzChatStats() {
+  const el = document.getElementById('iz-status');
+  el.innerHTML = '<div class="status">⏳ Carregando estatísticas...</div>';
+  
+  try {
+    const r = await api('/api/izchat/stats');
+    let html = '<div style="background:#f0f9ff;border:2px solid #6366f1;border-radius:10px;padding:14px;font-size:13px">';
+    html += '<div style="font-weight:700;font-size:15px;margin-bottom:10px">📊 Estatísticas de Sincronização</div>';
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`;
+    html += `<div>🏠 MoskoGás total: <strong>${r.moskogas_total?.toLocaleString() || 0}</strong></div>`;
+    html += `<div>👤 Com nome: <strong>${r.moskogas_with_name?.toLocaleString() || 0}</strong></div>`;
+    html += `<div>💬 IzChat contatos: <strong>${r.izchat_count !== null ? r.izchat_count?.toLocaleString() : '—'}</strong></div>`;
+    html += `<div>🔌 Token: ${r.token_configured ? '✅ Configurado' : '❌ Não configurado'}</div>`;
+    html += '</div></div>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="status err">❌ ${e.message}</div>`;
+  }
+}
+
+let izBatchRunning = false;
+let izBatchOffset = 0;
+let izBatchStats = { created: 0, updated: 0, skipped: 0, errors: 0 };
+
+async function startIzChatBatchSync() {
+  if (izBatchRunning) return;
+  
+  // Verificar token primeiro
+  try {
+    const cfg = await api('/api/izchat/config');
+    if (!cfg.token_configured) {
+      toast('Configure o token IzChat primeiro!', 'error');
+      return;
+    }
+  } catch (e) {
+    toast('Erro ao verificar token: ' + e.message, 'error');
+    return;
+  }
+  
+  izBatchRunning = true;
+  izBatchOffset = 0;
+  izBatchStats = { created: 0, updated: 0, skipped: 0, errors: 0 };
+  
+  document.getElementById('iz-stop-btn').style.display = 'inline-block';
+  document.getElementById('iz-batch-progress').style.display = 'block';
+  document.getElementById('iz-batch-result').innerHTML = '';
+  
+  await runIzChatBatch();
+}
+
+async function runIzChatBatch() {
+  if (!izBatchRunning) {
+    finishIzChatBatch('Sincronização interrompida');
+    return;
+  }
+  
+  const limit = parseInt(document.getElementById('iz-batch-size').value) || 50;
+  
+  try {
+    const r = await api('/api/izchat/contacts/sync-batch', 'POST', {
+      limit,
+      offset: izBatchOffset,
+      only_with_name: true
+    });
+    
+    izBatchStats.created += r.created || 0;
+    izBatchStats.updated += r.updated || 0;
+    izBatchStats.skipped += r.skipped || 0;
+    izBatchStats.errors += (r.errors?.length || 0);
+    
+    const total = izBatchOffset + (r.total || 0);
+    const percent = Math.min(100, Math.round((total / Math.max(1, total + 100)) * 100));
+    
+    document.getElementById('iz-progress-bar').style.width = percent + '%';
+    document.getElementById('iz-progress-text').textContent = 
+      `Processados: ${total} | ✅ ${izBatchStats.created + izBatchStats.updated} | ⏭️ ${izBatchStats.skipped} | ❌ ${izBatchStats.errors}`;
+    
+    // Se retornou menos que o limite, acabou
+    if ((r.total || 0) < limit) {
+      finishIzChatBatch('Sincronização concluída!');
+      return;
+    }
+    
+    // Próximo lote
+    izBatchOffset = r.next_offset || (izBatchOffset + limit);
+    setTimeout(runIzChatBatch, 500);
+    
+  } catch (e) {
+    finishIzChatBatch('Erro: ' + e.message);
+  }
+}
+
+function stopIzChatBatchSync() {
+  izBatchRunning = false;
+}
+
+function finishIzChatBatch(message) {
+  izBatchRunning = false;
+  document.getElementById('iz-stop-btn').style.display = 'none';
+  document.getElementById('iz-progress-bar').style.width = '100%';
+  
+  let html = `<div style="background:#ecfdf5;border:1px solid #10b981;border-radius:8px;padding:12px;font-size:13px">`;
+  html += `<div style="font-weight:700;margin-bottom:8px">${message}</div>`;
+  html += `<div>✅ Criados: <strong>${izBatchStats.created}</strong></div>`;
+  html += `<div>🔄 Atualizados: <strong>${izBatchStats.updated}</strong></div>`;
+  html += `<div>⏭️ Ignorados: <strong>${izBatchStats.skipped}</strong></div>`;
+  html += `<div>❌ Erros: <strong>${izBatchStats.errors}</strong></div>`;
+  html += `</div>`;
+  
+  document.getElementById('iz-batch-result').innerHTML = html;
+  toast(message, izBatchStats.errors > 0 ? 'warning' : 'ok');
+}
+
 
 // ── PushInPay PIX Tests ─────────────────────────────────────────
 
