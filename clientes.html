@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.2.2 — MoskoGás</title>
+  <title>Clientes v1.2.3 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,20 +120,21 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.2.2 — clientes</div>
+  <div class="version-badge" style="display:none">v1.2.3 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.2</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.3</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
   </div>
 
   <!-- Toolbar -->
-  <div class="toolbar">
-    <div class="search-wrap">
+  <div class="toolbar" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div class="search-wrap" style="flex:1;min-width:280px">
       <span class="icon">🔍</span>
       <input id="q" type="text" placeholder="Buscar por nome, telefone, CPF/CNPJ, endereço..." oninput="onSearch()" autocomplete="off">
     </div>
+    <button class="btn btn-green" onclick="abrirNovoCliente()" style="padding:10px 16px;font-size:14px;white-space:nowrap">➕ Novo Cliente</button>
     <select id="filtro-origem" class="filter-select" onchange="loadPage(1)" style="display:none">
       <option value="">Todas as origens</option>
       <option value="manual">✍️ Manual</option>
@@ -244,7 +245,7 @@
 <div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
   <div style="background:#fff;border-radius:14px;width:min(96vw,580px);box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto" onclick="event.stopPropagation()">
     <div style="padding:16px 20px;border-bottom:2px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;background:#1e293b;border-radius:14px 14px 0 0">
-      <h2 style="font-size:16px;font-weight:800;color:#fff">✏️ Editar Cliente</h2>
+      <h2 id="edit-modal-title" style="font-size:16px;font-weight:800;color:#fff">✏️ Editar Cliente</h2>
       <button onclick="closeEditModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:18px;cursor:pointer">✕</button>
     </div>
     <div style="padding:20px;display:grid;gap:12px">
@@ -326,7 +327,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button id="edit-save-btn" onclick="saveEditCliente()" style="flex:1;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">💾 Salvar</button>
         <button onclick="closeEditModal()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer">Cancelar</button>
-        <!-- v1.2.2: Botão deletar (admin only) -->
+        <!-- v1.2.3: Botão deletar (admin only) -->
         <button id="edit-delete-btn" onclick="deleteCliente()" style="display:none;background:#fee2e2;color:#dc2626;border:2px solid #fecaca;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer" title="Deletar cliente (apenas se não tiver pedidos)">🗑️ Deletar</button>
       </div>
     </div>
@@ -778,11 +779,15 @@ async function editCliente(phone, nome) {
   _editPhone = phone;
   _editProdutos = [];
   
+  // v1.2.3: Resetar título e botão para modo edição
+  document.getElementById('edit-modal-title').textContent = '✏️ Editar Cliente';
+  document.getElementById('edit-save-btn').textContent = '💾 Salvar';
+  
   // Carregar produtos do sistema
   await loadAllProducts();
   renderProdutoSelect();
   
-  // v1.2.2: Mostrar botão deletar apenas para admin
+  // v1.2.3: Mostrar botão deletar apenas para admin
   const deleteBtn = document.getElementById('edit-delete-btn');
   const user = JSON.parse(localStorage.getItem('mg_user') || '{}');
   if (deleteBtn) deleteBtn.style.display = (user.role === 'admin') ? 'block' : 'none';
@@ -801,6 +806,10 @@ async function editCliente(phone, nome) {
     document.getElementById('edit-bairro').value= c.bairro || '';
     document.getElementById('edit-comp').value  = c.complemento || '';
     document.getElementById('edit-ref').value   = c.referencia || '';
+    
+    // v1.2.3: Permitir edição de telefone também na edição (backend faz migração)
+    document.getElementById('edit-tel').readOnly = false;
+    document.getElementById('edit-tel').style.background = '#fff';
     
     // Tipo de cobrança
     const tipo = c.cobranca_tipo || 'entrega';
@@ -845,19 +854,25 @@ function closeEditModal() {
 }
 
 async function saveEditCliente() {
-  if (!_editPhone) return;
   const btn = document.getElementById('edit-save-btn');
+  const isNovoCadastro = !_editPhone;
+  const newPhone = document.getElementById('edit-tel').value.replace(/\D/g,'');
+  const nome = document.getElementById('edit-nome').value.trim();
+  
+  // Validações
+  if (!nome) { toast('❌ Informe o nome do cliente', 'error'); return; }
+  if (!newPhone || newPhone.length < 10) { toast('❌ Informe um telefone válido (mínimo 10 dígitos)', 'error'); return; }
+  
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
-    // v1.2.2: Enviar original_phone para o backend migrar se telefone foi alterado
-    const newPhone = document.getElementById('edit-tel').value.replace(/\D/g,'');
+    // v1.2.3: Enviar original_phone para o backend migrar se telefone foi alterado
     const pgPrefSel = document.querySelector('input[name="pagamento_pref"]:checked');
     const result = await api('/api/customer/upsert', {
       method: 'POST',
       body: JSON.stringify({
         phone: newPhone,
-        original_phone: _editPhone, // telefone original antes da edição
-        name:  document.getElementById('edit-nome').value.trim(),
+        original_phone: _editPhone || null, // telefone original antes da edição (null para novo)
+        name: nome,
         address_line: document.getElementById('edit-rua').value.trim(),
         bairro:  document.getElementById('edit-bairro').value.trim(),
         complemento: document.getElementById('edit-comp').value.trim(),
@@ -866,6 +881,7 @@ async function saveEditCliente() {
         email:       document.getElementById('edit-email').value.trim(),
         cobranca_tipo: document.getElementById('edit-cobranca-mensalista').checked ? 'mensalista' : 'entrega',
         pagamento_preferencial: pgPrefSel ? pgPrefSel.value : '',
+        origem: isNovoCadastro ? 'manual' : undefined
       })
     });
     
@@ -873,22 +889,24 @@ async function saveEditCliente() {
     const finalPhone = result.phone_digits || newPhone;
     
     // Salvar produtos preferidos (usar telefone normalizado)
-    await api(`/api/clientes/${encodeURIComponent(finalPhone)}/produtos`, {
-      method: 'POST',
-      body: JSON.stringify({ produtos: _editProdutos })
-    });
+    if (_editProdutos && _editProdutos.length > 0) {
+      await api(`/api/clientes/${encodeURIComponent(finalPhone)}/produtos`, {
+        method: 'POST',
+        body: JSON.stringify({ produtos: _editProdutos })
+      });
+    }
     
-    toast('✅ Cliente atualizado!', 'success');
+    toast(isNovoCadastro ? '✅ Cliente cadastrado com sucesso!' : '✅ Cliente atualizado!', 'success');
     closeEditModal();
     loadPage(_page);
   } catch(e) {
     toast('❌ ' + e.message, 'error');
   } finally {
-    btn.disabled = false; btn.textContent = '💾 Salvar';
+    btn.disabled = false; btn.textContent = isNovoCadastro ? '✅ Cadastrar' : '💾 Salvar';
   }
 }
 
-// v1.2.2: Deletar cliente (admin only)
+// v1.2.3: Deletar cliente (admin only)
 async function deleteCliente() {
   if (!_editPhone) return;
   const nome = document.getElementById('edit-nome').value || 'este cliente';
@@ -906,6 +924,37 @@ async function deleteCliente() {
   } finally {
     btn.disabled = false; btn.textContent = '🗑️ Deletar';
   }
+}
+
+// v1.2.3: Cadastro de novo cliente
+function abrirNovoCliente() {
+  _editPhone = null; // indica novo cadastro
+  _editOrigem = 'manual';
+  _editProdutos = [];
+  document.getElementById('edit-modal-title').textContent = '➕ Cadastrar Novo Cliente';
+  // Limpar todos os campos
+  ['edit-nome','edit-tel','edit-cpf','edit-email','edit-rua','edit-bairro','edit-comp','edit-ref'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  // Forma de cobrança padrão
+  document.getElementById('edit-cobranca-entrega').checked = true;
+  updateCobrancaStyle();
+  // Habilitar campo telefone para novo cadastro
+  document.getElementById('edit-tel').readOnly = false;
+  document.getElementById('edit-tel').style.background = '#fff';
+  // Esconder info de última venda
+  document.getElementById('edit-last-sale-info').style.display = 'none';
+  // Esconder botão deletar
+  document.getElementById('edit-delete-btn').style.display = 'none';
+  // Limpar preços de produtos
+  editClientePrecos = {};
+  renderEditProdutos();
+  // Trocar texto do botão para "Cadastrar"
+  document.getElementById('edit-save-btn').textContent = '✅ Cadastrar';
+  document.getElementById('edit-status').textContent = '';
+  document.getElementById('modal-editar').style.display = 'flex';
+  setTimeout(() => document.getElementById('edit-nome').focus(), 100);
 }
 
 // Init
