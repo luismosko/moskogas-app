@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Controle de Vale Gás v1.2.2 — MoskoGás</title>
+    <title>Controle de Vale Gás v1.2.3 — MoskoGás</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -71,7 +71,7 @@
 
 <div class="toolbar">
     <button class="btn btn-blue" onclick="openNewModal()"><span style="font-size:16px">+</span> Nova Emissão de Vale Gás</button>
-    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.2.2</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:bold;">v1.2.3</span>
     <button class="btn btn-orange" onclick="load()" title="Recarregar">🔄 Atualizar</button>
     <span style="font-size:12px;color:#64748b;margin-left:4px" id="count-badge"></span>
 
@@ -671,44 +671,42 @@ async function salvarNovoCliente() {
 load();
 </script>
 <!-- Modal Cadastro de Cliente -->
-<div class="modal" id="modal-novo-cliente">
-    <div class="modal-content" style="max-width:500px">
-        <div class="modal-header">
-            <h2 style="margin:0;font-size:18px">➕ Cadastrar Novo Cliente</h2>
-            <button class="close-btn" onclick="closeNovoClienteModal()">&times;</button>
+<div class="modal-overlay" id="modal-novo-cliente">
+    <div class="modal" style="max-width:500px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h2 style="font-size:18px;color:#1e293b">➕ Cadastrar Novo Cliente</h2>
+            <button onclick="closeNovoClienteModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8" title="Fechar">&times;</button>
         </div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;flex-direction:column;gap:12px">
             <div>
-                <label style="font-weight:600;font-size:13px;color:#334155">Nome / Razão Social *</label>
-                <input type="text" id="nc-nome" placeholder="Nome completo ou razão social" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px">
+                <label style="font-weight:600;font-size:13px;color:#334155;display:block;margin-bottom:4px">Nome / Razão Social *</label>
+                <input type="text" id="nc-nome" placeholder="Nome completo ou razão social" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none">
             </div>
             <div>
-                <label style="font-weight:600;font-size:13px;color:#334155">Telefone (WhatsApp) *</label>
-                <input type="tel" id="nc-telefone" placeholder="67 99999-0000" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px" oninput="this.value=this.value.replace(/\D/g,'').slice(0,11)">
+                <label style="font-weight:600;font-size:13px;color:#334155;display:block;margin-bottom:4px">Telefone (WhatsApp) *</label>
+                <input type="tel" id="nc-telefone" placeholder="67 99999-0000" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none" oninput="this.value=this.value.replace(/\D/g,'').slice(0,11)">
             </div>
             <div>
-                <label style="font-weight:600;font-size:13px;color:#334155">CPF / CNPJ</label>
-                <input type="text" id="nc-doc" placeholder="000.000.000-00 ou 00.000.000/0001-00" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px">
-            </div>
-            <div style="display:flex;gap:12px">
-                <div style="flex:1">
-                    <label style="font-weight:600;font-size:13px;color:#334155">Tipo</label>
-                    <select id="nc-tipo" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px">
-                        <option value="F">Pessoa Física</option>
-                        <option value="J">Pessoa Jurídica</option>
-                    </select>
-                </div>
+                <label style="font-weight:600;font-size:13px;color:#334155;display:block;margin-bottom:4px">CPF / CNPJ</label>
+                <input type="text" id="nc-doc" placeholder="000.000.000-00 ou 00.000.000/0001-00" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none">
             </div>
             <div>
-                <label style="font-weight:600;font-size:13px;color:#334155">Endereço</label>
-                <input type="text" id="nc-endereco" placeholder="Rua, número" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px">
+                <label style="font-weight:600;font-size:13px;color:#334155;display:block;margin-bottom:4px">Tipo</label>
+                <select id="nc-tipo" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none">
+                    <option value="F">Pessoa Física</option>
+                    <option value="J">Pessoa Jurídica</option>
+                </select>
             </div>
             <div>
-                <label style="font-weight:600;font-size:13px;color:#334155">Bairro</label>
-                <input type="text" id="nc-bairro" placeholder="Bairro" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px">
+                <label style="font-weight:600;font-size:13px;color:#334155;display:block;margin-bottom:4px">Endereço</label>
+                <input type="text" id="nc-endereco" placeholder="Rua, número" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none">
+            </div>
+            <div>
+                <label style="font-weight:600;font-size:13px;color:#334155;display:block;margin-bottom:4px">Bairro</label>
+                <input type="text" id="nc-bairro" placeholder="Bairro" style="width:100%;padding:10px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none">
             </div>
         </div>
-        <div class="modal-footer">
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:2px solid #e2e8f0">
             <button class="btn btn-gray" onclick="closeNovoClienteModal()">Cancelar</button>
             <button class="btn btn-green" onclick="salvarNovoCliente()" id="nc-btn-save">✅ Cadastrar</button>
         </div>
