@@ -1,5 +1,5 @@
-// v2.52.42
-// v2.52.42: IzChat CRM API — sync contatos MoskoGás→IzChat, bina virtual, config token
+// v2.52.43
+// v2.52.43: IzChat sync — aumentar delay para 500ms, stats com captura de erro
 // v2.52.41: Vale Gás — emissão NFC-e ou Venda Bling direto do módulo de vales
 // v2.52.40: Relatório email — pedidos organizados por seção (Pendentes > Cancelados > Entregues), faturamento só entregues
 // v2.52.39: Bloqueio crítico — NFC-e com valor R$0 bloqueada + alerta WhatsApp para admins
@@ -8099,8 +8099,8 @@ export default {
             results.skipped++;
           }
 
-          // Rate limit: pequeno delay entre chamadas
-          await new Promise(r => setTimeout(r, 100));
+          // Rate limit: delay entre chamadas (500ms para evitar bloqueio)
+          await new Promise(r => setTimeout(r, 500));
         } catch (e) {
           results.errors.push({ phone, error: e.message });
         }
@@ -8122,14 +8122,21 @@ export default {
       const mgWithName = await env.DB.prepare("SELECT COUNT(*) as c FROM customers_cache WHERE name IS NOT NULL AND name != '' AND name != phone_digits").first();
 
       let izCount = null;
+      let izError = null;
       if (tokenConfigured) {
-        // Buscar contagem do IzChat (primeira página para ter o count)
-        const resp = await fetch('https://chatapi.izchat.com.br/api/external/contacts?pageNumber=1', {
-          headers: { 'Authorization': `Bearer ${tokenRow.value}`, 'Content-Type': 'application/json' }
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          izCount = data?.count || data?.data?.length || null;
+        try {
+          // Buscar contagem do IzChat (primeira página para ter o count)
+          const resp = await fetch('https://chatapi.izchat.com.br/api/external/contacts?pageNumber=1', {
+            headers: { 'Authorization': `Bearer ${tokenRow.value}`, 'Content-Type': 'application/json' }
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            izCount = data?.count ?? data?.data?.length ?? null;
+          } else {
+            izError = `HTTP ${resp.status}`;
+          }
+        } catch (e) {
+          izError = e.message;
         }
       }
 
@@ -8138,7 +8145,8 @@ export default {
         token_configured: tokenConfigured,
         moskogas_total: mgCount?.c || 0,
         moskogas_with_name: mgWithName?.c || 0,
-        izchat_count: izCount
+        izchat_count: izCount,
+        izchat_error: izError
       });
     }
 
