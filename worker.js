@@ -1,5 +1,5 @@
-// v2.52.43
-// v2.52.43: IzChat sync — aumentar delay para 500ms, stats com captura de erro
+// v2.52.44
+// v2.52.44: IzChat stats — verificar conexão ao invés de contar (API não suporta count)
 // v2.52.41: Vale Gás — emissão NFC-e ou Venda Bling direto do módulo de vales
 // v2.52.40: Relatório email — pedidos organizados por seção (Pendentes > Cancelados > Entregues), faturamento só entregues
 // v2.52.39: Bloqueio crítico — NFC-e com valor R$0 bloqueada + alerta WhatsApp para admins
@@ -8121,32 +8121,25 @@ export default {
       const mgCount = await env.DB.prepare('SELECT COUNT(*) as c FROM customers_cache').first();
       const mgWithName = await env.DB.prepare("SELECT COUNT(*) as c FROM customers_cache WHERE name IS NOT NULL AND name != '' AND name != phone_digits").first();
 
-      let izCount = null;
-      let izError = null;
+      // Testar conexão com IzChat (apenas verifica se token é válido)
+      let izConnected = false;
       if (tokenConfigured) {
         try {
-          // Buscar contagem do IzChat (primeira página para ter o count)
           const resp = await fetch('https://chatapi.izchat.com.br/api/external/contacts?pageNumber=1', {
             headers: { 'Authorization': `Bearer ${tokenRow.value}`, 'Content-Type': 'application/json' }
           });
-          if (resp.ok) {
-            const data = await resp.json();
-            izCount = data?.count ?? data?.data?.length ?? null;
-          } else {
-            izError = `HTTP ${resp.status}`;
-          }
+          izConnected = resp.ok;
         } catch (e) {
-          izError = e.message;
+          izConnected = false;
         }
       }
 
       return json({
         ok: true,
         token_configured: tokenConfigured,
+        izchat_connected: izConnected,
         moskogas_total: mgCount?.c || 0,
-        moskogas_with_name: mgWithName?.c || 0,
-        izchat_count: izCount,
-        izchat_error: izError
+        moskogas_with_name: mgWithName?.c || 0
       });
     }
 

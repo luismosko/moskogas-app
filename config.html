@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.15.1 — MoskoGás</title>
+<title>Config v2.15.2 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -138,8 +138,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.15.1 — config</div>
-  <h1>⚙️ Configurações v2.15.1</h1>
+  <div class="version-badge">v2.15.2 — config</div>
+  <h1>⚙️ Configurações v2.15.2</h1>
 
   <!-- ── ABAS DE CONFIGURAÇÃO ── -->
   <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
@@ -1373,8 +1373,7 @@ async function loadIzChatStats() {
     html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`;
     html += `<div>🏠 MoskoGás total: <strong>${r.moskogas_total?.toLocaleString() || 0}</strong></div>`;
     html += `<div>👤 Com nome: <strong>${r.moskogas_with_name?.toLocaleString() || 0}</strong></div>`;
-    const izText = r.izchat_count !== null ? r.izchat_count?.toLocaleString() : (r.izchat_error || '—');
-    html += `<div>💬 IzChat contatos: <strong>${izText}</strong></div>`;
+    html += `<div>💬 IzChat API: <strong>${r.izchat_connected ? '✅ Conectado' : '❌ Erro'}</strong></div>`;
     html += `<div>🔌 Token: ${r.token_configured ? '✅ Configurado' : '❌ Não configurado'}</div>`;
     html += '</div></div>';
     el.innerHTML = html;
