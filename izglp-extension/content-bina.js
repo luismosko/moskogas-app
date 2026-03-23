@@ -1,49 +1,44 @@
-// MoskoGás Bina - Content Script v1.0.0
+// IZGLP — Bina Virtual Content Script v2.0.0
 // Injeta no IzChat e mostra dados do cliente
 
 (function() {
   'use strict';
   
-  const API_BASE = 'https://api.moskogas.com.br';
   let currentPhone = null;
   let binaPanel = null;
   let lastCheckedPhone = null;
-  let checkInterval = null;
+  let config = { enabled: true };
   
-  // Configurações salvas
-  let config = {
-    apiKey: '',
-    enabled: true,
-    position: 'right' // right ou left
-  };
+  const log = (msg) => console.log(`[IZGLP-Bina] ${msg}`);
+  
+  function isContextValid() {
+    try { return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id); }
+    catch (e) { return false; }
+  }
   
   // Carregar configurações
-  chrome.storage.sync.get(['moskogas_api_key', 'bina_enabled', 'bina_position'], (result) => {
-    config.apiKey = result.moskogas_api_key || '';
-    config.enabled = result.bina_enabled !== false;
-    config.position = result.bina_position || 'right';
-    
-    if (config.enabled) {
-      init();
-    }
-  });
+  if (isContextValid()) {
+    chrome.storage.sync.get(['bina_enabled'], (result) => {
+      config.enabled = result.bina_enabled !== false;
+      if (config.enabled) init();
+    });
+  }
   
   function init() {
-    console.log('🔥 MoskoGás Bina iniciada');
+    log('🔥 IZGLP Bina iniciada');
     createBinaPanel();
     startMonitoring();
   }
   
   function createBinaPanel() {
-    // Remover painel existente se houver
     if (binaPanel) binaPanel.remove();
     
     binaPanel = document.createElement('div');
-    binaPanel.id = 'moskogas-bina-panel';
+    binaPanel.id = 'izglp-bina-panel';
     binaPanel.innerHTML = `
       <div class="bina-header">
         <span class="bina-logo">🔥</span>
-        <span class="bina-title">MoskoGás Bina</span>
+        <span class="bina-title">IZGLP Bina</span>
         <button class="bina-minimize" title="Minimizar">−</button>
       </div>
       <div class="bina-content">
@@ -55,11 +50,7 @@
     `;
     
     document.body.appendChild(binaPanel);
-    
-    // Botão minimizar
     binaPanel.querySelector('.bina-minimize').addEventListener('click', toggleMinimize);
-    
-    // Permitir arrastar
     makeDraggable(binaPanel);
   }
   
@@ -94,10 +85,8 @@
   }
   
   function startMonitoring() {
-    // Verificar a cada 1 segundo
-    checkInterval = setInterval(checkForPhone, 1000);
+    setInterval(checkForPhone, 1000);
     
-    // Também observar mudanças no DOM
     const observer = new MutationObserver(() => {
       setTimeout(checkForPhone, 500);
     });
@@ -119,25 +108,18 @@
   }
   
   function extractPhoneFromPage() {
-    // Estratégia 1: Buscar no cabeçalho da conversa
-    // O IzChat geralmente mostra o número no topo da conversa
-    
-    // Buscar elementos que contenham número de telefone
+    // Estratégia 1: Buscar em elementos específicos
     const selectors = [
-      // Cabeçalho da conversa
       '[class*="header"] [class*="phone"]',
       '[class*="header"] [class*="number"]',
       '[class*="contact"] [class*="phone"]',
       '[class*="chat"] [class*="header"]',
-      // Título da conversa
       '[class*="title"]',
       '[class*="name"]',
-      // Área de detalhes do contato
       '[class*="detail"]',
       '[class*="info"]'
     ];
     
-    // Primeiro, tentar encontrar em elementos específicos
     for (const selector of selectors) {
       const elements = document.querySelectorAll(selector);
       for (const el of elements) {
@@ -148,15 +130,13 @@
     
     // Estratégia 2: Buscar na URL
     const urlMatch = window.location.href.match(/(?:contact|chat|ticket)[\/=](\d{10,13})/i);
-    if (urlMatch) {
-      return normalizePhone(urlMatch[1]);
-    }
+    if (urlMatch) return normalizePhone(urlMatch[1]);
     
-    // Estratégia 3: Buscar no título da página
+    // Estratégia 3: Título da página
     const titlePhone = extractPhoneFromText(document.title);
     if (titlePhone) return titlePhone;
     
-    // Estratégia 4: Buscar em data attributes
+    // Estratégia 4: Data attributes
     const dataElements = document.querySelectorAll('[data-phone], [data-number], [data-contact]');
     for (const el of dataElements) {
       const phone = el.dataset.phone || el.dataset.number || el.dataset.contact;
@@ -166,7 +146,7 @@
       }
     }
     
-    // Estratégia 5: Buscar qualquer sequência de 10-11 dígitos visível na área de cabeçalho
+    // Estratégia 5: Cabeçalho
     const headerArea = document.querySelector('[class*="header"], [class*="top"], [class*="toolbar"]');
     if (headerArea) {
       const phone = extractPhoneFromText(headerArea.textContent);
@@ -179,14 +159,12 @@
   function extractPhoneFromText(text) {
     if (!text) return null;
     
-    // Limpar texto
     const clean = text.replace(/\s+/g, ' ').trim();
     
-    // Padrões de telefone brasileiro
     const patterns = [
-      /\+?55\s*\(?(\d{2})\)?\s*(\d{4,5})[\s-]?(\d{4})/,  // +55 (67) 99999-9999
-      /\(?(\d{2})\)?\s*(\d{4,5})[\s-]?(\d{4})/,          // (67) 99999-9999
-      /(\d{2})(\d{4,5})(\d{4})/                           // 67999999999
+      /\+?55\s*\(?(\d{2})\)?\s*(\d{4,5})[\s-]?(\d{4})/,
+      /\(?(\d{2})\)?\s*(\d{4,5})[\s-]?(\d{4})/,
+      /(\d{2})(\d{4,5})(\d{4})/
     ];
     
     for (const pattern of patterns) {
@@ -196,7 +174,6 @@
         const part1 = match[2];
         const part2 = match[3];
         
-        // Validar DDD (67 para MS)
         if (ddd && part1 && part2) {
           return normalizePhone(`${ddd}${part1}${part2}`);
         }
@@ -209,15 +186,12 @@
   function normalizePhone(phone) {
     if (!phone) return null;
     
-    // Remover tudo que não for número
     let digits = phone.replace(/\D/g, '');
     
-    // Adicionar 55 se não tiver
     if (digits.length === 10 || digits.length === 11) {
       digits = '55' + digits;
     }
     
-    // Validar tamanho (13 dígitos: 55 + DDD + 9 dígitos)
     if (digits.length >= 12 && digits.length <= 13) {
       return digits;
     }
@@ -225,58 +199,34 @@
     return null;
   }
   
-  async function fetchClientData(phone) {
+  function fetchClientData(phone) {
     updatePanel('loading', { phone });
     
-    try {
-      // Buscar no MoskoGás
-      const response = await fetch(`${API_BASE}/api/customer/search?q=${phone}&type=phone`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-KEY': config.apiKey
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.results && data.results.length > 0) {
-        const client = data.results[0];
-        updatePanel('found', { client, phone });
-      } else {
-        // Tentar buscar última compra
-        const lastOrderResp = await fetch(`${API_BASE}/api/customer/last-order?phone=${phone}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-KEY': config.apiKey
-          }
-        });
-        
-        if (lastOrderResp.ok) {
-          const lastOrder = await lastOrderResp.json();
-          if (lastOrder.order) {
-            updatePanel('found', { 
-              client: {
-                name: lastOrder.order.customer_name,
-                address_line: lastOrder.order.address_line,
-                bairro: lastOrder.order.bairro
-              },
-              phone,
-              lastOrder: lastOrder.order
-            });
-            return;
-          }
-        }
-        
-        updatePanel('not-found', { phone });
-      }
-    } catch (error) {
-      console.error('Erro ao buscar cliente:', error);
-      updatePanel('error', { phone, error: error.message });
+    if (!isContextValid()) {
+      updatePanel('error', { phone, error: 'Extensão desconectada' });
+      return;
     }
+    
+    chrome.runtime.sendMessage({ type: 'BINA_SEARCH', phone }, (response) => {
+      if (chrome.runtime.lastError) {
+        updatePanel('error', { phone, error: chrome.runtime.lastError.message });
+        return;
+      }
+      
+      if (response && response.ok) {
+        if (response.found) {
+          updatePanel('found', { 
+            client: response.client, 
+            phone, 
+            lastOrder: response.lastOrder 
+          });
+        } else {
+          updatePanel('not-found', { phone });
+        }
+      } else {
+        updatePanel('error', { phone, error: 'Falha na busca' });
+      }
+    });
   }
   
   function updatePanel(status, data = {}) {
@@ -342,16 +292,23 @@
             ` : ''}
           </div>
           <div class="bina-actions">
-            <button class="bina-btn bina-btn-primary" onclick="window.open('https://moskogas-app.pages.dev/pedido.html?phone=${data.phone}', '_blank')">
+            <button class="bina-btn bina-btn-primary" id="btn-novo-pedido">
               🛒 Novo Pedido
             </button>
-            <button class="bina-btn bina-btn-secondary" onclick="window.open('https://moskogas-app.pages.dev/consulta-pedidos.html?phone=${data.phone}', '_blank')">
+            <button class="bina-btn bina-btn-secondary" id="btn-historico">
               📋 Histórico
             </button>
           </div>
         `;
         
-        // Highlight do painel
+        // Event listeners
+        content.querySelector('#btn-novo-pedido').addEventListener('click', () => {
+          chrome.runtime.sendMessage({ type: 'OPEN_IZGLP', page: 'pedido.html', phone: data.phone });
+        });
+        content.querySelector('#btn-historico').addEventListener('click', () => {
+          chrome.runtime.sendMessage({ type: 'OPEN_IZGLP', page: 'consulta-pedidos.html', phone: data.phone });
+        });
+        
         binaPanel.classList.add('found');
         setTimeout(() => binaPanel.classList.remove('found'), 2000);
         break;
@@ -364,11 +321,15 @@
             <div class="bina-phone-display">${formatPhone(data.phone)}</div>
           </div>
           <div class="bina-actions">
-            <button class="bina-btn bina-btn-primary" onclick="window.open('https://moskogas-app.pages.dev/pedido.html?phone=${data.phone}&new=1', '_blank')">
+            <button class="bina-btn bina-btn-primary" id="btn-cadastrar">
               ➕ Cadastrar e Fazer Pedido
             </button>
           </div>
         `;
+        
+        content.querySelector('#btn-cadastrar').addEventListener('click', () => {
+          chrome.runtime.sendMessage({ type: 'OPEN_IZGLP', page: 'pedido.html', phone: data.phone });
+        });
         break;
         
       case 'error':
@@ -379,11 +340,16 @@
             <div class="bina-error-msg">${data.error}</div>
           </div>
           <div class="bina-actions">
-            <button class="bina-btn bina-btn-secondary" onclick="location.reload()">
+            <button class="bina-btn bina-btn-secondary" id="btn-retry">
               🔄 Tentar novamente
             </button>
           </div>
         `;
+        
+        content.querySelector('#btn-retry').addEventListener('click', () => {
+          lastCheckedPhone = null;
+          checkForPhone();
+        });
         break;
         
       default:
@@ -414,28 +380,29 @@
     return date.toLocaleDateString('pt-BR');
   }
   
-  // Escutar mensagens do popup
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'getStatus') {
-      sendResponse({
-        currentPhone,
-        enabled: config.enabled
-      });
-    } else if (request.action === 'setEnabled') {
-      config.enabled = request.enabled;
-      if (config.enabled) {
-        if (!binaPanel) createBinaPanel();
-        binaPanel.style.display = '';
-      } else {
-        if (binaPanel) binaPanel.style.display = 'none';
+  // Escutar mensagens
+  if (isContextValid()) {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === 'getStatus') {
+        sendResponse({ currentPhone, enabled: config.enabled });
+      } else if (request.action === 'setEnabled') {
+        config.enabled = request.enabled;
+        if (config.enabled) {
+          if (!binaPanel) createBinaPanel();
+          binaPanel.style.display = '';
+        } else {
+          if (binaPanel) binaPanel.style.display = 'none';
+        }
+        sendResponse({ ok: true });
+      } else if (request.action === 'refresh') {
+        lastCheckedPhone = null;
+        checkForPhone();
+        sendResponse({ ok: true });
       }
-      sendResponse({ ok: true });
-    } else if (request.action === 'refresh') {
-      lastCheckedPhone = null;
-      checkForPhone();
-      sendResponse({ ok: true });
-    }
-    return true;
-  });
+      return true;
+    });
+  }
+  
+  log('🟢 IZGLP Bina v2.0.0 ativa');
   
 })();

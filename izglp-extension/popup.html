@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>IZGLP — Sistema de Gestão</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 360px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    background: #f8fafc;
+    color: #1e293b;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: #fff;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-logo {
+    font-size: 28px;
+  }
+  .header-info h1 {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .header-info p {
+    font-size: 11px;
+    opacity: 0.8;
+    margin-top: 2px;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .tab {
+    flex: 1;
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+  .tab:hover { color: #059669; }
+  .tab.active {
+    color: #059669;
+    border-bottom-color: #059669;
+    background: #f0fdf4;
+  }
+  .tab-icon { margin-right: 6px; }
+
+  /* Tab content */
+  .tab-content { display: none; padding: 12px; }
+  .tab-content.active { display: block; }
+
+  /* Status card */
+  .status-card {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .status-row:last-child { border-bottom: none; }
+  .status-label {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    font-weight: 600;
+  }
+  .badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+  }
+  .badge-green  { background: #dcfce7; color: #16a34a; }
+  .badge-red    { background: #fee2e2; color: #dc2626; }
+  .badge-gray   { background: #f1f5f9; color: #64748b; }
+  .badge-orange { background: #ffedd5; color: #ea580c; }
+
+  /* Buttons */
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 11px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .15s;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .btn:disabled { opacity: 0.6; cursor: default; }
+  .btn-primary {
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) { background: #047857; }
+  .btn-secondary {
+    background: #6b7280;
+    color: #fff;
+  }
+  .btn-secondary:hover:not(:disabled) { background: #4b5563; }
+  .btn-secondary.is-paused {
+    background: #dc2626;
+    animation: pausePulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pausePulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+  .btn-orange {
+    background: #f97316;
+    color: #fff;
+  }
+  .btn-orange:hover { background: #ea580c; }
+  .btn-outline {
+    background: #fff;
+    color: #059669;
+    border: 2px solid #059669;
+  }
+  .btn-outline:hover { background: #f0fdf4; }
+
+  /* Config section */
+  .config-section {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .config-section h2 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    color: #64748b;
+    margin-bottom: 12px;
+  }
+  .form-group { margin-bottom: 10px; }
+  .form-group label {
+    display: block;
+    font-size: 11px;
+    color: #475569;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .form-group input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #1e293b;
+    outline: none;
+    transition: border .15s;
+  }
+  .form-group input:focus { border-color: #059669; }
+
+  /* Connected badge */
+  .connected-badge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #dcfce7;
+    border-radius: 8px;
+    border: 1px solid #bbf7d0;
+    margin-bottom: 12px;
+  }
+  .connected-badge span {
+    font-size: 12px;
+    color: #16a34a;
+    font-weight: 600;
+  }
+  .connected-badge button {
+    font-size: 11px;
+    background: none;
+    border: none;
+    color: #16a34a;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  /* Links */
+  .quick-links {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .quick-links a {
+    padding: 10px 8px;
+    background: #fff;
+    border-radius: 8px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 11px;
+    color: #374151;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+  }
+  .quick-links a:hover {
+    background: #059669;
+    color: #fff;
+    border-color: #059669;
+  }
+  .quick-links a span {
+    display: block;
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    display: none;
+    z-index: 999;
+  }
+  .toast.show { display: block; animation: fadeIn .2s; }
+  .toast-green { background: #16a34a; }
+  .toast-red   { background: #dc2626; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px) } to { opacity:1; transform:translateY(0) } }
+
+  .footer {
+    text-align: center;
+    padding: 10px;
+    font-size: 10px;
+    color: #94a3b8;
+    border-top: 1px solid #f1f5f9;
+    background: #fff;
+  }
+
+  /* Toggle */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 12px;
+  }
+  .toggle-label { font-size: 13px; color: #374151; font-weight: 500; }
+  .toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #e5e7eb;
+    transition: 0.3s;
+    border-radius: 24px;
+  }
+  .toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle input:checked + .toggle-slider { background-color: #10b981; }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-logo">🔥</div>
+  <div class="header-info">
+    <h1>IZGLP</h1>
+    <p id="ext-version">Sistema de Gestão v2.0.0</p>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" data-tab="hub">
+    <span class="tab-icon">📦</span>Hub Ultragaz
+  </div>
+  <div class="tab" data-tab="bina">
+    <span class="tab-icon">📞</span>Bina IzChat
+  </div>
+  <div class="tab" data-tab="config">
+    <span class="tab-icon">⚙️</span>Config
+  </div>
+</div>
+
+<!-- Tab: Hub Ultragaz -->
+<div class="tab-content active" id="tab-hub">
+  <div class="status-card">
+    <div class="status-row">
+      <span class="status-label">Aba do Hub</span>
+      <span id="hub-tab-status" class="badge badge-gray">Verificando...</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Último scan</span>
+      <span id="last-scan-info">—</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Pedidos novos</span>
+      <span id="pedidos-novos" class="badge badge-gray">—</span>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-scan">🔍 Varrer Agora</button>
+  <button class="btn btn-secondary" id="btn-pause">⏸ Pausar Varredura (10 min)</button>
+  <a class="btn btn-orange" href="https://hub.ultragaz.com.br" target="_blank" style="text-decoration:none;">
+    🌐 Abrir Hub Ultragaz
+  </a>
+</div>
+
+<!-- Tab: Bina IzChat -->
+<div class="tab-content" id="tab-bina">
+  <div class="status-card">
+    <div class="status-row">
+      <span class="status-label">Aba do IzChat</span>
+      <span id="izchat-tab-status" class="badge badge-gray">Verificando...</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Telefone detectado</span>
+      <span id="bina-phone" class="badge badge-gray">—</span>
+    </div>
+  </div>
+
+  <div class="toggle-row">
+    <span class="toggle-label">🔔 Bina ativada</span>
+    <label class="toggle">
+      <input type="checkbox" id="toggle-bina" checked>
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+
+  <button class="btn btn-primary" id="btn-refresh-bina">🔄 Atualizar Bina</button>
+  <a class="btn btn-outline" href="https://chat.izchat.com.br" target="_blank" style="text-decoration:none;">
+    💬 Abrir IzChat
+  </a>
+</div>
+
+<!-- Tab: Config -->
+<div class="tab-content" id="tab-config">
+  <div id="config-connected" class="connected-badge" style="display:none;">
+    <span>✅ Conectado ao IZGLP</span>
+    <button id="btn-edit-config">Editar</button>
+  </div>
+
+  <div id="config-section" class="config-section">
+    <h2>🔑 Configurações</h2>
+    <div class="form-group">
+      <label>API Key IZGLP</label>
+      <input type="password" id="input-apikey" placeholder="Digite sua API Key" autocomplete="off">
+    </div>
+    <button class="btn btn-primary" id="btn-save">💾 Salvar e Conectar</button>
+  </div>
+
+  <div class="quick-links">
+    <a href="https://moskogas-app.pages.dev/pedido.html" target="_blank">
+      <span>🛒</span>Pedido
+    </a>
+    <a href="https://moskogas-app.pages.dev/gestao.html" target="_blank">
+      <span>📋</span>Gestão
+    </a>
+    <a href="https://moskogas-app.pages.dev/config.html" target="_blank">
+      <span>⚙️</span>Sistema
+    </a>
+  </div>
+</div>
+
+<div class="footer">IZGLP — Mosko Ltda © 2026</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="popup.js"></script>
+</body>
+</html>
