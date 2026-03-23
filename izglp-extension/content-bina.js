@@ -1,5 +1,5 @@
-// IZGLP — Bina v2.2.1
-// Botão "Abrir Pedido" injetado no painel de dados do contato
+// IZGLP — Bina v2.3.0
+// Botão "Abrir Pedido" - abordagem simplificada
 
 (function() {
   'use strict';
@@ -15,17 +15,16 @@
   // ══════════════════════════════════════════════════════════════════════════════
   
   function init() {
-    log('🔥 IZGLP Bina v2.2.1 iniciada');
+    log('🔥 IZGLP Bina v2.3.0 iniciada');
     injectStyles();
     
-    // Monitorar DOM
-    setInterval(checkAndInject, 1000);
+    // Monitorar continuamente
+    setInterval(checkAndInject, 500);
     
-    new MutationObserver(() => setTimeout(checkAndInject, 500))
-      .observe(document.body, { childList: true, subtree: true });
-    
-    // Verificar imediatamente
-    checkAndInject();
+    // Observer para mudanças no DOM
+    new MutationObserver(() => {
+      setTimeout(checkAndInject, 200);
+    }).observe(document.body, { childList: true, subtree: true });
   }
   
   // ══════════════════════════════════════════════════════════════════════════════
@@ -39,30 +38,26 @@
     style.id = 'izglp-styles';
     style.textContent = `
       #${BUTTON_ID} {
-        width: calc(100% - 32px);
-        margin: 16px 16px;
-        padding: 16px 24px;
-        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        transition: all 0.2s;
-        box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 10px !important;
+        width: calc(100% - 32px) !important;
+        margin: 16px 16px !important;
+        padding: 16px 24px !important;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        font-size: 16px !important;
+        font-weight: bold !important;
+        cursor: pointer !important;
+        box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4) !important;
+        transition: all 0.2s !important;
       }
       #${BUTTON_ID}:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(245, 158, 11, 0.5);
-        background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
-      }
-      #${BUTTON_ID}:active {
-        transform: translateY(0);
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(245, 158, 11, 0.5) !important;
       }
     `;
     document.head.appendChild(style);
@@ -75,107 +70,84 @@
   function checkAndInject() {
     if (!enabled) return;
     
-    // Verificar se o painel "Dados do contato" está aberto
-    // Ele aparece à direita e contém o texto "Dados do contato" e "Editar contato"
-    const rightPanel = findRightPanel();
+    // Se já existe o botão, verificar se ainda está no DOM
+    const existingBtn = document.getElementById(BUTTON_ID);
+    if (existingBtn && document.body.contains(existingBtn)) {
+      return; // Já existe, não fazer nada
+    }
     
-    if (!rightPanel) {
-      // Painel fechado - remover botão se existir
-      removeButton();
+    // Procurar o elemento "OUTRAS INFORMAÇÕES"
+    const outrasInfo = findOutrasInformacoes();
+    
+    if (!outrasInfo) {
+      // Painel não está aberto
       currentPhone = null;
       return;
     }
     
-    // Extrair telefone do painel direito (NÃO da lista à esquerda)
-    const phone = extractPhoneFromPanel(rightPanel);
-    
-    // Se já existe botão com mesmo telefone, não fazer nada
-    const existingBtn = document.getElementById(BUTTON_ID);
-    if (existingBtn && currentPhone === phone) {
-      return;
-    }
-    
+    // Extrair telefone
+    const phone = extractPhone();
     currentPhone = phone;
     
-    // Remover botão antigo
-    removeButton();
+    // Criar e injetar botão
+    const btn = createButton(phone);
     
-    // Criar e injetar novo botão
-    injectButton(rightPanel, phone);
+    // Injetar ANTES de "OUTRAS INFORMAÇÕES"
+    outrasInfo.parentNode.insertBefore(btn, outrasInfo);
+    
+    log(`✅ Botão injetado! Telefone: ${phone || 'não detectado'}`);
   }
   
-  function findRightPanel() {
-    // Procurar o painel que contém "Dados do contato" ou "Editar contato"
-    const allDivs = document.querySelectorAll('div');
+  function findOutrasInformacoes() {
+    // Buscar todos os elementos de texto
+    const allElements = document.querySelectorAll('*');
     
-    for (const div of allDivs) {
-      // Verificar se é um painel lateral (geralmente tem width fixo ou é um drawer)
-      const style = window.getComputedStyle(div);
-      const rect = div.getBoundingClientRect();
+    for (const el of allElements) {
+      // Verificar apenas elementos folha (sem muitos filhos)
+      if (el.children.length > 3) continue;
       
-      // O painel direito geralmente está à direita da tela
-      if (rect.left < window.innerWidth * 0.5) continue;
-      if (rect.width < 200) continue;
+      const text = el.textContent?.trim().toUpperCase();
       
-      const text = div.textContent || '';
-      
-      // Verificar se contém os elementos típicos do painel de contato
-      if ((text.includes('Dados do contato') || text.includes('Editar contato')) &&
-          text.includes('OUTRAS INFORMAÇÕES')) {
-        return div;
-      }
-    }
-    
-    // Fallback: procurar por classe típica de drawer/panel
-    const panels = document.querySelectorAll('[class*="Drawer"], [class*="drawer"], [class*="Panel"], [class*="panel"], [class*="Sidebar"], [class*="sidebar"]');
-    for (const panel of panels) {
-      const text = panel.textContent || '';
-      if (text.includes('Dados do contato') || text.includes('Editar contato')) {
-        return panel;
+      if (text === 'OUTRAS INFORMAÇÕES' || text === 'OUTRAS INFORMACOES') {
+        log('📍 Encontrado: OUTRAS INFORMAÇÕES');
+        return el;
       }
     }
     
     return null;
   }
   
-  function extractPhoneFromPanel(panel) {
-    // O telefone aparece no formato: +55 (67) 9286-8073
-    // Precisamos pegar esse formato específico COM parênteses
-    // e IGNORAR o formato sem parênteses que aparece nos badges da lista
+  function extractPhone() {
+    // Buscar telefone no formato +55 (XX) XXXXX-XXXX (COM parênteses)
+    const bodyText = document.body.innerText;
     
-    const text = panel.innerText || panel.textContent || '';
+    // Padrão com parênteses - formato do painel de contato
+    const matches = bodyText.match(/\+55\s*\((\d{2})\)\s*(\d{4,5})-?(\d{4})/g);
     
-    // Padrão COM parênteses: +55 (XX) XXXXX-XXXX
-    const match = text.match(/\+55\s*\((\d{2})\)\s*(\d{4,5})-?(\d{4})/);
-    
-    if (match) {
-      const phone = `55${match[1]}${match[2]}${match[3]}`;
-      log(`📱 Telefone detectado: ${phone}`);
-      return phone;
-    }
-    
-    // Fallback: procurar em spans específicos
-    const phoneSpans = panel.querySelectorAll('span, div, p');
-    for (const span of phoneSpans) {
-      const spanText = span.textContent || '';
-      // Só aceitar se tem parênteses (formato do painel de contato)
-      const spanMatch = spanText.match(/\+55\s*\((\d{2})\)\s*(\d{4,5})-?(\d{4})/);
-      if (spanMatch) {
-        return `55${spanMatch[1]}${spanMatch[2]}${spanMatch[3]}`;
+    if (matches && matches.length > 0) {
+      // Pegar o primeiro match
+      const match = matches[0].match(/\+55\s*\((\d{2})\)\s*(\d{4,5})-?(\d{4})/);
+      if (match) {
+        const phone = `55${match[1]}${match[2]}${match[3]}`;
+        log(`📱 Telefone: ${phone}`);
+        return phone;
       }
     }
     
-    log('⚠️ Telefone não encontrado no painel');
     return null;
   }
   
-  function injectButton(panel, phone) {
+  function createButton(phone) {
     const btn = document.createElement('button');
     btn.id = BUTTON_ID;
+    btn.type = 'button';
     btn.innerHTML = '🛒 Abrir Pedido no App';
-    btn.title = phone ? `Abrir pedido para ${formatPhone(phone)}` : 'Abrir novo pedido';
     
-    btn.onclick = (e) => {
+    if (phone) {
+      btn.title = `Abrir pedido para ${formatPhone(phone)}`;
+    }
+    
+    btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       
@@ -184,36 +156,10 @@
         : 'https://moskogas-app.pages.dev/pedido.html';
       
       window.open(url, '_blank');
-      log(`🛒 Abrindo pedido: ${url}`);
-    };
+      log(`🛒 Abrindo: ${url}`);
+    });
     
-    // Encontrar onde injetar - antes de "OUTRAS INFORMAÇÕES"
-    let injected = false;
-    const allElements = panel.querySelectorAll('*');
-    
-    for (const el of allElements) {
-      const text = (el.textContent || '').trim();
-      if (text === 'OUTRAS INFORMAÇÕES' || text === 'OUTRAS INFORMACOES') {
-        // Verificar se é o elemento exato (não um container)
-        if (el.childNodes.length <= 1) {
-          el.parentNode.insertBefore(btn, el);
-          injected = true;
-          log('✅ Botão injetado antes de OUTRAS INFORMAÇÕES');
-          break;
-        }
-      }
-    }
-    
-    // Fallback: adicionar no final do painel
-    if (!injected) {
-      panel.appendChild(btn);
-      log('✅ Botão injetado no final do painel');
-    }
-  }
-  
-  function removeButton() {
-    const btn = document.getElementById(BUTTON_ID);
-    if (btn) btn.remove();
+    return btn;
   }
   
   function formatPhone(phone) {
@@ -225,7 +171,7 @@
   }
   
   // ══════════════════════════════════════════════════════════════════════════════
-  // MESSAGE LISTENERS (para comunicação com o popup)
+  // MESSAGE LISTENERS
   // ══════════════════════════════════════════════════════════════════════════════
   
   function isContextValid() {
@@ -235,30 +181,28 @@
   
   if (isContextValid()) {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      log(`📨 Mensagem recebida: ${request.action}`);
+      log(`📨 Mensagem: ${request.action}`);
       
       if (request.action === 'getStatus') {
-        sendResponse({ 
-          currentPhone: currentPhone, 
-          enabled: enabled 
-        });
+        sendResponse({ currentPhone, enabled });
       } 
       else if (request.action === 'setEnabled') {
         enabled = request.enabled;
         if (!enabled) {
-          removeButton();
-        } else {
-          checkAndInject();
+          const btn = document.getElementById(BUTTON_ID);
+          if (btn) btn.remove();
         }
         sendResponse({ ok: true });
       } 
       else if (request.action === 'refresh') {
+        const btn = document.getElementById(BUTTON_ID);
+        if (btn) btn.remove();
         currentPhone = null;
-        checkAndInject();
+        setTimeout(checkAndInject, 100);
         sendResponse({ ok: true, phone: currentPhone });
       }
       
-      return true; // Indica resposta assíncrona
+      return true;
     });
   }
   
