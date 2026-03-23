@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedidos 2.9.24 — MoskoGás</title>
+<title>Pedidos 2.9.30 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -103,7 +103,7 @@
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
     -->
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.29</span>
+  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.30</span>
   <span id="nfce-alert-badge" title="Pedidos entregues sem NFC-e" style="display:none;align-items:center;gap:6px;background:#fef2f2;border:1px solid #dc2626;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;color:#dc2626;animation:pulseRed 1.5s infinite">
     🧾 <span id="nfce-alert-count">0</span> pendente(s)
     <button onclick="gerarNFCePendentes()" id="btn-gerar-nfce" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700;cursor:pointer" title="Gerar NFC-e agora para todos os pedidos pendentes">▶ Gerar</button>
@@ -179,7 +179,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.9.29: NF-e botão + badge; Detecta ?ultragaz=1
+// v2.9.30: NF-e botão + badge; Detecta ?ultragaz=1
 // v2.9.13
 
 function nfeBtnHtml(o) {
@@ -513,6 +513,7 @@ function renderTable(rows) {
       <td onclick="event.stopPropagation()">
         <div class="action-btns" style="gap:3px">
           ${o.tipo_pagamento==='pix_receber' && !o.pago ? `<button class="btn" style="font-size:11px;padding:4px 7px;background:#0891b2;color:#fff" title="Enviar PIX QR Code" onclick="abrirPixGestao(${o.id})">💠</button>` : ''}
+          ${['dinheiro','pix_vista','debito','credito'].includes(o.tipo_pagamento) && ['novo','encaminhado','whatsapp_enviado'].includes(o.status) ? `<button class="btn" style="font-size:11px;padding:4px 7px;background:${o.foto_comprovante ? '#10b981' : '#64748b'};color:#fff" title="${o.foto_comprovante ? '✅ Comprovante anexado - clique para ver/trocar' : '📎 Anexar comprovante'}" onclick="abrirComprovante(${o.id}, ${o.foto_comprovante ? 'true' : 'false'})">📎</button>` : ''}
           ${canWa      ? `<button class="btn btn-green" style="font-size:11px;padding:4px 7px" title="Enviar/Reenviar WhatsApp" onclick="openModal(${o.id})">📲</button>` : ''}
           ${canDeliver ? `<button class="btn btn-blue"  style="font-size:11px;padding:4px 7px" title="Marcar como entregue" onclick="markDelivered(${o.id})">✅</button>` : ''}
           ${o.status==='entregue' && !o.nfe_ids_json && o.tipo_pagamento !== 'vale_gas' && o.tipo_pagamento !== 'vale_gas_ultragaz' ? nfeBtnHtml(o) : ''}
@@ -1549,6 +1550,202 @@ async function confirmarEmitirNfe() {
     btn.textContent = '📄 Tentar novamente';
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v2.9.30: MODAL DE COMPROVANTE
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _compOrderId = null;
+let _compFile = null;
+
+function abrirComprovante(orderId, jaTemComprovante) {
+  _compOrderId = orderId;
+  _compFile = null;
+  document.getElementById('comp-order-id').textContent = orderId;
+  document.getElementById('comp-status').innerHTML = jaTemComprovante 
+    ? '<div style="font-weight:700;color:#166534;font-size:13px">✅ Já tem comprovante — envie outro para substituir</div>'
+    : '<div style="font-weight:700;color:#1e293b;font-size:13px">📎 Anexe o comprovante de pagamento</div>';
+  document.getElementById('upload-preview-g').style.display = 'none';
+  document.getElementById('btn-enviar-comp-g').disabled = true;
+  document.getElementById('upload-file-input-g').value = '';
+  document.getElementById('comprovante-modal-g').style.display = 'flex';
+}
+
+function closeComprovanteModalG() {
+  document.getElementById('comprovante-modal-g').style.display = 'none';
+  _compOrderId = null;
+  _compFile = null;
+}
+
+function handleFileDropG(e) {
+  e.preventDefault();
+  document.getElementById('upload-drop-zone-g').style.borderColor = '#cbd5e1';
+  document.getElementById('upload-drop-zone-g').style.background = '#f8fafc';
+  const file = e.dataTransfer?.files?.[0];
+  if (file) handleFileSelectG(file);
+}
+
+function handleFileSelectG(file) {
+  if (!file) return;
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  if (!validTypes.includes(file.type)) {
+    toast('⚠️ Arquivo inválido. Use JPG, PNG, WebP ou PDF.', 'error');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast('⚠️ Arquivo muito grande. Máximo 10MB.', 'error');
+    return;
+  }
+  _compFile = file;
+  showFilePreviewG(file);
+}
+
+function showFilePreviewG(file) {
+  const preview = document.getElementById('upload-preview-g');
+  const img = document.getElementById('upload-preview-img-g');
+  const pdfDiv = document.getElementById('upload-preview-pdf-g');
+  const sizeEl = document.getElementById('upload-file-size-g');
+  
+  sizeEl.textContent = (file.size / 1024).toFixed(1) + ' KB';
+  
+  if (file.type === 'application/pdf') {
+    img.style.display = 'none';
+    pdfDiv.style.display = 'block';
+    document.getElementById('upload-pdf-name-g').textContent = file.name;
+  } else {
+    pdfDiv.style.display = 'none';
+    img.style.display = 'block';
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    reader.readAsDataURL(file);
+  }
+  
+  preview.style.display = 'block';
+  document.getElementById('btn-enviar-comp-g').disabled = false;
+}
+
+function removePreviewG() {
+  document.getElementById('upload-preview-g').style.display = 'none';
+  document.getElementById('upload-file-input-g').value = '';
+  document.getElementById('btn-enviar-comp-g').disabled = true;
+  _compFile = null;
+}
+
+async function enviarComprovanteGestao() {
+  if (!_compFile || !_compOrderId) {
+    toast('Selecione um arquivo primeiro', 'error');
+    return;
+  }
+  
+  const btn = document.getElementById('btn-enviar-comp-g');
+  const marcarPago = document.getElementById('comp-marcar-pago-g').checked;
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></span> Enviando...';
+  showLoading('Enviando comprovante...');
+  
+  try {
+    const formData = new FormData();
+    formData.append('file', _compFile);
+    formData.append('marcar_pago', marcarPago ? '1' : '0');
+    
+    const token = getSessionToken();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    
+    const resp = await fetch(API_BASE + '/api/pagamentos/' + _compOrderId + '/comprovante', {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(errData.error || 'Erro ' + resp.status);
+    }
+    
+    hideLoading();
+    toast('✅ Comprovante anexado ao pedido #' + _compOrderId, 'success');
+    closeComprovanteModalG();
+    load(); // Recarregar tabela
+    
+  } catch (e) {
+    hideLoading();
+    toast('❌ Erro: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '📤 Enviar Comprovante';
+  }
+}
+
+// Ctrl+V para colar imagem
+document.addEventListener('paste', function(e) {
+  if (document.getElementById('comprovante-modal-g').style.display !== 'flex') return;
+  
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        handleFileSelectG(file);
+        e.preventDefault();
+        return;
+      }
+    }
+  }
+});
 </script>
+
+<!-- Modal de Comprovante -->
+<div id="comprovante-modal-g" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:24px;max-width:440px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="margin:0;font-size:17px;color:#1e293b">📎 Comprovante #<span id="comp-order-id">—</span></h2>
+      <button onclick="closeComprovanteModalG()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b">&times;</button>
+    </div>
+    
+    <div id="comp-status" style="margin-bottom:12px"></div>
+    
+    <div id="upload-drop-zone-g" style="border:3px dashed #cbd5e1;border-radius:10px;padding:30px 16px;text-align:center;cursor:pointer;transition:all .2s;background:#f8fafc"
+         ondragover="event.preventDefault();this.style.borderColor='#3b82f6';this.style.background='#eff6ff'"
+         ondragleave="this.style.borderColor='#cbd5e1';this.style.background='#f8fafc'"
+         ondrop="handleFileDropG(event)"
+         onclick="document.getElementById('upload-file-input-g').click()">
+      <div style="font-size:36px;margin-bottom:8px">📤</div>
+      <div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:4px">Arraste ou clique</div>
+      <div style="font-size:11px;color:#64748b">JPG, PNG, WebP ou PDF (máx 10MB)</div>
+      <div style="font-size:12px;color:#3b82f6;font-weight:600;margin-top:8px">💡 Ctrl+V para colar</div>
+    </div>
+    
+    <input type="file" id="upload-file-input-g" accept="image/jpeg,image/png,image/webp,application/pdf" style="display:none" onchange="handleFileSelectG(this.files[0])">
+    
+    <div id="upload-preview-g" style="display:none;margin-top:12px;text-align:center">
+      <div style="position:relative;display:inline-block">
+        <img id="upload-preview-img-g" style="max-width:100%;max-height:200px;border-radius:8px;border:2px solid #e2e8f0">
+        <div id="upload-preview-pdf-g" style="display:none;padding:30px;background:#fee2e2;border-radius:8px;border:2px solid #fca5a5">
+          <div style="font-size:36px">📄</div>
+          <div style="font-size:12px;font-weight:700;color:#991b1b;margin-top:6px" id="upload-pdf-name-g">documento.pdf</div>
+        </div>
+        <button onclick="removePreviewG()" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;background:#ef4444;color:#fff;border:none;font-size:14px;cursor:pointer;font-weight:700">&times;</button>
+      </div>
+      <div style="font-size:10px;color:#64748b;margin-top:4px" id="upload-file-size-g"></div>
+    </div>
+    
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-size:13px;color:#1e293b">
+      <input type="checkbox" id="comp-marcar-pago-g" checked style="width:18px;height:18px;accent-color:#10b981">
+      <span>✅ Marcar como <strong>PAGO</strong></span>
+    </label>
+    
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="closeComprovanteModalG()" style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:700;cursor:pointer">Cancelar</button>
+      <button onclick="enviarComprovanteGestao()" id="btn-enviar-comp-g" style="flex:1.5;padding:12px;border:none;border-radius:8px;background:#10b981;color:#fff;font-size:13px;font-weight:700;cursor:pointer" disabled>
+        📤 Enviar Comprovante
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>@keyframes spin { to { transform: rotate(360deg) } }</style>
+
 </body>
 </html>
