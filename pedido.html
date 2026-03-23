@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.62</title>
+<title>Novo Pedido — MoskoGás v2.11.63</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,12 +51,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.62 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.63 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.62</span></h1>
+    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.63</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -2562,97 +2562,50 @@ async function confirmQuickDeliver() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// v2.11.62: Carregar cliente da URL — trata variações com/sem 55 e com/sem 9
+// v2.11.63: Carregar cliente da URL — busca com últimos 8 dígitos (funciona com LIKE)
 // ══════════════════════════════════════════════════════════════════════════════
 (function initFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const phoneFromUrl = params.get('phone');
   
   if (phoneFromUrl && phoneFromUrl.length >= 10) {
-    console.log('[pedido] ═══════════════════════════════════════════');
     console.log('[pedido] Carregando cliente da URL:', phoneFromUrl);
     
     setTimeout(async () => {
       try {
         let digits = phoneFromUrl.replace(/\D/g, '');
-        console.log('[pedido] Dígitos extraídos:', digits, '(length:', digits.length + ')');
         
-        // Determinar versão local (sem 55)
-        let local = digits;
-        if (local.startsWith('55') && local.length > 11) {
-          local = local.substring(2);
-          console.log('[pedido] Removido 55, agora:', local);
+        // Remover 55 do início se presente
+        if (digits.startsWith('55') && digits.length > 11) {
+          digits = digits.substring(2);
         }
         
-        // Gerar TODAS as variações: com/sem 55, com/sem 9
-        const variations = [];
-        
-        if (local.length === 11 && local[2] === '9') {
-          // Formato: 67992414371 (11 dígitos, com 9 do celular)
-          variations.push(local);                                    // 67992414371
-          variations.push('55' + local);                             // 5567992414371
-          const without9 = local.substring(0, 2) + local.substring(3);
-          variations.push(without9);                                 // 6792414371
-          variations.push('55' + without9);                          // 556792414371
-          console.log('[pedido] Formato 11 dígitos COM 9');
-        } else if (local.length === 10) {
-          // Formato: 6792414371 (10 dígitos, sem 9 do celular)
-          variations.push(local);                                    // 6792414371
-          variations.push('55' + local);                             // 556792414371
-          const with9 = local.substring(0, 2) + '9' + local.substring(2);
-          variations.push(with9);                                    // 67992414371
-          variations.push('55' + with9);                             // 5567992414371
-          console.log('[pedido] Formato 10 dígitos SEM 9, adicionando 9:', with9);
-        } else {
-          // Outros formatos - tentar como está
-          variations.push(digits);
-          if (digits.startsWith('55')) {
-            variations.push(digits.substring(2));
-          } else {
-            variations.push('55' + digits);
-          }
-          console.log('[pedido] Formato outro:', digits.length, 'dígitos');
-        }
-        
-        // Remover duplicatas
-        const uniqueVariations = [...new Set(variations)];
-        console.log('[pedido] Variações a tentar:', uniqueVariations);
+        // Pegar os ÚLTIMOS 8 dígitos para busca (funciona com LIKE %xxx%)
+        // Ex: 6792414371 → 92414371 (encontra 67992414371)
+        const searchDigits = digits.length > 8 ? digits.slice(-8) : digits;
+        console.log('[pedido] Buscando com últimos dígitos:', searchDigits);
         
         // Preencher campo de busca
         const searchInput = document.getElementById('searchPhone');
         if (searchInput) {
-          searchInput.value = local;
+          searchInput.value = searchDigits;
           
-          // Tentar cada variação até encontrar
-          let found = false;
-          for (const variant of uniqueVariations) {
-            console.log('[pedido] 🔍 Tentando buscar:', variant);
-            try {
-              const res = await api(`/api/customer/search?q=${variant}&type=phone`);
-              console.log('[pedido] Resposta para', variant, ':', res?.length || 0, 'resultados');
-              
-              if (res && res.length > 0) {
-                selectClient(res[0]);
-                console.log('[pedido] ✅ Cliente encontrado:', res[0].name);
-                found = true;
-                break;
-              }
-            } catch (apiErr) {
-              console.error('[pedido] ❌ Erro na API para', variant, ':', apiErr);
-            }
-          }
+          // Buscar cliente
+          const res = await api(`/api/customer/search?q=${searchDigits}&type=phone`);
+          console.log('[pedido] Resultado:', res?.length || 0, 'clientes');
           
-          if (!found) {
+          if (res && res.length > 0) {
+            selectClient(res[0]);
+            console.log('[pedido] ✅ Cliente carregado:', res[0].name);
+          } else {
             // Cliente não encontrado - preencher só o telefone
-            document.getElementById('cPhone').value = local;
-            console.log('[pedido] ⚠️ Cliente não encontrado em nenhuma variação');
+            document.getElementById('cPhone').value = digits;
             toast('📱 Telefone preenchido. Cliente não cadastrado.', 'info');
           }
         }
       } catch (e) {
-        console.error('[pedido] ❌ Erro geral:', e);
+        console.error('[pedido] Erro:', e);
       }
-      console.log('[pedido] ═══════════════════════════════════════════');
     }, 500);
   }
 })();
