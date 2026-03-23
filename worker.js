@@ -1,4 +1,5 @@
-// v2.52.45
+// v2.52.46
+// v2.52.46: IzChat sync com variações de telefone (com/sem 55, com/sem 9)
 // v2.52.45: Busca cliente por telefone enriquece com endereço de customer_addresses
 // v2.52.44: IzChat stats — verificar conexão ao invés de contar (API não suporta count)
 // v2.52.41: Vale Gás — emissão NFC-e ou Venda Bling direto do módulo de vales
@@ -7942,11 +7943,42 @@ export default {
       const izToken = tokenRow.value;
 
       const body = await request.json().catch(() => ({}));
-      const phone = (body.phone || '').replace(/\D/g, '');
+      const phone = (body.phone_digits || body.phone || '').replace(/\D/g, '');
       if (!phone || phone.length < 10) return err('Telefone inválido', 400);
 
-      // Buscar cliente no MoskoGás
-      const customer = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits=?').bind(phone).first();
+      // v2.52.46: Gerar variações do telefone (com/sem 55, com/sem 9)
+      let local = phone;
+      if (local.startsWith('55') && local.length > 11) local = local.substring(2);
+      const variations = [];
+      if (local.length === 11 && local[2] === '9') {
+        variations.push(local, '55' + local);
+        const without9 = local.substring(0, 2) + local.substring(3);
+        variations.push(without9, '55' + without9);
+      } else if (local.length === 10) {
+        variations.push(local, '55' + local);
+        const with9 = local.substring(0, 2) + '9' + local.substring(2);
+        variations.push(with9, '55' + with9);
+      } else {
+        variations.push(phone);
+        if (phone.startsWith('55')) variations.push(phone.substring(2));
+        else variations.push('55' + phone);
+      }
+
+      // Buscar cliente no MoskoGás tentando todas as variações
+      let customer = null;
+      let foundPhone = phone;
+      for (const variant of variations) {
+        customer = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits=?').bind(variant).first();
+        if (customer) {
+          foundPhone = variant;
+          // Enriquecer com endereço de customer_addresses se não tiver
+          if (!customer.address_line) {
+            const addr = await env.DB.prepare('SELECT address_line, bairro, complemento, referencia FROM customer_addresses WHERE phone_digits = ? ORDER BY id ASC LIMIT 1').bind(variant).first();
+            if (addr) customer = { ...customer, address_line: addr.address_line || '', bairro: addr.bairro || '', complemento: addr.complemento || '', referencia: addr.referencia || '' };
+          }
+          break;
+        }
+      }
       if (!customer) return err('Cliente não encontrado no MoskoGás', 404);
 
       // Buscar contato no IzChat
