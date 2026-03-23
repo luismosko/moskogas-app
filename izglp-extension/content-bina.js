@@ -254,25 +254,45 @@
   // ══════════════════════════════════════════════════════════════════════════════
   
   function getPhoneVariations(phone) {
-    // Gerar variações com e sem o 9 após DDD
-    const variations = [phone];
+    // Gerar variações: com/sem 55, com/sem 9
+    const variations = [];
     const digits = phone.replace(/\D/g, '');
     
-    // Remover 55 se presente para análise
+    // Determinar versão local (sem 55)
     let local = digits;
-    if (local.startsWith('55')) local = local.substring(2);
-    
-    if (local.length === 11 && local[2] === '9') {
-      // Tem 9 após DDD — tentar sem o 9
-      const without9 = '55' + local.substring(0, 2) + local.substring(3);
-      variations.push(without9);
-    } else if (local.length === 10) {
-      // Sem 9 após DDD — tentar com 9
-      const with9 = '55' + local.substring(0, 2) + '9' + local.substring(2);
-      variations.push(with9);
+    if (local.startsWith('55') && local.length > 11) {
+      local = local.substring(2);
     }
     
-    return variations;
+    // Adicionar variações COM e SEM 55
+    // E também COM e SEM o 9 do celular
+    
+    if (local.length === 11 && local[2] === '9') {
+      // Formato: 67992414371 (11 dígitos, com 9 do celular)
+      variations.push(local);                                    // 67992414371
+      variations.push('55' + local);                             // 5567992414371
+      const without9 = local.substring(0, 2) + local.substring(3);
+      variations.push(without9);                                 // 6792414371
+      variations.push('55' + without9);                          // 556792414371
+    } else if (local.length === 10) {
+      // Formato: 6792414371 (10 dígitos, sem 9 do celular)
+      variations.push(local);                                    // 6792414371
+      variations.push('55' + local);                             // 556792414371
+      const with9 = local.substring(0, 2) + '9' + local.substring(2);
+      variations.push(with9);                                    // 67992414371
+      variations.push('55' + with9);                             // 5567992414371
+    } else {
+      // Outros formatos - tentar como está
+      variations.push(digits);
+      if (digits.startsWith('55')) {
+        variations.push(digits.substring(2));
+      } else {
+        variations.push('55' + digits);
+      }
+    }
+    
+    // Remover duplicatas
+    return [...new Set(variations)];
   }
   
   async function fetchClientData(phone) {
