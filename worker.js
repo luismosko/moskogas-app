@@ -1,4 +1,5 @@
-// v2.52.46
+// v2.52.47
+// v2.52.47: Endpoint POST /api/pagamentos/:id/comprovante — atendente anexa comprovante antes da entrega
 // v2.52.46: IzChat sync com variações de telefone (com/sem 55, com/sem 9)
 // v2.52.45: Busca cliente por telefone enriquece com endereço de customer_addresses
 // v2.52.44: IzChat stats — verificar conexão ao invés de contar (API não suporta count)
@@ -5400,41 +5401,48 @@ export default {
         tipoPagamento = formData.get('tipo_pagamento') || null;
         obsEntregador = formData.get('observacao_entregador') || null;
 
-        if (!photoFile || !(photoFile instanceof File) || photoFile.size < 100) {
+        // v2.52.47: Se já tem comprovante anexado pelo atendente, foto é opcional
+        const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
+        
+        if (photoFile && photoFile instanceof File && photoFile.size >= 100) {
+          // Validar tipo
+          const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+          if (!allowedTypes.includes(photoFile.type)) {
+            return err('Tipo de arquivo inválido. Use JPG, PNG ou WebP.', 400);
+          }
+
+          // Limite 5MB (após compressão no cliente deve ser ~200-400KB)
+          if (photoFile.size > 5 * 1024 * 1024) {
+            return err('Foto muito grande (máx 5MB)', 400);
+          }
+
+          // Gerar key para R2
+          const dateStr = new Date().toISOString().slice(0, 10);
+          const ts = Date.now();
+          const ext = photoFile.type === 'image/png' ? 'png' : photoFile.type === 'image/webp' ? 'webp' : 'jpg';
+          photoKey = `comprovantes/${dateStr}/pedido_${id}_${ts}.${ext}`;
+
+          // Upload para R2
+          const arrayBuffer = await photoFile.arrayBuffer();
+          await env.BUCKET.put(photoKey, arrayBuffer, {
+            httpMetadata: { contentType: photoFile.type },
+            customMetadata: {
+              order_id: String(id),
+              uploaded_by: user?.nome || 'entregador',
+              original_name: photoFile.name || 'comprovante',
+            },
+          });
+
+          console.log(`[R2] Foto salva: ${photoKey} (${(photoFile.size / 1024).toFixed(1)}KB)`);
+        } else if (!jaTemComprovante) {
+          // Sem foto enviada e sem comprovante prévio → erro
           return err('Foto do comprovante é obrigatória', 400);
+        } else {
+          // Já tem comprovante do atendente, pode continuar sem foto nova
+          console.log(`[mark-delivered] Pedido #${id} já tem comprovante do atendente: ${order.foto_comprovante}`);
         }
-
-        // Validar tipo
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-        if (!allowedTypes.includes(photoFile.type)) {
-          return err('Tipo de arquivo inválido. Use JPG, PNG ou WebP.', 400);
-        }
-
-        // Limite 5MB (após compressão no cliente deve ser ~200-400KB)
-        if (photoFile.size > 5 * 1024 * 1024) {
-          return err('Foto muito grande (máx 5MB)', 400);
-        }
-
-        // Gerar key para R2
-        const dateStr = new Date().toISOString().slice(0, 10);
-        const ts = Date.now();
-        const ext = photoFile.type === 'image/png' ? 'png' : photoFile.type === 'image/webp' ? 'webp' : 'jpg';
-        photoKey = `comprovantes/${dateStr}/pedido_${id}_${ts}.${ext}`;
-
-        // Upload para R2
-        const arrayBuffer = await photoFile.arrayBuffer();
-        await env.BUCKET.put(photoKey, arrayBuffer, {
-          httpMetadata: { contentType: photoFile.type },
-          customMetadata: {
-            order_id: String(id),
-            uploaded_by: user?.nome || 'entregador',
-            original_name: photoFile.name || 'comprovante',
-          },
-        });
-
-        console.log(`[R2] Foto salva: ${photoKey} (${(photoFile.size / 1024).toFixed(1)}KB)`);
       } else if (ct.includes('application/json')) {
-        // Fallback JSON (sem foto — só admin pode)
+        // Fallback JSON (sem foto)
         const body = await request.json();
         tipoPagamento = body.tipo_pagamento || null;
         obsEntregador = body.observacao_entregador || null;
@@ -5446,8 +5454,11 @@ export default {
             await env.DB.prepare('UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=? WHERE id=?').bind(drv.id, drv.nome, drv.telefone||'', id).run();
           }
         }
-        // Admin e atendente podem marcar sem foto (gestao.html)
-        if (!['admin', 'atendente'].includes(user?.role)) {
+        // v2.52.47: Entregador pode enviar JSON se já tem comprovante do atendente
+        const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
+        // Admin e atendente sempre podem marcar sem foto
+        // Entregador só pode se já tiver comprovante
+        if (!['admin', 'gerente', 'atendente'].includes(user?.role) && !jaTemComprovante) {
           return err('Foto do comprovante é obrigatória para entregadores', 400);
         }
       } else {
@@ -5922,6 +5933,7 @@ export default {
           o.pix_tx_id, o.pix_qrcode, o.pix_qrcode_base64, o.pix_paid_at,
           o.cora_invoice_id, o.cora_qrcode, o.cora_paid_at,
           o.nfce_id, o.nfce_numero, o.nfce_status,
+          o.foto_comprovante,
           cc.bling_contact_id,
           (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
           (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
@@ -6022,6 +6034,88 @@ export default {
       await logBlingAudit(env, orderId, 'marcar_pago', 'success', { tipo: order.tipo_pagamento, tipo_fiscal: tipoFiscal });
       await logEvent(env, orderId, 'payment_confirmed', { tipo_fiscal: tipoFiscal });
       return json({ ok: true, fiscal: fiscalResult });
+    }
+
+    // ── Upload de comprovante pelo atendente ──────────────────
+    // v2.52.47: Anexar comprovante de pagamento (imagem/PDF) antes da entrega
+    const comprovanteMatch = path.match(/^\/api\/pagamentos\/(\d+)\/comprovante$/);
+    if (method === 'POST' && comprovanteMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const user = authCheck;
+
+      const orderId = parseInt(comprovanteMatch[1]);
+      const order = await env.DB.prepare('SELECT id, status, pago, foto_comprovante FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+
+      const ct = request.headers.get('Content-Type') || '';
+      if (!ct.includes('multipart/form-data')) {
+        return err('Content-Type deve ser multipart/form-data', 400);
+      }
+
+      const formData = await request.formData();
+      const file = formData.get('file');
+      const marcarPago = formData.get('marcar_pago') === '1' || formData.get('marcar_pago') === 'true';
+
+      if (!file || !(file instanceof File) || file.size < 100) {
+        return err('Arquivo de comprovante é obrigatório', 400);
+      }
+
+      // Validar tipo (imagens + PDF)
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) {
+        return err('Tipo de arquivo inválido. Use JPG, PNG, WebP ou PDF.', 400);
+      }
+
+      // Limite 10MB
+      if (file.size > 10 * 1024 * 1024) {
+        return err('Arquivo muito grande (máx 10MB)', 400);
+      }
+
+      // Gerar key para R2
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const ts = Date.now();
+      let ext = 'jpg';
+      if (file.type === 'image/png') ext = 'png';
+      else if (file.type === 'image/webp') ext = 'webp';
+      else if (file.type === 'application/pdf') ext = 'pdf';
+      const photoKey = `comprovantes/${dateStr}/pedido_${orderId}_atend_${ts}.${ext}`;
+
+      // Upload para R2
+      const arrayBuffer = await file.arrayBuffer();
+      await env.BUCKET.put(photoKey, arrayBuffer, {
+        httpMetadata: { contentType: file.type },
+        customMetadata: {
+          order_id: String(orderId),
+          uploaded_by: user.nome || 'atendente',
+          uploaded_by_role: user.role || 'atendente',
+          original_name: file.name || 'comprovante',
+          source: 'atendente_upload',
+        },
+      });
+
+      console.log(`[R2] Comprovante atendente salvo: ${photoKey} (${(file.size / 1024).toFixed(1)}KB) por ${user.nome}`);
+
+      // Atualizar pedido
+      let sql = 'UPDATE orders SET foto_comprovante=?, updated_at=unixepoch()';
+      const params = [photoKey];
+      
+      if (marcarPago) {
+        sql += ', pago=1';
+      }
+      
+      sql += ' WHERE id=?';
+      params.push(orderId);
+      
+      await env.DB.prepare(sql).bind(...params).run();
+      await logEvent(env, orderId, 'comprovante_atendente', { key: photoKey, user: user.nome, marcar_pago: marcarPago });
+
+      return json({ 
+        ok: true, 
+        key: photoKey, 
+        pago: marcarPago || order.pago === 1,
+        message: marcarPago ? 'Comprovante anexado e pedido marcado como pago' : 'Comprovante anexado com sucesso'
+      });
     }
 
     // ── PushInPay PIX — QR Code do pedido ──────────────────

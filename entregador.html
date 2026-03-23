@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Entregador 2.6.7 — MoskoGás</title>
+<title>Entregador 2.6.8 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
@@ -209,7 +209,7 @@
   <div id="list"></div>
 </div>
 
-<div class="version-badge">v2.6.6 — entregador</div>
+<div class="version-badge">v2.6.8 — entregador</div>
 
 <!-- PIX QR Code Modal -->
 <div class="pix-overlay" id="pixOverlay">
@@ -483,19 +483,42 @@ function renderPendentes(rows) {
         </div>
 
         <div class="photo-area">
-          <input type="file" accept="image/*" capture="environment" class="photo-input" id="photo-input-${o.id}" onchange="onPhotoSelected(${o.id}, this)">
-          <button class="photo-btn ${hasPhoto ? 'has-photo' : ''}" id="photo-btn-${o.id}" onclick="document.getElementById('photo-input-${o.id}').click()">
-            <span class="icon">${hasPhoto ? '✅' : '📸'}</span>
-            ${hasPhoto ? 'Foto capturada ✓ (toque para trocar)' : 'Tirar foto do comprovante (obrigatório)'}
-          </button>
-          <div class="photo-preview" id="photo-preview-${o.id}" ${hasPhoto ? 'style="display:block"' : ''}>
-            ${hasPhoto ? '<img src="' + hasPhoto.dataUrl + '"><button class="remove" onclick="removePhoto(' + o.id + ')">✕</button><div class="photo-size">' + hasPhoto.sizeTxt + '</div>' : ''}
-          </div>
+          ${(() => {
+            // v2.6.8: Se já tem comprovante anexado pelo atendente, não precisa tirar foto
+            const jaTemComprovante = o.foto_comprovante && o.foto_comprovante.length > 5;
+            if (jaTemComprovante) {
+              return `
+                <div style="background:#dcfce7;border:2px solid #86efac;border-radius:12px;padding:16px;text-align:center">
+                  <div style="font-size:28px;margin-bottom:8px">✅</div>
+                  <div style="font-weight:700;color:#166534;font-size:14px">Comprovante já anexado pelo atendente</div>
+                  <div style="color:#15803d;font-size:12px;margin-top:4px">Você pode entregar sem tirar foto</div>
+                </div>
+              `;
+            } else {
+              return `
+                <input type="file" accept="image/*" capture="environment" class="photo-input" id="photo-input-${o.id}" onchange="onPhotoSelected(${o.id}, this)">
+                <button class="photo-btn ${hasPhoto ? 'has-photo' : ''}" id="photo-btn-${o.id}" onclick="document.getElementById('photo-input-${o.id}').click()">
+                  <span class="icon">${hasPhoto ? '✅' : '📸'}</span>
+                  ${hasPhoto ? 'Foto capturada ✓ (toque para trocar)' : 'Tirar foto do comprovante (obrigatório)'}
+                </button>
+                <div class="photo-preview" id="photo-preview-${o.id}" ${hasPhoto ? 'style="display:block"' : ''}>
+                  ${hasPhoto ? '<img src="' + hasPhoto.dataUrl + '"><button class="remove" onclick="removePhoto(' + o.id + ')">✕</button><div class="photo-size">' + hasPhoto.sizeTxt + '</div>' : ''}
+                </div>
+              `;
+            }
+          })()}
         </div>
 
-        <button class="btn-deliver ${hasPhoto ? 'ready' : 'disabled'}" id="deliver-btn-${o.id}" onclick="deliver(${o.id})" ${!hasPhoto ? 'disabled' : ''}>
-          ✅ Marcar como Entregue
-        </button>
+        ${(() => {
+          // v2.6.8: Botão habilitado se tem foto OU se já tem comprovante do atendente
+          const jaTemComprovante = o.foto_comprovante && o.foto_comprovante.length > 5;
+          const podeEntregar = hasPhoto || jaTemComprovante;
+          return `
+            <button class="btn-deliver ${podeEntregar ? 'ready' : 'disabled'}" id="deliver-btn-${o.id}" onclick="deliver(${o.id})" ${!podeEntregar ? 'disabled' : ''} data-has-comprovante="${jaTemComprovante ? '1' : '0'}">
+              ✅ Marcar como Entregue
+            </button>
+          `;
+        })()}
         ${o.tipo_pagamento === 'pix_receber' ? '<button class="btn-pix-card" onclick="abrirPixQr(' + o.id + ')">💠 PIX QR Code Mosko</button>' : ''}
       </div>
     </div>`;
@@ -742,8 +765,12 @@ function removePhoto(orderId) {
 // ══════════════════════════════════════════════
 
 async function deliver(orderId) {
+  const btn = document.getElementById('deliver-btn-' + orderId);
+  const jaTemComprovante = btn && btn.dataset.hasComprovante === '1';
   const photo = photoStore[orderId];
-  if (!photo) {
+  
+  // v2.6.8: Se NÃO tem comprovante do atendente, exige foto
+  if (!jaTemComprovante && !photo) {
     toast('📸 Tire a foto do comprovante antes!', 'error');
     return;
   }
@@ -756,29 +783,45 @@ async function deliver(orderId) {
   }
   const obs = document.getElementById('obs-' + orderId);
 
-  const btn = document.getElementById('deliver-btn-' + orderId);
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Enviando...';
   showLoading('Finalizando entrega...');
 
   try {
-    const formData = new FormData();
-    const ext = fotoConfig.formato === 'png' ? 'png' : fotoConfig.formato === 'webp' ? 'webp' : 'jpg';
-    formData.append('photo', photo.blob, 'comprovante_' + orderId + '.' + ext);
-    if (tipoPg && tipoPg.value) formData.append('tipo_pagamento', tipoPg.value);
-    if (obs && obs.value.trim()) formData.append('observacao_entregador', obs.value.trim());
-
     const token = getSessionToken();
     const key = apiKey();
     const headers = {};
     if (token) headers['Authorization'] = 'Bearer ' + token;
     else if (key) headers['X-API-KEY'] = key;
 
-    const resp = await fetch(API_BASE + '/api/order/' + orderId + '/mark-delivered', {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+    let resp;
+    
+    if (photo) {
+      // Tem foto nova — enviar via FormData
+      const formData = new FormData();
+      const ext = fotoConfig.formato === 'png' ? 'png' : fotoConfig.formato === 'webp' ? 'webp' : 'jpg';
+      formData.append('photo', photo.blob, 'comprovante_' + orderId + '.' + ext);
+      if (tipoPg && tipoPg.value) formData.append('tipo_pagamento', tipoPg.value);
+      if (obs && obs.value.trim()) formData.append('observacao_entregador', obs.value.trim());
+
+      resp = await fetch(API_BASE + '/api/order/' + orderId + '/mark-delivered', {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+    } else {
+      // v2.6.8: Sem foto nova, já tem comprovante — enviar via JSON
+      headers['Content-Type'] = 'application/json';
+      const bodyJson = {};
+      if (tipoPg && tipoPg.value) bodyJson.tipo_pagamento = tipoPg.value;
+      if (obs && obs.value.trim()) bodyJson.observacao_entregador = obs.value.trim();
+
+      resp = await fetch(API_BASE + '/api/order/' + orderId + '/mark-delivered', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyJson),
+      });
+    }
 
     if (!resp.ok) {
       const errData = await resp.json().catch(() => ({ error: resp.statusText }));
@@ -786,7 +829,7 @@ async function deliver(orderId) {
     }
 
     const result = await resp.json();
-    removePhoto(orderId);
+    if (photo) removePhoto(orderId);
     hideLoading();
 
     let msg = '✅ Pedido #' + orderId + ' entregue!';

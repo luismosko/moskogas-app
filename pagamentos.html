@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.21</title>
+<title>Pagamentos — MoskoGás v1.9.22</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -64,11 +64,75 @@
   .btn-copy:hover { background: #0e7490; }
   .btn-whats { background: #16a34a; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-whats:hover { background: #15803d; }
+  /* v1.9.22: Upload de comprovante */
+  .upload-drop-zone { 
+    border: 3px dashed #cbd5e1; 
+    border-radius: 16px; 
+    padding: 32px 20px; 
+    text-align: center; 
+    background: #f8fafc; 
+    cursor: pointer; 
+    transition: all 0.2s;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .upload-drop-zone:hover, .upload-drop-zone.drag-over { 
+    border-color: #f97316; 
+    background: #fff7ed; 
+  }
+  .upload-drop-zone.has-file { 
+    border-color: #16a34a; 
+    background: #f0fdf4; 
+  }
+  .upload-drop-zone .icon { font-size: 48px; }
+  .upload-drop-zone .title { font-size: 16px; font-weight: 700; color: #374151; }
+  .upload-drop-zone .hint { font-size: 13px; color: #64748b; }
+  .upload-drop-zone .hint kbd { 
+    background: #e2e8f0; 
+    border-radius: 4px; 
+    padding: 2px 6px; 
+    font-family: monospace; 
+    font-size: 11px;
+    border: 1px solid #cbd5e1;
+  }
+  .upload-preview { margin-top: 16px; text-align: center; }
+  .upload-preview img { max-width: 100%; max-height: 250px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .upload-preview .pdf-preview { 
+    background: #fee2e2; 
+    border: 2px solid #fca5a5; 
+    border-radius: 12px; 
+    padding: 20px; 
+    display: flex; 
+    align-items: center; 
+    gap: 12px;
+  }
+  .upload-preview .pdf-preview .icon { font-size: 40px; }
+  .upload-preview .pdf-preview .name { font-weight: 700; color: #991b1b; word-break: break-all; }
+  .upload-preview .btn-remove { 
+    margin-top: 12px; 
+    background: #ef4444; 
+    color: #fff; 
+    border: none; 
+    border-radius: 8px; 
+    padding: 8px 16px; 
+    font-size: 13px; 
+    font-weight: 700; 
+    cursor: pointer; 
+  }
+  .upload-preview .btn-remove:hover { background: #dc2626; }
+  .upload-file-input { display: none; }
+  .btn-comprovante { background: #8b5cf6; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-comprovante:hover { background: #7c3aed; }
+  .has-comprovante-badge { background: #dcfce7; color: #166534; border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 4px; }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.21 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.22 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -90,7 +154,7 @@
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.21</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.22</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -145,6 +209,41 @@
       <button onclick="closeQrModal()" style="background:none;border:none;font-size:20px;cursor:pointer" title="Fechar">✕</button>
     </div>
     <div id="qr-modal-body" class="qr-modal-body"></div>
+  </div>
+</div>
+
+<!-- v1.9.22: Modal de Upload de Comprovante -->
+<div class="modal-overlay" id="comprovante-modal">
+  <div class="modal-box" style="max-width:500px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0">📎 Anexar Comprovante</h3>
+      <button onclick="closeComprovanteModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b" title="Fechar">✕</button>
+    </div>
+    <p style="margin:0 0 16px;color:#64748b;font-size:14px">
+      Pedido <strong id="comprovante-order-id">#000</strong> — <span id="comprovante-cliente"></span>
+    </p>
+    
+    <div id="upload-drop-zone" class="upload-drop-zone" onclick="document.getElementById('upload-file-input').click()">
+      <div class="icon">📁</div>
+      <div class="title">Arraste um arquivo aqui</div>
+      <div class="hint">ou clique para selecionar • <kbd>Ctrl+V</kbd> para colar imagem</div>
+      <div class="hint" style="margin-top:4px">JPG, PNG, WebP ou PDF (máx 10MB)</div>
+    </div>
+    <input type="file" id="upload-file-input" class="upload-file-input" accept="image/jpeg,image/png,image/webp,application/pdf" onchange="handleFileSelect(this.files)">
+    
+    <div id="upload-preview" class="upload-preview" style="display:none"></div>
+    
+    <div style="margin:20px 0 12px;padding:14px;background:#f0fdf4;border-radius:12px;border:2px solid #86efac">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;color:#166534">
+        <input type="checkbox" id="chk-marcar-pago" checked style="width:20px;height:20px;accent-color:#16a34a">
+        ✅ Marcar como PAGO ao anexar
+      </label>
+    </div>
+    
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button onclick="closeComprovanteModal()" style="background:#e2e8f0;color:#64748b;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer">Cancelar</button>
+      <button id="btn-enviar-comprovante" onclick="enviarComprovante()" disabled style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;opacity:0.5">📤 Enviar Comprovante</button>
+    </div>
   </div>
 </div>
 
@@ -261,6 +360,13 @@ function renderTable(rows) {
           actionBtns+=`<button class="btn-qr" onclick="showQrCode(${p.id})" title="${hasQr?'Ver QR Code PIX':'Gerar QR Code PIX'}">${hasQr?'📱 QR':'➕ PIX'}</button>`;
           if(hasQr) actionBtns+=`<button class="btn-check-pix" onclick="checkPixStatus(${p.id})" title="Verificar pagamento na PushInPay" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">✔ Check</button>`;
         }
+        // v1.9.22: Botão para anexar comprovante
+        const hasComprovante = p.foto_comprovante && p.foto_comprovante.length > 5;
+        if (hasComprovante) {
+          actionBtns+=`<span class="has-comprovante-badge" title="Comprovante já anexado">📎 ✓</span>`;
+        } else {
+          actionBtns+=`<button class="btn-comprovante" onclick="abrirComprovanteModal(${p.id})" title="Anexar comprovante de pagamento">📎</button>`;
+        }
         const cnt=p.reminder_count||0;const badge=cnt>0?`<span class="rb">${cnt}</span>`:'';
         const hasPhone=p.phone_digits&&p.phone_digits.replace(/\D/g,'').length>=10;
         if(hasPhone){
@@ -284,6 +390,15 @@ function renderTable(rows) {
         actionBtns+=`<button class="btn-nfe" onclick="gerarNfeUnico(${p.id})" title="Gerar Venda no Bling + marcar pago">📄 Venda</button>`;
       } else {
         actionBtns+=`<button class="btn-pago" onclick="marcarPago(${p.id})" title="Confirmar recebimento PIX">✅ Pago</button>`;
+      }
+      // v1.9.22: Botão comprovante para todos os tipos (se ainda não tem)
+      if (p.tipo_pagamento !== 'pix_receber') { // PIX já tem botão acima
+        const hasComprovante2 = p.foto_comprovante && p.foto_comprovante.length > 5;
+        if (hasComprovante2) {
+          actionBtns+=`<span class="has-comprovante-badge" title="Comprovante já anexado">📎 ✓</span>`;
+        } else {
+          actionBtns+=`<button class="btn-comprovante" onclick="abrirComprovanteModal(${p.id})" title="Anexar comprovante de pagamento">📎</button>`;
+        }
       }
       // Botão imprimir
       actionBtns += `<button onclick="printRec(${p.id})" title="Imprimir recibo" style="background:#1F4E79;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">🖨️</button>`;
@@ -780,6 +895,196 @@ async function autoCheckPix(){
   pixCheckRunning = false;
 }
 setInterval(autoCheckPix, 20000); // a cada 30s
+
+// ═══════════════════════════════════════════════════════════════
+// v1.9.22: Upload de Comprovante pelo Atendente
+// ═══════════════════════════════════════════════════════════════
+let comprovanteOrderId = null;
+let comprovanteFile = null;
+
+function abrirComprovanteModal(orderId) {
+  const pedido = allData.find(r => r.id == orderId);
+  comprovanteOrderId = orderId;
+  comprovanteFile = null;
+  
+  document.getElementById('comprovante-order-id').textContent = '#' + orderId;
+  document.getElementById('comprovante-cliente').textContent = pedido ? pedido.customer_name : '';
+  document.getElementById('upload-preview').style.display = 'none';
+  document.getElementById('upload-preview').innerHTML = '';
+  document.getElementById('upload-drop-zone').classList.remove('has-file');
+  document.getElementById('upload-file-input').value = '';
+  document.getElementById('btn-enviar-comprovante').disabled = true;
+  document.getElementById('btn-enviar-comprovante').style.opacity = '0.5';
+  document.getElementById('chk-marcar-pago').checked = true;
+  
+  document.getElementById('comprovante-modal').classList.add('show');
+  
+  // Focar para permitir Ctrl+V
+  document.getElementById('upload-drop-zone').focus();
+}
+
+function closeComprovanteModal() {
+  document.getElementById('comprovante-modal').classList.remove('show');
+  comprovanteOrderId = null;
+  comprovanteFile = null;
+}
+
+// Drag & Drop
+const dropZone = document.getElementById('upload-drop-zone');
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', () => {
+  dropZone.classList.remove('drag-over');
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length > 0) {
+    handleFileSelect(e.dataTransfer.files);
+  }
+});
+
+// Colar (Ctrl+V) — funciona em qualquer lugar quando modal aberto
+document.addEventListener('paste', (e) => {
+  if (!document.getElementById('comprovante-modal').classList.contains('show')) return;
+  
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  
+  for (let item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        handleFileSelect([file]);
+        return;
+      }
+    }
+  }
+});
+
+function handleFileSelect(files) {
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  if (!allowedTypes.includes(file.type)) {
+    toast('❌ Tipo de arquivo inválido. Use JPG, PNG, WebP ou PDF.', 'error');
+    return;
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    toast('❌ Arquivo muito grande (máx 10MB)', 'error');
+    return;
+  }
+  
+  comprovanteFile = file;
+  showFilePreview(file);
+  
+  document.getElementById('upload-drop-zone').classList.add('has-file');
+  document.getElementById('btn-enviar-comprovante').disabled = false;
+  document.getElementById('btn-enviar-comprovante').style.opacity = '1';
+}
+
+function showFilePreview(file) {
+  const preview = document.getElementById('upload-preview');
+  preview.style.display = 'block';
+  
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      preview.innerHTML = `
+        <img src="${e.target.result}" alt="Preview">
+        <div style="margin-top:8px;font-size:12px;color:#64748b">${file.name} (${(file.size/1024).toFixed(1)} KB)</div>
+        <button class="btn-remove" onclick="removePreview()">✕ Remover</button>
+      `;
+    };
+    reader.readAsDataURL(file);
+  } else if (file.type === 'application/pdf') {
+    preview.innerHTML = `
+      <div class="pdf-preview">
+        <span class="icon">📄</span>
+        <div>
+          <div class="name">${file.name}</div>
+          <div style="font-size:12px;color:#64748b">${(file.size/1024).toFixed(1)} KB</div>
+        </div>
+      </div>
+      <button class="btn-remove" onclick="removePreview()">✕ Remover</button>
+    `;
+  }
+}
+
+function removePreview() {
+  comprovanteFile = null;
+  document.getElementById('upload-preview').style.display = 'none';
+  document.getElementById('upload-preview').innerHTML = '';
+  document.getElementById('upload-drop-zone').classList.remove('has-file');
+  document.getElementById('upload-file-input').value = '';
+  document.getElementById('btn-enviar-comprovante').disabled = true;
+  document.getElementById('btn-enviar-comprovante').style.opacity = '0.5';
+}
+
+async function enviarComprovante() {
+  if (!comprovanteFile || !comprovanteOrderId) {
+    toast('❌ Selecione um arquivo primeiro', 'error');
+    return;
+  }
+  
+  const marcarPago = document.getElementById('chk-marcar-pago').checked;
+  const btn = document.getElementById('btn-enviar-comprovante');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span> Enviando...';
+  
+  showLoading('Enviando comprovante...');
+  
+  try {
+    const formData = new FormData();
+    formData.append('file', comprovanteFile);
+    formData.append('marcar_pago', marcarPago ? '1' : '0');
+    
+    const token = getToken();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    
+    const resp = await fetch(API_BASE + '/api/pagamentos/' + comprovanteOrderId + '/comprovante', {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(errData.error || 'Erro ' + resp.status);
+    }
+    
+    const result = await resp.json();
+    hideLoading();
+    
+    closeComprovanteModal();
+    
+    const msg = marcarPago 
+      ? `✅ Comprovante anexado e pedido #${comprovanteOrderId} marcado como PAGO!`
+      : `✅ Comprovante anexado ao pedido #${comprovanteOrderId}`;
+    toast(msg, 'success');
+    
+    loadPagamentos();
+    
+  } catch (e) {
+    hideLoading();
+    toast('❌ ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '📤 Enviar Comprovante';
+  }
+}
+
+// Adicionar estilo de spinner
+if (!document.getElementById('spinner-style')) {
+  const style = document.createElement('style');
+  style.id = 'spinner-style';
+  style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+  document.head.appendChild(style);
+}
 </script>
 </body>
 </html>
