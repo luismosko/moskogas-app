@@ -1,181 +1,248 @@
-// IZGLP — Bina Virtual Content Script v2.0.0
-// Injeta no IzChat e mostra dados do cliente
+// IZGLP — Bina Virtual Content Script v2.1.0
+// Injeta botão "Abrir Pedido" DENTRO da interface do IzChat
 
 (function() {
   'use strict';
   
-  let currentPhone = null;
-  let binaPanel = null;
-  let lastCheckedPhone = null;
-  let config = { enabled: true };
-  
   const log = (msg) => console.log(`[IZGLP-Bina] ${msg}`);
+  const BUTTON_ID = 'izglp-abrir-pedido-btn';
+  const PANEL_ID = 'izglp-bina-info';
+  
+  let lastInjectedPhone = null;
+  let observer = null;
   
   function isContextValid() {
     try { return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id); }
     catch (e) { return false; }
   }
   
-  // Carregar configurações
-  if (isContextValid()) {
-    chrome.storage.sync.get(['bina_enabled'], (result) => {
-      config.enabled = result.bina_enabled !== false;
-      if (config.enabled) init();
-    });
-  }
-  
   function init() {
-    log('🔥 IZGLP Bina iniciada');
-    createBinaPanel();
+    log('🔥 IZGLP Bina v2.1.0 iniciada — Modo injeção no IzChat');
+    injectStyles();
     startMonitoring();
   }
   
-  function createBinaPanel() {
-    if (binaPanel) binaPanel.remove();
-    
-    binaPanel = document.createElement('div');
-    binaPanel.id = 'izglp-bina-panel';
-    binaPanel.innerHTML = `
-      <div class="bina-header">
-        <span class="bina-logo">🔥</span>
-        <span class="bina-title">IZGLP Bina</span>
-        <button class="bina-minimize" title="Minimizar">−</button>
-      </div>
-      <div class="bina-content">
-        <div class="bina-status">
-          <span class="bina-icon">👀</span>
-          <span>Aguardando conversa...</span>
-        </div>
-      </div>
+  // ══════════════════════════════════════════════════════════════════════════════
+  // ESTILOS GLOBAIS
+  // ══════════════════════════════════════════════════════════════════════════════
+  
+  function injectStyles() {
+    const style = document.createElement('style');
+    style.id = 'izglp-bina-styles';
+    style.textContent = `
+      #${PANEL_ID} {
+        background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+        border-radius: 12px;
+        padding: 16px;
+        margin: 12px 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      #${PANEL_ID} .izglp-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+      }
+      #${PANEL_ID} .izglp-logo {
+        font-size: 24px;
+      }
+      #${PANEL_ID} .izglp-phone {
+        background: rgba(255,255,255,0.2);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        margin-bottom: 12px;
+        font-family: monospace;
+      }
+      #${BUTTON_ID} {
+        width: 100%;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all 0.2s;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        margin-bottom: 8px;
+      }
+      #${BUTTON_ID}:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(245, 158, 11, 0.5);
+      }
+      #izglp-btn-historico {
+        width: 100%;
+        padding: 10px 16px;
+        background: rgba(255,255,255,0.2);
+        color: white;
+        border: 2px solid rgba(255,255,255,0.4);
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all 0.2s;
+      }
+      #izglp-btn-historico:hover {
+        background: rgba(255,255,255,0.3);
+      }
+      
+      /* Painel flutuante (fallback) */
+      #${PANEL_ID}.floating {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 280px;
+        z-index: 999999;
+      }
     `;
     
-    document.body.appendChild(binaPanel);
-    binaPanel.querySelector('.bina-minimize').addEventListener('click', toggleMinimize);
-    makeDraggable(binaPanel);
+    // Remover estilo antigo se existir
+    const existing = document.getElementById('izglp-bina-styles');
+    if (existing) existing.remove();
+    
+    document.head.appendChild(style);
   }
   
-  function toggleMinimize() {
-    binaPanel.classList.toggle('minimized');
-  }
-  
-  function makeDraggable(el) {
-    const header = el.querySelector('.bina-header');
-    let isDragging = false;
-    let offsetX, offsetY;
-    
-    header.addEventListener('mousedown', (e) => {
-      if (e.target.classList.contains('bina-minimize')) return;
-      isDragging = true;
-      offsetX = e.clientX - el.offsetLeft;
-      offsetY = e.clientY - el.offsetTop;
-      el.style.cursor = 'grabbing';
-    });
-    
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      el.style.left = (e.clientX - offsetX) + 'px';
-      el.style.top = (e.clientY - offsetY) + 'px';
-      el.style.right = 'auto';
-    });
-    
-    document.addEventListener('mouseup', () => {
-      isDragging = false;
-      el.style.cursor = '';
-    });
-  }
+  // ══════════════════════════════════════════════════════════════════════════════
+  // MONITORAMENTO DO DOM
+  // ══════════════════════════════════════════════════════════════════════════════
   
   function startMonitoring() {
-    setInterval(checkForPhone, 1000);
+    // Verificar periodicamente
+    setInterval(checkAndInject, 1000);
     
-    const observer = new MutationObserver(() => {
-      setTimeout(checkForPhone, 500);
+    // Observer para mudanças no DOM (quando abre/fecha painel de contato)
+    observer = new MutationObserver(() => {
+      setTimeout(checkAndInject, 300);
     });
     
     observer.observe(document.body, {
       childList: true,
       subtree: true
     });
+    
+    // Verificar imediatamente
+    checkAndInject();
   }
   
-  function checkForPhone() {
-    const phone = extractPhoneFromPage();
+  function checkAndInject() {
+    // Procurar o telefone no painel de dados do contato
+    const phoneData = findPhoneInContactPanel();
     
-    if (phone && phone !== lastCheckedPhone) {
-      lastCheckedPhone = phone;
-      currentPhone = phone;
-      fetchClientData(phone);
+    if (phoneData.phone || phoneData.targetContainer) {
+      injectButton(phoneData);
     }
   }
   
-  function extractPhoneFromPage() {
-    // Estratégia 1: Buscar em elementos específicos
-    const selectors = [
-      '[class*="header"] [class*="phone"]',
-      '[class*="header"] [class*="number"]',
-      '[class*="contact"] [class*="phone"]',
-      '[class*="chat"] [class*="header"]',
-      '[class*="title"]',
-      '[class*="name"]',
-      '[class*="detail"]',
-      '[class*="info"]'
-    ];
+  // ══════════════════════════════════════════════════════════════════════════════
+  // ENCONTRAR TELEFONE NO PAINEL DE CONTATO
+  // ══════════════════════════════════════════════════════════════════════════════
+  
+  function findPhoneInContactPanel() {
+    let phone = null;
+    let name = null;
+    let targetContainer = null;
     
-    for (const selector of selectors) {
-      const elements = document.querySelectorAll(selector);
-      for (const el of elements) {
-        const phone = extractPhoneFromText(el.textContent);
-        if (phone) return phone;
+    // Buscar em todos os elementos de texto
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    while (walker.nextNode()) {
+      const text = walker.currentNode.textContent || '';
+      
+      // Buscar padrão +55 (XX) XXXXX-XXXX
+      if (text.includes('+55') || text.match(/\(\d{2}\)\s*\d{4,5}/)) {
+        const extracted = extractPhone(text);
+        if (extracted) {
+          phone = extracted;
+          break;
+        }
       }
     }
     
-    // Estratégia 2: Buscar na URL
-    const urlMatch = window.location.href.match(/(?:contact|chat|ticket)[\/=](\d{10,13})/i);
-    if (urlMatch) return normalizePhone(urlMatch[1]);
+    // Encontrar nome do contato no header
+    const headerName = document.querySelector('[class*="contactName"], [class*="ContactName"], [class*="ticketName"], [class*="userName"]');
+    if (headerName) {
+      name = headerName.textContent?.trim();
+    }
     
-    // Estratégia 3: Título da página
-    const titlePhone = extractPhoneFromText(document.title);
-    if (titlePhone) return titlePhone;
-    
-    // Estratégia 4: Data attributes
-    const dataElements = document.querySelectorAll('[data-phone], [data-number], [data-contact]');
-    for (const el of dataElements) {
-      const phone = el.dataset.phone || el.dataset.number || el.dataset.contact;
-      if (phone) {
-        const normalized = normalizePhone(phone);
-        if (normalized) return normalized;
+    // Encontrar container "OUTRAS INFORMAÇÕES"
+    const allElements = document.querySelectorAll('*');
+    for (const el of allElements) {
+      const text = (el.textContent || '').trim().toUpperCase();
+      
+      // Encontrar exatamente o header "OUTRAS INFORMAÇÕES"
+      if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
+        if (text === 'OUTRAS INFORMAÇÕES' || text === 'OUTRAS INFORMACOES') {
+          targetContainer = el;
+          log('📍 Encontrado: OUTRAS INFORMAÇÕES');
+          break;
+        }
       }
     }
     
-    // Estratégia 5: Cabeçalho
-    const headerArea = document.querySelector('[class*="header"], [class*="top"], [class*="toolbar"]');
-    if (headerArea) {
-      const phone = extractPhoneFromText(headerArea.textContent);
-      if (phone) return phone;
+    // Se não encontrou, buscar por classe
+    if (!targetContainer) {
+      targetContainer = document.querySelector('[class*="otherInfo"], [class*="OtherInfo"], [class*="extraInfo"], [class*="additionalInfo"]');
     }
     
-    return null;
+    // Verificar se o painel de dados do contato está aberto
+    const contactPanel = document.querySelector('[class*="ContactDrawer"], [class*="contactDrawer"], [class*="drawer"]:not([class*="navigation"])');
+    if (!targetContainer && contactPanel) {
+      // Encontrar qualquer container dentro do painel de contato
+      const sections = contactPanel.querySelectorAll('div');
+      for (const section of sections) {
+        if (section.querySelector('[class*="Salvar"], button') || section.textContent?.includes('OUTRAS')) {
+          targetContainer = section.parentElement;
+          break;
+        }
+      }
+    }
+    
+    return { phone, name, targetContainer };
   }
   
-  function extractPhoneFromText(text) {
+  function extractPhone(text) {
     if (!text) return null;
     
-    const clean = text.replace(/\s+/g, ' ').trim();
-    
+    // Padrões de telefone brasileiro
     const patterns = [
       /\+?55\s*\(?(\d{2})\)?\s*(\d{4,5})[\s-]?(\d{4})/,
-      /\(?(\d{2})\)?\s*(\d{4,5})[\s-]?(\d{4})/,
-      /(\d{2})(\d{4,5})(\d{4})/
+      /\(?(\d{2})\)?\s*9?\s*(\d{4})[\s-]?(\d{4})/
     ];
     
     for (const pattern of patterns) {
-      const match = clean.match(pattern);
+      const match = text.match(pattern);
       if (match) {
-        const ddd = match[1];
-        const part1 = match[2];
-        const part2 = match[3];
+        let ddd = match[1];
+        let part1 = match[2];
+        let part2 = match[3];
         
-        if (ddd && part1 && part2) {
-          return normalizePhone(`${ddd}${part1}${part2}`);
+        // Garantir que DDD tem 2 dígitos
+        if (ddd && ddd.length === 2 && part1 && part2) {
+          // Adicionar 9 se necessário (celular)
+          if (part1.length === 4) {
+            part1 = '9' + part1;
+          }
+          return `55${ddd}${part1}${part2}`;
         }
       }
     }
@@ -183,183 +250,126 @@
     return null;
   }
   
-  function normalizePhone(phone) {
-    if (!phone) return null;
-    
-    let digits = phone.replace(/\D/g, '');
-    
-    if (digits.length === 10 || digits.length === 11) {
-      digits = '55' + digits;
-    }
-    
-    if (digits.length >= 12 && digits.length <= 13) {
-      return digits;
-    }
-    
-    return null;
-  }
+  // ══════════════════════════════════════════════════════════════════════════════
+  // INJETAR BOTÃO NO IZCHAT
+  // ══════════════════════════════════════════════════════════════════════════════
   
-  function fetchClientData(phone) {
-    updatePanel('loading', { phone });
+  function injectButton(data) {
+    const { phone, name, targetContainer } = data;
     
-    if (!isContextValid()) {
-      updatePanel('error', { phone, error: 'Extensão desconectada' });
+    // Verificar se já existe
+    const existingPanel = document.getElementById(PANEL_ID);
+    
+    // Se já existe e é o mesmo telefone, não fazer nada
+    if (existingPanel && lastInjectedPhone === phone) {
       return;
     }
     
-    chrome.runtime.sendMessage({ type: 'BINA_SEARCH', phone }, (response) => {
-      if (chrome.runtime.lastError) {
-        updatePanel('error', { phone, error: chrome.runtime.lastError.message });
-        return;
+    // Remover painel antigo
+    if (existingPanel) {
+      existingPanel.remove();
+    }
+    
+    lastInjectedPhone = phone;
+    
+    // Criar o painel IZGLP
+    const panel = document.createElement('div');
+    panel.id = PANEL_ID;
+    panel.innerHTML = `
+      <div class="izglp-header">
+        <span class="izglp-logo">🔥</span>
+        <span class="izglp-title">IZGLP</span>
+      </div>
+      ${phone ? `
+        <div class="izglp-phone">
+          📱 ${formatPhone(phone)}
+        </div>
+      ` : '<div class="izglp-phone">📱 Telefone não detectado</div>'}
+      <button id="${BUTTON_ID}">
+        🛒 Abrir Pedido
+      </button>
+      <button id="izglp-btn-historico">
+        📋 Histórico
+      </button>
+    `;
+    
+    // Tentar injetar no local correto
+    let injected = false;
+    
+    // 1. Injetar após "OUTRAS INFORMAÇÕES"
+    if (targetContainer && !injected) {
+      try {
+        const parent = targetContainer.parentElement;
+        if (parent) {
+          // Inserir ANTES de "OUTRAS INFORMAÇÕES" para ficar mais visível
+          parent.insertBefore(panel, targetContainer);
+          injected = true;
+          log('✅ Botão injetado antes de OUTRAS INFORMAÇÕES');
+        }
+      } catch (e) {
+        log('⚠️ Erro ao injetar: ' + e.message);
+      }
+    }
+    
+    // 2. Tentar no painel de contato em geral
+    if (!injected) {
+      const contactPanel = document.querySelector('[class*="ContactDrawer"], [class*="contactDrawer"], [class*="contact-drawer"]');
+      if (contactPanel) {
+        // Encontrar um bom lugar - após as tabs ou no final
+        const tabs = contactPanel.querySelector('[class*="tabs"], [class*="Tabs"], [role="tablist"]');
+        if (tabs && tabs.parentElement) {
+          tabs.parentElement.insertBefore(panel, tabs.nextSibling);
+        } else {
+          contactPanel.appendChild(panel);
+        }
+        injected = true;
+        log('✅ Botão injetado no painel de contato');
+      }
+    }
+    
+    // 3. Tentar no painel lateral direito genérico
+    if (!injected) {
+      const rightPanel = document.querySelector('[class*="rightSide"], [class*="RightSide"], [class*="sidebar"]:last-child');
+      if (rightPanel) {
+        rightPanel.appendChild(panel);
+        injected = true;
+        log('✅ Botão injetado no painel lateral');
+      }
+    }
+    
+    // 4. Fallback: painel flutuante
+    if (!injected) {
+      panel.classList.add('floating');
+      document.body.appendChild(panel);
+      injected = true;
+      log('✅ Botão injetado como painel flutuante (fallback)');
+    }
+    
+    // Adicionar event listeners
+    setTimeout(() => {
+      const btnPedido = document.getElementById(BUTTON_ID);
+      const btnHistorico = document.getElementById('izglp-btn-historico');
+      
+      if (btnPedido) {
+        btnPedido.onclick = () => {
+          const url = phone 
+            ? `https://moskogas-app.pages.dev/pedido.html?phone=${phone}`
+            : 'https://moskogas-app.pages.dev/pedido.html';
+          window.open(url, '_blank');
+          log(`🛒 Abrindo pedido: ${url}`);
+        };
       }
       
-      if (response && response.ok) {
-        if (response.found) {
-          updatePanel('found', { 
-            client: response.client, 
-            phone, 
-            lastOrder: response.lastOrder 
-          });
-        } else {
-          updatePanel('not-found', { phone });
-        }
-      } else {
-        updatePanel('error', { phone, error: 'Falha na busca' });
+      if (btnHistorico) {
+        btnHistorico.onclick = () => {
+          const url = phone 
+            ? `https://moskogas-app.pages.dev/consulta-pedidos.html?phone=${phone}`
+            : 'https://moskogas-app.pages.dev/consulta-pedidos.html';
+          window.open(url, '_blank');
+          log(`📋 Abrindo histórico: ${url}`);
+        };
       }
-    });
-  }
-  
-  function updatePanel(status, data = {}) {
-    const content = binaPanel.querySelector('.bina-content');
-    
-    switch (status) {
-      case 'loading':
-        content.innerHTML = `
-          <div class="bina-status loading">
-            <span class="bina-spinner">⏳</span>
-            <span>Buscando ${formatPhone(data.phone)}...</span>
-          </div>
-        `;
-        break;
-        
-      case 'found':
-        const c = data.client;
-        content.innerHTML = `
-          <div class="bina-client">
-            <div class="bina-client-name">
-              <span class="bina-icon">👤</span>
-              <strong>${c.name || 'Sem nome'}</strong>
-            </div>
-            <div class="bina-client-phone">
-              <span class="bina-icon">📱</span>
-              ${formatPhone(data.phone)}
-            </div>
-            ${c.address_line ? `
-              <div class="bina-client-address">
-                <span class="bina-icon">📍</span>
-                ${c.address_line}
-              </div>
-            ` : ''}
-            ${c.bairro ? `
-              <div class="bina-client-bairro">
-                <span class="bina-icon">🏘️</span>
-                ${c.bairro}
-              </div>
-            ` : ''}
-            ${c.complemento ? `
-              <div class="bina-client-complemento">
-                <span class="bina-icon">🏠</span>
-                ${c.complemento}
-              </div>
-            ` : ''}
-            ${c.referencia ? `
-              <div class="bina-client-referencia">
-                <span class="bina-icon">📌</span>
-                ${c.referencia}
-              </div>
-            ` : ''}
-            ${c.ultima_compra_glp ? `
-              <div class="bina-client-last">
-                <span class="bina-icon">📦</span>
-                Última: ${c.ultima_compra_glp}
-              </div>
-            ` : ''}
-            ${data.lastOrder ? `
-              <div class="bina-client-last">
-                <span class="bina-icon">📦</span>
-                Último pedido: ${formatDate(data.lastOrder.created_at)}
-              </div>
-            ` : ''}
-          </div>
-          <div class="bina-actions">
-            <button class="bina-btn bina-btn-primary" id="btn-novo-pedido">
-              🛒 Novo Pedido
-            </button>
-            <button class="bina-btn bina-btn-secondary" id="btn-historico">
-              📋 Histórico
-            </button>
-          </div>
-        `;
-        
-        // Event listeners
-        content.querySelector('#btn-novo-pedido').addEventListener('click', () => {
-          chrome.runtime.sendMessage({ type: 'OPEN_IZGLP', page: 'pedido.html', phone: data.phone });
-        });
-        content.querySelector('#btn-historico').addEventListener('click', () => {
-          chrome.runtime.sendMessage({ type: 'OPEN_IZGLP', page: 'consulta-pedidos.html', phone: data.phone });
-        });
-        
-        binaPanel.classList.add('found');
-        setTimeout(() => binaPanel.classList.remove('found'), 2000);
-        break;
-        
-      case 'not-found':
-        content.innerHTML = `
-          <div class="bina-status not-found">
-            <span class="bina-icon">❓</span>
-            <span>Cliente não cadastrado</span>
-            <div class="bina-phone-display">${formatPhone(data.phone)}</div>
-          </div>
-          <div class="bina-actions">
-            <button class="bina-btn bina-btn-primary" id="btn-cadastrar">
-              ➕ Cadastrar e Fazer Pedido
-            </button>
-          </div>
-        `;
-        
-        content.querySelector('#btn-cadastrar').addEventListener('click', () => {
-          chrome.runtime.sendMessage({ type: 'OPEN_IZGLP', page: 'pedido.html', phone: data.phone });
-        });
-        break;
-        
-      case 'error':
-        content.innerHTML = `
-          <div class="bina-status error">
-            <span class="bina-icon">⚠️</span>
-            <span>Erro ao buscar</span>
-            <div class="bina-error-msg">${data.error}</div>
-          </div>
-          <div class="bina-actions">
-            <button class="bina-btn bina-btn-secondary" id="btn-retry">
-              🔄 Tentar novamente
-            </button>
-          </div>
-        `;
-        
-        content.querySelector('#btn-retry').addEventListener('click', () => {
-          lastCheckedPhone = null;
-          checkForPhone();
-        });
-        break;
-        
-      default:
-        content.innerHTML = `
-          <div class="bina-status">
-            <span class="bina-icon">👀</span>
-            <span>Aguardando conversa...</span>
-          </div>
-        `;
-    }
+    }, 100);
   }
   
   function formatPhone(phone) {
@@ -374,35 +384,26 @@
     return phone;
   }
   
-  function formatDate(timestamp) {
-    if (!timestamp) return '';
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString('pt-BR');
-  }
+  // ══════════════════════════════════════════════════════════════════════════════
+  // LISTENERS
+  // ══════════════════════════════════════════════════════════════════════════════
   
-  // Escutar mensagens
   if (isContextValid()) {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'getStatus') {
-        sendResponse({ currentPhone, enabled: config.enabled });
-      } else if (request.action === 'setEnabled') {
-        config.enabled = request.enabled;
-        if (config.enabled) {
-          if (!binaPanel) createBinaPanel();
-          binaPanel.style.display = '';
-        } else {
-          if (binaPanel) binaPanel.style.display = 'none';
-        }
-        sendResponse({ ok: true });
+        sendResponse({ currentPhone: lastInjectedPhone, enabled: true });
       } else if (request.action === 'refresh') {
-        lastCheckedPhone = null;
-        checkForPhone();
+        lastInjectedPhone = null;
+        checkAndInject();
         sendResponse({ ok: true });
       }
       return true;
     });
   }
   
-  log('🟢 IZGLP Bina v2.0.0 ativa');
+  // Iniciar
+  init();
+  
+  log('🟢 IZGLP Bina v2.1.0 — Injeção no IzChat ativa');
   
 })();
