@@ -250,22 +250,57 @@
   }
   
   // ══════════════════════════════════════════════════════════════════════════════
-  // BUSCAR DADOS DO CLIENTE
+  // BUSCAR DADOS DO CLIENTE - v2.4.1: tenta variações com/sem 9
   // ══════════════════════════════════════════════════════════════════════════════
+  
+  function getPhoneVariations(phone) {
+    // Gerar variações com e sem o 9 após DDD
+    const variations = [phone];
+    const digits = phone.replace(/\D/g, '');
+    
+    // Remover 55 se presente para análise
+    let local = digits;
+    if (local.startsWith('55')) local = local.substring(2);
+    
+    if (local.length === 11 && local[2] === '9') {
+      // Tem 9 após DDD — tentar sem o 9
+      const without9 = '55' + local.substring(0, 2) + local.substring(3);
+      variations.push(without9);
+    } else if (local.length === 10) {
+      // Sem 9 após DDD — tentar com 9
+      const with9 = '55' + local.substring(0, 2) + '9' + local.substring(2);
+      variations.push(with9);
+    }
+    
+    return variations;
+  }
   
   async function fetchClientData(phone) {
     const dataDiv = document.getElementById('izglp-client-data');
     const syncBtn = document.getElementById('izglp-btn-sync');
     if (!dataDiv) return;
     
+    const variations = getPhoneVariations(phone);
+    log(`🔍 Tentando variações: ${variations.join(', ')}`);
+    
     try {
-      // Buscar cliente na API
-      const url = `${API_URL}/api/customer/search?q=${phone}&type=phone&api_key=${apiKey || 'Moskogas0909'}`;
-      const response = await fetch(url);
-      const clients = await response.json();
+      let client = null;
       
-      if (clients && clients.length > 0) {
-        const c = clients[0];
+      // Tentar cada variação até encontrar
+      for (const variant of variations) {
+        const url = `${API_URL}/api/customer/search?q=${variant}&type=phone&api_key=${apiKey || 'Moskogas0909'}`;
+        const response = await fetch(url);
+        const clients = await response.json();
+        
+        if (clients && clients.length > 0) {
+          client = clients[0];
+          log(`✅ Cliente encontrado com ${variant}: ${client.name}`);
+          break;
+        }
+      }
+      
+      if (client) {
+        const c = client;
         
         let html = '';
         
