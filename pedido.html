@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.63</title>
+<title>Novo Pedido — MoskoGás v2.11.64</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,12 +51,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.63 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.64 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.63</span></h1>
+    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.64</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -2562,7 +2562,7 @@ async function confirmQuickDeliver() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// v2.11.63: Carregar cliente da URL — busca com últimos 8 dígitos (funciona com LIKE)
+// v2.11.64: Carregar cliente da URL — chama selectCustomer corretamente
 // ══════════════════════════════════════════════════════════════════════════════
 (function initFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -2581,27 +2581,60 @@ async function confirmQuickDeliver() {
         }
         
         // Pegar os ÚLTIMOS 8 dígitos para busca (funciona com LIKE %xxx%)
-        // Ex: 6792414371 → 92414371 (encontra 67992414371)
         const searchDigits = digits.length > 8 ? digits.slice(-8) : digits;
         console.log('[pedido] Buscando com últimos dígitos:', searchDigits);
         
-        // Preencher campo de busca
-        const searchInput = document.getElementById('searchPhone');
-        if (searchInput) {
-          searchInput.value = searchDigits;
+        // Buscar cliente
+        const res = await api(`/api/customer/search?q=${searchDigits}&type=phone`);
+        console.log('[pedido] Resultado:', res?.length || 0, 'clientes');
+        
+        if (res && res.length > 0) {
+          const cliente = res[0];
+          console.log('[pedido] ✅ Cliente encontrado:', cliente.name);
           
-          // Buscar cliente
-          const res = await api(`/api/customer/search?q=${searchDigits}&type=phone`);
-          console.log('[pedido] Resultado:', res?.length || 0, 'clientes');
+          // Preencher campos diretamente (como selectCustomer faz)
+          document.getElementById('cName').value = cliente.name || '';
+          document.getElementById('cPhone').value = cliente.phone_digits || digits;
           
-          if (res && res.length > 0) {
-            selectClient(res[0]);
-            console.log('[pedido] ✅ Cliente carregado:', res[0].name);
-          } else {
-            // Cliente não encontrado - preencher só o telefone
-            document.getElementById('cPhone').value = digits;
-            toast('📱 Telefone preenchido. Cliente não cadastrado.', 'info');
+          // Separar rua e número
+          const addrLine = cliente.address_line || '';
+          const numMatch = addrLine.match(/,\s*(\d+\S*)$/);
+          document.getElementById('cAddr').value = numMatch ? addrLine.slice(0, numMatch.index) : addrLine;
+          const numEl = document.getElementById('cNum');
+          if (numEl) numEl.value = numMatch ? numMatch[1] : '';
+          
+          document.getElementById('cBairro').value = cliente.bairro || '';
+          document.getElementById('cComp').value = cliente.complemento || '';
+          document.getElementById('cRef').value = cliente.referencia || '';
+          
+          // Salvar IDs para uso posterior
+          window._lastBlingContactId = cliente.bling_contact_id || null;
+          window._currentClientPhone = cliente.phone_digits || null;
+          window._currentClientCnpj = cliente.cpf_cnpj || null;
+          
+          // Limpar campo de busca
+          const searchInput = document.getElementById('searchPhone');
+          if (searchInput) searchInput.value = '';
+          
+          // Carregar endereços múltiplos
+          if (cliente.phone_digits) {
+            loadSavedAddresses(cliente.phone_digits);
           }
+          
+          // Mostrar badge Bling se vinculado
+          const blingBadge = document.getElementById('bling-badge-cliente');
+          if (blingBadge && cliente.bling_contact_id) {
+            blingBadge.style.display = 'inline-flex';
+            blingBadge.style.background = '#dcfce7';
+            blingBadge.style.color = '#166534';
+            blingBadge.innerHTML = '✅ Vinculado ao Bling';
+          }
+          
+          toast('✅ Cliente carregado: ' + cliente.name, 'success');
+        } else {
+          // Cliente não encontrado - preencher só o telefone
+          document.getElementById('cPhone').value = digits;
+          toast('📱 Telefone preenchido. Cliente não cadastrado.', 'info');
         }
       } catch (e) {
         console.error('[pedido] Erro:', e);
