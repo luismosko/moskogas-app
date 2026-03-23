@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.64</title>
+<title>Novo Pedido — MoskoGás v2.11.65</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,12 +51,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.64 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.65 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.64</span></h1>
+    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.65</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -1525,13 +1525,27 @@ async function saveOrder() {
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
 
-    // v2.11.49: popup finalização rápida
-    // Consumidor final OU data passada/hoje → perguntar se quer marcar entregue
-    const _dataSalva = getDataPedido();
-    const _hoje = dataCGOffset(0);
-    const _devePerguntar = isConsumidorFinal || _dataSalva <= _hoje;
-    if (_devePerguntar) {
-      setTimeout(() => openQuickDeliver(result.id, isConsumidorFinal, tipoPgto), 400);
+    // v2.11.65: Se pagamento à vista, abrir modal de comprovante
+    const pgtoAVista = ['dinheiro', 'pix_vista', 'debito', 'credito'].includes(tipoPgto);
+    if (pgtoAVista) {
+      // Guardar dados para popup de finalização rápida (será aberto depois do comprovante)
+      window._pendingQuickDeliver = {
+        orderId: result.id,
+        isConsumidorFinal,
+        tipoPgto,
+        dataSalva: getDataPedido(),
+        hoje: dataCGOffset(0)
+      };
+      setTimeout(() => abrirComprovanteModal(result.id), 400);
+    } else {
+      // v2.11.49: popup finalização rápida (sem modal de comprovante)
+      // Consumidor final OU data passada/hoje → perguntar se quer marcar entregue
+      const _dataSalva = getDataPedido();
+      const _hoje = dataCGOffset(0);
+      const _devePerguntar = isConsumidorFinal || _dataSalva <= _hoje;
+      if (_devePerguntar) {
+        setTimeout(() => openQuickDeliver(result.id, isConsumidorFinal, tipoPgto), 400);
+      }
     }
 
     // v2.11.49: Não redireciona — limpa form para novo pedido
@@ -2562,7 +2576,7 @@ async function confirmQuickDeliver() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// v2.11.64: Carregar cliente da URL — chama selectCustomer corretamente
+// v2.11.65: Carregar cliente da URL — chama selectCustomer corretamente
 // ══════════════════════════════════════════════════════════════════════════════
 (function initFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -2642,6 +2656,210 @@ async function confirmQuickDeliver() {
     }, 500);
   }
 })();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- v2.11.65: MODAL DE COMPROVANTE — Abrir após criar pedido com pgto à vista -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="comprovante-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="margin:0;font-size:18px;color:#1e293b">📎 Anexar Comprovante</h2>
+      <button onclick="closeComprovanteModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#64748b">&times;</button>
+    </div>
+    
+    <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px;margin-bottom:16px">
+      <div style="font-weight:700;color:#166534;font-size:14px">✅ Pedido #<span id="comp-order-id">—</span> criado!</div>
+      <div style="color:#15803d;font-size:12px;margin-top:4px">Agora anexe o comprovante de pagamento</div>
+    </div>
+    
+    <div id="upload-drop-zone" style="border:3px dashed #cbd5e1;border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s;background:#f8fafc"
+         ondragover="event.preventDefault();this.style.borderColor='#3b82f6';this.style.background='#eff6ff'"
+         ondragleave="this.style.borderColor='#cbd5e1';this.style.background='#f8fafc'"
+         ondrop="handleFileDrop(event)"
+         onclick="document.getElementById('upload-file-input').click()">
+      <div style="font-size:48px;margin-bottom:12px">📤</div>
+      <div style="font-size:14px;font-weight:700;color:#334155;margin-bottom:8px">Arraste o arquivo aqui</div>
+      <div style="font-size:12px;color:#64748b">ou clique para selecionar</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px">JPG, PNG, WebP ou PDF (máx 10MB)</div>
+      <div style="font-size:13px;color:#3b82f6;font-weight:700;margin-top:12px">💡 Dica: Copie a imagem no WhatsApp e cole aqui (Ctrl+V)</div>
+    </div>
+    
+    <input type="file" id="upload-file-input" accept="image/jpeg,image/png,image/webp,application/pdf" style="display:none" onchange="handleFileSelect(this.files[0])">
+    
+    <div id="upload-preview" style="display:none;margin-top:16px;text-align:center">
+      <div style="position:relative;display:inline-block">
+        <img id="upload-preview-img" style="max-width:100%;max-height:300px;border-radius:8px;border:2px solid #e2e8f0">
+        <div id="upload-preview-pdf" style="display:none;padding:40px;background:#fee2e2;border-radius:8px;border:2px solid #fca5a5">
+          <div style="font-size:48px">📄</div>
+          <div style="font-size:14px;font-weight:700;color:#991b1b;margin-top:8px" id="upload-pdf-name">documento.pdf</div>
+        </div>
+        <button onclick="removePreview()" style="position:absolute;top:-8px;right:-8px;width:28px;height:28px;border-radius:50%;background:#ef4444;color:#fff;border:none;font-size:16px;cursor:pointer;font-weight:700">&times;</button>
+      </div>
+      <div style="font-size:11px;color:#64748b;margin-top:8px" id="upload-file-size"></div>
+    </div>
+    
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button onclick="closeComprovanteModal()" style="flex:1;padding:14px;border:2px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#64748b;font-size:14px;font-weight:700;cursor:pointer">Pular</button>
+      <button onclick="enviarComprovantePedido()" id="btn-enviar-comp" style="flex:1.5;padding:14px;border:none;border-radius:10px;background:#10b981;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" disabled>
+        📤 Enviar Comprovante
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// v2.11.65: UPLOAD DE COMPROVANTE
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _compOrderId = null;
+let _compFile = null;
+
+function abrirComprovanteModal(orderId) {
+  _compOrderId = orderId;
+  _compFile = null;
+  document.getElementById('comp-order-id').textContent = orderId;
+  document.getElementById('upload-preview').style.display = 'none';
+  document.getElementById('btn-enviar-comp').disabled = true;
+  document.getElementById('upload-file-input').value = '';
+  document.getElementById('comprovante-modal').style.display = 'flex';
+}
+
+function closeComprovanteModal() {
+  document.getElementById('comprovante-modal').style.display = 'none';
+  _compOrderId = null;
+  _compFile = null;
+  
+  // v2.11.65: Abrir popup de finalização rápida se tiver pendente
+  if (window._pendingQuickDeliver) {
+    const pqd = window._pendingQuickDeliver;
+    window._pendingQuickDeliver = null;
+    const _devePerguntar = pqd.isConsumidorFinal || pqd.dataSalva <= pqd.hoje;
+    if (_devePerguntar) {
+      setTimeout(() => openQuickDeliver(pqd.orderId, pqd.isConsumidorFinal, pqd.tipoPgto), 300);
+    }
+  }
+}
+
+function handleFileDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-drop-zone').style.borderColor = '#cbd5e1';
+  document.getElementById('upload-drop-zone').style.background = '#f8fafc';
+  const file = e.dataTransfer?.files?.[0];
+  if (file) handleFileSelect(file);
+}
+
+function handleFileSelect(file) {
+  if (!file) return;
+  
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  if (!validTypes.includes(file.type)) {
+    toast('⚠️ Arquivo inválido. Use JPG, PNG, WebP ou PDF.', 'error');
+    return;
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    toast('⚠️ Arquivo muito grande. Máximo 10MB.', 'error');
+    return;
+  }
+  
+  _compFile = file;
+  showFilePreview(file);
+}
+
+function showFilePreview(file) {
+  const preview = document.getElementById('upload-preview');
+  const img = document.getElementById('upload-preview-img');
+  const pdfDiv = document.getElementById('upload-preview-pdf');
+  const sizeEl = document.getElementById('upload-file-size');
+  
+  sizeEl.textContent = (file.size / 1024).toFixed(1) + ' KB';
+  
+  if (file.type === 'application/pdf') {
+    img.style.display = 'none';
+    pdfDiv.style.display = 'block';
+    document.getElementById('upload-pdf-name').textContent = file.name;
+  } else {
+    pdfDiv.style.display = 'none';
+    img.style.display = 'block';
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    reader.readAsDataURL(file);
+  }
+  
+  preview.style.display = 'block';
+  document.getElementById('btn-enviar-comp').disabled = false;
+}
+
+function removePreview() {
+  document.getElementById('upload-preview').style.display = 'none';
+  document.getElementById('upload-file-input').value = '';
+  document.getElementById('btn-enviar-comp').disabled = true;
+  _compFile = null;
+}
+
+async function enviarComprovantePedido() {
+  if (!_compFile || !_compOrderId) {
+    toast('Selecione um arquivo primeiro', 'error');
+    return;
+  }
+  
+  const btn = document.getElementById('btn-enviar-comp');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Enviando...';
+  showLoading('Enviando comprovante...');
+  
+  try {
+    const formData = new FormData();
+    formData.append('file', _compFile);
+    formData.append('marcar_pago', '1'); // Sempre marca como pago
+    
+    const token = getSessionToken();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    
+    const resp = await fetch(API_BASE + '/api/pagamentos/' + _compOrderId + '/comprovante', {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(errData.error || 'Erro ' + resp.status);
+    }
+    
+    hideLoading();
+    toast('✅ Comprovante anexado ao pedido #' + _compOrderId, 'success');
+    closeComprovanteModal();
+    
+  } catch (e) {
+    hideLoading();
+    toast('❌ Erro: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '📤 Enviar Comprovante';
+  }
+}
+
+// Ctrl+V para colar imagem
+document.addEventListener('paste', function(e) {
+  if (document.getElementById('comprovante-modal').style.display !== 'flex') return;
+  
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        handleFileSelect(file);
+        e.preventDefault();
+        return;
+      }
+    }
+  }
+});
 </script>
 
 </body>
