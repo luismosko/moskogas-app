@@ -1,5 +1,5 @@
-// v2.52.47
-// v2.52.47: Endpoint POST /api/pagamentos/:id/comprovante — atendente anexa comprovante antes da entrega
+// v2.52.48
+// v2.52.48: Endpoint POST /api/pagamentos/:id/comprovante — atendente anexa comprovante antes da entrega
 // v2.52.46: IzChat sync com variações de telefone (com/sem 55, com/sem 9)
 // v2.52.45: Busca cliente por telefone enriquece com endereço de customer_addresses
 // v2.52.44: IzChat stats — verificar conexão ao invés de contar (API não suporta count)
@@ -5401,7 +5401,7 @@ export default {
         tipoPagamento = formData.get('tipo_pagamento') || null;
         obsEntregador = formData.get('observacao_entregador') || null;
 
-        // v2.52.47: Se já tem comprovante anexado pelo atendente, foto é opcional
+        // v2.52.48: Se já tem comprovante anexado pelo atendente, foto é opcional
         const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
         
         if (photoFile && photoFile instanceof File && photoFile.size >= 100) {
@@ -5454,7 +5454,7 @@ export default {
             await env.DB.prepare('UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=? WHERE id=?').bind(drv.id, drv.nome, drv.telefone||'', id).run();
           }
         }
-        // v2.52.47: Entregador pode enviar JSON se já tem comprovante do atendente
+        // v2.52.48: Entregador pode enviar JSON se já tem comprovante do atendente
         const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
         // Admin e atendente sempre podem marcar sem foto
         // Entregador só pode se já tiver comprovante
@@ -5946,6 +5946,81 @@ export default {
       return json(rows.results || []);
     }
 
+    // ══════════════════════════════════════════════════════════
+    // v2.52.48: UPLOAD DE COMPROVANTE — Atendente anexa antes da entrega
+    // ══════════════════════════════════════════════════════════
+    const comprovanteUploadMatch = path.match(/^\/api\/pagamentos\/(\d+)\/comprovante$/);
+    if (method === 'POST' && comprovanteUploadMatch) {
+      const authComp = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authComp instanceof Response) return authComp;
+      
+      const orderId = parseInt(comprovanteUploadMatch[1]);
+      const order = await env.DB.prepare('SELECT id, status, pago FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      
+      const ct = request.headers.get('Content-Type') || '';
+      if (!ct.includes('multipart/form-data')) return err('Content-Type deve ser multipart/form-data', 400);
+      
+      const formData = await request.formData();
+      const file = formData.get('file');
+      const marcarPago = formData.get('marcar_pago') === '1';
+      
+      if (!file || typeof file === 'string') return err('Arquivo não enviado', 400);
+      
+      // Validar tipo
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) return err('Tipo de arquivo inválido. Use JPG, PNG, WebP ou PDF.', 400);
+      
+      // Validar tamanho (10MB)
+      const MAX_SIZE = 10 * 1024 * 1024;
+      if (file.size > MAX_SIZE) return err('Arquivo muito grande. Máximo 10MB.', 400);
+      
+      // Gerar key para R2
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const ts = Date.now();
+      const ext = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const photoKey = `comprovantes/${dateStr}/pedido_${orderId}_atend_${ts}.${ext}`;
+      
+      // Upload para R2
+      const arrayBuffer = await file.arrayBuffer();
+      await env.BUCKET.put(photoKey, arrayBuffer, {
+        httpMetadata: { contentType: file.type },
+        customMetadata: {
+          order_id: String(orderId),
+          uploaded_by: authComp.nome || 'atendente',
+          uploaded_at: new Date().toISOString(),
+          original_name: file.name || 'comprovante',
+        }
+      });
+      
+      // Atualizar banco
+      let sql = 'UPDATE orders SET foto_comprovante=?, updated_at=unixepoch()';
+      const params = [photoKey];
+      
+      if (marcarPago) {
+        sql += ', pago=1';
+      }
+      
+      sql += ' WHERE id=?';
+      params.push(orderId);
+      
+      await env.DB.prepare(sql).bind(...params).run();
+      
+      await logEvent(env, orderId, 'comprovante_anexado', {
+        photo_key: photoKey,
+        marcou_pago: marcarPago,
+        by: authComp.nome || authComp.login,
+        file_size: file.size,
+        file_type: file.type
+      });
+      
+      return json({ 
+        ok: true, 
+        foto_comprovante: photoKey,
+        pago: marcarPago ? 1 : order.pago
+      });
+    }
+
     if (method === 'PATCH' && /^\/api\/pagamentos\/\d+$/.test(path)) {
       const orderId = parseInt(path.split('/')[3]);
       const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
@@ -6037,7 +6112,7 @@ export default {
     }
 
     // ── Upload de comprovante pelo atendente ──────────────────
-    // v2.52.47: Anexar comprovante de pagamento (imagem/PDF) antes da entrega
+    // v2.52.48: Anexar comprovante de pagamento (imagem/PDF) antes da entrega
     const comprovanteMatch = path.match(/^\/api\/pagamentos\/(\d+)\/comprovante$/);
     if (method === 'POST' && comprovanteMatch) {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
