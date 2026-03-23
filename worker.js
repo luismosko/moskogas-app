@@ -1,4 +1,5 @@
-// v2.52.44
+// v2.52.45
+// v2.52.45: Busca cliente por telefone enriquece com endereço de customer_addresses
 // v2.52.44: IzChat stats — verificar conexão ao invés de contar (API não suporta count)
 // v2.52.41: Vale Gás — emissão NFC-e ou Venda Bling direto do módulo de vales
 // v2.52.40: Relatório email — pedidos organizados por seção (Pendentes > Cancelados > Entregues), faturamento só entregues
@@ -3863,7 +3864,24 @@ export default {
           if (byEnd.length > 0) rows = byEnd;
           else rows = await env.DB.prepare("SELECT * FROM customers_cache WHERE phone_digits LIKE ? LIMIT 10").bind(`%${digits}%`).all().then(r => r.results);
         }
-        if (rows.length > 0) return json(rows);
+        
+        // v2.52.45: Enriquecer com endereço de customer_addresses se não tiver no cache
+        if (rows.length > 0) {
+          for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            if (!r.address_line && r.phone_digits) {
+              // Buscar primeiro endereço cadastrado
+              const addr = await env.DB.prepare(
+                "SELECT address_line, bairro, complemento, referencia FROM customer_addresses WHERE phone_digits = ? ORDER BY id ASC LIMIT 1"
+              ).bind(r.phone_digits).first();
+              if (addr) {
+                rows[i] = { ...r, address_line: addr.address_line || '', bairro: addr.bairro || '', complemento: addr.complemento || '', referencia: addr.referencia || '' };
+              }
+            }
+          }
+          return json(rows);
+        }
+        
         try {
           const resp = await blingFetch(`/contatos?pagina=1&limite=10&telefone=${digits}`, {}, env);
           if (resp.ok) { const data = await resp.json(); const result = mapContatos(data.data || []); await saveContactsCache(result, env); return json(result); }
