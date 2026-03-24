@@ -1,4 +1,5 @@
-// v2.52.49
+// v2.52.50
+// v2.52.50: Corrige auditoria sem-bling para verificar nfce_id (NFC-e) além de bling_pedido_id
 // v2.52.49: POST /nfce/{id}/lancar-estoque no fluxo + endpoints lancar-estoque, lancar-estoque-lote, listar-bling
 // v2.52.48: Endpoint POST /api/pagamentos/:id/comprovante — atendente anexa comprovante antes da entrega
 // v2.52.46: IzChat sync com variações de telefone (com/sem 55, com/sem 9)
@@ -5794,17 +5795,27 @@ export default {
       }
     }
 
-    // GET /api/auditoria/sem-bling — pedidos entregues sem bling que deveriam ter
+    // GET /api/auditoria/sem-bling — pedidos entregues sem fiscal (Bling ou NFC-e) que deveriam ter
+    // v2.52.50: Considera nfce_id (NFC-e) além de bling_pedido_id (Pedido Venda)
     if (method === 'GET' && path === '/api/auditoria/sem-bling') {
       const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
       if (authCheck instanceof Response) return authCheck;
+      // Tipos que DEVERIAM ter fiscal na entrega:
+      // - dinheiro, pix_vista, debito, credito → NFC-e (nfce_id)
+      // - pix_receber → Pedido Venda (bling_pedido_id) criado em pagamentos.html
       const rows = await env.DB.prepare(`
         SELECT id, customer_name, phone_digits, tipo_pagamento, total_value, pago,
-          delivered_at, created_at, bling_pedido_id, vendedor_nome, items_json
+          delivered_at, created_at, bling_pedido_id, nfce_id, nfce_numero, nfce_status,
+          vendedor_nome, items_json
         FROM orders
         WHERE status = 'entregue'
-          AND bling_pedido_id IS NULL
-          AND tipo_pagamento IN ('dinheiro','pix_vista','debito','credito')
+          AND (
+            -- Tipos NFC-e: sem nfce_id
+            (tipo_pagamento IN ('dinheiro','pix_vista','debito','credito') AND (nfce_id IS NULL OR nfce_id = ''))
+            OR
+            -- pix_receber: sem bling_pedido_id (fiscal criado em pagamentos.html)
+            (tipo_pagamento = 'pix_receber' AND (bling_pedido_id IS NULL OR bling_pedido_id = ''))
+          )
         ORDER BY delivered_at DESC
       `).all();
       return json({ pedidos: rows.results || [], total: rows.results?.length || 0 });
@@ -6719,7 +6730,7 @@ export default {
 
       const orders = await env.DB.prepare(
         `SELECT id, customer_name, phone_digits, total_value, tipo_pagamento, pago,
-                bling_pedido_id, bling_pedido_num, vendedor_nome, items_json,
+                bling_pedido_id, bling_pedido_num, nfce_id, nfce_numero, vendedor_nome, items_json,
                 status, driver_name_cache, created_at
          FROM orders WHERE created_at >= ? AND created_at < ? AND status != 'cancelado' ORDER BY id DESC`
       ).bind(dayStartEpoch, dayEndEpoch).all().then(r => r.results || []);
@@ -6731,7 +6742,8 @@ export default {
 
       const totalPedidos = orders.length;
       const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
-      const comBling = orders.filter(o => o.bling_pedido_id).length;
+      // v2.52.50: Considera tanto bling_pedido_id quanto nfce_id
+      const comBling = orders.filter(o => o.bling_pedido_id || o.nfce_id).length;
       const pagos = orders.filter(o => o.pago === 1).length;
       const naoPagos = totalPedidos - pagos;
 
@@ -7598,13 +7610,14 @@ export default {
 
       // Pedidos do dia
       const orders = await env.DB.prepare(
-        `SELECT id, customer_name, total_value, tipo_pagamento, pago, bling_pedido_id, bling_pedido_num, vendedor_nome, items_json, status, created_at
+        `SELECT id, customer_name, total_value, tipo_pagamento, pago, bling_pedido_id, bling_pedido_num, nfce_id, nfce_numero, nfce_status, vendedor_nome, items_json, status, created_at
          FROM orders WHERE created_at >= ? AND created_at <= ? ORDER BY id`
       ).bind(epochStart, epochEnd).all().then(r => r.results || []);
 
       const totalPedidos = orders.length;
       const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
-      const comBling = orders.filter(o => o.bling_pedido_id).length;
+      // v2.52.50: Considera tanto bling_pedido_id (Pedido Venda) quanto nfce_id (NFC-e)
+      const comBling = orders.filter(o => o.bling_pedido_id || o.nfce_id).length;
       const semBling = totalPedidos - comBling;
       const pagos = orders.filter(o => o.pago === 1).length;
       const naoPagos = totalPedidos - pagos;
@@ -12613,12 +12626,13 @@ async function dailyAuditSnapshot(env) {
     if (existing) { console.log(`[audit] Snapshot ${yesterday} já existe`); return; }
 
     const orders = await env.DB.prepare(
-      `SELECT total_value, tipo_pagamento, pago, bling_pedido_id, vendedor_nome, items_json FROM orders WHERE created_at BETWEEN ? AND ?`
+      `SELECT total_value, tipo_pagamento, pago, bling_pedido_id, nfce_id, vendedor_nome, items_json FROM orders WHERE created_at BETWEEN ? AND ?`
     ).bind(dateStart, dateEnd).all().then(r => r.results || []);
 
     const totalPedidos = orders.length;
     const totalValor = orders.reduce((s, o) => s + (o.total_value || 0), 0);
-    const comBling = orders.filter(o => o.bling_pedido_id).length;
+    // v2.52.50: Considera tanto bling_pedido_id quanto nfce_id
+    const comBling = orders.filter(o => o.bling_pedido_id || o.nfce_id).length;
     const pagos = orders.filter(o => o.pago === 1).length;
 
     const porTipo = {};
