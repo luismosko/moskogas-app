@@ -1,4 +1,5 @@
-// v2.52.50
+// v2.52.51
+// v2.52.51: lancar_contas/estoque NFC-e - "já existe" vira skipped (não erro)
 // v2.52.50: Corrige auditoria sem-bling para verificar nfce_id (NFC-e) além de bling_pedido_id
 // v2.52.49: POST /nfce/{id}/lancar-estoque no fluxo + endpoints lancar-estoque, lancar-estoque-lote, listar-bling
 // v2.52.48: Endpoint POST /api/pagamentos/:id/comprovante — atendente anexa comprovante antes da entrega
@@ -920,6 +921,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
 
   // ── PASSO 3: Lançar contas via POST /nfce/{id}/lancar-contas ──
   // Botão "C" (Contas) que aparece na UI do Bling. Faz integração financeira.
+  // v2.52.51: "Já existem contas lançadas" = skipped (não erro)
   await new Promise(r => setTimeout(r, 500));
   try {
     const contasResp = await blingFetch(`/nfce/${nfceId}/lancar-contas`, { method: 'POST', body: '{}' }, env);
@@ -927,9 +929,12 @@ async function emitirNFCeBling(env, orderId, orderData) {
     let contasBody = '';
     try { contasBody = await contasResp.text(); } catch(_) {}
     console.log(`[NFC-e] /lancar-contas → HTTP ${contasStatus}: ${contasBody.substring(0, 300)}`);
-    await logBlingAudit(env, orderId, 'lancar_contas_nfce', contasResp.ok ? 'success' : 'error', {
+    // "Já existem contas lançadas" = OK (Bling auto-lançou)
+    const jaExiste = contasBody.includes('existem contas') || contasBody.includes('já lan');
+    const status = contasResp.ok ? 'success' : (jaExiste ? 'skipped' : 'error');
+    await logBlingAudit(env, orderId, 'lancar_contas_nfce', status, {
       bling_pedido_id: String(nfceId),
-      error_message: `HTTP ${contasStatus}: ${contasBody.substring(0, 400)}`,
+      error_message: jaExiste ? 'Bling já lançou automaticamente' : `HTTP ${contasStatus}: ${contasBody.substring(0, 400)}`,
     });
   } catch(e) {
     console.error('[NFC-e] /lancar-contas falhou:', e.message);
@@ -937,6 +942,7 @@ async function emitirNFCeBling(env, orderId, orderData) {
 
   // ── PASSO 4: Lançar estoque via POST /nfce/{id}/lancar-estoque ──
   // Botão "E" (Estoque) que aparece na UI do Bling. Baixa estoque dos produtos.
+  // v2.52.51: "Já existe" = skipped (não erro)
   await new Promise(r => setTimeout(r, 500));
   try {
     const estoqueResp = await blingFetch(`/nfce/${nfceId}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
@@ -944,9 +950,12 @@ async function emitirNFCeBling(env, orderId, orderData) {
     let estoqueBody = '';
     try { estoqueBody = await estoqueResp.text(); } catch(_) {}
     console.log(`[NFC-e] /lancar-estoque → HTTP ${estoqueStatus}: ${estoqueBody.substring(0, 300)}`);
-    await logBlingAudit(env, orderId, 'lancar_estoque_nfce', estoqueResp.ok ? 'success' : 'error', {
+    // "Já existe estoque lançado" = OK (Bling auto-lançou)
+    const jaExiste = estoqueBody.includes('já') || estoqueBody.includes('existem');
+    const status = estoqueResp.ok ? 'success' : (jaExiste ? 'skipped' : 'error');
+    await logBlingAudit(env, orderId, 'lancar_estoque_nfce', status, {
       bling_pedido_id: String(nfceId),
-      error_message: `HTTP ${estoqueStatus}: ${estoqueBody.substring(0, 400)}`,
+      error_message: jaExiste ? 'Bling já lançou automaticamente' : `HTTP ${estoqueStatus}: ${estoqueBody.substring(0, 400)}`,
     });
   } catch(e) {
     console.error('[NFC-e] /lancar-estoque falhou:', e.message);

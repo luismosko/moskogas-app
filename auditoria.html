@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auditoria v1.1.4 — MoskoGás</title>
+<title>Auditoria v1.1.5 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -133,7 +133,7 @@
     </div>
   </div>
 
-  <div class="version-badge">v1.1.4 — auditoria</div>
+  <div class="version-badge">v1.1.5 — auditoria</div>
 </div>
 
 <script src="shared.js"></script>
@@ -244,7 +244,7 @@ function renderErros() {
     document.getElementById('tbl-erros').style.display = 'table';
     document.getElementById('erros-empty').style.display = 'none';
     document.getElementById('erros-body').innerHTML = erros.map(e => {
-      const hora = e.created_at ? new Date(e.created_at*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '';
+      const hora = e.created_at ? formatAuditTime(e.created_at) : '';
       return `<tr>
         <td><strong>#${e.order_id}</strong></td>
         <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.customer_name || '—'}</td>
@@ -269,7 +269,7 @@ function renderAuditLog() {
   document.getElementById('audit-body').innerHTML = logs.map(l => {
     const tagClass = l.status === 'success' ? 'tag-success' : l.status === 'error' ? 'tag-error' : 'tag-skipped';
     const statusLabel = l.status === 'success' ? '✅ OK' : l.status === 'error' ? '❌ Erro' : '⏭️ Pulado';
-    const hora = l.created_at ? new Date(l.created_at*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '';
+    const hora = l.created_at ? formatAuditTime(l.created_at) : '';
     const blingInfo = l.bling_pedido_num ? `nº ${l.bling_pedido_num}` : (l.bling_pedido_id ? `ID ${l.bling_pedido_id}` : '—');
     const tipoLabel = TIPO_LABELS[l.order_tipo] || l.order_tipo || '—';
     return `<tr>
@@ -393,6 +393,23 @@ function exportCSV() {
 loadAuditoria();
 
 // ── SEM BLING PANEL ──────────────────────────────────────────
+// v1.1.5: Helper para formatar data do audit log (pode ser string ISO ou epoch)
+function formatAuditTime(val) {
+  if (!val) return '';
+  // Se for número (epoch), multiplica por 1000
+  if (typeof val === 'number') {
+    return new Date(val * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Campo_Grande'});
+  }
+  // Se for string ISO (ex: "2026-03-24 18:59:01")
+  if (typeof val === 'string') {
+    // Adiciona timezone se não tiver
+    const dt = val.includes('T') ? new Date(val) : new Date(val.replace(' ', 'T') + '-04:00');
+    if (isNaN(dt.getTime())) return val; // fallback
+    return dt.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Campo_Grande'});
+  }
+  return '';
+}
+
 const pgtoLabel = { dinheiro:'💵 Dinheiro', pix_vista:'⚡ PIX Pago', pix_receber:'⏳ PIX Rec.', debito:'💳 Débito', credito:'💳 Crédito' };
 
 async function loadSemBling() {
