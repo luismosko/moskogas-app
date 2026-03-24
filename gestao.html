@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedidos 2.9.30 — MoskoGás</title>
+<title>Pedidos 2.9.31 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -54,6 +54,7 @@
     <input type="date" id="fDateTo" onchange="load()" style="width:135px">
     <button id="btnHoje" class="btn" onclick="setDateFilter('hoje')" title="Filtrar pedidos de hoje" style="background:#f97316;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Hoje</button>
     <button id="btnOntem" class="btn" onclick="setDateFilter('ontem')" title="Filtrar pedidos de ontem" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Ontem</button>
+    <button id="btnAmanha" class="btn" onclick="setDateFilter('amanha')" title="Filtrar pedidos de amanhã" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px;white-space:nowrap">Amanhã</button>
     <button class="btn" onclick="setDateFilter('limpar')" title="Limpar filtro de data" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
   </div>
   <div style="position:relative">
@@ -97,24 +98,20 @@
     <option value="">Todos entregadores</option>
   </select>
   <input type="text" id="fQ" placeholder="🔍 Cliente, telefone, endereço..." oninput="load()" style="width:160px">
-  <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos">🔄 Atualizar</button>
-  <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-    <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
-    <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    -->
-  <span title="Versão do sistema" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px">v2.9.30</span>
+  <button class="btn btn-orange" onclick="load()" title="Recarregar pedidos" style="padding:6px 8px;font-size:12px">🔄</button>
   <span id="nfce-alert-badge" title="Pedidos entregues sem NFC-e" style="display:none;align-items:center;gap:6px;background:#fef2f2;border:1px solid #dc2626;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;color:#dc2626;animation:pulseRed 1.5s infinite">
     🧾 <span id="nfce-alert-count">0</span> pendente(s)
     <button onclick="gerarNFCePendentes()" id="btn-gerar-nfce" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700;cursor:pointer" title="Gerar NFC-e agora para todos os pedidos pendentes">▶ Gerar</button>
   </span>
-  <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:auto;cursor:pointer;">
-    <input type="checkbox" id="autoRefresh" onchange="toggleAuto()"> Auto (30s)
-  </label>
 </div>
 
 <!-- SUMMARY -->
-<div class="summary-bar" id="summary-bar"></div>
+<div class="summary-bar" id="summary-bar" style="align-items:center">
+  <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.31</span>
+  <span style="border-left:1px solid rgba(255,255,255,0.3);height:14px;margin:0 4px"></span>
+  <span id="summary-bar-stats" style="display:contents"></span>
+</div>
 
 <!-- TABELA -->
 <table>
@@ -280,15 +277,25 @@ function setDateFilter(mode) {
   const to   = document.getElementById('fDateTo');
   const btnH = document.getElementById('btnHoje');
   const btnO = document.getElementById('btnOntem');
+  const btnA = document.getElementById('btnAmanha');
+  // Reset all buttons
+  btnH.style.background = '#64748b';
+  btnO.style.background = '#64748b';
+  btnA.style.background = '#64748b';
+  
   if (mode === 'hoje') {
     const t = todayCG(); from.value = t; to.value = t;
-    btnH.style.background = '#f97316'; btnO.style.background = '#64748b';
+    btnH.style.background = '#f97316';
   } else if (mode === 'ontem') {
     const y = yesterdayCG(); from.value = y; to.value = y;
-    btnO.style.background = '#f97316'; btnH.style.background = '#64748b';
+    btnO.style.background = '#f97316';
+  } else if (mode === 'amanha') {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    const tom = d.toLocaleDateString('sv-SE', { timeZone: window._appTimezone || 'America/Campo_Grande' });
+    from.value = tom; to.value = tom;
+    btnA.style.background = '#f97316';
   } else {
     from.value = ''; to.value = '';
-    btnH.style.background = '#64748b'; btnO.style.background = '#64748b';
   }
   load();
 }
@@ -530,7 +537,7 @@ function renderSummary(rows) {
   let total = 0;
   rows.forEach(r => { counts[r.status]++; total += r.total_value || 0; });
 
-  document.getElementById('summary-bar').innerHTML = `
+  document.getElementById('summary-bar-stats').innerHTML = `
     <span>🔴 Novos: <strong>${counts.novo}</strong></span>
     <span>🟡 Atribuídos: <strong>${counts.encaminhado}</strong></span>
     <span>🟢 WhatsApp: <strong>${counts.whatsapp_enviado}</strong></span>
