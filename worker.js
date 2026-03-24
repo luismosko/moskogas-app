@@ -1,4 +1,5 @@
-// v2.52.48
+// v2.52.49
+// v2.52.49: POST /nfce/{id}/lancar-estoque no fluxo + endpoints lancar-estoque, lancar-estoque-lote, listar-bling
 // v2.52.48: Endpoint POST /api/pagamentos/:id/comprovante — atendente anexa comprovante antes da entrega
 // v2.52.46: IzChat sync com variações de telefone (com/sem 55, com/sem 9)
 // v2.52.45: Busca cliente por telefone enriquece com endereço de customer_addresses
@@ -933,7 +934,24 @@ async function emitirNFCeBling(env, orderId, orderData) {
     console.error('[NFC-e] /lancar-contas falhou:', e.message);
   }
 
-  // ── PASSO 4: Buscar número e chave via GET ──
+  // ── PASSO 4: Lançar estoque via POST /nfce/{id}/lancar-estoque ──
+  // Botão "E" (Estoque) que aparece na UI do Bling. Baixa estoque dos produtos.
+  await new Promise(r => setTimeout(r, 500));
+  try {
+    const estoqueResp = await blingFetch(`/nfce/${nfceId}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
+    const estoqueStatus = estoqueResp.status;
+    let estoqueBody = '';
+    try { estoqueBody = await estoqueResp.text(); } catch(_) {}
+    console.log(`[NFC-e] /lancar-estoque → HTTP ${estoqueStatus}: ${estoqueBody.substring(0, 300)}`);
+    await logBlingAudit(env, orderId, 'lancar_estoque_nfce', estoqueResp.ok ? 'success' : 'error', {
+      bling_pedido_id: String(nfceId),
+      error_message: `HTTP ${estoqueStatus}: ${estoqueBody.substring(0, 400)}`,
+    });
+  } catch(e) {
+    console.error('[NFC-e] /lancar-estoque falhou:', e.message);
+  }
+
+  // ── PASSO 5: Buscar número e chave via GET ──
   await new Promise(r => setTimeout(r, 1000));
   let nfceNumero = criarData.data?.numero ?? null;
   let nfceChave  = criarData.data?.chaveAcesso ?? criarData.data?.chave ?? null;
@@ -7110,6 +7128,117 @@ export default {
         await new Promise(r2 => setTimeout(r2, 400));
       }
       return json({ nfce_id: nfceId, resultados });
+    }
+
+    // ── NFC-e: Lançar estoque de uma NFC-e específica ──
+    if (method === 'POST' && path === '/api/nfce/lancar-estoque') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      const body2 = await request.json().catch(() => ({}));
+      let nfceId = body2?.nfce_id;
+      // Se passou numero ao invés de ID, buscar no Bling
+      if (!nfceId && body2?.numero) {
+        const searchResp = await blingFetch(`/nfce?numero=${body2.numero}`, { method: 'GET' }, env);
+        if (searchResp.ok) {
+          const searchData = await searchResp.json();
+          nfceId = searchData.data?.[0]?.id || null;
+        }
+      }
+      if (!nfceId) return json({ error: 'nfce_id ou numero obrigatório' }, 400);
+      try {
+        const r = await blingFetch(`/nfce/${nfceId}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
+        const txt = await r.text().catch(() => '');
+        return json({ ok: r.ok, nfce_id: nfceId, status: r.status, body: txt.substring(0, 500) });
+      } catch(e) {
+        return json({ ok: false, nfce_id: nfceId, error: e.message }, 500);
+      }
+    }
+
+    // ── NFC-e: Lançar estoque em lote (por números de NFC-e) ──
+    // Body: { numeros: ["028170", "028171", "028169"] }
+    if (method === 'POST' && path === '/api/nfce/lancar-estoque-lote') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      const body2 = await request.json().catch(() => ({}));
+      const numeros = body2?.numeros || [];
+      if (!numeros.length) return json({ error: 'numeros array obrigatório', exemplo: { numeros: ["028170", "028171"] } }, 400);
+      
+      const resultados = [];
+      let sucessos = 0, erros = 0;
+      
+      for (const num of numeros) {
+        try {
+          // Buscar ID da NFC-e pelo número
+          const searchResp = await blingFetch(`/nfce?numero=${num}`, { method: 'GET' }, env);
+          if (!searchResp.ok) {
+            resultados.push({ numero: num, ok: false, error: `Busca falhou: ${searchResp.status}` });
+            erros++;
+            continue;
+          }
+          const searchData = await searchResp.json();
+          const nfceId = searchData.data?.[0]?.id;
+          if (!nfceId) {
+            resultados.push({ numero: num, ok: false, error: 'NFC-e não encontrada' });
+            erros++;
+            continue;
+          }
+          
+          // Lançar estoque
+          await new Promise(r => setTimeout(r, 300)); // Rate limit
+          const r = await blingFetch(`/nfce/${nfceId}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
+          const txt = await r.text().catch(() => '');
+          
+          if (r.ok || r.status === 200) {
+            resultados.push({ numero: num, nfce_id: nfceId, ok: true, status: r.status });
+            sucessos++;
+          } else {
+            // Verificar se já tem estoque lançado (erro 400 pode indicar isso)
+            const jaLancado = txt.includes('já') || txt.includes('duplica') || r.status === 400;
+            resultados.push({ numero: num, nfce_id: nfceId, ok: false, ja_lancado: jaLancado, status: r.status, body: txt.substring(0, 200) });
+            if (!jaLancado) erros++;
+          }
+        } catch(e) {
+          resultados.push({ numero: num, ok: false, error: e.message });
+          erros++;
+        }
+      }
+      
+      return json({ 
+        ok: erros === 0, 
+        total: numeros.length, 
+        sucessos, 
+        erros, 
+        resultados 
+      });
+    }
+
+    // ── NFC-e: Listar NFC-e de um período no Bling (para identificar sem estoque) ──
+    // GET /api/nfce/listar-bling?dataInicio=2026-03-20&dataFim=2026-03-24
+    if (method === 'GET' && path === '/api/nfce/listar-bling') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      const dataInicio = url.searchParams.get('dataInicio') || new Date(Date.now() - 7*24*3600000).toISOString().slice(0, 10);
+      const dataFim = url.searchParams.get('dataFim') || new Date().toISOString().slice(0, 10);
+      
+      try {
+        const r = await blingFetch(`/nfce?dataInicio=${dataInicio}&dataFim=${dataFim}&pagina=1&limite=100`, { method: 'GET' }, env);
+        if (!r.ok) {
+          const txt = await r.text();
+          return json({ ok: false, error: `Bling ${r.status}: ${txt.substring(0, 300)}` }, 502);
+        }
+        const data = await r.json();
+        const nfces = (data.data || []).map(n => ({
+          id: n.id,
+          numero: n.numero,
+          data: n.data || n.dataOperacao,
+          valor: n.valor || n.total,
+          situacao: n.situacao?.descricao || n.situacao?.valor || n.situacao,
+          // Bling não retorna info de estoque na listagem, mas podemos inferir pelos campos
+        }));
+        return json({ ok: true, periodo: { dataInicio, dataFim }, total: nfces.length, nfces });
+      } catch(e) {
+        return json({ ok: false, error: e.message }, 500);
+      }
     }
 
     // ── NFC-e: Testar /emitir em uma NFC-e existente (diagnóstico) ──
