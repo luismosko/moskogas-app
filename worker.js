@@ -1,4 +1,4 @@
-// v2.52.62
+// v2.52.63
 // v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
 // v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
@@ -4156,10 +4156,18 @@ export default {
 
       // v2.28.0: busca multi-palavra — cada palavra vira um AND LIKE separado
       const nameWords = qName ? qName.split(/\s+/).filter(Boolean) : [];
+      // v2.52.63: Detectar se qName parece ser CPF/CNPJ (só números ou formato doc)
+      const qNameOnlyDigits = qName.replace(/\D/g, '');
+      const looksLikeDoc = qNameOnlyDigits.length >= 6 && /^[\d.\-\/\s]+$/.test(qName);
       {
         let sql = 'SELECT * FROM customers_cache WHERE phone_digits IS NOT NULL'; const p = [];
         if (qPhone) { sql += ' AND phone_digits LIKE ?'; p.push(`%${qPhone}%`); }
-        for (const w of nameWords) { sql += ' AND name LIKE ?'; p.push(`%${w}%`); }
+        // v2.52.63: Se parece doc, busca por cpf_cnpj; senão busca por nome; se ambíguo, busca em ambos
+        if (looksLikeDoc) {
+          sql += ' AND cpf_cnpj LIKE ?'; p.push(`%${qNameOnlyDigits}%`);
+        } else {
+          for (const w of nameWords) { sql += ' AND (name LIKE ? OR cpf_cnpj LIKE ?)'; p.push(`%${w}%`, `%${w}%`); }
+        }
         if (qAddr) { sql += ' AND (address_line LIKE ? OR bairro LIKE ? OR complemento LIKE ?)'; p.push(`%${qAddr}%`, `%${qAddr}%`, `%${qAddr}%`); }
         sql += ' ORDER BY name ASC LIMIT 15';
         const rows = await env.DB.prepare(sql).bind(...p).all().then(r => r.results || []);
