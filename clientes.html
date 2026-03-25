@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.2.3 — MoskoGás</title>
+  <title>Clientes v1.2.4 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.2.3 — clientes</div>
+  <div class="version-badge" style="display:none">v1.2.4 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.3</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.4</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -327,7 +327,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button id="edit-save-btn" onclick="saveEditCliente()" style="flex:1;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">💾 Salvar</button>
         <button onclick="closeEditModal()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer">Cancelar</button>
-        <!-- v1.2.3: Botão deletar (admin only) -->
+        <!-- v1.2.4: Botão deletar (admin only) -->
         <button id="edit-delete-btn" onclick="deleteCliente()" style="display:none;background:#fee2e2;color:#dc2626;border:2px solid #fecaca;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer" title="Deletar cliente (apenas se não tiver pedidos)">🗑️ Deletar</button>
       </div>
     </div>
@@ -374,8 +374,19 @@ async function loadPage(page) {
     }
 
     tbody.innerHTML = clientes.map(c => {
-      const tel = c.phone_digits
-        ? c.phone_digits.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3')
+      // v1.2.4: Formatar doc_CNPJ como CNPJ e não como telefone
+      let tel = '';
+      if (c.phone_digits) {
+        if (c.phone_digits.startsWith('doc_')) {
+          const cnpj = c.phone_digits.slice(4);
+          if (cnpj.length === 14) tel = `📋 ${cnpj.slice(0,2)}.${cnpj.slice(2,5)}.${cnpj.slice(5,8)}/${cnpj.slice(8,12)}-${cnpj.slice(12)}`;
+          else if (cnpj.length === 11) tel = `📋 ${cnpj.slice(0,3)}.${cnpj.slice(3,6)}.${cnpj.slice(6,9)}-${cnpj.slice(9)}`;
+          else tel = `📋 ${cnpj}`;
+        } else {
+          tel = c.phone_digits.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3');
+        }
+      }
+      tel = tel
         : '—';
       const endereco = [c.address_line, c.bairro].filter(Boolean).join(' · ') || '—';
       const aRec = parseFloat(c.valor_pendente||0);
@@ -447,7 +458,17 @@ async function openCliente(phone) {
     const { cliente, pedidos, stats } = res;
 
     document.getElementById('mc-nome').textContent = cliente.name || '—';
-    const tel = (cliente.phone_digits||'').replace(/^55(\d{2})(\d{4,5})(\d{4})$/,'($1) $2-$3');
+    // v1.2.4: Formatar doc_CNPJ como CNPJ
+    let tel = '';
+    const pd = cliente.phone_digits || '';
+    if (pd.startsWith('doc_')) {
+      const cnpj = pd.slice(4);
+      if (cnpj.length === 14) tel = `📋 ${cnpj.slice(0,2)}.${cnpj.slice(2,5)}.${cnpj.slice(5,8)}/${cnpj.slice(8,12)}-${cnpj.slice(12)}`;
+      else if (cnpj.length === 11) tel = `📋 ${cnpj.slice(0,3)}.${cnpj.slice(3,6)}.${cnpj.slice(6,9)}-${cnpj.slice(9)}`;
+      else tel = `📋 ${cnpj}`;
+    } else {
+      tel = pd.replace(/^55(\d{2})(\d{4,5})(\d{4})$/,'($1) $2-$3');
+    }
     document.getElementById('mc-sub').textContent = [tel, cliente.cpf_cnpj, cliente.email].filter(Boolean).join(' · ');
 
     // KPIs
@@ -779,7 +800,7 @@ async function editCliente(phone, nome) {
   _editPhone = phone;
   _editProdutos = [];
   
-  // v1.2.3: Resetar título e botão para modo edição
+  // v1.2.4: Resetar título e botão para modo edição
   document.getElementById('edit-modal-title').textContent = '✏️ Editar Cliente';
   document.getElementById('edit-save-btn').textContent = '💾 Salvar';
   
@@ -787,7 +808,7 @@ async function editCliente(phone, nome) {
   await loadAllProducts();
   renderProdutoSelect();
   
-  // v1.2.3: Mostrar botão deletar apenas para admin
+  // v1.2.4: Mostrar botão deletar apenas para admin
   const deleteBtn = document.getElementById('edit-delete-btn');
   const user = JSON.parse(localStorage.getItem('mg_user') || '{}');
   if (deleteBtn) deleteBtn.style.display = (user.role === 'admin') ? 'block' : 'none';
@@ -799,7 +820,9 @@ async function editCliente(phone, nome) {
     const c = res.cliente;
     hideLoading();
     document.getElementById('edit-nome').value  = c.name || '';
-    document.getElementById('edit-tel').value   = (c.phone_digits||'').replace(/^55/,'');
+    // v1.2.4: Se for doc_CNPJ, deixar campo vazio para preencher telefone real
+    const _pd = c.phone_digits || '';
+    document.getElementById('edit-tel').value = _pd.startsWith('doc_') ? '' : _pd.replace(/^55/,'');
     document.getElementById('edit-cpf').value   = c.cpf_cnpj || '';
     document.getElementById('edit-email').value = c.email || '';
     document.getElementById('edit-rua').value   = c.address_line || '';
@@ -807,7 +830,7 @@ async function editCliente(phone, nome) {
     document.getElementById('edit-comp').value  = c.complemento || '';
     document.getElementById('edit-ref').value   = c.referencia || '';
     
-    // v1.2.3: Permitir edição de telefone também na edição (backend faz migração)
+    // v1.2.4: Permitir edição de telefone também na edição (backend faz migração)
     document.getElementById('edit-tel').readOnly = false;
     document.getElementById('edit-tel').style.background = '#fff';
     
@@ -865,7 +888,7 @@ async function saveEditCliente() {
   
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
-    // v1.2.3: Enviar original_phone para o backend migrar se telefone foi alterado
+    // v1.2.4: Enviar original_phone para o backend migrar se telefone foi alterado
     const pgPrefSel = document.querySelector('input[name="pagamento_pref"]:checked');
     const result = await api('/api/customer/upsert', {
       method: 'POST',
@@ -906,7 +929,7 @@ async function saveEditCliente() {
   }
 }
 
-// v1.2.3: Deletar cliente (admin only)
+// v1.2.4: Deletar cliente (admin only)
 async function deleteCliente() {
   if (!_editPhone) return;
   const nome = document.getElementById('edit-nome').value || 'este cliente';
@@ -926,7 +949,7 @@ async function deleteCliente() {
   }
 }
 
-// v1.2.3: Cadastro de novo cliente
+// v1.2.4: Cadastro de novo cliente
 function abrirNovoCliente() {
   _editPhone = null; // indica novo cadastro
   _editOrigem = 'manual';

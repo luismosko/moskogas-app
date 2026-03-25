@@ -1,4 +1,5 @@
-// v2.52.52
+// v2.52.53
+// v2.52.53: Fix migração doc_CNPJ→telefone real + tabela customer_phones + unificar por CNPJ/bling_contact_id
 // v2.52.52: Endpoints IA IzChat — /api/pub/ia/* para atendimento automático WhatsApp
 // v2.52.51: lancar_contas/estoque NFC-e - "já existe" vira skipped (não erro)
 // v2.52.50: Corrige auditoria sem-bling para verificar nfce_id (NFC-e) além de bling_pedido_id
@@ -195,7 +196,12 @@ function err(msg, status = 400) {
 // v2.52.28: Normaliza telefone para formato consistente (sempre com prefixo 55 para celulares/fixos brasileiros)
 function normalizePhone(phone) {
   if (!phone) return '';
-  const digits = String(phone).replace(/\D/g, '');
+  const str = String(phone);
+  // v2.52.53: Preservar prefixos especiais doc_ e bid_ (clientes sem telefone)
+  if (str.startsWith('doc_') || str.startsWith('bid_')) {
+    return str;
+  }
+  const digits = str.replace(/\D/g, '');
   if (!digits) return '';
   // Se já tem 55 no início e tem 12-13 dígitos (55 + DDD + número), mantém
   if (digits.startsWith('55') && digits.length >= 12 && digits.length <= 13) {
@@ -2660,6 +2666,19 @@ export default {
           )
         `).run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ca_phone ON customer_addresses(phone_digits)').run();
+        // v2.52.53: Tabela de telefones adicionais (múltiplos telefones por cliente)
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS customer_phones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_digits TEXT NOT NULL,
+            alt_phone TEXT NOT NULL,
+            label TEXT DEFAULT '',
+            created_at INTEGER DEFAULT (unixepoch()),
+            UNIQUE(phone_digits, alt_phone)
+          )
+        `).run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cp_phone ON customer_phones(phone_digits)').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_cp_alt ON customer_phones(alt_phone)').run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS streets_cg (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3406,32 +3425,38 @@ export default {
       // Normaliza para 55+DDD+numero
       const phoneDigits = phone.length === 11 ? `55${phone}` : phone.length === 13 ? phone : `55${phone}`;
       
-      const cliente = await env.DB.prepare(`
+      // v2.52.53: Buscar cliente por phone_digits principal
+      let cliente = await env.DB.prepare(`
         SELECT phone_digits, name, address_line, bairro, complemento, referencia, 
                cpf_cnpj, email, ultima_compra_glp
         FROM customers_cache WHERE phone_digits = ?
       `).bind(phoneDigits).first();
       
+      // Tenta sem 55
       if (!cliente) {
-        // Tenta sem 55
-        const clienteSem55 = await env.DB.prepare(`
+        cliente = await env.DB.prepare(`
           SELECT phone_digits, name, address_line, bairro, complemento, referencia, 
                  cpf_cnpj, email, ultima_compra_glp
           FROM customers_cache WHERE phone_digits = ?
         `).bind(phone.slice(-11)).first();
-        
-        if (!clienteSem55) return json({ encontrado: false });
-        return json({
-          encontrado: true,
-          nome: clienteSem55.name || '',
-          endereco: clienteSem55.address_line || '',
-          bairro: clienteSem55.bairro || '',
-          complemento: clienteSem55.complemento || '',
-          referencia: clienteSem55.referencia || '',
-          cpf_cnpj: clienteSem55.cpf_cnpj || '',
-          ultima_compra: clienteSem55.ultima_compra_glp || ''
-        });
       }
+      
+      // v2.52.53: Buscar em telefones adicionais (customer_phones)
+      if (!cliente) {
+        try {
+          const altMatch = await env.DB.prepare(`
+            SELECT cc.phone_digits, cc.name, cc.address_line, cc.bairro, cc.complemento, 
+                   cc.referencia, cc.cpf_cnpj, cc.email, cc.ultima_compra_glp
+            FROM customer_phones cp 
+            JOIN customers_cache cc ON cc.phone_digits = cp.phone_digits 
+            WHERE cp.alt_phone LIKE ? OR cp.alt_phone LIKE ?
+            LIMIT 1
+          `).bind(`%${phoneDigits}`, `%${phone.slice(-11)}`).first();
+          if (altMatch) cliente = altMatch;
+        } catch (_) {}
+      }
+      
+      if (!cliente) return json({ encontrado: false });
       
       return json({
         encontrado: true,
@@ -4202,9 +4227,30 @@ export default {
       if (type === 'phone') {
         let rows = [];
         if (digits.length >= 6) {
+          // Busca direta por phone_digits
           const byEnd = await env.DB.prepare("SELECT * FROM customers_cache WHERE phone_digits LIKE ? LIMIT 10").bind(`%${digits}`).all().then(r => r.results);
           if (byEnd.length > 0) rows = byEnd;
           else rows = await env.DB.prepare("SELECT * FROM customers_cache WHERE phone_digits LIKE ? LIMIT 10").bind(`%${digits}%`).all().then(r => r.results);
+          
+          // v2.52.53: Buscar também em telefones adicionais (customer_phones)
+          if (rows.length < 10) {
+            try {
+              const altRows = await env.DB.prepare(`
+                SELECT cc.* FROM customer_phones cp 
+                JOIN customers_cache cc ON cc.phone_digits = cp.phone_digits 
+                WHERE cp.alt_phone LIKE ? 
+                LIMIT ?
+              `).bind(`%${digits}%`, 10 - rows.length).all().then(r => r.results || []);
+              // Adicionar se não estiver já na lista
+              const existingPhones = new Set(rows.map(r => r.phone_digits));
+              for (const r of altRows) {
+                if (!existingPhones.has(r.phone_digits)) {
+                  rows.push(r);
+                  existingPhones.add(r.phone_digits);
+                }
+              }
+            } catch (_) {}
+          }
         }
         
         // v2.52.45: Enriquecer com endereço de customer_addresses se não tiver no cache
@@ -5255,27 +5301,61 @@ export default {
     if (method === 'POST' && path === '/api/customer/upsert') {
       const body = await request.json();
       const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial, original_phone } = body;
-      // v2.52.28: Usar normalizePhone para garantir prefixo 55 consistente
+      // v2.52.53: Normalizar telefone (preserva doc_/bid_ se for o caso)
       const digits = normalizePhone(phone);
       const originalDigits = original_phone ? normalizePhone(original_phone) : null;
 
-      // v2.52.28: Se o telefone foi alterado, precisamos migrar os dados
-      if (originalDigits && originalDigits !== digits && originalDigits !== '') {
-        const oldCustomer = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits=?').bind(originalDigits).first().catch(() => null);
-        if (oldCustomer) {
-          // Migrar dados do cliente antigo para o novo telefone
-          await env.DB.prepare(`INSERT INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial, origem, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-            ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, pagamento_preferencial=excluded.pagamento_preferencial, updated_at=unixepoch()`)
-            .bind(digits, name || oldCustomer.name, address_line || oldCustomer.address_line, bairro || oldCustomer.bairro, complemento || oldCustomer.complemento, referencia || oldCustomer.referencia, bling_contact_id || oldCustomer.bling_contact_id, cpf_cnpj || oldCustomer.cpf_cnpj, email !== undefined ? email : oldCustomer.email, cobranca_tipo || oldCustomer.cobranca_tipo || 'entrega', pagamento_preferencial !== undefined ? pagamento_preferencial : oldCustomer.pagamento_preferencial, oldCustomer.origem || 'manual').run();
-          // Migrar produtos preferidos
-          await env.DB.prepare(`UPDATE customer_products SET phone_digits=? WHERE phone_digits=?`).bind(digits, originalDigits).run().catch(() => {});
-          // Atualizar pedidos para novo telefone
-          await env.DB.prepare(`UPDATE orders SET phone_digits=? WHERE phone_digits=?`).bind(digits, originalDigits).run().catch(() => {});
-          // Remover cliente antigo
-          await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits=?`).bind(originalDigits).run();
-          return json({ ok: true, migrated: true, from: originalDigits, to: digits });
+      // v2.52.53: Migração inteligente — detecta doc_CNPJ, busca por CNPJ/bling_contact_id
+      let oldCustomer = null;
+      let oldPhoneKey = originalDigits;
+      
+      // Tenta buscar pelo original_phone primeiro
+      if (originalDigits) {
+        oldCustomer = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits=?').bind(originalDigits).first().catch(() => null);
+      }
+      
+      // v2.52.53: Se original começa com doc_ e não encontrou, busca pelo CNPJ dentro do doc_
+      if (!oldCustomer && originalDigits && originalDigits.startsWith('doc_')) {
+        const cnpjDigits = originalDigits.slice(4);
+        oldCustomer = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits=? OR cpf_cnpj=?').bind(originalDigits, cnpjDigits).first().catch(() => null);
+        if (oldCustomer) oldPhoneKey = oldCustomer.phone_digits;
+      }
+      
+      // v2.52.53: Se passou CNPJ e não encontrou por telefone, busca pelo CNPJ
+      if (!oldCustomer && cpf_cnpj) {
+        const cnpjClean = cpf_cnpj.replace(/\D/g, '');
+        if (cnpjClean.length >= 11) {
+          oldCustomer = await env.DB.prepare('SELECT * FROM customers_cache WHERE cpf_cnpj=? OR phone_digits=?').bind(cnpjClean, `doc_${cnpjClean}`).first().catch(() => null);
+          if (oldCustomer) oldPhoneKey = oldCustomer.phone_digits;
         }
+      }
+      
+      // v2.52.53: Se passou bling_contact_id e não encontrou, busca pelo bling_contact_id
+      if (!oldCustomer && bling_contact_id) {
+        oldCustomer = await env.DB.prepare('SELECT * FROM customers_cache WHERE bling_contact_id=?').bind(String(bling_contact_id)).first().catch(() => null);
+        if (oldCustomer) oldPhoneKey = oldCustomer.phone_digits;
+      }
+
+      // Se encontrou cliente existente e o telefone está mudando, migrar
+      if (oldCustomer && oldPhoneKey && oldPhoneKey !== digits && digits && !digits.startsWith('doc_')) {
+        console.log(`[upsert] Migrando cliente ${oldPhoneKey} → ${digits}`);
+        // Criar/atualizar registro com novo telefone
+        await env.DB.prepare(`INSERT INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial, origem, updated_at) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+          ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, pagamento_preferencial=excluded.pagamento_preferencial, updated_at=unixepoch()`)
+          .bind(digits, name || oldCustomer.name, address_line !== undefined ? address_line : oldCustomer.address_line, bairro !== undefined ? bairro : oldCustomer.bairro, complemento !== undefined ? complemento : oldCustomer.complemento, referencia !== undefined ? referencia : oldCustomer.referencia, bling_contact_id || oldCustomer.bling_contact_id, cpf_cnpj || oldCustomer.cpf_cnpj, email !== undefined ? email : oldCustomer.email, cobranca_tipo || oldCustomer.cobranca_tipo || 'entrega', pagamento_preferencial !== undefined ? pagamento_preferencial : oldCustomer.pagamento_preferencial, oldCustomer.origem || 'manual').run();
+        // Migrar produtos preferidos
+        await env.DB.prepare(`UPDATE customer_products SET phone_digits=? WHERE phone_digits=?`).bind(digits, oldPhoneKey).run().catch(() => {});
+        // Atualizar pedidos para novo telefone
+        await env.DB.prepare(`UPDATE orders SET phone_digits=? WHERE phone_digits=?`).bind(digits, oldPhoneKey).run().catch(() => {});
+        // v2.52.53: Salvar telefone antigo na tabela customer_phones (se era telefone real)
+        if (!oldPhoneKey.startsWith('doc_') && !oldPhoneKey.startsWith('bid_')) {
+          await env.DB.prepare(`CREATE TABLE IF NOT EXISTS customer_phones (id INTEGER PRIMARY KEY AUTOINCREMENT, phone_digits TEXT NOT NULL, alt_phone TEXT NOT NULL, label TEXT DEFAULT '', created_at INTEGER DEFAULT (unixepoch()), UNIQUE(phone_digits, alt_phone))`).run().catch(() => {});
+          await env.DB.prepare(`INSERT OR IGNORE INTO customer_phones (phone_digits, alt_phone, label) VALUES (?, ?, 'migrado')`).bind(digits, oldPhoneKey).run().catch(() => {});
+        }
+        // Remover cliente antigo
+        await env.DB.prepare(`DELETE FROM customers_cache WHERE phone_digits=?`).bind(oldPhoneKey).run();
+        return json({ ok: true, migrated: true, from: oldPhoneKey, to: digits, phone_digits: digits });
       }
 
       // v2.52.27: Preservar campos existentes se não fornecidos
