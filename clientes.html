@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.2.6 — MoskoGás</title>
+  <title>Clientes v1.2.7 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.2.6 — clientes</div>
+  <div class="version-badge" style="display:none">v1.2.7 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.6</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.7</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -327,7 +327,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button id="edit-save-btn" onclick="saveEditCliente()" style="flex:1;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">💾 Salvar</button>
         <button onclick="closeEditModal()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer">Cancelar</button>
-        <!-- v1.2.6: Botão deletar (admin only) -->
+        <!-- v1.2.7: Botão deletar (admin only) -->
         <button id="edit-delete-btn" onclick="deleteCliente()" style="display:none;background:#fee2e2;color:#dc2626;border:2px solid #fecaca;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer" title="Deletar cliente (apenas se não tiver pedidos)">🗑️ Deletar</button>
       </div>
     </div>
@@ -374,7 +374,7 @@ async function loadPage(page) {
     }
 
     tbody.innerHTML = clientes.map(c => {
-      // v1.2.6: Formatar doc_CNPJ como CNPJ e não como telefone
+      // v1.2.7: Formatar doc_CNPJ como CNPJ e não como telefone
       let tel = '';
       if (c.phone_digits) {
         if (c.phone_digits.startsWith('doc_')) {
@@ -457,7 +457,7 @@ async function openCliente(phone) {
     const { cliente, pedidos, stats } = res;
 
     document.getElementById('mc-nome').textContent = cliente.name || '—';
-    // v1.2.6: Formatar doc_CNPJ como CNPJ
+    // v1.2.7: Formatar doc_CNPJ como CNPJ
     let tel = '';
     const pd = cliente.phone_digits || '';
     if (pd.startsWith('doc_')) {
@@ -706,7 +706,7 @@ function escAttr(s) {
 
 // ── Modal Editar Cliente ──
 let _editPhone = null;
-let _editBlingId = null; // v1.2.6: bling_contact_id do cliente sendo editado
+let _editBlingId = null; // v1.2.7: bling_contact_id do cliente sendo editado
 let _editProdutos = []; // produtos preferidos do cliente
 let _allProducts = [];  // todos os produtos do sistema
 
@@ -798,10 +798,10 @@ function updateCobrancaStyle() {
 
 async function editCliente(phone, nome) {
   _editPhone = phone;
-  _editBlingId = null; // v1.2.6: reset
+  _editBlingId = null; // v1.2.7: reset
   _editProdutos = [];
   
-  // v1.2.6: Resetar título e botão para modo edição
+  // v1.2.7: Resetar título e botão para modo edição
   document.getElementById('edit-modal-title').textContent = '✏️ Editar Cliente';
   document.getElementById('edit-save-btn').textContent = '💾 Salvar';
   
@@ -809,7 +809,7 @@ async function editCliente(phone, nome) {
   await loadAllProducts();
   renderProdutoSelect();
   
-  // v1.2.6: Mostrar botão deletar apenas para admin
+  // v1.2.7: Mostrar botão deletar apenas para admin
   const deleteBtn = document.getElementById('edit-delete-btn');
   const user = JSON.parse(localStorage.getItem('mg_user') || '{}');
   if (deleteBtn) deleteBtn.style.display = (user.role === 'admin') ? 'block' : 'none';
@@ -821,7 +821,7 @@ async function editCliente(phone, nome) {
     const c = res.cliente;
     hideLoading();
     document.getElementById('edit-nome').value  = c.name || '';
-    // v1.2.6: Se for doc_CNPJ, deixar campo vazio para preencher telefone real
+    // v1.2.7: Se for doc_CNPJ, deixar campo vazio para preencher telefone real
     const _pd = c.phone_digits || '';
     document.getElementById('edit-tel').value = _pd.startsWith('doc_') ? '' : _pd.replace(/^55/,'');
     document.getElementById('edit-cpf').value   = c.cpf_cnpj || '';
@@ -831,7 +831,7 @@ async function editCliente(phone, nome) {
     document.getElementById('edit-comp').value  = c.complemento || '';
     document.getElementById('edit-ref').value   = c.referencia || '';
     
-    // v1.2.6: Permitir edição de telefone também na edição (backend faz migração)
+    // v1.2.7: Permitir edição de telefone também na edição (backend faz migração)
     document.getElementById('edit-tel').readOnly = false;
     document.getElementById('edit-tel').style.background = '#fff';
     
@@ -875,7 +875,7 @@ async function editCliente(phone, nome) {
 function closeEditModal() {
   document.getElementById('modal-editar').style.display = 'none';
   _editPhone = null;
-  _editBlingId = null; // v1.2.6
+  _editBlingId = null; // v1.2.7
 }
 
 async function saveEditCliente() {
@@ -890,7 +890,7 @@ async function saveEditCliente() {
   
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
-    // v1.2.6: Enviar original_phone para o backend migrar se telefone foi alterado
+    // v1.2.7: Enviar original_phone para o backend migrar se telefone foi alterado
     const pgPrefSel = document.querySelector('input[name="pagamento_pref"]:checked');
     const result = await api('/api/customer/upsert', {
       method: 'POST',
@@ -904,7 +904,7 @@ async function saveEditCliente() {
         referencia:  document.getElementById('edit-ref').value.trim(),
         cpf_cnpj:    document.getElementById('edit-cpf').value.trim(),
         email:       document.getElementById('edit-email').value.trim(),
-        bling_contact_id: _editBlingId || null, // v1.2.6: preservar bling_contact_id
+        bling_contact_id: _editBlingId || null, // v1.2.7: preservar bling_contact_id
         cobranca_tipo: document.getElementById('edit-cobranca-mensalista').checked ? 'mensalista' : 'entrega',
         pagamento_preferencial: pgPrefSel ? pgPrefSel.value : '',
         origem: isNovoCadastro ? 'manual' : undefined
@@ -932,7 +932,7 @@ async function saveEditCliente() {
   }
 }
 
-// v1.2.6: Deletar cliente (admin only)
+// v1.2.7: Deletar cliente (admin only)
 async function deleteCliente() {
   if (!_editPhone) return;
   const nome = document.getElementById('edit-nome').value || 'este cliente';
@@ -952,10 +952,10 @@ async function deleteCliente() {
   }
 }
 
-// v1.2.6: Cadastro de novo cliente
+// v1.2.7: Cadastro de novo cliente
 function abrirNovoCliente() {
   _editPhone = null; // indica novo cadastro
-  _editBlingId = null; // v1.2.6
+  _editBlingId = null; // v1.2.7
   _editOrigem = 'manual';
   _editProdutos = [];
   document.getElementById('edit-modal-title').textContent = '➕ Cadastrar Novo Cliente';
@@ -987,5 +987,187 @@ function abrirNovoCliente() {
 // Init
 loadPage(1);
 </script>
+
+<!-- Modal Debug/Merge v1.2.7 -->
+<div id="modal-debug" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:flex-start;padding-top:50px">
+  <div style="background:#fff;border-radius:12px;width:95%;max-width:900px;max-height:85vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="background:#1e293b;color:#fff;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0;font-size:18px">🔧 Debug & Merge de Clientes</h2>
+      <button onclick="fecharDebugPanel()" style="background:none;border:none;color:#fff;font-size:24px;cursor:pointer">&times;</button>
+    </div>
+    <div style="padding:24px">
+      <!-- Busca -->
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <input id="debug-search" type="text" placeholder="Buscar por nome, CNPJ ou telefone..." style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px">
+        <button onclick="buscarDebug()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-weight:600;cursor:pointer">🔍 Buscar</button>
+      </div>
+      
+      <!-- Resultados -->
+      <div id="debug-results" style="margin-bottom:16px">
+        <p style="color:#64748b;text-align:center;padding:40px">Digite um termo e clique em Buscar para ver os registros no banco</p>
+      </div>
+      
+      <!-- Merge -->
+      <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:8px;padding:16px;margin-top:16px">
+        <h3 style="margin:0 0 12px 0;color:#92400e;font-size:14px">🔀 Merge de Clientes</h3>
+        <p style="font-size:12px;color:#78350f;margin:0 0 12px 0">Selecione qual manter e qual deletar. Os dados do deletado serão copiados para o mantido.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="merge-manter" style="flex:1;min-width:200px;padding:10px;border:2px solid #e2e8f0;border-radius:6px">
+            <option value="">— Manter (com telefone) —</option>
+          </select>
+          <select id="merge-deletar" style="flex:1;min-width:200px;padding:10px;border:2px solid #e2e8f0;border-radius:6px">
+            <option value="">— Deletar (duplicado) —</option>
+          </select>
+          <button onclick="executarMerge()" style="background:#059669;color:#fff;border:none;border-radius:6px;padding:10px 20px;font-weight:600;cursor:pointer">✅ Executar Merge</button>
+        </div>
+      </div>
+      
+      <!-- Limpeza Geral -->
+      <div style="background:#fee2e2;border:2px solid #ef4444;border-radius:8px;padding:16px;margin-top:16px">
+        <h3 style="margin:0 0 8px 0;color:#991b1b;font-size:14px">🧹 Limpeza Automática</h3>
+        <p style="font-size:12px;color:#7f1d1d;margin:0 0 12px 0">Remove TODOS os registros doc_CNPJ que têm versão com telefone real (faz merge automático do bling_id)</p>
+        <button onclick="limparTodosDuplicados()" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:10px 20px;font-weight:600;cursor:pointer">🗑️ Limpar Todos Duplicados</button>
+        <span id="limpeza-resultado" style="margin-left:12px;font-size:12px"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Debug Panel v1.2.7
+let _debugResults = [];
+
+function abrirDebugPanel() {
+  document.getElementById('modal-debug').style.display = 'flex';
+  document.getElementById('debug-search').focus();
+}
+
+function fecharDebugPanel() {
+  document.getElementById('modal-debug').style.display = 'none';
+}
+
+async function buscarDebug() {
+  const q = document.getElementById('debug-search').value.trim();
+  if (!q) { toast('Digite algo para buscar', 'error'); return; }
+  
+  const resultsDiv = document.getElementById('debug-results');
+  resultsDiv.innerHTML = '<p style="text-align:center;color:#64748b">🔍 Buscando...</p>';
+  
+  try {
+    // Buscar por nome E por CNPJ
+    const [byName, byCnpj] = await Promise.all([
+      api(`/api/debug/clientes?q=${encodeURIComponent(q)}`),
+      api(`/api/debug/clientes?cnpj=${encodeURIComponent(q)}`)
+    ]);
+    
+    // Combinar resultados sem duplicar
+    const seen = new Set();
+    _debugResults = [];
+    for (const r of [...(byName.registros || []), ...(byCnpj.registros || [])]) {
+      if (!seen.has(r.phone_digits)) {
+        seen.add(r.phone_digits);
+        _debugResults.push(r);
+      }
+    }
+    
+    if (_debugResults.length === 0) {
+      resultsDiv.innerHTML = '<p style="text-align:center;color:#64748b">Nenhum registro encontrado</p>';
+      return;
+    }
+    
+    // Renderizar tabela
+    resultsDiv.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:#f1f5f9">
+            <th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">Tipo</th>
+            <th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">phone_digits</th>
+            <th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">Nome</th>
+            <th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">CPF/CNPJ</th>
+            <th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">Bling ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${_debugResults.map(r => `
+            <tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:8px">
+                <span style="background:${r.tipo === 'telefone_real' ? '#dcfce7' : '#fef3c7'};color:${r.tipo === 'telefone_real' ? '#166534' : '#92400e'};padding:2px 8px;border-radius:4px;font-weight:600;font-size:10px">${r.tipo}</span>
+              </td>
+              <td style="padding:8px;font-family:monospace;font-size:11px">${r.phone_digits}</td>
+              <td style="padding:8px;font-weight:600">${r.name || '—'}</td>
+              <td style="padding:8px;font-family:monospace">${r.cpf_cnpj || '—'}</td>
+              <td style="padding:8px">${r.bling_contact_id ? `<span style="background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-size:10px">B:${r.bling_contact_id}</span>` : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+    
+    // Popular selects de merge
+    const selManter = document.getElementById('merge-manter');
+    const selDeletar = document.getElementById('merge-deletar');
+    selManter.innerHTML = '<option value="">— Manter (com telefone) —</option>';
+    selDeletar.innerHTML = '<option value="">— Deletar (duplicado) —</option>';
+    
+    for (const r of _debugResults) {
+      const label = `${r.name} (${r.phone_digits})${r.bling_contact_id ? ' [Bling]' : ''}`;
+      selManter.innerHTML += `<option value="${r.phone_digits}">${label}</option>`;
+      selDeletar.innerHTML += `<option value="${r.phone_digits}">${label}</option>`;
+    }
+    
+  } catch (e) {
+    resultsDiv.innerHTML = `<p style="text-align:center;color:#dc2626">❌ Erro: ${e.message}</p>`;
+  }
+}
+
+async function executarMerge() {
+  const manter = document.getElementById('merge-manter').value;
+  const deletar = document.getElementById('merge-deletar').value;
+  
+  if (!manter || !deletar) { toast('Selecione ambos os registros', 'error'); return; }
+  if (manter === deletar) { toast('Manter e deletar não podem ser iguais', 'error'); return; }
+  
+  if (!confirm(`Confirma MERGE?\n\n✅ MANTER: ${manter}\n🗑️ DELETAR: ${deletar}\n\nOs dados do deletado serão copiados para o mantido.`)) return;
+  
+  try {
+    const res = await api('/api/clientes/merge', {
+      method: 'POST',
+      body: JSON.stringify({ manter, deletar })
+    });
+    toast(`✅ Merge OK! Campos copiados: ${res.campos_copiados?.join(', ') || 'nenhum'}, Pedidos migrados: ${res.pedidos_migrados}`, 'success');
+    buscarDebug(); // Recarregar resultados
+    loadPage(_page); // Atualizar lista
+  } catch (e) {
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+async function limparTodosDuplicados() {
+  if (!confirm('⚠️ ATENÇÃO!\n\nIsso vai deletar TODOS os registros doc_CNPJ que têm versão com telefone real.\n\nContinuar?')) return;
+  
+  const span = document.getElementById('limpeza-resultado');
+  span.innerHTML = '⏳ Limpando...';
+  
+  try {
+    const res = await api('/api/clientes/limpar-duplicados', { method: 'POST' });
+    span.innerHTML = `✅ ${res.deletados} deletados`;
+    span.style.color = '#059669';
+    if (res.deletados > 0) {
+      loadPage(_page);
+      buscarDebug();
+    }
+  } catch (e) {
+    span.innerHTML = `❌ ${e.message}`;
+    span.style.color = '#dc2626';
+  }
+}
+
+// Enter para buscar
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('debug-search');
+  if (inp) inp.addEventListener('keypress', e => { if (e.key === 'Enter') buscarDebug(); });
+});
+</script>
+
 </body>
 </html>

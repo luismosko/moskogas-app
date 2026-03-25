@@ -1,4 +1,5 @@
-// v2.52.55
+// v2.52.56
+// v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
 // v2.52.55: Merge dados do doc_ antes de deletar (copia bling_contact_id)
 // v2.52.54: Limpeza automática doc_CNPJ duplicados no upsert
 // v2.52.53: Fix migração doc_CNPJ→telefone real + tabela customer_phones + unificar por CNPJ/bling_contact_id
@@ -4418,6 +4419,94 @@ export default {
     }
 
     // ── GESTÃO DE CLIENTES ──────────────────────────────────────────────
+    // GET /api/debug/clientes?q=termo — Debug: ver registros exatos no banco
+    if (method === 'GET' && path === '/api/debug/clientes') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      const q = url.searchParams.get('q') || '';
+      const cnpj = url.searchParams.get('cnpj') || '';
+      const bling_id = url.searchParams.get('bling_id') || '';
+      
+      let rows = [];
+      if (q) {
+        rows = await env.DB.prepare(`SELECT phone_digits, name, cpf_cnpj, bling_contact_id, address_line, bairro, email, updated_at FROM customers_cache WHERE name LIKE ? OR phone_digits LIKE ? ORDER BY updated_at DESC LIMIT 20`).bind(`%${q}%`, `%${q}%`).all().then(r => r.results || []);
+      } else if (cnpj) {
+        const cnpjClean = cnpj.replace(/\D/g, '');
+        rows = await env.DB.prepare(`SELECT phone_digits, name, cpf_cnpj, bling_contact_id, address_line, bairro, email, updated_at FROM customers_cache WHERE cpf_cnpj LIKE ? OR phone_digits LIKE ? ORDER BY updated_at DESC LIMIT 20`).bind(`%${cnpjClean}%`, `%doc_${cnpjClean}%`).all().then(r => r.results || []);
+      } else if (bling_id) {
+        rows = await env.DB.prepare(`SELECT phone_digits, name, cpf_cnpj, bling_contact_id, address_line, bairro, email, updated_at FROM customers_cache WHERE bling_contact_id = ? ORDER BY updated_at DESC LIMIT 20`).bind(bling_id).all().then(r => r.results || []);
+      }
+      
+      return json({ 
+        total: rows.length, 
+        registros: rows.map(r => ({
+          ...r,
+          tipo: r.phone_digits.startsWith('doc_') ? 'doc_CNPJ' : r.phone_digits.startsWith('bid_') ? 'bid_ID' : 'telefone_real',
+          phone_formatado: r.phone_digits.startsWith('doc_') ? `📋 CNPJ: ${r.phone_digits.slice(4)}` : r.phone_digits
+        }))
+      });
+    }
+
+    // POST /api/clientes/merge — Merge dois clientes (admin only)
+    if (method === 'POST' && path === '/api/clientes/merge') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const { manter, deletar } = await request.json();
+      if (!manter || !deletar) return json({ error: 'Informe manter e deletar (phone_digits)' }, 400);
+      if (manter === deletar) return json({ error: 'manter e deletar não podem ser iguais' }, 400);
+      
+      // Buscar ambos
+      const regManter = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits = ?').bind(manter).first();
+      const regDeletar = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits = ?').bind(deletar).first();
+      
+      if (!regManter) return json({ error: `Registro ${manter} não encontrado` }, 404);
+      if (!regDeletar) return json({ error: `Registro ${deletar} não encontrado` }, 404);
+      
+      // Merge: copiar campos vazios do deletar para o manter
+      const updates = [];
+      if (!regManter.bling_contact_id && regDeletar.bling_contact_id) updates.push({ col: 'bling_contact_id', val: regDeletar.bling_contact_id });
+      if (!regManter.cpf_cnpj && regDeletar.cpf_cnpj) updates.push({ col: 'cpf_cnpj', val: regDeletar.cpf_cnpj });
+      if (!regManter.email && regDeletar.email) updates.push({ col: 'email', val: regDeletar.email });
+      if (!regManter.address_line && regDeletar.address_line) updates.push({ col: 'address_line', val: regDeletar.address_line });
+      if (!regManter.bairro && regDeletar.bairro) updates.push({ col: 'bairro', val: regDeletar.bairro });
+      if (!regManter.complemento && regDeletar.complemento) updates.push({ col: 'complemento', val: regDeletar.complemento });
+      if (!regManter.referencia && regDeletar.referencia) updates.push({ col: 'referencia', val: regDeletar.referencia });
+      
+      // Aplicar updates
+      for (const u of updates) {
+        await env.DB.prepare(`UPDATE customers_cache SET ${u.col} = ?, updated_at = unixepoch() WHERE phone_digits = ?`).bind(u.val, manter).run();
+      }
+      
+      // Migrar pedidos do deletar para o manter
+      const pedidosMigrados = await env.DB.prepare('UPDATE orders SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run();
+      
+      // Migrar endereços adicionais
+      await env.DB.prepare('UPDATE customer_addresses SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run().catch(() => {});
+      
+      // Migrar produtos preferidos
+      await env.DB.prepare('UPDATE customer_products SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run().catch(() => {});
+      
+      // Salvar telefone do deletar como telefone adicional (se era telefone real)
+      if (!deletar.startsWith('doc_') && !deletar.startsWith('bid_')) {
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS customer_phones (id INTEGER PRIMARY KEY AUTOINCREMENT, phone_digits TEXT NOT NULL, alt_phone TEXT NOT NULL, label TEXT DEFAULT "", created_at INTEGER DEFAULT (unixepoch()), UNIQUE(phone_digits, alt_phone))').run().catch(() => {});
+        await env.DB.prepare('INSERT OR IGNORE INTO customer_phones (phone_digits, alt_phone, label) VALUES (?, ?, "merge")').bind(manter, deletar).run().catch(() => {});
+      }
+      
+      // Deletar o registro
+      await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(deletar).run();
+      
+      console.log(`[merge] ${deletar} → ${manter}, updates: ${updates.length}, pedidos: ${pedidosMigrados.meta?.changes || 0}`);
+      
+      return json({ 
+        ok: true, 
+        mantido: manter, 
+        deletado: deletar, 
+        campos_copiados: updates.map(u => u.col),
+        pedidos_migrados: pedidosMigrados.meta?.changes || 0
+      });
+    }
+
     // GET /api/clientes — lista paginada com stats de pedidos
     if (request.method === 'GET' && path === '/api/clientes') {
       const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
@@ -5346,9 +5435,14 @@ export default {
     if (method === 'POST' && path === '/api/customer/upsert') {
       const body = await request.json();
       const { phone, name, address_line, bairro, complemento, referencia, bling_contact_id, cpf_cnpj, email, cobranca_tipo, pagamento_preferencial, original_phone } = body;
+      // v2.52.56: Log completo para debug
+      console.log(`[upsert] INPUT: phone=${phone}, original_phone=${original_phone}, cpf_cnpj=${cpf_cnpj}, bling_contact_id=${bling_contact_id}`);
+      
       // v2.52.53: Normalizar telefone (preserva doc_/bid_ se for o caso)
       const digits = normalizePhone(phone);
       const originalDigits = original_phone ? normalizePhone(original_phone) : null;
+      
+      console.log(`[upsert] NORMALIZED: digits=${digits}, originalDigits=${originalDigits}`);
 
       // v2.52.53: Migração inteligente — detecta doc_CNPJ, busca por CNPJ/bling_contact_id
       let oldCustomer = null;
@@ -5381,6 +5475,9 @@ export default {
         if (oldCustomer) oldPhoneKey = oldCustomer.phone_digits;
       }
 
+      console.log(`[upsert] SEARCH: oldCustomer=${oldCustomer ? 'FOUND' : 'NOT_FOUND'}, oldPhoneKey=${oldPhoneKey}, digits=${digits}`);
+      if (oldCustomer) console.log(`[upsert] OLD_DATA: phone=${oldCustomer.phone_digits}, name=${oldCustomer.name}, bling=${oldCustomer.bling_contact_id}`);
+      
       // Se encontrou cliente existente e o telefone está mudando, migrar
       if (oldCustomer && oldPhoneKey && oldPhoneKey !== digits && digits && !digits.startsWith('doc_')) {
         console.log(`[upsert] Migrando cliente ${oldPhoneKey} → ${digits}`);
