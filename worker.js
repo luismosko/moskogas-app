@@ -7239,14 +7239,14 @@ export default {
 
     // ── NFC-e: Listar NFC-e de um período no Bling (para identificar sem estoque) ──
     // GET /api/nfce/listar-bling?dataInicio=2026-03-20&dataFim=2026-03-24
-    // v2.52.54: Corrigido mapeamento de campos da API Bling v3
+    // v2.52.55: Busca NFC-e e verifica estoque automaticamente (retorna só pendentes)
     if (method === 'GET' && path === '/api/nfce/listar-bling') {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
       const dataInicio = url.searchParams.get('dataInicio') || new Date(Date.now() - 7*24*3600000).toISOString().slice(0, 10);
       const dataFim = url.searchParams.get('dataFim') || new Date().toISOString().slice(0, 10);
+      const somenteAutorizadas = url.searchParams.get('somenteAutorizadas') !== 'false';
       
-      // Mapa de situações NFC-e Bling
       const SITUACAO_MAP = { 1: 'Pendente', 2: 'Rejeitada', 3: 'Cancelada', 4: 'Denegada', 5: 'Autorizada', 6: 'Inutilizada' };
       
       try {
@@ -7256,8 +7256,7 @@ export default {
           return json({ ok: false, error: `Bling ${r.status}: ${txt.substring(0, 300)}` }, 502);
         }
         const data = await r.json();
-        const nfces = (data.data || []).map(n => {
-          // Situação pode ser objeto {id, valor} ou número direto
+        let nfces = (data.data || []).map(n => {
           let sitId = typeof n.situacao === 'object' ? (n.situacao?.id || n.situacao?.valor) : n.situacao;
           let sitDesc = SITUACAO_MAP[sitId] || (typeof n.situacao === 'object' ? n.situacao?.descricao : null) || String(sitId);
           return {
@@ -7269,7 +7268,54 @@ export default {
             situacao_id: sitId,
           };
         });
-        return json({ ok: true, periodo: { dataInicio, dataFim }, total: nfces.length, nfces });
+        
+        // Filtrar só autorizadas (situacao_id = 5)
+        if (somenteAutorizadas) {
+          nfces = nfces.filter(n => n.situacao_id === 5);
+        }
+        
+        // Verificar estoque de cada NFC-e (tentar lançar e ver resposta)
+        const pendentes = [];
+        const jaLancadas = [];
+        let checadas = 0;
+        
+        for (const nfce of nfces) {
+          checadas++;
+          try {
+            await new Promise(r => setTimeout(r, 200)); // Rate limit
+            const estResp = await blingFetch(`/nfce/${nfce.id}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
+            const estTxt = await estResp.text().catch(() => '');
+            
+            if (estResp.ok) {
+              // Lançou agora - adiciona como pendente (foi corrigido)
+              nfce.estoque_status = 'lancado_agora';
+              pendentes.push(nfce);
+            } else if (estTxt.includes('existe') || estTxt.includes('lan\u00e7ado')) {
+              // Já tinha estoque - não mostra
+              nfce.estoque_status = 'ja_lancado';
+              jaLancadas.push(nfce.numero);
+            } else {
+              // Erro real - mostrar para verificar
+              nfce.estoque_status = 'erro';
+              nfce.estoque_erro = estTxt.substring(0, 200);
+              pendentes.push(nfce);
+            }
+          } catch(e) {
+            nfce.estoque_status = 'erro';
+            nfce.estoque_erro = e.message;
+            pendentes.push(nfce);
+          }
+        }
+        
+        return json({ 
+          ok: true, 
+          periodo: { dataInicio, dataFim }, 
+          total_bling: nfces.length,
+          ja_lancadas: jaLancadas.length,
+          pendentes: pendentes.length,
+          nfces: pendentes,
+          resumo: `${jaLancadas.length} já tinham estoque, ${pendentes.length} pendentes/erros`
+        });
       } catch(e) {
         return json({ ok: false, error: e.message }, 500);
       }
@@ -12670,4 +12716,4 @@ async function dailyAuditSnapshot(env) {
     console.log(`[audit] Snapshot ${yesterday} salvo: ${totalPedidos} pedidos, R$${snapshot.totalValor}`);
   } catch (e) { console.error('[audit] Snapshot error:', e.message); }
 }
-// v2.52.54 - force deploy 1774399000
+// v2.52.55 - force deploy 1774399000
