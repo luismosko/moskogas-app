@@ -7289,47 +7289,13 @@ export default {
           nfces = nfces.filter(n => n.situacao_id === 5);
         }
         
-        // Verificar estoque de cada NFC-e (tentar lançar e ver resposta)
-        const pendentes = [];
-        const jaLancadas = [];
-        let checadas = 0;
-        
-        for (const nfce of nfces) {
-          checadas++;
-          try {
-            await new Promise(r => setTimeout(r, 200)); // Rate limit
-            const estResp = await blingFetch(`/nfce/${nfce.id}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
-            const estTxt = await estResp.text().catch(() => '');
-            
-            if (estResp.ok) {
-              // Lançou agora - adiciona como pendente (foi corrigido)
-              nfce.estoque_status = 'lancado_agora';
-              pendentes.push(nfce);
-            } else if (estTxt.includes('existe') || estTxt.includes('lan\u00e7ado')) {
-              // Já tinha estoque - não mostra
-              nfce.estoque_status = 'ja_lancado';
-              jaLancadas.push(nfce.numero);
-            } else {
-              // Erro real - mostrar para verificar
-              nfce.estoque_status = 'erro';
-              nfce.estoque_erro = estTxt.substring(0, 200);
-              pendentes.push(nfce);
-            }
-          } catch(e) {
-            nfce.estoque_status = 'erro';
-            nfce.estoque_erro = e.message;
-            pendentes.push(nfce);
-          }
-        }
-        
+        // v2.52.57: NÃO verificar estoque aqui (limite 50 subrequests do CF Workers)
+        // Usuário clica "Lançar Estoque (Todos)" para processar em lotes
         return json({ 
           ok: true, 
           periodo: { dataInicio, dataFim }, 
-          total_bling: nfces.length,
-          ja_lancadas: jaLancadas.length,
-          pendentes: pendentes.length,
-          nfces: pendentes,
-          resumo: `${jaLancadas.length} já tinham estoque, ${pendentes.length} pendentes/erros`
+          total: nfces.length,
+          nfces
         });
       } catch(e) {
         return json({ ok: false, error: e.message }, 500);
@@ -12731,4 +12697,4 @@ async function dailyAuditSnapshot(env) {
     console.log(`[audit] Snapshot ${yesterday} salvo: ${totalPedidos} pedidos, R$${snapshot.totalValor}`);
   } catch (e) { console.error('[audit] Snapshot error:', e.message); }
 }
-// v2.52.56 - force deploy 1774399000
+// v2.52.57 - force deploy 1774399000

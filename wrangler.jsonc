@@ -6,6 +6,9 @@
   "observability": {
     "enabled": true
   },
+  "limits": {
+    "subrequests": 100000
+  },
   "triggers": {
     "crons": ["*/30 * * * *"]
   },
