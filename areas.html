@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Áreas de Entrega v1.0.0 — MoskoGás</title>
+  <script src="shared.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .version-badge { display:inline-block; background:#6366f1; color:#fff; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; margin-bottom:8px; }
+
+    /* ── Header ── */
+    .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+    .page-title { font-size:22px; font-weight:800; color:#1e293b; }
+
+    /* ── Stats Cards ── */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+    .stat-card { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,0.07); text-align:center; }
+    .stat-card.zona1 { border-left:4px solid #22c55e; }
+    .stat-card.zona2 { border-left:4px solid #eab308; }
+    .stat-card.zona3 { border-left:4px solid #f97316; }
+    .stat-card.total { border-left:4px solid #6366f1; }
+    .stat-value { font-size:28px; font-weight:800; color:#1e293b; }
+    .stat-label { font-size:12px; color:#64748b; margin-top:4px; }
+
+    /* ── Toolbar ── */
+    .toolbar { background:#fff; border-radius:12px; padding:14px 16px; margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+    .search-wrap { flex:1; min-width:200px; position:relative; }
+    .search-wrap input { width:100%; padding:9px 14px 9px 36px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; transition:border-color .15s; }
+    .search-wrap input:focus { border-color:#6366f1; }
+    .search-wrap .icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:16px; pointer-events:none; }
+    .filter-select { padding:9px 12px; border:2px solid #e2e8f0; border-radius:8px; font-size:13px; color:#374151; outline:none; background:#fff; cursor:pointer; }
+    .btn-primary { background:#6366f1; color:#fff; border:none; padding:10px 18px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background .15s; }
+    .btn-primary:hover { background:#4f46e5; }
+
+    /* ── Table ── */
+    .table-wrap { background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,0.07); overflow:hidden; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#1e293b; color:#fff; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:10px 14px; text-align:left; white-space:nowrap; }
+    tbody tr { border-bottom:1px solid #f1f5f9; cursor:pointer; transition:background .1s; }
+    tbody tr:hover { background:#f8faff; }
+    tbody td { padding:11px 14px; font-size:13px; color:#374151; }
+    .td-bairro { font-weight:700; color:#1e293b; }
+
+    /* Zona badges */
+    .zona-badge { display:inline-block; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+    .zona-1 { background:#dcfce7; color:#166534; }
+    .zona-2 { background:#fef9c3; color:#854d0e; }
+    .zona-3 { background:#ffedd5; color:#c2410c; }
+
+    /* Status icons */
+    .status-icon { font-size:16px; }
+    .status-ok { color:#22c55e; }
+    .status-no { color:#ef4444; }
+    .status-maybe { color:#eab308; }
+
+    /* ── Empty / Loading ── */
+    .empty { text-align:center; padding:48px 16px; color:#94a3b8; }
+    .loading-row td { text-align:center; padding:32px; color:#94a3b8; font-size:14px; }
+
+    /* ── MODAL ── */
+    #modal-bairro { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9000; align-items:center; justify-content:center; padding:20px; }
+    #modal-bairro.open { display:flex; }
+    .modal-card { background:#fff; border-radius:16px; width:min(96vw,520px); box-shadow:0 20px 60px rgba(0,0,0,.3); overflow:hidden; }
+    .modal-header { background:#1e293b; color:#fff; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; }
+    .modal-header h2 { font-size:18px; font-weight:800; }
+    .btn-close { background:rgba(255,255,255,.15); border:none; color:#fff; width:32px; height:32px; border-radius:8px; font-size:18px; cursor:pointer; }
+    .btn-close:hover { background:rgba(255,255,255,.25); }
+    .modal-body { padding:24px; }
+    .form-group { margin-bottom:16px; }
+    .form-group label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; }
+    .form-group input, .form-group select, .form-group textarea { width:100%; padding:10px 14px; border:2px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; transition:border-color .15s; }
+    .form-group input:focus, .form-group select:focus { border-color:#6366f1; }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .checkbox-group { display:flex; flex-wrap:wrap; gap:12px; }
+    .checkbox-item { display:flex; align-items:center; gap:6px; font-size:13px; }
+    .checkbox-item input { width:18px; height:18px; accent-color:#6366f1; }
+    .modal-footer { padding:16px 24px; background:#f8fafc; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #e2e8f0; }
+    .btn-secondary { background:#e2e8f0; color:#374151; border:none; padding:10px 18px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+    .btn-danger { background:#ef4444; color:#fff; border:none; padding:10px 18px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+    .btn-danger:hover { background:#dc2626; }
+
+    /* ── Legend ── */
+    .legend { background:#fff; border-radius:12px; padding:16px; margin-top:16px; box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+    .legend h3 { font-size:14px; font-weight:700; color:#1e293b; margin-bottom:12px; }
+    .legend-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+    .legend-item { display:flex; align-items:flex-start; gap:10px; padding:10px; background:#f8fafc; border-radius:8px; }
+    .legend-badge { flex-shrink:0; }
+    .legend-text { font-size:12px; color:#64748b; line-height:1.5; }
+    .legend-text strong { color:#1e293b; }
+  </style>
+</head>
+<body>
+  <div id="nav-placeholder"></div>
+
+  <div class="container">
+    <span class="version-badge">v1.0.0</span>
+    <div class="page-header">
+      <h1 class="page-title">🗺️ Áreas de Entrega</h1>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card zona1">
+        <div class="stat-value" id="stat-zona1">-</div>
+        <div class="stat-label">🟢 Zona 1</div>
+      </div>
+      <div class="stat-card zona2">
+        <div class="stat-value" id="stat-zona2">-</div>
+        <div class="stat-label">🟡 Zona 2</div>
+      </div>
+      <div class="stat-card zona3">
+        <div class="stat-value" id="stat-zona3">-</div>
+        <div class="stat-label">🟠 Zona 3</div>
+      </div>
+      <div class="stat-card total">
+        <div class="stat-value" id="stat-total">-</div>
+        <div class="stat-label">📍 Total</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Buscar bairro...">
+      </div>
+      <select class="filter-select" id="filter-zona">
+        <option value="">Todas as zonas</option>
+        <option value="1">🟢 Zona 1</option>
+        <option value="2">🟡 Zona 2</option>
+        <option value="3">🟠 Zona 3</option>
+      </select>
+      <button class="btn-primary" onclick="abrirModalNovo()">➕ Novo Bairro</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Bairro</th>
+            <th>Zona</th>
+            <th>P13</th>
+            <th>Água 1</th>
+            <th>Água 2+</th>
+            <th>P20/P45</th>
+            <th>Obs</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr class="loading-row"><td colspan="7">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <h3>📋 Legenda das Zonas</h3>
+      <div class="legend-grid">
+        <div class="legend-item">
+          <span class="legend-badge zona-badge zona-1">Zona 1</span>
+          <div class="legend-text">
+            <strong>Entrega Imediata</strong><br>
+            Atendemos P13, água (qualquer quantidade) e P20/P45. Região próxima à loja.
+          </div>
+        </div>
+        <div class="legend-item">
+          <span class="legend-badge zona-badge zona-2">Zona 2</span>
+          <div class="legend-text">
+            <strong>Entrega Normal</strong><br>
+            Atendemos P13 e água (2+ galões). Água 1 galão não entregamos nessa região.
+          </div>
+        </div>
+        <div class="legend-item">
+          <span class="legend-badge zona-badge zona-3">Zona 3</span>
+          <div class="legend-text">
+            <strong>Sob Rota / Atacado</strong><br>
+            P13 em rotas programadas. Água apenas em quantidade maior (atacado).
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal-bairro">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="modal-title">Novo Bairro</h2>
+        <button class="btn-close" onclick="fecharModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-id">
+        <div class="form-group">
+          <label>Nome do Bairro *</label>
+          <input type="text" id="edit-bairro" placeholder="Ex: Jardim Noroeste">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Zona *</label>
+            <select id="edit-zona">
+              <option value="1">🟢 Zona 1 - Entrega Imediata</option>
+              <option value="2">🟡 Zona 2 - Entrega Normal</option>
+              <option value="3">🟠 Zona 3 - Sob Rota</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Produtos que entregamos</label>
+          <div class="checkbox-group">
+            <label class="checkbox-item">
+              <input type="checkbox" id="edit-p13" checked> P13 (Gás 13kg)
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="edit-agua1"> Água 1 galão
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="edit-agua2" checked> Água 2+ galões
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="edit-p20p45" checked> P20/P45 (Industrial)
+            </label>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="checkbox-item">
+              <input type="checkbox" id="edit-sobrota"> Entrega sob rota (agendado)
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-item">
+              <input type="checkbox" id="edit-atacado"> Água só atacado (5+)
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Observação</label>
+          <textarea id="edit-obs" rows="2" placeholder="Ex: Entrega às terças e quintas"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-danger" id="btn-excluir" style="display:none" onclick="excluirBairro()">🗑️ Excluir</button>
+        <button class="btn-secondary" onclick="fecharModal()">Cancelar</button>
+        <button class="btn-primary" onclick="salvarBairro()">💾 Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let bairros = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadNav('areas');
+      carregarBairros();
+
+      document.getElementById('search-input').addEventListener('input', renderTable);
+      document.getElementById('filter-zona').addEventListener('change', renderTable);
+    });
+
+    async function carregarBairros() {
+      try {
+        const resp = await api('/api/areas');
+        if (!resp.ok) throw new Error('Erro ao carregar');
+        const data = await resp.json();
+        bairros = data.bairros || [];
+        updateStats();
+        renderTable();
+      } catch (e) {
+        toast('Erro ao carregar bairros', 'error');
+        console.error(e);
+      }
+    }
+
+    function updateStats() {
+      const z1 = bairros.filter(b => b.zona === 1).length;
+      const z2 = bairros.filter(b => b.zona === 2).length;
+      const z3 = bairros.filter(b => b.zona === 3).length;
+      document.getElementById('stat-zona1').textContent = z1;
+      document.getElementById('stat-zona2').textContent = z2;
+      document.getElementById('stat-zona3').textContent = z3;
+      document.getElementById('stat-total').textContent = bairros.length;
+    }
+
+    function renderTable() {
+      const search = document.getElementById('search-input').value.toLowerCase();
+      const zona = document.getElementById('filter-zona').value;
+
+      let filtered = bairros.filter(b => {
+        if (search && !b.bairro.toLowerCase().includes(search)) return false;
+        if (zona && b.zona !== parseInt(zona)) return false;
+        return true;
+      });
+
+      const tbody = document.getElementById('table-body');
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum bairro encontrado</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(b => `
+        <tr onclick="editarBairro(${b.id})">
+          <td class="td-bairro">${b.bairro}</td>
+          <td><span class="zona-badge zona-${b.zona}">Zona ${b.zona}</span></td>
+          <td><span class="status-icon ${b.atende_p13 ? (b.sob_rota ? 'status-maybe' : 'status-ok') : 'status-no'}">${b.atende_p13 ? (b.sob_rota ? '⚠️' : '✅') : '❌'}</span></td>
+          <td><span class="status-icon ${b.atende_agua_1 ? 'status-ok' : 'status-no'}">${b.atende_agua_1 ? '✅' : '❌'}</span></td>
+          <td><span class="status-icon ${b.atende_agua_2plus ? (b.atacado_apenas ? 'status-maybe' : 'status-ok') : 'status-no'}">${b.atende_agua_2plus ? (b.atacado_apenas ? '⚠️' : '✅') : '❌'}</span></td>
+          <td><span class="status-icon ${b.atende_p20_p45 ? 'status-ok' : 'status-no'}">${b.atende_p20_p45 ? '✅' : '❌'}</span></td>
+          <td style="font-size:12px;color:#64748b;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${b.observacao || ''}">${b.observacao || '-'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function abrirModalNovo() {
+      document.getElementById('modal-title').textContent = 'Novo Bairro';
+      document.getElementById('edit-id').value = '';
+      document.getElementById('edit-bairro').value = '';
+      document.getElementById('edit-zona').value = '1';
+      document.getElementById('edit-p13').checked = true;
+      document.getElementById('edit-agua1').checked = true;
+      document.getElementById('edit-agua2').checked = true;
+      document.getElementById('edit-p20p45').checked = true;
+      document.getElementById('edit-sobrota').checked = false;
+      document.getElementById('edit-atacado').checked = false;
+      document.getElementById('edit-obs').value = '';
+      document.getElementById('btn-excluir').style.display = 'none';
+      document.getElementById('modal-bairro').classList.add('open');
+    }
+
+    function editarBairro(id) {
+      const b = bairros.find(x => x.id === id);
+      if (!b) return;
+      document.getElementById('modal-title').textContent = 'Editar Bairro';
+      document.getElementById('edit-id').value = b.id;
+      document.getElementById('edit-bairro').value = b.bairro;
+      document.getElementById('edit-zona').value = b.zona;
+      document.getElementById('edit-p13').checked = b.atende_p13 === 1;
+      document.getElementById('edit-agua1').checked = b.atende_agua_1 === 1;
+      document.getElementById('edit-agua2').checked = b.atende_agua_2plus === 1;
+      document.getElementById('edit-p20p45').checked = b.atende_p20_p45 === 1;
+      document.getElementById('edit-sobrota').checked = b.sob_rota === 1;
+      document.getElementById('edit-atacado').checked = b.atacado_apenas === 1;
+      document.getElementById('edit-obs').value = b.observacao || '';
+      document.getElementById('btn-excluir').style.display = 'block';
+      document.getElementById('modal-bairro').classList.add('open');
+    }
+
+    function fecharModal() {
+      document.getElementById('modal-bairro').classList.remove('open');
+    }
+
+    async function salvarBairro() {
+      const id = document.getElementById('edit-id').value;
+      const bairro = document.getElementById('edit-bairro').value.trim();
+      if (!bairro) { toast('Nome do bairro obrigatório', 'error'); return; }
+
+      const payload = {
+        bairro,
+        zona: parseInt(document.getElementById('edit-zona').value),
+        atende_p13: document.getElementById('edit-p13').checked ? 1 : 0,
+        atende_agua_1: document.getElementById('edit-agua1').checked ? 1 : 0,
+        atende_agua_2plus: document.getElementById('edit-agua2').checked ? 1 : 0,
+        atende_p20_p45: document.getElementById('edit-p20p45').checked ? 1 : 0,
+        sob_rota: document.getElementById('edit-sobrota').checked ? 1 : 0,
+        atacado_apenas: document.getElementById('edit-atacado').checked ? 1 : 0,
+        observacao: document.getElementById('edit-obs').value.trim()
+      };
+
+      try {
+        showLoading('Salvando...');
+        const url = id ? `/api/areas/${id}` : '/api/areas';
+        const method = id ? 'PATCH' : 'POST';
+        const resp = await api(url, { method, body: JSON.stringify(payload) });
+        hideLoading();
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Erro');
+        toast('Bairro salvo!', 'success');
+        fecharModal();
+        carregarBairros();
+      } catch (e) {
+        hideLoading();
+        toast(e.message, 'error');
+      }
+    }
+
+    async function excluirBairro() {
+      const id = document.getElementById('edit-id').value;
+      if (!id) return;
+      if (!confirm('Excluir este bairro?')) return;
+
+      try {
+        showLoading('Excluindo...');
+        const resp = await api(`/api/areas/${id}`, { method: 'DELETE' });
+        hideLoading();
+        if (!resp.ok) throw new Error('Erro ao excluir');
+        toast('Bairro excluído', 'success');
+        fecharModal();
+        carregarBairros();
+      } catch (e) {
+        hideLoading();
+        toast(e.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

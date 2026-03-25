@@ -1,4 +1,5 @@
-// v2.52.51
+// v2.52.52
+// v2.52.52: Endpoints IA IzChat — /api/pub/ia/* para atendimento automático WhatsApp
 // v2.52.51: lancar_contas/estoque NFC-e - "já existe" vira skipped (não erro)
 // v2.52.50: Corrige auditoria sem-bling para verificar nfce_id (NFC-e) além de bling_pedido_id
 // v2.52.49: POST /nfce/{id}/lancar-estoque no fluxo + endpoints lancar-estoque, lancar-estoque-lote, listar-bling
@@ -3392,6 +3393,317 @@ export default {
       return json({ url: row?.value || null });
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════
+    // IA ATENDIMENTO IZCHAT — Endpoints públicos para o Agente IA consultar
+    // v2.52.52: Sistema de atendimento automático via WhatsApp
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    // GET /api/pub/ia/cliente?phone=67999999999 — Busca dados do cliente
+    if (method === 'GET' && path === '/api/pub/ia/cliente') {
+      const phone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
+      if (!phone || phone.length < 10) return json({ encontrado: false, erro: 'Telefone inválido' });
+      
+      // Normaliza para 55+DDD+numero
+      const phoneDigits = phone.length === 11 ? `55${phone}` : phone.length === 13 ? phone : `55${phone}`;
+      
+      const cliente = await env.DB.prepare(`
+        SELECT phone_digits, name, address_line, bairro, complemento, referencia, 
+               cpf_cnpj, email, ultima_compra_glp
+        FROM customers_cache WHERE phone_digits = ?
+      `).bind(phoneDigits).first();
+      
+      if (!cliente) {
+        // Tenta sem 55
+        const clienteSem55 = await env.DB.prepare(`
+          SELECT phone_digits, name, address_line, bairro, complemento, referencia, 
+                 cpf_cnpj, email, ultima_compra_glp
+          FROM customers_cache WHERE phone_digits = ?
+        `).bind(phone.slice(-11)).first();
+        
+        if (!clienteSem55) return json({ encontrado: false });
+        return json({
+          encontrado: true,
+          nome: clienteSem55.name || '',
+          endereco: clienteSem55.address_line || '',
+          bairro: clienteSem55.bairro || '',
+          complemento: clienteSem55.complemento || '',
+          referencia: clienteSem55.referencia || '',
+          cpf_cnpj: clienteSem55.cpf_cnpj || '',
+          ultima_compra: clienteSem55.ultima_compra_glp || ''
+        });
+      }
+      
+      return json({
+        encontrado: true,
+        nome: cliente.name || '',
+        endereco: cliente.address_line || '',
+        bairro: cliente.bairro || '',
+        complemento: cliente.complemento || '',
+        referencia: cliente.referencia || '',
+        cpf_cnpj: cliente.cpf_cnpj || '',
+        ultima_compra: cliente.ultima_compra_glp || ''
+      });
+    }
+
+    // GET /api/pub/ia/precos — Lista de preços dos produtos
+    if (method === 'GET' && path === '/api/pub/ia/precos') {
+      const produtos = await env.DB.prepare(`
+        SELECT id, name, code, price, is_favorite 
+        FROM app_products WHERE ativo = 1 ORDER BY sort_order
+      `).all().then(r => r.results || []);
+      
+      // Formata para a IA entender
+      const lista = produtos.map(p => ({
+        id: p.id,
+        nome: p.name,
+        codigo: p.code,
+        preco: p.price,
+        preco_formatado: `R$ ${Number(p.price).toFixed(2).replace('.', ',')}`,
+        destaque: p.is_favorite === 1
+      }));
+      
+      return json({
+        produtos: lista,
+        observacoes: [
+          'P13 = Botijão 13kg (residencial)',
+          'P20 = Botijão 20kg (comercial)',
+          'P45 = Botijão 45kg (industrial)',
+          'Água Mineral 20L = Galão de água',
+          'Preços sujeitos a alteração sem aviso'
+        ]
+      });
+    }
+
+    // GET /api/pub/ia/bairros — Lista de bairros e zonas de entrega
+    if (method === 'GET' && path === '/api/pub/ia/bairros') {
+      const bairros = await env.DB.prepare(`
+        SELECT bairro, zona, atende_p13, atende_agua_1, atende_agua_2plus, 
+               atende_p20_p45, sob_rota, atacado_apenas, observacao
+        FROM delivery_zones WHERE ativo = 1 ORDER BY zona, bairro
+      `).all().then(r => r.results || []);
+      
+      const zonas = {
+        1: { nome: 'Zona 1 - Entrega Imediata', descricao: 'Atendemos P13, água (qualquer quantidade), P20/P45' },
+        2: { nome: 'Zona 2 - Entrega Normal', descricao: 'Atendemos P13 e água (2+ galões). Água 1 galão não entregamos.' },
+        3: { nome: 'Zona 3 - Sob Rota', descricao: 'P13 sob rota (agendado), água apenas atacado (grandes quantidades)' }
+      };
+      
+      return json({ bairros, zonas, total: bairros.length });
+    }
+
+    // GET /api/pub/ia/verificar-entrega?bairro=X&produto=Y&quantidade=Z
+    if (method === 'GET' && path === '/api/pub/ia/verificar-entrega') {
+      const bairro = (url.searchParams.get('bairro') || '').trim();
+      const produto = (url.searchParams.get('produto') || 'p13').toLowerCase();
+      const quantidade = parseInt(url.searchParams.get('quantidade') || '1');
+      
+      if (!bairro) return json({ atende: false, motivo: 'Bairro não informado' });
+      
+      // Busca bairro (case insensitive, com ou sem acento)
+      const zona = await env.DB.prepare(`
+        SELECT * FROM delivery_zones 
+        WHERE ativo = 1 AND (
+          LOWER(bairro) = LOWER(?) OR 
+          LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(bairro,'á','a'),'é','e'),'í','i'),'ó','o'),'ã','a')) = 
+          LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(?,'á','a'),'é','e'),'í','i'),'ó','o'),'ã','a'))
+        )
+      `).bind(bairro, bairro).first();
+      
+      // Se não encontrou, considera zona 3 (genérico)
+      if (!zona) {
+        return json({
+          atende: produto === 'p13' || produto === 'p20' || produto === 'p45',
+          bairro_encontrado: false,
+          zona: 3,
+          mensagem: produto === 'agua' && quantidade < 5
+            ? 'Esse bairro é mais distante. Para água, só entregamos em quantidade maior (5+ galões). Posso verificar com um atendente?'
+            : produto === 'p13'
+              ? 'Esse bairro é mais distante. Entregamos P13 em rotas programadas. Posso agendar para você?'
+              : 'Para esse produto nesse bairro, preciso verificar com um atendente. Um momento.'
+        });
+      }
+      
+      // Verifica regras por produto
+      let atende = false;
+      let mensagem = '';
+      
+      if (produto === 'p13') {
+        atende = zona.atende_p13 === 1;
+        if (zona.sob_rota === 1) {
+          mensagem = 'Entregamos P13 nesse bairro em rotas programadas. Vou verificar a próxima rota disponível.';
+        } else {
+          mensagem = atende ? 'Entregamos P13 nesse bairro!' : 'Infelizmente não entregamos P13 nesse bairro.';
+        }
+      } else if (produto === 'agua' || produto === 'água') {
+        if (quantidade === 1) {
+          atende = zona.atende_agua_1 === 1;
+          mensagem = atende 
+            ? 'Entregamos 1 galão de água nesse bairro!' 
+            : 'Para 1 galão de água, só entregamos na Zona 1 (perto da loja). Quer pedir 2 ou mais galões?';
+        } else {
+          atende = zona.atende_agua_2plus === 1;
+          if (zona.atacado_apenas === 1 && quantidade < 5) {
+            atende = false;
+            mensagem = 'Nesse bairro, entregamos água apenas em quantidade maior (5+ galões). Deseja ajustar a quantidade?';
+          } else {
+            mensagem = atende ? `Entregamos ${quantidade} galões de água nesse bairro!` : 'Não entregamos água nesse bairro.';
+          }
+        }
+      } else if (produto === 'p20' || produto === 'p45') {
+        atende = zona.atende_p20_p45 === 1;
+        mensagem = 'Para P20 e P45 (industrial), vou transferir você para um atendente especializado.';
+      }
+      
+      return json({
+        atende,
+        bairro_encontrado: true,
+        bairro: zona.bairro,
+        zona: zona.zona,
+        sob_rota: zona.sob_rota === 1,
+        atacado_apenas: zona.atacado_apenas === 1,
+        mensagem,
+        transferir_humano: produto === 'p20' || produto === 'p45' || (zona.atacado_apenas === 1 && quantidade >= 5)
+      });
+    }
+
+    // POST /api/pub/ia/criar-pedido — Cria pedido no sistema
+    if (method === 'POST' && path === '/api/pub/ia/criar-pedido') {
+      try {
+        const body = await request.json();
+        const { telefone, nome, endereco, bairro, complemento, referencia, produto, quantidade, observacao } = body;
+        
+        if (!telefone || !nome || !endereco || !bairro || !produto) {
+          return json({ sucesso: false, erro: 'Campos obrigatórios: telefone, nome, endereco, bairro, produto' });
+        }
+        
+        // Normaliza telefone
+        const phoneDigits = telefone.replace(/\D/g, '');
+        const phoneNorm = phoneDigits.length === 11 ? `55${phoneDigits}` : phoneDigits;
+        
+        // Busca produto
+        const prod = await env.DB.prepare(`
+          SELECT id, name, code, price FROM app_products 
+          WHERE ativo = 1 AND (
+            LOWER(name) LIKE ? OR code = ? OR id = ?
+          ) LIMIT 1
+        `).bind(`%${produto}%`, produto, parseInt(produto) || 0).first();
+        
+        if (!prod) return json({ sucesso: false, erro: `Produto não encontrado: ${produto}` });
+        
+        const qtd = Math.max(1, parseInt(quantidade) || 1);
+        const total = prod.price * qtd;
+        
+        // Monta items_json
+        const items = [{
+          product_id: prod.id,
+          bling_id: prod.bling_id || '',
+          name: prod.name,
+          code: prod.code,
+          quantity: qtd,
+          price: prod.price,
+          total: total
+        }];
+        
+        // Insere pedido
+        const now = Math.floor(Date.now() / 1000);
+        const result = await env.DB.prepare(`
+          INSERT INTO orders (
+            phone_digits, customer_name, address_line, bairro, complemento, referencia,
+            items_json, total_value, notes, status, sync_status, created_at,
+            vendedor_id, vendedor_nome, tipo_pagamento
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOVO', 'pending', ?, 0, 'IA WhatsApp', 'a_definir')
+        `).bind(
+          phoneNorm, nome, endereco, bairro, complemento || '', referencia || '',
+          JSON.stringify(items), total, observacao || 'Pedido via IA WhatsApp', now
+        ).run();
+        
+        const orderId = result.meta?.last_row_id;
+        
+        // Upsert no customers_cache
+        await env.DB.prepare(`
+          INSERT INTO customers_cache (phone_digits, name, address_line, bairro, complemento, referencia, updated_at, origem)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'ia_whatsapp')
+          ON CONFLICT(phone_digits) DO UPDATE SET
+            name = COALESCE(NULLIF(excluded.name, ''), customers_cache.name),
+            address_line = COALESCE(NULLIF(excluded.address_line, ''), customers_cache.address_line),
+            bairro = COALESCE(NULLIF(excluded.bairro, ''), customers_cache.bairro),
+            complemento = COALESCE(NULLIF(excluded.complemento, ''), customers_cache.complemento),
+            referencia = COALESCE(NULLIF(excluded.referencia, ''), customers_cache.referencia),
+            updated_at = datetime('now')
+        `).bind(phoneNorm, nome, endereco, bairro, complemento || '', referencia || '').run();
+        
+        // Notifica atendentes via WhatsApp (opcional - número interno)
+        try {
+          await sendWhatsApp(env, '5567993339333', 
+            `🤖 *Novo pedido via IA*\n\n` +
+            `📦 #${orderId}\n` +
+            `👤 ${nome}\n` +
+            `📍 ${endereco}, ${bairro}\n` +
+            `🛒 ${qtd}x ${prod.name}\n` +
+            `💰 R$ ${total.toFixed(2).replace('.', ',')}\n\n` +
+            `_Conferir em gestao.html_`,
+            { category: 'sistema' }
+          );
+        } catch (e) { /* ignora erro de notificação */ }
+        
+        return json({
+          sucesso: true,
+          pedido_id: orderId,
+          resumo: {
+            produto: prod.name,
+            quantidade: qtd,
+            total: total,
+            total_formatado: `R$ ${total.toFixed(2).replace('.', ',')}`,
+            endereco: `${endereco}, ${bairro}`,
+            status: 'Aguardando confirmação do atendente'
+          },
+          mensagem: `Pedido #${orderId} criado! Um atendente vai confirmar em breve e você receberá o tempo estimado de entrega.`
+        });
+      } catch (e) {
+        return json({ sucesso: false, erro: e.message });
+      }
+    }
+
+    // GET /api/pub/ia/horario — Verifica se está em horário de atendimento
+    if (method === 'GET' && path === '/api/pub/ia/horario') {
+      const now = new Date();
+      // Ajusta para BRT (UTC-4)
+      const brt = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+      const hora = brt.getUTCHours();
+      const minuto = brt.getUTCMinutes();
+      const diaSemana = brt.getUTCDay(); // 0=dom, 6=sab
+      
+      // Horário comercial: Seg-Sex 8h-18h, Sab 8h-12h
+      let aberto = false;
+      let mensagem = '';
+      
+      if (diaSemana === 0) {
+        mensagem = 'Estamos fechados aos domingos. Voltamos segunda-feira às 8h!';
+      } else if (diaSemana === 6) {
+        aberto = hora >= 8 && hora < 12;
+        mensagem = aberto ? 'Estamos abertos até 12h hoje (sábado)!' : 'Aos sábados funcionamos das 8h às 12h.';
+      } else {
+        aberto = hora >= 8 && hora < 18;
+        mensagem = aberto ? 'Estamos abertos até 18h!' : 'Nosso horário é de segunda a sexta, 8h às 18h.';
+      }
+      
+      return json({
+        aberto,
+        hora_atual: `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`,
+        dia_semana: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][diaSemana],
+        mensagem,
+        horarios: {
+          segunda_sexta: '8h às 18h',
+          sabado: '8h às 12h',
+          domingo: 'Fechado'
+        }
+      });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // FIM — IA ATENDIMENTO IZCHAT
+    // ══════════════════════════════════════════════════════════════════════════════
+
     // Registrar que QR foi mostrado ao cliente
     const qrShownMatch = path.match(/^\/api\/order\/(\d+)\/qr-shown$/);
     if (method === 'POST' && qrShownMatch) {
@@ -3976,6 +4288,85 @@ export default {
         return aS - bS;
       });
       return json(merged.slice(0, 12));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // GESTÃO DE ÁREAS DE ENTREGA (delivery_zones)
+    // v2.52.52: Gerenciamento de bairros e zonas para IA IzChat
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    // GET /api/areas — lista todas as áreas de entrega
+    if (method === 'GET' && path === '/api/areas') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const bairros = await env.DB.prepare(`
+        SELECT * FROM delivery_zones WHERE ativo = 1 ORDER BY zona, bairro
+      `).all().then(r => r.results || []);
+      
+      return json({ bairros, total: bairros.length });
+    }
+
+    // POST /api/areas — criar novo bairro
+    if (method === 'POST' && path === '/api/areas') {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const body = await request.json();
+      const { bairro, zona, atende_p13, atende_agua_1, atende_agua_2plus, atende_p20_p45, sob_rota, atacado_apenas, observacao } = body;
+      
+      if (!bairro || !zona) return err('Bairro e zona obrigatórios');
+      
+      try {
+        await env.DB.prepare(`
+          INSERT INTO delivery_zones (bairro, zona, atende_p13, atende_agua_1, atende_agua_2plus, atende_p20_p45, sob_rota, atacado_apenas, observacao)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(bairro.trim(), zona, atende_p13 || 0, atende_agua_1 || 0, atende_agua_2plus || 0, atende_p20_p45 || 0, sob_rota || 0, atacado_apenas || 0, observacao || '').run();
+        
+        return json({ ok: true });
+      } catch (e) {
+        if (e.message?.includes('UNIQUE')) return err('Bairro já existe');
+        return err(e.message);
+      }
+    }
+
+    // PATCH /api/areas/:id — atualizar bairro
+    const areasMatch = path.match(/^\/api\/areas\/(\d+)$/);
+    if (method === 'PATCH' && areasMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const id = parseInt(areasMatch[1]);
+      const body = await request.json();
+      const { bairro, zona, atende_p13, atende_agua_1, atende_agua_2plus, atende_p20_p45, sob_rota, atacado_apenas, observacao } = body;
+      
+      await env.DB.prepare(`
+        UPDATE delivery_zones SET
+          bairro = COALESCE(?, bairro),
+          zona = COALESCE(?, zona),
+          atende_p13 = COALESCE(?, atende_p13),
+          atende_agua_1 = COALESCE(?, atende_agua_1),
+          atende_agua_2plus = COALESCE(?, atende_agua_2plus),
+          atende_p20_p45 = COALESCE(?, atende_p20_p45),
+          sob_rota = COALESCE(?, sob_rota),
+          atacado_apenas = COALESCE(?, atacado_apenas),
+          observacao = ?,
+          updated_at = unixepoch()
+        WHERE id = ?
+      `).bind(bairro, zona, atende_p13, atende_agua_1, atende_agua_2plus, atende_p20_p45, sob_rota, atacado_apenas, observacao ?? null, id).run();
+      
+      return json({ ok: true });
+    }
+
+    // DELETE /api/areas/:id — desativar bairro
+    if (method === 'DELETE' && areasMatch) {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const id = parseInt(areasMatch[1]);
+      await env.DB.prepare('UPDATE delivery_zones SET ativo = 0 WHERE id = ?').bind(id).run();
+      
+      return json({ ok: true });
     }
 
     // ── GESTÃO DE CLIENTES ──────────────────────────────────────────────

@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.25.5
+// shared.js — Utilitários compartilhados MoskoGás v1.25.6
+// v1.25.6: Menu ADM — Áreas de Entrega (areas.html)
 // v1.25.5: Menu Relatório — Performance Entregadores (admin only)
 // v1.25.4: Modal de confirmação Bling Reconectar — aparece automaticamente em qualquer erro 401/no_token; _showBlingReconnectConfirm() global
 // v1.25.3: Rename módulo Gestão → Pedidos (nav label + textos)
@@ -183,6 +184,7 @@ const NAV_DROPDOWNS = [
     children: [
       { href: 'contratos.html', icon: '📄', label: 'Contratos' },
       { href: 'clientes.html', icon: '👥', label: 'Clientes' },
+      { href: 'areas.html', icon: '🗺️', label: 'Áreas de Entrega' },
       { href: 'produtos.html', icon: '📦', label: 'Produtos' },
       { href: 'estoque.html', icon: '📊', label: 'Estoque' },
       { href: 'vales.html', icon: '🎟️', label: 'Vale Gás' },
