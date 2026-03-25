@@ -1,4 +1,4 @@
-// v2.52.56
+// v2.52.59
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
 // v2.52.55: Merge dados do doc_ antes de deletar (copia bling_contact_id)
 // v2.52.54: Limpeza automática doc_CNPJ duplicados no upsert
