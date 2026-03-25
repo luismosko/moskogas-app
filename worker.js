@@ -1,4 +1,5 @@
-// v2.52.53
+// v2.52.54
+// v2.52.54: Limpeza automática doc_CNPJ duplicados no upsert
 // v2.52.53: Fix migração doc_CNPJ→telefone real + tabela customer_phones + unificar por CNPJ/bling_contact_id
 // v2.52.52: Endpoints IA IzChat — /api/pub/ia/* para atendimento automático WhatsApp
 // v2.52.51: lancar_contas/estoque NFC-e - "já existe" vira skipped (não erro)
@@ -4492,6 +4493,41 @@ export default {
       }
     }
 
+    // POST /api/clientes/limpar-duplicados — remove doc_CNPJ duplicados (admin only)
+    if (method === 'POST' && path === '/api/clientes/limpar-duplicados') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      // Buscar todos os clientes doc_
+      const docClientes = await env.DB.prepare(`SELECT phone_digits, cpf_cnpj, bling_contact_id, name FROM customers_cache WHERE phone_digits LIKE 'doc_%'`).all();
+      const results = { verificados: 0, deletados: 0, detalhes: [] };
+      
+      for (const doc of (docClientes.results || [])) {
+        results.verificados++;
+        const cnpj = doc.cpf_cnpj || doc.phone_digits.slice(4);
+        const cnpjClean = cnpj.replace(/\D/g, '');
+        
+        // Buscar se existe versão com telefone real (mesmo CNPJ ou mesmo bling_contact_id)
+        let realCustomer = null;
+        if (cnpjClean.length >= 11) {
+          realCustomer = await env.DB.prepare(`SELECT phone_digits, name FROM customers_cache WHERE cpf_cnpj = ? AND phone_digits NOT LIKE 'doc_%' AND phone_digits NOT LIKE 'bid_%'`).bind(cnpjClean).first();
+        }
+        if (!realCustomer && doc.bling_contact_id) {
+          realCustomer = await env.DB.prepare(`SELECT phone_digits, name FROM customers_cache WHERE bling_contact_id = ? AND phone_digits NOT LIKE 'doc_%' AND phone_digits NOT LIKE 'bid_%'`).bind(doc.bling_contact_id).first();
+        }
+        
+        if (realCustomer) {
+          // Existe versão real — deletar doc_
+          await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(doc.phone_digits).run();
+          results.deletados++;
+          results.detalhes.push({ deletado: doc.phone_digits, nome: doc.name, mantido: realCustomer.phone_digits });
+        }
+      }
+      
+      console.log(`[limpar-duplicados] Verificados: ${results.verificados}, Deletados: ${results.deletados}`);
+      return json({ ok: true, ...results });
+    }
+
     // GET /api/clientes/:phone/fiscal — config fiscal do cliente
     if (method === 'GET' && path.match(/^\/api\/clientes\/[^/]+\/fiscal$/)) {
       const authCheck = await requireAuth(request, env, ['admin','gerente','atendente']);
@@ -5370,6 +5406,30 @@ export default {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
         ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, pagamento_preferencial=excluded.pagamento_preferencial, updated_at=unixepoch()`)
         .bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf, finalEmail, finalCobranca, finalPgPref).run();
+      
+      // v2.52.54: Limpeza automática de duplicados doc_CNPJ
+      // Se salvou com telefone real e tem CNPJ, deletar registro doc_CNPJ se existir
+      if (digits && !digits.startsWith('doc_') && finalCpf) {
+        const cnpjClean = finalCpf.replace(/\D/g, '');
+        if (cnpjClean.length >= 11) {
+          const docKey = `doc_${cnpjClean}`;
+          if (docKey !== digits) {
+            const deleted = await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(docKey).run().catch(() => null);
+            if (deleted && deleted.meta?.changes > 0) {
+              console.log(`[upsert] Limpeza: deletado duplicado ${docKey} (mantido ${digits})`);
+            }
+          }
+        }
+      }
+      // Também limpar se tem bling_contact_id — deletar doc_ com mesmo bling_id
+      if (digits && !digits.startsWith('doc_') && finalBlingId) {
+        const dups = await env.DB.prepare('SELECT phone_digits FROM customers_cache WHERE bling_contact_id = ? AND phone_digits != ? AND phone_digits LIKE "doc_%"').bind(String(finalBlingId), digits).all().catch(() => ({ results: [] }));
+        for (const dup of (dups.results || [])) {
+          await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(dup.phone_digits).run().catch(() => {});
+          console.log(`[upsert] Limpeza: deletado duplicado ${dup.phone_digits} por bling_id (mantido ${digits})`);
+        }
+      }
+      
       return json({ ok: true, bling_contact_id: finalBlingId, phone_digits: digits });
     }
 
