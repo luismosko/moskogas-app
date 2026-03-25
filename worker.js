@@ -1,4 +1,5 @@
-// v2.52.61
+// v2.52.62
+// v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
 // v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
 // v2.52.55: Merge dados do doc_ antes de deletar (copia bling_contact_id)
@@ -1472,11 +1473,11 @@ function variarMensagem(msg) {
  */
 
 // ── WhatsApp Multi-Conexão — seleciona token pela categoria ────────────────
-// Categorias: interno | financeiro | marketing | avaliacao | externo | geral
+// Categorias: interno | financeiro | marketing | avaliacao | ia_atendimento | externo | geral
 async function getWATokenForCategory(env, category) {
   try {
     const cat = category || 'geral';
-    // Mapear categorias genéricas para as 5 principais
+    // Mapear categorias genéricas para as 6 principais
     const catMap = {
       'lembrete_pix': 'financeiro',
       'cobranca':     'financeiro',
@@ -1487,6 +1488,8 @@ async function getWATokenForCategory(env, category) {
       'entregador':   'interno',
       'entrega':      'interno',   // mensagens ao entregador → conexão interna (Disk)
       'contrato':     'interno',
+      'ia_atendimento': 'ia_atendimento',  // v2.52.62: IA WhatsApp
+      'ia_pedido':    'ia_atendimento',    // alias
       'geral':        'externo',
       'externo':      'externo',
       'interno':      'interno',

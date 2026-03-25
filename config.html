@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.15.2 — MoskoGás</title>
+<title>Config v2.15.3 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -138,8 +138,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.15.2 — config</div>
-  <h1>⚙️ Configurações v2.15.2</h1>
+  <div class="version-badge">v2.15.3 — config</div>
+  <h1>⚙️ Configurações v2.15.3</h1>
 
   <!-- ── ABAS DE CONFIGURAÇÃO ── -->
   <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
@@ -470,6 +470,7 @@
       <span class="cat-badge cat-financeiro">💰 Financeiro</span>
       <span class="cat-badge cat-marketing">📢 Marketing</span>
       <span class="cat-badge cat-avaliacao">⭐ Avaliação</span>
+      <span class="cat-badge cat-ia_atendimento">🤖 Atend. IA</span>
       <span class="cat-badge cat-externo">📤 Externo</span>
     </div>
 
@@ -487,6 +488,7 @@
           <option value="financeiro">💰 Financeiro</option>
           <option value="marketing">📢 Marketing</option>
           <option value="avaliacao">⭐ Avaliação</option>
+          <option value="ia_atendimento">🤖 Atend. IA</option>
           <option value="externo">📤 Externo</option>
         </select>
         <button class="btn btn-green" onclick="testIzChat()" style="font-size:13px">📲 Testar</button>
@@ -532,9 +534,13 @@
               <input type="checkbox" id="cat-avaliacao" value="avaliacao" onchange="updateCatBorder(this)"> ⭐ Avaliação
               <span style="font-size:10px;color:#94a3b8">(pós-venda)</span>
             </label>
-            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px" style="grid-column:span 2">
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cat-ia_atendimento" value="ia_atendimento" onchange="updateCatBorder(this)"> 🤖 Atend. IA
+              <span style="font-size:10px;color:#94a3b8">(atendimento automático)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px">
               <input type="checkbox" id="cat-externo" value="externo" onchange="updateCatBorder(this)"> 📤 Externo
-              <span style="font-size:10px;color:#94a3b8">(mensagens gerais ao cliente)</span>
+              <span style="font-size:10px;color:#94a3b8">(mensagens gerais)</span>
             </label>
           </div>
         </div>
@@ -557,6 +563,7 @@
   .cat-financeiro{ background:#dcfce7;color:#166534; }
   .cat-marketing { background:#fef3c7;color:#92400e; }
   .cat-avaliacao { background:#fce7f3;color:#9d174d; }
+  .cat-ia_atendimento { background:#ede9fe;color:#6d28d9; }
   .cat-externo   { background:#f1f5f9;color:#475569; }
   .conn-card { background:#f8fafc;border:2px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;transition:border-color .2s }
   .conn-card.desligado { opacity:.6;border-color:#fecaca;background:#fff5f5 }
@@ -1070,11 +1077,13 @@ async function reconectarBling() {
 // ── WhatsApp Multi-Conexão ──────────────────────────────────────
 const CAT_LABELS = {
   interno: '🔒 Interno', financeiro: '💰 Financeiro',
-  marketing: '📢 Marketing', avaliacao: '⭐ Avaliação', externo: '📤 Externo'
+  marketing: '📢 Marketing', avaliacao: '⭐ Avaliação',
+  ia_atendimento: '🤖 Atend. IA', externo: '📤 Externo'
 };
 const CAT_CLASSES = {
   interno:'cat-interno', financeiro:'cat-financeiro',
-  marketing:'cat-marketing', avaliacao:'cat-avaliacao', externo:'cat-externo'
+  marketing:'cat-marketing', avaliacao:'cat-avaliacao',
+  ia_atendimento:'cat-ia_atendimento', externo:'cat-externo'
 };
 
 async function loadConexoes() {
@@ -1163,7 +1172,7 @@ async function editarConexao(id) {
     document.getElementById('conn-descricao').value = r.descricao || '';
     const cats = JSON.parse(r.categorias || '[]');
     aplicarRestricoesCategorias(id);
-    ['interno','financeiro','marketing','avaliacao','externo'].forEach(c => {
+    ['interno','financeiro','marketing','avaliacao','ia_atendimento','externo'].forEach(c => {
       const el = document.getElementById('cat-'+c);
       if (!el.disabled) { el.checked = cats.includes(c); updateCatBorder(el); }
     });
@@ -1181,7 +1190,7 @@ function updateCatBorder(el) {
 
 // Bloqueia categorias já usadas por outra conexão
 async function aplicarRestricoesCategorias(editandoId) {
-  const ALL_CATS = ['interno','financeiro','marketing','avaliacao','externo'];
+  const ALL_CATS = ['interno','financeiro','marketing','avaliacao','ia_atendimento','externo'];
   // Reset tudo primeiro
   ALL_CATS.forEach(cat => {
     const el = document.getElementById('cat-'+cat);
@@ -1221,7 +1230,7 @@ async function salvarConexao() {
   const nome = document.getElementById('conn-nome').value.trim();
   const token = document.getElementById('conn-token').value.trim();
   const descricao = document.getElementById('conn-descricao').value.trim();
-  const categorias = ['interno','financeiro','marketing','avaliacao','externo']
+  const categorias = ['interno','financeiro','marketing','avaliacao','ia_atendimento','externo']
     .filter(c => document.getElementById('cat-'+c).checked);
   const status = document.getElementById('conn-status');
 
