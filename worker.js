@@ -1,4 +1,5 @@
-// v2.52.54
+// v2.52.55
+// v2.52.55: Merge dados do doc_ antes de deletar (copia bling_contact_id)
 // v2.52.54: Limpeza automática doc_CNPJ duplicados no upsert
 // v2.52.53: Fix migração doc_CNPJ→telefone real + tabela customer_phones + unificar por CNPJ/bling_contact_id
 // v2.52.52: Endpoints IA IzChat — /api/pub/ia/* para atendimento automático WhatsApp
@@ -4517,10 +4518,18 @@ export default {
         }
         
         if (realCustomer) {
-          // Existe versão real — deletar doc_
+          // v2.52.55: Merge bling_contact_id antes de deletar
+          if (doc.bling_contact_id) {
+            const realHasBling = await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits = ?').bind(realCustomer.phone_digits).first();
+            if (!realHasBling?.bling_contact_id) {
+              await env.DB.prepare('UPDATE customers_cache SET bling_contact_id = ? WHERE phone_digits = ?').bind(doc.bling_contact_id, realCustomer.phone_digits).run();
+              console.log(`[limpar-duplicados] Merge: copiado bling_contact_id ${doc.bling_contact_id} para ${realCustomer.phone_digits}`);
+            }
+          }
+          // Deletar doc_
           await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(doc.phone_digits).run();
           results.deletados++;
-          results.detalhes.push({ deletado: doc.phone_digits, nome: doc.name, mantido: realCustomer.phone_digits });
+          results.detalhes.push({ deletado: doc.phone_digits, nome: doc.name, mantido: realCustomer.phone_digits, bling_merged: !!doc.bling_contact_id });
         }
       }
       
@@ -5407,26 +5416,38 @@ export default {
         ON CONFLICT(phone_digits) DO UPDATE SET name=excluded.name, address_line=excluded.address_line, bairro=excluded.bairro, complemento=excluded.complemento, referencia=excluded.referencia, bling_contact_id=excluded.bling_contact_id, cpf_cnpj=excluded.cpf_cnpj, email=excluded.email, cobranca_tipo=excluded.cobranca_tipo, pagamento_preferencial=excluded.pagamento_preferencial, updated_at=unixepoch()`)
         .bind(digits, name, address_line, bairro, complemento, referencia, finalBlingId, finalCpf, finalEmail, finalCobranca, finalPgPref).run();
       
-      // v2.52.54: Limpeza automática de duplicados doc_CNPJ
-      // Se salvou com telefone real e tem CNPJ, deletar registro doc_CNPJ se existir
+      // v2.52.55: Limpeza automática de duplicados doc_CNPJ com MERGE de dados
+      // Se salvou com telefone real e tem CNPJ, buscar doc_CNPJ e fazer merge
       if (digits && !digits.startsWith('doc_') && finalCpf) {
         const cnpjClean = finalCpf.replace(/\D/g, '');
         if (cnpjClean.length >= 11) {
           const docKey = `doc_${cnpjClean}`;
           if (docKey !== digits) {
-            const deleted = await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(docKey).run().catch(() => null);
-            if (deleted && deleted.meta?.changes > 0) {
+            const docRecord = await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits = ?').bind(docKey).first().catch(() => null);
+            if (docRecord) {
+              // v2.52.55: Se doc_ tem bling_contact_id e o registro real não tem, copiar
+              if (docRecord.bling_contact_id && !finalBlingId) {
+                await env.DB.prepare('UPDATE customers_cache SET bling_contact_id = ? WHERE phone_digits = ?').bind(docRecord.bling_contact_id, digits).run().catch(() => {});
+                console.log(`[upsert] Merge: copiado bling_contact_id ${docRecord.bling_contact_id} de ${docKey} para ${digits}`);
+              }
+              // Agora deletar o doc_
+              await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(docKey).run().catch(() => {});
               console.log(`[upsert] Limpeza: deletado duplicado ${docKey} (mantido ${digits})`);
             }
           }
         }
       }
       // Também limpar se tem bling_contact_id — deletar doc_ com mesmo bling_id
-      if (digits && !digits.startsWith('doc_') && finalBlingId) {
-        const dups = await env.DB.prepare('SELECT phone_digits FROM customers_cache WHERE bling_contact_id = ? AND phone_digits != ? AND phone_digits LIKE "doc_%"').bind(String(finalBlingId), digits).all().catch(() => ({ results: [] }));
-        for (const dup of (dups.results || [])) {
-          await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(dup.phone_digits).run().catch(() => {});
-          console.log(`[upsert] Limpeza: deletado duplicado ${dup.phone_digits} por bling_id (mantido ${digits})`);
+      if (digits && !digits.startsWith('doc_')) {
+        // Buscar o bling_contact_id atual (pode ter sido copiado acima)
+        const currentRecord = await env.DB.prepare('SELECT bling_contact_id FROM customers_cache WHERE phone_digits = ?').bind(digits).first().catch(() => null);
+        const currentBlingId = currentRecord?.bling_contact_id || finalBlingId;
+        if (currentBlingId) {
+          const dups = await env.DB.prepare('SELECT phone_digits FROM customers_cache WHERE bling_contact_id = ? AND phone_digits != ? AND (phone_digits LIKE "doc_%" OR phone_digits LIKE "bid_%")').bind(String(currentBlingId), digits).all().catch(() => ({ results: [] }));
+          for (const dup of (dups.results || [])) {
+            await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(dup.phone_digits).run().catch(() => {});
+            console.log(`[upsert] Limpeza: deletado duplicado ${dup.phone_digits} por bling_id ${currentBlingId} (mantido ${digits})`);
+          }
         }
       }
       
