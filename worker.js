@@ -7152,6 +7152,7 @@ export default {
     }
 
     // ── NFC-e: Lançar estoque de uma NFC-e específica ──
+    // v2.52.53: Tratar "já existe estoque" como sucesso
     if (method === 'POST' && path === '/api/nfce/lancar-estoque') {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente']);
       if (authCheck instanceof Response) return authCheck;
@@ -7169,7 +7170,10 @@ export default {
       try {
         const r = await blingFetch(`/nfce/${nfceId}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
         const txt = await r.text().catch(() => '');
-        return json({ ok: r.ok, nfce_id: nfceId, status: r.status, body: txt.substring(0, 500) });
+        // "Já existe estoque lançado" = OK (Bling já fez)
+        const jaExiste = txt.includes('existe') || txt.includes('lan\u00e7ado');
+        const isOk = r.ok || jaExiste;
+        return json({ ok: isOk, ja_lancado: jaExiste, nfce_id: nfceId, status: r.status, body: txt.substring(0, 500) });
       } catch(e) {
         return json({ ok: false, nfce_id: nfceId, error: e.message }, 500);
       }
@@ -12657,4 +12661,4 @@ async function dailyAuditSnapshot(env) {
     console.log(`[audit] Snapshot ${yesterday} salvo: ${totalPedidos} pedidos, R$${snapshot.totalValor}`);
   } catch (e) { console.error('[audit] Snapshot error:', e.message); }
 }
-// v2.52.51 - force deploy 1774399000
+// v2.52.53 - force deploy 1774399000
