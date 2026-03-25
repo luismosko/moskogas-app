@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auditoria v1.1.8 — MoskoGás</title>
+<title>Auditoria v1.1.9 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -133,7 +133,7 @@
     </div>
   </div>
 
-  <div class="version-badge">v1.1.8 — auditoria</div>
+  <div class="version-badge">v1.1.9 — auditoria</div>
 </div>
 
 <script src="shared.js"></script>
@@ -618,16 +618,15 @@ async function buscarNFCesBling() {
   const dataFim = document.getElementById('nfce-data-fim').value;
   if (!dataInicio || !dataFim) { toast('Informe o período', 'error'); return; }
   
-  document.getElementById('nfce-est-body').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8">⏳ Buscando e verificando estoque no Bling...<br><small>Isso pode levar alguns segundos</small></td></tr>';
+  // v1.1.9: Limpar lista para não usar cache
+  nfceListaEstoque = [];
+  document.getElementById('nfce-est-body').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8">⏳ Buscando NFC-e no Bling...<br><small>O status de estoque será verificado ao lançar</small></td></tr>';
   
   try {
     const res = await api(`/api/nfce/listar-bling?dataInicio=${dataInicio}&dataFim=${dataFim}`);
     if (!res.ok) throw new Error(res.error || 'Erro ao buscar');
     
-    // v1.1.7: Mostrar resumo
-    if (res.resumo) {
-      toast(res.resumo, 'success');
-    }
+    // v1.1.9: resumo removido (sem verificação automática)
     
     nfceListaEstoque = (res.nfces || []).map(n => ({
       numero: n.numero,
@@ -640,15 +639,11 @@ async function buscarNFCesBling() {
       estoque_erro: n.estoque_erro || null
     }));
     renderNFCeEstoqueTable();
-    // v1.1.7: Mensagem mais informativa
-    const pendentes = nfceListaEstoque.filter(n => !n.estoque_status || n.estoque_status === 'erro').length;
-    const lancados = nfceListaEstoque.filter(n => n.estoque_status === 'lancado_agora').length;
+    // v1.1.9: Mensagem simplificada (sem verificação automática para evitar limite subrequests)
     if (nfceListaEstoque.length === 0) {
-      toast('✅ Todas as NFC-e do período já têm estoque lançado!', 'success');
-    } else if (lancados > 0) {
-      toast(`✅ ${lancados} NFC-e tiveram estoque lançado automaticamente`, 'success');
+      toast('Nenhuma NFC-e encontrada no período', 'warning');
     } else {
-      toast(`⚠️ ${pendentes} NFC-e com erro precisam de atenção`, 'warning');
+      toast(`📋 ${nfceListaEstoque.length} NFC-e encontradas. Use "Lançar" ou "Lançar Estoque (Todos)"`, 'success');
     }
   } catch(e) {
     document.getElementById('nfce-est-body').innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#dc2626">❌ ${e.message}</td></tr>`;
