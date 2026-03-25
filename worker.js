@@ -1,4 +1,5 @@
-// v2.52.60
+// v2.52.61
+// v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
 // v2.52.55: Merge dados do doc_ antes de deletar (copia bling_contact_id)
 // v2.52.54: Limpeza automática doc_CNPJ duplicados no upsert
@@ -967,6 +968,10 @@ async function emitirNFCeBling(env, orderId, orderData) {
       bling_pedido_id: String(nfceId),
       error_message: jaExiste ? 'Bling já lançou automaticamente' : `HTTP ${estoqueStatus}: ${estoqueBody.substring(0, 400)}`,
     });
+    // v2.52.61: Marcar estoque_lancado = 1 se sucesso ou já existia
+    if (status === 'success' || status === 'skipped') {
+      await env.DB.prepare('UPDATE orders SET estoque_lancado = 1 WHERE id = ?').bind(orderId).run().catch(() => {});
+    }
   } catch(e) {
     console.error('[NFC-e] /lancar-estoque falhou:', e.message);
   }
@@ -7911,10 +7916,10 @@ export default {
         const ordersMap = {};
         if (numeros.length > 0) {
           const ordersRows = await env.DB.prepare(
-            `SELECT nfce_numero, total_value, customer_name FROM orders WHERE nfce_numero IN (${placeholders})`
+            `SELECT nfce_numero, total_value, customer_name, estoque_lancado FROM orders WHERE nfce_numero IN (${placeholders})`
           ).bind(...numeros).all().then(r => r.results || []).catch(() => []);
           for (const o of ordersRows) {
-            ordersMap[o.nfce_numero] = { valor: o.total_value, cliente: o.customer_name };
+            ordersMap[o.nfce_numero] = { valor: o.total_value, cliente: o.customer_name, estoque_lancado: o.estoque_lancado };
           }
         }
         
@@ -7930,6 +7935,7 @@ export default {
             cliente: d1Data.cliente || '',
             situacao: sitDesc,
             situacao_id: sitId,
+            estoque_status: d1Data.estoque_lancado ? 'ja_lancado' : null,
           };
         });
         
@@ -12412,8 +12418,65 @@ Responda APENAS com o texto do post, sem explicações ou aspas.`;
     ctx.waitUntil(publishScheduledPosts(env));
     // NFC-e retry automático: roda a cada execução do cron (a cada 5 min), processa até 10 notas
     ctx.waitUntil(retryNFCePendentes(env, 10));
+    // v2.52.61: Lançar estoque de NFC-e autorizadas que ainda não têm estoque_lancado
+    ctx.waitUntil(lancarEstoqueAutomatico(env));
   },
 };
+
+// ══════════════════════════════════════════════════════════════
+// CRON: LANÇAR ESTOQUE AUTOMÁTICO (v2.52.61)
+// ══════════════════════════════════════════════════════════════
+
+async function lancarEstoqueAutomatico(env) {
+  try {
+    // Busca pedidos entregues com NFC-e autorizada mas sem estoque lançado
+    // nfce_status = 'autorizada' e estoque_lancado = 0 (ou null)
+    const rows = await env.DB.prepare(`
+      SELECT id, nfce_id, nfce_numero, customer_name
+      FROM orders
+      WHERE status = 'entregue'
+        AND nfce_id IS NOT NULL
+        AND nfce_status IN ('autorizada', 'emitida')
+        AND (estoque_lancado IS NULL OR estoque_lancado = 0)
+      ORDER BY delivered_at DESC
+      LIMIT 20
+    `).all().then(r => r.results || []).catch(() => []);
+
+    if (rows.length === 0) {
+      console.log('[estoque-cron] Nenhuma NFC-e pendente de estoque');
+      return;
+    }
+
+    console.log(`[estoque-cron] ${rows.length} NFC-e para lançar estoque`);
+    let ok = 0, skipped = 0, erros = 0;
+
+    for (const row of rows) {
+      try {
+        await new Promise(r => setTimeout(r, 300)); // Rate limit
+        const resp = await blingFetch(`/nfce/${row.nfce_id}/lancar-estoque`, { method: 'POST', body: '{}' }, env);
+        const body = await resp.text().catch(() => '');
+        const jaExiste = body.includes('já') || body.includes('existem') || body.includes('existe');
+        
+        if (resp.ok || jaExiste) {
+          await env.DB.prepare('UPDATE orders SET estoque_lancado = 1 WHERE id = ?').bind(row.id).run().catch(() => {});
+          if (resp.ok) ok++;
+          else skipped++;
+          console.log(`[estoque-cron] ${row.nfce_numero}: ${resp.ok ? 'OK' : 'já existia'}`);
+        } else {
+          erros++;
+          console.log(`[estoque-cron] ${row.nfce_numero}: ERRO ${resp.status} - ${body.substring(0, 100)}`);
+        }
+      } catch (e) {
+        erros++;
+        console.error(`[estoque-cron] ${row.nfce_numero}: ${e.message}`);
+      }
+    }
+
+    console.log(`[estoque-cron] Finalizado: ${ok} lançados, ${skipped} já existiam, ${erros} erros`);
+  } catch (e) {
+    console.error('[estoque-cron] Erro geral:', e.message);
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 // MÓDULO MARKETING POSTS (v2.47.0)

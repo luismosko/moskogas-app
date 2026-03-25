@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auditoria v1.1.9 — MoskoGás</title>
+<title>Auditoria v1.2.0 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -52,7 +52,7 @@
 <body>
 <div id="nav-container"></div>
 <div class="container">
-  <h1>📊 Auditoria Bling v1.1.3</h1>
+  <h1>📊 Auditoria Bling v1.2.0</h1>
 
   <div class="toolbar">
     <input type="date" id="audit-date" title="Data da auditoria">
@@ -61,7 +61,7 @@
     <button class="btn btn-green" id="btn-csv" onclick="exportCSV()" disabled title="Exportar relatório CSV">📥 CSV</button>
     <button class="btn" onclick="loadSemBling()" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer" title="Ver pedidos entregues sem registro no Bling">⚠️ Sem Bling</button>
     <button class="btn" onclick="showNFCeEstoquePanel()" style="background:#f59e0b;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer" title="Lançar estoque de NFC-e no Bling">📦 NFC-e Estoque</button>
-    <span style="margin-left:auto;background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">v1.1.3</span>
+    <span style="margin-left:auto;background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">v1.2.0</span>
   </div>
 
   <div id="loading" class="loading" style="display:none;">⏳ Carregando auditoria...</div>
@@ -133,7 +133,7 @@
     </div>
   </div>
 
-  <div class="version-badge">v1.1.9 — auditoria</div>
+  <div class="version-badge">v1.2.0 — auditoria</div>
 </div>
 
 <script src="shared.js"></script>
@@ -639,11 +639,17 @@ async function buscarNFCesBling() {
       estoque_erro: n.estoque_erro || null
     }));
     renderNFCeEstoqueTable();
-    // v1.1.9: Mensagem simplificada (sem verificação automática para evitar limite subrequests)
+    // v1.2.0: Mostrar quantas já têm estoque lançado
+    const jaLancadas = nfceListaEstoque.filter(n => n.estoque_status === 'ja_lancado').length;
+    const pendentes = nfceListaEstoque.filter(n => !n.estoque_status).length;
     if (nfceListaEstoque.length === 0) {
       toast('Nenhuma NFC-e encontrada no período', 'warning');
+    } else if (jaLancadas > 0 && pendentes === 0) {
+      toast(`✅ Todas ${jaLancadas} NFC-e já têm estoque lançado!`, 'success');
+    } else if (jaLancadas > 0) {
+      toast(`📋 ${pendentes} pendentes, ${jaLancadas} já lançadas`, 'success');
     } else {
-      toast(`📋 ${nfceListaEstoque.length} NFC-e encontradas. Use "Lançar" ou "Lançar Estoque (Todos)"`, 'success');
+      toast(`📋 ${nfceListaEstoque.length} NFC-e encontradas`, 'success');
     }
   } catch(e) {
     document.getElementById('nfce-est-body').innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#dc2626">❌ ${e.message}</td></tr>`;
