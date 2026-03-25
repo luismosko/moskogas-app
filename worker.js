@@ -6151,13 +6151,13 @@ export default {
 
     // ── Upload de comprovante pelo atendente ──────────────────
     // v2.52.48: Anexar comprovante de pagamento (imagem/PDF) antes da entrega
-    const comprovanteMatch = path.match(/^\/api\/pagamentos\/(\d+)\/comprovante$/);
-    if (method === 'POST' && comprovanteMatch) {
+    const pagCompMatch = path.match(/^\/api\/pagamentos\/(\d+)\/comprovante$/);
+    if (method === 'POST' && pagCompMatch) {
       const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
       if (authCheck instanceof Response) return authCheck;
       const user = authCheck;
 
-      const orderId = parseInt(comprovanteMatch[1]);
+      const orderId = parseInt(pagCompMatch[1]);
       const order = await env.DB.prepare('SELECT id, status, pago, foto_comprovante FROM orders WHERE id=?').bind(orderId).first();
       if (!order) return err('Pedido não encontrado', 404);
 
