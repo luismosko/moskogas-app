@@ -7256,14 +7256,29 @@ export default {
           return json({ ok: false, error: `Bling ${r.status}: ${txt.substring(0, 300)}` }, 502);
         }
         const data = await r.json();
+        // Buscar valores do nosso banco D1 (API Bling listagem não retorna valor)
+        const numeros = (data.data || []).map(n => n.numero).filter(Boolean);
+        const placeholders = numeros.map(() => '?').join(',');
+        const ordersMap = {};
+        if (numeros.length > 0) {
+          const ordersRows = await env.DB.prepare(
+            `SELECT nfce_numero, total_value, customer_name FROM orders WHERE nfce_numero IN (${placeholders})`
+          ).bind(...numeros).all().then(r => r.results || []).catch(() => []);
+          for (const o of ordersRows) {
+            ordersMap[o.nfce_numero] = { valor: o.total_value, cliente: o.customer_name };
+          }
+        }
+        
         let nfces = (data.data || []).map(n => {
           let sitId = typeof n.situacao === 'object' ? (n.situacao?.id || n.situacao?.valor) : n.situacao;
           let sitDesc = SITUACAO_MAP[sitId] || (typeof n.situacao === 'object' ? n.situacao?.descricao : null) || String(sitId);
+          const d1Data = ordersMap[n.numero] || {};
           return {
             id: n.id,
             numero: n.numero,
             data: n.dataEmissao || n.data || n.dataOperacao || '',
-            valor: parseFloat(n.valorNota || n.valor || n.total || 0),
+            valor: d1Data.valor || parseFloat(n.valorNota || n.valor || n.totais?.valorNota || 0),
+            cliente: d1Data.cliente || '',
             situacao: sitDesc,
             situacao_id: sitId,
           };
@@ -12716,4 +12731,4 @@ async function dailyAuditSnapshot(env) {
     console.log(`[audit] Snapshot ${yesterday} salvo: ${totalPedidos} pedidos, R$${snapshot.totalValor}`);
   } catch (e) { console.error('[audit] Snapshot error:', e.message); }
 }
-// v2.52.55 - force deploy 1774399000
+// v2.52.56 - force deploy 1774399000
