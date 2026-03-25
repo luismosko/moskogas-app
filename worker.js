@@ -12697,4 +12697,4 @@ async function dailyAuditSnapshot(env) {
     console.log(`[audit] Snapshot ${yesterday} salvo: ${totalPedidos} pedidos, R$${snapshot.totalValor}`);
   } catch (e) { console.error('[audit] Snapshot error:', e.message); }
 }
-// v2.52.57 - force deploy 1774399000
+// v2.52.58 - force deploy 1774404694
