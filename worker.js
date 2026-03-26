@@ -1,4 +1,4 @@
-// v2.52.63
+// v2.52.64
 // v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
 // v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
@@ -4145,6 +4145,35 @@ export default {
         await env.DB.prepare('UPDATE product_favorites SET sort_order = ? WHERE id = ?').bind(i + 1, order[i]).run();
       }
       return json({ ok: true, message: 'Ordem atualizada' });
+    }
+
+    // ── CEP CAMPO GRANDE ──────────────────────────────────────
+    // v2.52.64: Consulta CEP - retorna logradouro/bairro
+    if (method === 'GET' && path.startsWith('/api/cep/')) {
+      const subpath = path.replace('/api/cep/', '');
+      
+      // Busca por texto (logradouro ou bairro)
+      if (subpath === 'busca') {
+        const q = (url.searchParams.get('q') || '').trim();
+        if (q.length < 2) return json([]);
+        const rows = await env.DB.prepare(
+          `SELECT cep, logradouro, complemento, bairro FROM ceps_cg 
+           WHERE logradouro LIKE ? OR bairro LIKE ? 
+           ORDER BY logradouro ASC LIMIT 20`
+        ).bind(`%${q}%`, `%${q}%`).all().then(r => r.results || []);
+        return json(rows);
+      }
+      
+      // Busca por CEP exato (apenas números)
+      const cepNum = subpath.replace(/\D/g, '');
+      if (cepNum.length >= 5) {
+        const row = await env.DB.prepare(
+          `SELECT cep, logradouro, complemento, bairro FROM ceps_cg WHERE cep LIKE ?`
+        ).bind(`${cepNum}%`).first();
+        if (row) return json(row);
+        return json({ error: 'CEP não encontrado' }, 404);
+      }
+      return json({ error: 'CEP inválido' }, 400);
     }
 
     // ── BUSCA COMBINADA ──────────────────────────────────────
