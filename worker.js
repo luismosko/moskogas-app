@@ -1,4 +1,5 @@
-// v2.52.73
+// v2.52.74
+// v2.52.74: Fix status case-sensitive (entregue vs ENTREGUE)
 // v2.52.73: Diagnóstico de corporativos (debug datas e status)
 // v2.52.72: Endpoint /api/pub/corporativos-marco para listar clientes CNPJ em março
 // v2.52.71: Endpoints diagnóstico e desfazer merge (temporário para correção)
@@ -3544,7 +3545,7 @@ export default {
       
       // Pedidos ENTREGUE em março
       const marcoEntregue = await env.DB.prepare(`
-        SELECT COUNT(*) as total FROM orders WHERE status = 'ENTREGUE' AND created_at >= ? AND created_at <= ?
+        SELECT COUNT(*) as total FROM orders WHERE LOWER(status) = 'entregue' AND created_at >= ? AND created_at <= ?
       `).bind(inicioMarco, fimMarco).first();
       
       // Amostra de pedidos recentes
@@ -3594,7 +3595,7 @@ export default {
           c.cpf_cnpj, c.bling_contact_id, c.address_line, c.name as nome_cache
         FROM orders o
         LEFT JOIN customers_cache c ON c.phone_digits = o.phone_digits
-        WHERE o.status = 'ENTREGUE'
+        WHERE LOWER(o.status) = 'entregue'
           AND o.created_at >= ?
           AND o.created_at <= ?
         ORDER BY o.customer_name, o.created_at
