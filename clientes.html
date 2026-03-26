@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.2.9 — MoskoGás</title>
+  <title>Clientes v1.3.0 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.2.9 — clientes</div>
+  <div class="version-badge" style="display:none">v1.3.0 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.9</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.3.0</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -135,6 +135,7 @@
       <input id="q" type="text" placeholder="Buscar por nome, telefone, CPF/CNPJ, endereço..." oninput="onSearch()" autocomplete="off">
     </div>
     <button class="btn btn-green" onclick="abrirNovoCliente()" style="padding:10px 16px;font-size:14px;white-space:nowrap">➕ Novo Cliente</button>
+    <button class="btn" onclick="abrirDuplicados()" style="padding:10px 16px;font-size:14px;white-space:nowrap;background:#f59e0b;color:#fff">🔀 Duplicados</button>
     <button class="btn" onclick="abrirDebugPanel()" style="padding:10px 16px;font-size:14px;white-space:nowrap;background:#6366f1;color:#fff">🔧 Debug/Merge</button>
     <select id="filtro-origem" class="filter-select" onchange="loadPage(1)" style="display:none">
       <option value="">Todas as origens</option>
@@ -1011,7 +1012,266 @@ function abrirNovoCliente() {
 loadPage(1);
 </script>
 
-<!-- Modal Debug/Merge v1.2.9 -->
+<!-- Modal Duplicados v1.3.0 -->
+<div id="modal-duplicados" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;justify-content:center;align-items:flex-start;padding-top:30px;overflow-y:auto">
+  <div style="background:#fff;border-radius:12px;width:95%;max-width:1100px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-bottom:30px">
+    <div style="background:linear-gradient(135deg, #f59e0b, #d97706);color:#fff;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10">
+      <div>
+        <h2 style="margin:0;font-size:18px">🔀 Agente de Duplicados</h2>
+        <p style="margin:4px 0 0;font-size:12px;opacity:0.9">Detecta e resolve clientes com nomes similares automaticamente</p>
+      </div>
+      <button onclick="fecharDuplicados()" style="background:none;border:none;color:#fff;font-size:28px;cursor:pointer;line-height:1">&times;</button>
+    </div>
+    
+    <div style="padding:20px">
+      <!-- Stats -->
+      <div id="dup-stats" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;flex:1;min-width:150px">
+          <div style="font-size:11px;color:#92400e;font-weight:600">ANALISADOS</div>
+          <div id="dup-stat-analisados" style="font-size:24px;font-weight:700;color:#78350f">—</div>
+        </div>
+        <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;flex:1;min-width:150px">
+          <div style="font-size:11px;color:#991b1b;font-weight:600">DUPLICADOS</div>
+          <div id="dup-stat-duplicados" style="font-size:24px;font-weight:700;color:#dc2626">—</div>
+        </div>
+        <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:12px 16px;flex:1;min-width:150px">
+          <div style="font-size:11px;color:#166534;font-weight:600">RESOLVIDOS</div>
+          <div id="dup-stat-resolvidos" style="font-size:24px;font-weight:700;color:#16a34a">0</div>
+        </div>
+      </div>
+      
+      <!-- Ações -->
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <button onclick="carregarDuplicados()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
+          🔍 Buscar Duplicados
+        </button>
+        <button id="btn-resolver-todos" onclick="resolverTodosDuplicados()" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;display:none">
+          ✅ Resolver Todos Selecionados
+        </button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#64748b;margin-left:auto">
+          <input type="checkbox" id="dup-auto-select" checked style="width:16px;height:16px">
+          Auto-selecionar alta similaridade (≥90%)
+        </label>
+      </div>
+      
+      <!-- Lista de duplicados -->
+      <div id="dup-lista" style="min-height:200px">
+        <p style="text-align:center;color:#64748b;padding:60px 20px">
+          Clique em <strong>🔍 Buscar Duplicados</strong> para analisar o banco de clientes
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// Agente de Duplicados v1.3.0
+// ══════════════════════════════════════════════════════════════════════
+let _duplicados = [];
+let _resolvidos = 0;
+
+function abrirDuplicados() {
+  document.getElementById('modal-duplicados').style.display = 'flex';
+}
+
+function fecharDuplicados() {
+  document.getElementById('modal-duplicados').style.display = 'none';
+}
+
+async function carregarDuplicados() {
+  const lista = document.getElementById('dup-lista');
+  lista.innerHTML = '<p style="text-align:center;color:#64748b;padding:40px">⏳ Analisando clientes...</p>';
+  
+  try {
+    const res = await api('/api/clientes/duplicados?limit=300');
+    _duplicados = res.pares || [];
+    _resolvidos = 0;
+    
+    document.getElementById('dup-stat-analisados').textContent = res.total_analisados || 0;
+    document.getElementById('dup-stat-duplicados').textContent = _duplicados.length;
+    document.getElementById('dup-stat-resolvidos').textContent = '0';
+    
+    if (_duplicados.length === 0) {
+      lista.innerHTML = '<p style="text-align:center;color:#16a34a;padding:60px 20px;font-size:18px">✅ Nenhum duplicado encontrado!</p>';
+      document.getElementById('btn-resolver-todos').style.display = 'none';
+      return;
+    }
+    
+    document.getElementById('btn-resolver-todos').style.display = 'inline-flex';
+    renderizarDuplicados();
+    
+  } catch (e) {
+    lista.innerHTML = `<p style="text-align:center;color:#dc2626;padding:40px">❌ Erro: ${e.message}</p>`;
+  }
+}
+
+function renderizarDuplicados() {
+  const lista = document.getElementById('dup-lista');
+  const autoSelect = document.getElementById('dup-auto-select').checked;
+  
+  lista.innerHTML = _duplicados.map((d, i) => {
+    const checked = autoSelect && d.similaridade >= 90 ? 'checked' : '';
+    const simColor = d.similaridade >= 90 ? '#dc2626' : d.similaridade >= 80 ? '#f59e0b' : '#3b82f6';
+    
+    return `
+      <div class="dup-card" data-index="${i}" style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:12px;transition:all .2s">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" class="dup-check" data-index="${i}" ${checked} style="width:18px;height:18px;cursor:pointer">
+            <span style="background:${simColor};color:#fff;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700">
+              ${d.similaridade}% similar
+            </span>
+            <span style="background:#e0e7ff;color:#4338ca;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600">
+              ${d.motivo_escolha}
+            </span>
+          </div>
+          <button onclick="resolverDuplicado(${i})" style="background:#059669;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-weight:600;cursor:pointer;font-size:12px">
+            ✅ Resolver
+          </button>
+        </div>
+        
+        <div style="display:grid;grid-template-columns:1fr 40px 1fr;gap:8px;align-items:start">
+          <!-- Manter (verde) -->
+          <div style="background:#dcfce7;border:2px solid #86efac;border-radius:8px;padding:12px">
+            <div style="font-size:10px;font-weight:700;color:#166534;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+              ✅ MANTER
+              ${d.manter.bling_contact_id ? '<span style="background:#3b82f6;color:#fff;padding:2px 6px;border-radius:4px;font-size:9px">BLING</span>' : ''}
+            </div>
+            <div style="font-weight:700;color:#14532d;font-size:14px;margin-bottom:4px">${d.manter.name || '—'}</div>
+            <div style="font-size:11px;color:#166534;font-family:monospace">${formatPhone(d.manter.phone_digits)}</div>
+            ${d.manter.cpf_cnpj ? `<div style="font-size:11px;color:#166534">📋 ${d.manter.cpf_cnpj}</div>` : ''}
+            ${d.manter.address_line ? `<div style="font-size:10px;color:#15803d;margin-top:4px">📍 ${d.manter.address_line}</div>` : ''}
+            <div style="font-size:10px;color:#166534;margin-top:4px">📦 ${d.manter.total_pedidos} pedido(s)</div>
+          </div>
+          
+          <!-- Seta -->
+          <div style="display:flex;justify-content:center;align-items:center;font-size:20px;color:#64748b;padding-top:30px">
+            ←
+          </div>
+          
+          <!-- Deletar (vermelho) -->
+          <div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:8px;padding:12px">
+            <div style="font-size:10px;font-weight:700;color:#991b1b;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+              🗑️ DELETAR
+              ${d.deletar.bling_contact_id ? '<span style="background:#3b82f6;color:#fff;padding:2px 6px;border-radius:4px;font-size:9px">BLING</span>' : ''}
+            </div>
+            <div style="font-weight:700;color:#7f1d1d;font-size:14px;margin-bottom:4px">${d.deletar.name || '—'}</div>
+            <div style="font-size:11px;color:#991b1b;font-family:monospace">${formatPhone(d.deletar.phone_digits)}</div>
+            ${d.deletar.cpf_cnpj ? `<div style="font-size:11px;color:#991b1b">📋 ${d.deletar.cpf_cnpj}</div>` : ''}
+            ${d.deletar.address_line ? `<div style="font-size:10px;color:#b91c1c;margin-top:4px">📍 ${d.deletar.address_line}</div>` : ''}
+            <div style="font-size:10px;color:#991b1b;margin-top:4px">📦 ${d.deletar.total_pedidos} pedido(s)</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function formatPhone(p) {
+  if (!p) return '—';
+  if (p.startsWith('doc_')) return `📋 CNPJ: ${p.slice(4)}`;
+  if (p.startsWith('bid_')) return `🔗 Bling: ${p.slice(4)}`;
+  // Formatar telefone
+  const digits = p.replace(/\D/g, '');
+  if (digits.length === 13 && digits.startsWith('55')) {
+    return `(${digits.slice(2,4)}) ${digits.slice(4,5)} ${digits.slice(5,9)}-${digits.slice(9)}`;
+  }
+  return p;
+}
+
+async function resolverDuplicado(index) {
+  const d = _duplicados[index];
+  if (!d) return;
+  
+  const card = document.querySelector(`.dup-card[data-index="${index}"]`);
+  if (card) card.style.opacity = '0.5';
+  
+  try {
+    const res = await api('/api/clientes/merge', {
+      method: 'POST',
+      body: JSON.stringify({ manter: d.manter.phone_digits, deletar: d.deletar.phone_digits })
+    });
+    
+    toast(`✅ Merge OK! ${res.pedidos_migrados} pedido(s) migrado(s)`, 'success');
+    
+    // Remover da lista
+    _duplicados.splice(index, 1);
+    _resolvidos++;
+    document.getElementById('dup-stat-duplicados').textContent = _duplicados.length;
+    document.getElementById('dup-stat-resolvidos').textContent = _resolvidos;
+    
+    if (_duplicados.length === 0) {
+      document.getElementById('dup-lista').innerHTML = '<p style="text-align:center;color:#16a34a;padding:60px 20px;font-size:18px">✅ Todos os duplicados foram resolvidos!</p>';
+      document.getElementById('btn-resolver-todos').style.display = 'none';
+    } else {
+      renderizarDuplicados();
+    }
+    
+    loadPage(_page); // Atualizar lista principal
+    
+  } catch (e) {
+    toast('❌ ' + e.message, 'error');
+    if (card) card.style.opacity = '1';
+  }
+}
+
+async function resolverTodosDuplicados() {
+  // Pegar apenas os selecionados
+  const checks = document.querySelectorAll('.dup-check:checked');
+  if (checks.length === 0) {
+    toast('Nenhum item selecionado', 'error');
+    return;
+  }
+  
+  if (!confirm(`Confirma resolver ${checks.length} duplicado(s)?\\n\\nOs dados serão mesclados e os registros duplicados serão removidos.`)) return;
+  
+  const pares = [];
+  checks.forEach(chk => {
+    const i = parseInt(chk.dataset.index);
+    const d = _duplicados[i];
+    if (d) pares.push({ manter: d.manter.phone_digits, deletar: d.deletar.phone_digits });
+  });
+  
+  document.getElementById('btn-resolver-todos').disabled = true;
+  document.getElementById('btn-resolver-todos').textContent = '⏳ Processando...';
+  
+  try {
+    const res = await api('/api/clientes/merge-batch', {
+      method: 'POST',
+      body: JSON.stringify({ pares })
+    });
+    
+    toast(`✅ ${res.sucesso} resolvido(s), ${res.falhas} falha(s)`, res.falhas > 0 ? 'warning' : 'success');
+    
+    // Remover os resolvidos da lista
+    const indicesResolvidos = new Set();
+    checks.forEach(chk => indicesResolvidos.add(parseInt(chk.dataset.index)));
+    _duplicados = _duplicados.filter((_, i) => !indicesResolvidos.has(i));
+    _resolvidos += res.sucesso;
+    
+    document.getElementById('dup-stat-duplicados').textContent = _duplicados.length;
+    document.getElementById('dup-stat-resolvidos').textContent = _resolvidos;
+    
+    if (_duplicados.length === 0) {
+      document.getElementById('dup-lista').innerHTML = '<p style="text-align:center;color:#16a34a;padding:60px 20px;font-size:18px">✅ Todos os duplicados foram resolvidos!</p>';
+      document.getElementById('btn-resolver-todos').style.display = 'none';
+    } else {
+      renderizarDuplicados();
+    }
+    
+    loadPage(_page);
+    
+  } catch (e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    document.getElementById('btn-resolver-todos').disabled = false;
+    document.getElementById('btn-resolver-todos').textContent = '✅ Resolver Todos Selecionados';
+  }
+}
+</script>
+
+<!-- Modal Debug/Merge v1.3.0 -->
 <div id="modal-debug" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:flex-start;padding-top:50px">
   <div style="background:#fff;border-radius:12px;width:95%;max-width:900px;max-height:85vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
     <div style="background:#1e293b;color:#fff;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">

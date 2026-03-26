@@ -1,4 +1,5 @@
-// v2.52.67
+// v2.52.68
+// v2.52.68: Agente de duplicados - detecta clientes similares + merge batch
 // v2.52.67: Busca CEP por numero parcial
 // v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
 // v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
@@ -4506,6 +4507,191 @@ export default {
           tipo: r.phone_digits.startsWith('doc_') ? 'doc_CNPJ' : r.phone_digits.startsWith('bid_') ? 'bid_ID' : 'telefone_real',
           phone_formatado: r.phone_digits.startsWith('doc_') ? `📋 CNPJ: ${r.phone_digits.slice(4)}` : r.phone_digits
         }))
+      });
+    }
+
+    // GET /api/clientes/duplicados — Detecta pares de clientes com nomes similares
+    if (method === 'GET' && path === '/api/clientes/duplicados') {
+      const authCheck = await requireAuth(request, env, ['admin','gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const limit = Math.min(500, parseInt(url.searchParams.get('limit') || '200'));
+      const minSimilarity = parseFloat(url.searchParams.get('min') || '0.7');
+      
+      // Função para normalizar nomes (remover acentos, LTDA, ME, etc)
+      const normalize = (s) => {
+        if (!s) return '';
+        return s.toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+          .replace(/\b(ltda|me|mei|eireli|s\.?a\.?|epp|ss|limitada)\b/gi, '')
+          .replace(/[\.\-\/\(\)]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+      
+      // Função para calcular similaridade (Jaccard index de palavras)
+      const similarity = (a, b) => {
+        const wordsA = new Set(a.split(' ').filter(w => w.length > 2));
+        const wordsB = new Set(b.split(' ').filter(w => w.length > 2));
+        if (wordsA.size === 0 || wordsB.size === 0) return 0;
+        const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
+        const union = new Set([...wordsA, ...wordsB]).size;
+        return intersection / union;
+      };
+      
+      // Buscar todos os clientes com nome
+      const clientes = await env.DB.prepare(`
+        SELECT c.phone_digits, c.name, c.cpf_cnpj, c.bling_contact_id, c.address_line, c.email,
+               (SELECT COUNT(*) FROM orders WHERE phone_digits = c.phone_digits) as total_pedidos,
+               (SELECT MAX(created_at) FROM orders WHERE phone_digits = c.phone_digits) as ultimo_pedido
+        FROM customers_cache c
+        WHERE c.name IS NOT NULL AND c.name != ''
+        ORDER BY c.name
+        LIMIT ?
+      `).bind(limit).all();
+      
+      const rows = clientes.results || [];
+      const duplicados = [];
+      const jaProcessado = new Set();
+      
+      // Comparar cada par
+      for (let i = 0; i < rows.length; i++) {
+        if (jaProcessado.has(rows[i].phone_digits)) continue;
+        const normA = normalize(rows[i].name);
+        if (normA.length < 3) continue;
+        
+        for (let j = i + 1; j < rows.length; j++) {
+          if (jaProcessado.has(rows[j].phone_digits)) continue;
+          const normB = normalize(rows[j].name);
+          if (normB.length < 3) continue;
+          
+          // Verificar similaridade
+          const sim = similarity(normA, normB);
+          if (sim >= minSimilarity || normA === normB) {
+            // Determinar qual manter (prioridade: Bling > telefone real > mais pedidos > mais dados)
+            const scoreA = (rows[i].bling_contact_id ? 100 : 0) + 
+                          (!rows[i].phone_digits.startsWith('doc_') && !rows[i].phone_digits.startsWith('bid_') ? 50 : 0) +
+                          (rows[i].total_pedidos || 0) * 5 +
+                          (rows[i].cpf_cnpj ? 10 : 0) +
+                          (rows[i].address_line ? 5 : 0) +
+                          (rows[i].email ? 3 : 0);
+                          
+            const scoreB = (rows[j].bling_contact_id ? 100 : 0) + 
+                          (!rows[j].phone_digits.startsWith('doc_') && !rows[j].phone_digits.startsWith('bid_') ? 50 : 0) +
+                          (rows[j].total_pedidos || 0) * 5 +
+                          (rows[j].cpf_cnpj ? 10 : 0) +
+                          (rows[j].address_line ? 5 : 0) +
+                          (rows[j].email ? 3 : 0);
+            
+            const manter = scoreA >= scoreB ? rows[i] : rows[j];
+            const deletar = scoreA >= scoreB ? rows[j] : rows[i];
+            
+            duplicados.push({
+              similaridade: Math.round(sim * 100),
+              manter: {
+                phone_digits: manter.phone_digits,
+                name: manter.name,
+                cpf_cnpj: manter.cpf_cnpj,
+                bling_contact_id: manter.bling_contact_id,
+                address_line: manter.address_line,
+                total_pedidos: manter.total_pedidos || 0,
+                score: scoreA >= scoreB ? scoreA : scoreB,
+                tipo: manter.phone_digits.startsWith('doc_') ? 'CNPJ' : manter.phone_digits.startsWith('bid_') ? 'BlingID' : 'Telefone'
+              },
+              deletar: {
+                phone_digits: deletar.phone_digits,
+                name: deletar.name,
+                cpf_cnpj: deletar.cpf_cnpj,
+                bling_contact_id: deletar.bling_contact_id,
+                address_line: deletar.address_line,
+                total_pedidos: deletar.total_pedidos || 0,
+                score: scoreA >= scoreB ? scoreB : scoreA,
+                tipo: deletar.phone_digits.startsWith('doc_') ? 'CNPJ' : deletar.phone_digits.startsWith('bid_') ? 'BlingID' : 'Telefone'
+              },
+              motivo_escolha: manter.bling_contact_id && !deletar.bling_contact_id ? 'Tem Bling' :
+                              (!manter.phone_digits.startsWith('doc_') && deletar.phone_digits.startsWith('doc_')) ? 'Telefone real' :
+                              (manter.total_pedidos > deletar.total_pedidos) ? 'Mais pedidos' : 'Mais dados'
+            });
+            
+            jaProcessado.add(rows[j].phone_digits);
+          }
+        }
+      }
+      
+      // Ordenar por similaridade (maior primeiro)
+      duplicados.sort((a, b) => b.similaridade - a.similaridade);
+      
+      return json({
+        total_analisados: rows.length,
+        duplicados_encontrados: duplicados.length,
+        pares: duplicados.slice(0, 50) // Limitar a 50 pares
+      });
+    }
+
+    // POST /api/clientes/merge-batch — Merge múltiplos pares de uma vez
+    if (method === 'POST' && path === '/api/clientes/merge-batch') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const { pares } = await request.json(); // [{ manter, deletar }, ...]
+      if (!Array.isArray(pares) || pares.length === 0) return json({ error: 'Informe array de pares' }, 400);
+      
+      const resultados = [];
+      for (const par of pares) {
+        try {
+          const { manter, deletar } = par;
+          if (!manter || !deletar || manter === deletar) {
+            resultados.push({ manter, deletar, ok: false, erro: 'Dados inválidos' });
+            continue;
+          }
+          
+          const regManter = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits = ?').bind(manter).first();
+          const regDeletar = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits = ?').bind(deletar).first();
+          
+          if (!regManter || !regDeletar) {
+            resultados.push({ manter, deletar, ok: false, erro: 'Registro não encontrado' });
+            continue;
+          }
+          
+          // Copiar campos vazios
+          const updates = [];
+          if (!regManter.bling_contact_id && regDeletar.bling_contact_id) updates.push({ col: 'bling_contact_id', val: regDeletar.bling_contact_id });
+          if (!regManter.cpf_cnpj && regDeletar.cpf_cnpj) updates.push({ col: 'cpf_cnpj', val: regDeletar.cpf_cnpj });
+          if (!regManter.email && regDeletar.email) updates.push({ col: 'email', val: regDeletar.email });
+          if (!regManter.address_line && regDeletar.address_line) updates.push({ col: 'address_line', val: regDeletar.address_line });
+          if (!regManter.bairro && regDeletar.bairro) updates.push({ col: 'bairro', val: regDeletar.bairro });
+          
+          for (const u of updates) {
+            await env.DB.prepare(`UPDATE customers_cache SET ${u.col} = ?, updated_at = unixepoch() WHERE phone_digits = ?`).bind(u.val, manter).run();
+          }
+          
+          // Migrar pedidos
+          const pedidos = await env.DB.prepare('UPDATE orders SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run();
+          
+          // Migrar endereços e produtos
+          await env.DB.prepare('UPDATE customer_addresses SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run().catch(() => {});
+          await env.DB.prepare('UPDATE customer_products SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run().catch(() => {});
+          
+          // Deletar
+          await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(deletar).run();
+          
+          resultados.push({ 
+            manter, 
+            deletar, 
+            ok: true, 
+            campos_copiados: updates.map(u => u.col),
+            pedidos_migrados: pedidos.meta?.changes || 0
+          });
+        } catch (e) {
+          resultados.push({ manter: par.manter, deletar: par.deletar, ok: false, erro: e.message });
+        }
+      }
+      
+      return json({
+        total: pares.length,
+        sucesso: resultados.filter(r => r.ok).length,
+        falhas: resultados.filter(r => !r.ok).length,
+        resultados
       });
     }
 
