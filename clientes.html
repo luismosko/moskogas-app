@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.3.0 — MoskoGás</title>
+  <title>Clientes v1.3.1 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.3.0 — clientes</div>
+  <div class="version-badge" style="display:none">v1.3.1 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.3.0</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.3.1</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -136,6 +136,7 @@
     </div>
     <button class="btn btn-green" onclick="abrirNovoCliente()" style="padding:10px 16px;font-size:14px;white-space:nowrap">➕ Novo Cliente</button>
     <button class="btn" onclick="abrirDuplicados()" style="padding:10px 16px;font-size:14px;white-space:nowrap;background:#f59e0b;color:#fff">🔀 Duplicados</button>
+    <button class="btn" onclick="abrirUnificarGrupo()" style="padding:10px 16px;font-size:14px;white-space:nowrap;background:#8b5cf6;color:#fff">🏢 Unificar Grupo</button>
     <button class="btn" onclick="abrirDebugPanel()" style="padding:10px 16px;font-size:14px;white-space:nowrap;background:#6366f1;color:#fff">🔧 Debug/Merge</button>
     <select id="filtro-origem" class="filter-select" onchange="loadPage(1)" style="display:none">
       <option value="">Todas as origens</option>
@@ -1269,6 +1270,267 @@ async function resolverTodosDuplicados() {
     document.getElementById('btn-resolver-todos').textContent = '✅ Resolver Todos Selecionados';
   }
 }
+</script>
+
+<!-- Modal Unificar Grupo v1.3.1 -->
+<div id="modal-unificar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;justify-content:center;align-items:flex-start;padding-top:30px;overflow-y:auto">
+  <div style="background:#fff;border-radius:12px;width:95%;max-width:1100px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-bottom:30px">
+    <div style="background:linear-gradient(135deg, #8b5cf6, #7c3aed);color:#fff;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10">
+      <div>
+        <h2 style="margin:0;font-size:18px">🏢 Unificar Grupo de Clientes</h2>
+        <p style="margin:4px 0 0;font-size:12px;opacity:0.9">Para empresas com múltiplas filiais (Speed/Pala, Scania/PB Lopes, etc)</p>
+      </div>
+      <button onclick="fecharUnificarGrupo()" style="background:none;border:none;color:#fff;font-size:28px;cursor:pointer;line-height:1">&times;</button>
+    </div>
+    
+    <div style="padding:20px">
+      <!-- Busca -->
+      <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+        <input id="unif-busca" type="text" placeholder="Nome da empresa (ex: Speed, Scania, Semente...)" 
+               style="flex:1;min-width:250px;padding:12px 16px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px">
+        <button onclick="buscarGrupo()" style="background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-weight:600;cursor:pointer">
+          🔍 Buscar
+        </button>
+      </div>
+      
+      <!-- Instruções -->
+      <div id="unif-instrucoes" style="background:#f0fdf4;border:2px solid #86efac;border-radius:8px;padding:16px;margin-bottom:16px">
+        <h4 style="margin:0 0 8px;color:#166534;font-size:14px">📋 Como usar:</h4>
+        <ol style="margin:0;padding-left:20px;color:#15803d;font-size:13px;line-height:1.6">
+          <li>Busque pelo nome da empresa (ex: "Speed" para encontrar Speed Pneus e Pala Pneus)</li>
+          <li>Selecione o <strong>cliente principal</strong> (com Bling vinculado, se houver)</li>
+          <li>Os outros clientes serão <strong>mesclados</strong> e seus endereços viram <strong>endereços adicionais</strong></li>
+          <li>Todos os pedidos são migrados para o cliente principal</li>
+        </ol>
+      </div>
+      
+      <!-- Resultados -->
+      <div id="unif-resultado" style="display:none">
+        <!-- Seletor do principal -->
+        <div style="background:#dbeafe;border:2px solid #93c5fd;border-radius:8px;padding:16px;margin-bottom:16px">
+          <label style="font-weight:600;color:#1d4ed8;font-size:14px;display:block;margin-bottom:8px">
+            ⭐ Cliente PRINCIPAL (será mantido):
+          </label>
+          <select id="unif-principal" style="width:100%;padding:12px;border:2px solid #3b82f6;border-radius:8px;font-size:14px" onchange="atualizarPreview()">
+            <option value="">— Selecione o cliente principal —</option>
+          </select>
+        </div>
+        
+        <!-- Lista de clientes encontrados -->
+        <div id="unif-clientes" style="margin-bottom:16px"></div>
+        
+        <!-- Preview do merge -->
+        <div id="unif-preview" style="display:none;background:#fef3c7;border:2px solid #fcd34d;border-radius:8px;padding:16px;margin-bottom:16px">
+          <h4 style="margin:0 0 12px;color:#92400e;font-size:14px">📊 Preview da Unificação:</h4>
+          <div id="unif-preview-content"></div>
+        </div>
+        
+        <!-- Botão executar -->
+        <button id="btn-unificar" onclick="executarUnificacao()" disabled
+                style="background:#059669;color:#fff;border:none;border-radius:8px;padding:14px 28px;font-weight:700;cursor:pointer;font-size:15px;width:100%">
+          ✅ Executar Unificação
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// Unificar Grupo v1.3.1
+// ══════════════════════════════════════════════════════════════════════
+let _grupoClientes = [];
+
+function abrirUnificarGrupo() {
+  document.getElementById('modal-unificar').style.display = 'flex';
+  document.getElementById('unif-busca').focus();
+  document.getElementById('unif-resultado').style.display = 'none';
+  document.getElementById('unif-instrucoes').style.display = 'block';
+}
+
+function fecharUnificarGrupo() {
+  document.getElementById('modal-unificar').style.display = 'none';
+}
+
+async function buscarGrupo() {
+  const nome = document.getElementById('unif-busca').value.trim();
+  if (!nome || nome.length < 3) {
+    toast('Digite pelo menos 3 caracteres', 'error');
+    return;
+  }
+  
+  try {
+    const res = await api(`/api/clientes/buscar-grupo?nome=${encodeURIComponent(nome)}`);
+    _grupoClientes = res.clientes || [];
+    
+    if (_grupoClientes.length === 0) {
+      toast('Nenhum cliente encontrado', 'warning');
+      return;
+    }
+    
+    document.getElementById('unif-instrucoes').style.display = 'none';
+    document.getElementById('unif-resultado').style.display = 'block';
+    
+    // Popular select do principal
+    const sel = document.getElementById('unif-principal');
+    sel.innerHTML = '<option value="">— Selecione o cliente principal —</option>';
+    
+    _grupoClientes.forEach((c, i) => {
+      const bling = c.bling_contact_id ? ' [BLING]' : '';
+      const pedidos = c.total_pedidos ? ` (${c.total_pedidos} pedidos)` : '';
+      sel.innerHTML += `<option value="${i}">${c.name}${bling}${pedidos} — ${formatPhone(c.phone_digits)}</option>`;
+    });
+    
+    // Renderizar lista de clientes
+    renderizarGrupoClientes();
+    
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
+function renderizarGrupoClientes() {
+  const div = document.getElementById('unif-clientes');
+  
+  div.innerHTML = `
+    <h4 style="margin:0 0 12px;color:#374151;font-size:14px">📋 ${_grupoClientes.length} cliente(s) encontrado(s):</h4>
+    <div style="display:grid;gap:10px">
+      ${_grupoClientes.map((c, i) => `
+        <div class="unif-card" data-index="${i}" style="background:${c.bling_contact_id ? '#dbeafe' : '#f8fafc'};border:2px solid ${c.bling_contact_id ? '#3b82f6' : '#e2e8f0'};border-radius:8px;padding:12px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">
+          <div>
+            <div style="font-weight:700;color:#1e293b;font-size:14px">
+              ${c.name}
+              ${c.bling_contact_id ? '<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;margin-left:8px">BLING</span>' : ''}
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px">
+              📱 ${formatPhone(c.phone_digits)}
+              ${c.cpf_cnpj ? ` • 📋 ${c.cpf_cnpj}` : ''}
+            </div>
+            ${c.address_line ? `<div style="font-size:11px;color:#64748b;margin-top:2px">📍 ${c.address_line}${c.bairro ? ', ' + c.bairro : ''}</div>` : ''}
+            <div style="font-size:11px;color:#64748b;margin-top:2px">
+              📦 ${c.total_pedidos || 0} pedido(s)
+              ${c.total_compras ? ` • 💰 R$ ${Number(c.total_compras).toFixed(2)}` : ''}
+            </div>
+            ${c.enderecos_adicionais?.length > 0 ? `<div style="font-size:10px;color:#8b5cf6;margin-top:2px">🏢 ${c.enderecos_adicionais.length} endereço(s) adicional(is)</div>` : ''}
+          </div>
+          <div style="text-align:right">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#64748b">
+              <input type="checkbox" class="unif-check" data-index="${i}" checked style="width:18px;height:18px">
+              Incluir
+            </label>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  
+  // Adicionar listeners
+  div.querySelectorAll('.unif-check').forEach(chk => {
+    chk.addEventListener('change', atualizarPreview);
+  });
+}
+
+function atualizarPreview() {
+  const principalIdx = document.getElementById('unif-principal').value;
+  const previewDiv = document.getElementById('unif-preview');
+  const btn = document.getElementById('btn-unificar');
+  
+  if (!principalIdx) {
+    previewDiv.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+  
+  const principal = _grupoClientes[parseInt(principalIdx)];
+  const selecionados = [];
+  
+  document.querySelectorAll('.unif-check:checked').forEach(chk => {
+    const idx = parseInt(chk.dataset.index);
+    if (idx !== parseInt(principalIdx)) {
+      selecionados.push(_grupoClientes[idx]);
+    }
+  });
+  
+  if (selecionados.length === 0) {
+    previewDiv.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+  
+  // Contar endereços que serão criados
+  const enderecosNovos = selecionados.filter(c => c.address_line && c.address_line !== principal.address_line);
+  const totalPedidos = selecionados.reduce((sum, c) => sum + (c.total_pedidos || 0), 0);
+  
+  document.getElementById('unif-preview-content').innerHTML = `
+    <div style="display:grid;gap:8px;font-size:13px">
+      <div>⭐ <strong>Cliente mantido:</strong> ${principal.name} (${formatPhone(principal.phone_digits)})</div>
+      <div>🗑️ <strong>Clientes a mesclar:</strong> ${selecionados.length}</div>
+      <div>🏢 <strong>Endereços adicionais a criar:</strong> ${enderecosNovos.length}</div>
+      <div>📦 <strong>Pedidos a migrar:</strong> ${totalPedidos}</div>
+    </div>
+  `;
+  
+  previewDiv.style.display = 'block';
+  btn.disabled = false;
+}
+
+async function executarUnificacao() {
+  const principalIdx = document.getElementById('unif-principal').value;
+  if (!principalIdx) {
+    toast('Selecione o cliente principal', 'error');
+    return;
+  }
+  
+  const principal = _grupoClientes[parseInt(principalIdx)];
+  const deletarLista = [];
+  
+  document.querySelectorAll('.unif-check:checked').forEach(chk => {
+    const idx = parseInt(chk.dataset.index);
+    if (idx !== parseInt(principalIdx)) {
+      deletarLista.push(_grupoClientes[idx].phone_digits);
+    }
+  });
+  
+  if (deletarLista.length === 0) {
+    toast('Selecione pelo menos um cliente para mesclar', 'error');
+    return;
+  }
+  
+  const nomes = deletarLista.map(p => _grupoClientes.find(c => c.phone_digits === p)?.name || p).join(', ');
+  if (!confirm(`Confirma UNIFICAÇÃO?\\n\\n⭐ MANTER: ${principal.name}\\n🗑️ MESCLAR: ${nomes}\\n\\nTodos os pedidos serão migrados e os endereços diferentes viram endereços adicionais.`)) return;
+  
+  document.getElementById('btn-unificar').disabled = true;
+  document.getElementById('btn-unificar').textContent = '⏳ Processando...';
+  
+  try {
+    const res = await api('/api/clientes/unificar-grupo', {
+      method: 'POST',
+      body: JSON.stringify({
+        manter: principal.phone_digits,
+        deletar_lista: deletarLista,
+        criar_enderecos: true
+      })
+    });
+    
+    const msg = `✅ Unificação concluída!\\n${res.clientes_deletados.length} cliente(s) mesclado(s)\\n${res.enderecos_criados.length} endereço(s) criado(s)\\n${res.pedidos_migrados} pedido(s) migrado(s)`;
+    toast(msg.replace(/\\n/g, ' | '), 'success');
+    
+    // Fechar e atualizar
+    fecharUnificarGrupo();
+    loadPage(_page);
+    
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  } finally {
+    document.getElementById('btn-unificar').disabled = false;
+    document.getElementById('btn-unificar').textContent = '✅ Executar Unificação';
+  }
+}
+
+// Enter para buscar
+document.getElementById('unif-busca')?.addEventListener('keypress', e => {
+  if (e.key === 'Enter') buscarGrupo();
+});
 </script>
 
 <!-- Modal Debug/Merge v1.3.0 -->

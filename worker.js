@@ -1,4 +1,5 @@
-// v2.52.68
+// v2.52.69
+// v2.52.69: Duplicados inteligente - exclui falsos positivos + unificar-grupo com endereços
 // v2.52.68: Agente de duplicados - detecta clientes similares + merge batch
 // v2.52.67: Busca CEP por numero parcial
 // v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
@@ -4529,6 +4530,17 @@ export default {
           .trim();
       };
       
+      // Função para normalizar endereço (para comparação)
+      const normalizeAddr = (s) => {
+        if (!s) return '';
+        return s.toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/\b(rua|av|avenida|travessa|alameda|praca|rod|rodovia|br)\b/gi, '')
+          .replace(/[\.\-\/\(\),]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+      
       // Função para calcular similaridade (Jaccard index de palavras)
       const similarity = (a, b) => {
         const wordsA = new Set(a.split(' ').filter(w => w.length > 2));
@@ -4541,7 +4553,7 @@ export default {
       
       // Buscar todos os clientes com nome
       const clientes = await env.DB.prepare(`
-        SELECT c.phone_digits, c.name, c.cpf_cnpj, c.bling_contact_id, c.address_line, c.email,
+        SELECT c.phone_digits, c.name, c.cpf_cnpj, c.bling_contact_id, c.address_line, c.bairro, c.email,
                (SELECT COUNT(*) FROM orders WHERE phone_digits = c.phone_digits) as total_pedidos,
                (SELECT MAX(created_at) FROM orders WHERE phone_digits = c.phone_digits) as ultimo_pedido
         FROM customers_cache c
@@ -4565,9 +4577,26 @@ export default {
           const normB = normalize(rows[j].name);
           if (normB.length < 3) continue;
           
-          // Verificar similaridade
+          // Verificar similaridade de nome
           const sim = similarity(normA, normB);
           if (sim >= minSimilarity || normA === normB) {
+            // ═══════════════════════════════════════════════════════════════
+            // REGRA ANTI-FALSO-POSITIVO:
+            // Se nome igual/similar MAS endereço DIFERENTE = pessoas diferentes, pular!
+            // Só considera duplicado se: mesmo nome E (mesmo endereço OU sem endereço)
+            // ═══════════════════════════════════════════════════════════════
+            const addrA = normalizeAddr(rows[i].address_line);
+            const addrB = normalizeAddr(rows[j].address_line);
+            
+            // Se AMBOS têm endereço e são DIFERENTES = pessoas diferentes, pular
+            if (addrA && addrB && addrA !== addrB) {
+              const addrSim = similarity(addrA, addrB);
+              if (addrSim < 0.5) {
+                // Endereços muito diferentes = provavelmente pessoas diferentes
+                continue;
+              }
+            }
+            
             // Determinar qual manter (prioridade: Bling > telefone real > mais pedidos > mais dados)
             const scoreA = (rows[i].bling_contact_id ? 100 : 0) + 
                           (!rows[i].phone_digits.startsWith('doc_') && !rows[i].phone_digits.startsWith('bid_') ? 50 : 0) +
@@ -4594,6 +4623,7 @@ export default {
                 cpf_cnpj: manter.cpf_cnpj,
                 bling_contact_id: manter.bling_contact_id,
                 address_line: manter.address_line,
+                bairro: manter.bairro,
                 total_pedidos: manter.total_pedidos || 0,
                 score: scoreA >= scoreB ? scoreA : scoreB,
                 tipo: manter.phone_digits.startsWith('doc_') ? 'CNPJ' : manter.phone_digits.startsWith('bid_') ? 'BlingID' : 'Telefone'
@@ -4604,6 +4634,7 @@ export default {
                 cpf_cnpj: deletar.cpf_cnpj,
                 bling_contact_id: deletar.bling_contact_id,
                 address_line: deletar.address_line,
+                bairro: deletar.bairro,
                 total_pedidos: deletar.total_pedidos || 0,
                 score: scoreA >= scoreB ? scoreB : scoreA,
                 tipo: deletar.phone_digits.startsWith('doc_') ? 'CNPJ' : deletar.phone_digits.startsWith('bid_') ? 'BlingID' : 'Telefone'
@@ -4693,6 +4724,169 @@ export default {
         falhas: resultados.filter(r => !r.ok).length,
         resultados
       });
+    }
+
+    // GET /api/clientes/buscar-grupo?nome=xxx — Busca todos os clientes com nome similar para unificação
+    if (method === 'GET' && path === '/api/clientes/buscar-grupo') {
+      const authCheck = await requireAuth(request, env, ['admin','gerente']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const nome = (url.searchParams.get('nome') || '').trim();
+      if (!nome || nome.length < 3) return json({ error: 'Informe nome com pelo menos 3 caracteres' }, 400);
+      
+      // Normalizar para busca
+      const termos = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).filter(t => t.length >= 2);
+      if (termos.length === 0) return json({ error: 'Nome inválido' }, 400);
+      
+      // Buscar clientes que contenham qualquer termo
+      const likeClauses = termos.map(() => `LOWER(name) LIKE ?`).join(' OR ');
+      const likeParams = termos.map(t => `%${t}%`);
+      
+      const clientes = await env.DB.prepare(`
+        SELECT c.phone_digits, c.name, c.cpf_cnpj, c.bling_contact_id, c.address_line, c.bairro, c.complemento, c.referencia, c.email,
+               (SELECT COUNT(*) FROM orders WHERE phone_digits = c.phone_digits) as total_pedidos,
+               (SELECT SUM(total_value) FROM orders WHERE phone_digits = c.phone_digits AND status = 'ENTREGUE') as total_compras
+        FROM customers_cache c
+        WHERE ${likeClauses}
+        ORDER BY c.name
+        LIMIT 50
+      `).bind(...likeParams).all();
+      
+      // Buscar endereços adicionais de cada cliente
+      const rows = clientes.results || [];
+      for (const r of rows) {
+        const addrs = await env.DB.prepare('SELECT * FROM customer_addresses WHERE phone_digits = ?').bind(r.phone_digits).all();
+        r.enderecos_adicionais = addrs.results || [];
+      }
+      
+      return json({
+        termo_busca: nome,
+        total: rows.length,
+        clientes: rows
+      });
+    }
+
+    // POST /api/clientes/unificar-grupo — Unifica múltiplos clientes em um, criando endereços adicionais
+    if (method === 'POST' && path === '/api/clientes/unificar-grupo') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const { manter, deletar_lista, criar_enderecos = true } = await request.json();
+      // manter: phone_digits do cliente principal
+      // deletar_lista: array de phone_digits dos clientes a unificar
+      // criar_enderecos: se true, cria endereços adicionais a partir dos clientes deletados
+      
+      if (!manter) return json({ error: 'Informe phone_digits do cliente a manter' }, 400);
+      if (!Array.isArray(deletar_lista) || deletar_lista.length === 0) return json({ error: 'Informe array deletar_lista' }, 400);
+      
+      const regManter = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits = ?').bind(manter).first();
+      if (!regManter) return json({ error: `Cliente ${manter} não encontrado` }, 404);
+      
+      const resultados = {
+        cliente_mantido: manter,
+        enderecos_criados: [],
+        pedidos_migrados: 0,
+        clientes_deletados: [],
+        erros: []
+      };
+      
+      for (const deletar of deletar_lista) {
+        if (deletar === manter) continue;
+        
+        try {
+          const regDeletar = await env.DB.prepare('SELECT * FROM customers_cache WHERE phone_digits = ?').bind(deletar).first();
+          if (!regDeletar) {
+            resultados.erros.push({ phone: deletar, erro: 'Não encontrado' });
+            continue;
+          }
+          
+          // Copiar dados faltantes para o mantido
+          const updates = [];
+          if (!regManter.bling_contact_id && regDeletar.bling_contact_id) {
+            updates.push({ col: 'bling_contact_id', val: regDeletar.bling_contact_id });
+            regManter.bling_contact_id = regDeletar.bling_contact_id; // Atualizar referência local
+          }
+          if (!regManter.cpf_cnpj && regDeletar.cpf_cnpj) {
+            updates.push({ col: 'cpf_cnpj', val: regDeletar.cpf_cnpj });
+            regManter.cpf_cnpj = regDeletar.cpf_cnpj;
+          }
+          if (!regManter.email && regDeletar.email) {
+            updates.push({ col: 'email', val: regDeletar.email });
+            regManter.email = regDeletar.email;
+          }
+          
+          for (const u of updates) {
+            await env.DB.prepare(`UPDATE customers_cache SET ${u.col} = ?, updated_at = unixepoch() WHERE phone_digits = ?`).bind(u.val, manter).run();
+          }
+          
+          // Criar endereço adicional se tiver endereço diferente
+          if (criar_enderecos && regDeletar.address_line) {
+            const addrNorm = (regDeletar.address_line || '').toLowerCase().trim();
+            const manterAddrNorm = (regManter.address_line || '').toLowerCase().trim();
+            
+            // Só cria se endereço for diferente do principal
+            if (addrNorm && addrNorm !== manterAddrNorm) {
+              // Verificar se já não existe
+              const existe = await env.DB.prepare(`
+                SELECT id FROM customer_addresses 
+                WHERE phone_digits = ? AND LOWER(address_line) = ?
+              `).bind(manter, addrNorm).first();
+              
+              if (!existe) {
+                // Usar nome do cliente deletado como "obs" do endereço (filial)
+                const obs = regDeletar.name !== regManter.name ? regDeletar.name : '';
+                
+                await env.DB.prepare(`
+                  INSERT INTO customer_addresses (phone_digits, obs, address_line, bairro, complemento, referencia, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+                `).bind(
+                  manter,
+                  obs,
+                  regDeletar.address_line,
+                  regDeletar.bairro || '',
+                  regDeletar.complemento || '',
+                  regDeletar.referencia || ''
+                ).run();
+                
+                resultados.enderecos_criados.push({
+                  obs: obs || '(sem nome)',
+                  address_line: regDeletar.address_line,
+                  bairro: regDeletar.bairro,
+                  origem: deletar
+                });
+              }
+            }
+          }
+          
+          // Migrar pedidos
+          const pedidos = await env.DB.prepare('UPDATE orders SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run();
+          resultados.pedidos_migrados += pedidos.meta?.changes || 0;
+          
+          // Migrar endereços adicionais existentes
+          await env.DB.prepare('UPDATE customer_addresses SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run().catch(() => {});
+          
+          // Migrar produtos preferidos
+          await env.DB.prepare('UPDATE customer_products SET phone_digits = ? WHERE phone_digits = ?').bind(manter, deletar).run().catch(() => {});
+          
+          // Salvar telefone como alternativo se for telefone real
+          if (!deletar.startsWith('doc_') && !deletar.startsWith('bid_')) {
+            await env.DB.prepare(`
+              INSERT OR IGNORE INTO customer_phones (phone_digits, alt_phone, label) VALUES (?, ?, ?)
+            `).bind(manter, deletar, regDeletar.name || 'merge').run().catch(() => {});
+          }
+          
+          // Deletar o registro
+          await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(deletar).run();
+          resultados.clientes_deletados.push({ phone: deletar, nome: regDeletar.name });
+          
+        } catch (e) {
+          resultados.erros.push({ phone: deletar, erro: e.message });
+        }
+      }
+      
+      console.log(`[unificar-grupo] ${manter}: ${resultados.clientes_deletados.length} deletados, ${resultados.enderecos_criados.length} endereços, ${resultados.pedidos_migrados} pedidos`);
+      
+      return json(resultados);
     }
 
     // POST /api/clientes/merge — Merge dois clientes (admin only)
