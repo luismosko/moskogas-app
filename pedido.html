@@ -951,7 +951,7 @@ function selecionarCEP(cep, logradouro, bairro) {
 }
 
 // v2.11.71: Funções CEP para tela PRINCIPAL
-// v2.11.71: Só busca CEP completo (8 dígitos) - sem dropdown parcial
+// v2.11.71: Só busca CEP completo (8 dígitos) - resposta direta da API
 async function buscarCEPPrincipal(valor) {
   const clean = valor.replace(/\D/g, '');
   
@@ -960,15 +960,18 @@ async function buscarCEPPrincipal(valor) {
   
   try {
     const r = await api(`/api/cep/${clean}`);
-    if (r.ok && r.data && r.data.logradouro) {
+    // API retorna direto {cep, logradouro, bairro}, não {ok, data}
+    if (r && r.logradouro) {
       document.getElementById('cCep').value = clean.slice(0,5) + '-' + clean.slice(5);
-      document.getElementById('cAddr').value = r.data.logradouro;
-      document.getElementById('cBairro').value = r.data.bairro;
+      document.getElementById('cAddr').value = r.logradouro;
+      document.getElementById('cBairro').value = r.bairro || '';
       document.getElementById('cNum').focus();
       showToast('CEP encontrado!', 'success', 1500);
+    } else {
+      console.log('CEP retorno sem logradouro:', r);
     }
   } catch(e) {
-    console.log('CEP não encontrado:', clean);
+    console.log('CEP erro:', e.message);
   }
 }
 
