@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.2.8 — MoskoGás</title>
+  <title>Clientes v1.2.9 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.2.8 — clientes</div>
+  <div class="version-badge" style="display:none">v1.2.9 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.8</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.2.9</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -316,7 +316,11 @@
       <div style="border-top:1px solid #f1f5f9;padding-top:10px">
         <label style="font-size:10px;font-weight:700;color:#94a3b8;display:block;margin-bottom:8px">📍 ENDEREÇO</label>
         <div style="display:grid;gap:8px">
-          <input id="edit-rua" type="text" placeholder="Rua" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+          <!-- v1.2.9: Campo CEP com auto-preenchimento -->
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:8px">
+            <input id="edit-cep" type="text" placeholder="CEP" maxlength="9" oninput="buscarCEPCliente(this.value)" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+            <input id="edit-rua" type="text" placeholder="Rua" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <input id="edit-bairro" type="text" placeholder="Bairro" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
             <input id="edit-comp" type="text" placeholder="Complemento" style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
@@ -328,7 +332,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button id="edit-save-btn" onclick="saveEditCliente()" style="flex:1;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">💾 Salvar</button>
         <button onclick="closeEditModal()" style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer">Cancelar</button>
-        <!-- v1.2.8: Botão deletar (admin only) -->
+        <!-- v1.2.9: Botão deletar (admin only) -->
         <button id="edit-delete-btn" onclick="deleteCliente()" style="display:none;background:#fee2e2;color:#dc2626;border:2px solid #fecaca;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer" title="Deletar cliente (apenas se não tiver pedidos)">🗑️ Deletar</button>
       </div>
     </div>
@@ -375,7 +379,7 @@ async function loadPage(page) {
     }
 
     tbody.innerHTML = clientes.map(c => {
-      // v1.2.8: Formatar doc_CNPJ como CNPJ e não como telefone
+      // v1.2.9: Formatar doc_CNPJ como CNPJ e não como telefone
       let tel = '';
       if (c.phone_digits) {
         if (c.phone_digits.startsWith('doc_')) {
@@ -458,7 +462,7 @@ async function openCliente(phone) {
     const { cliente, pedidos, stats } = res;
 
     document.getElementById('mc-nome').textContent = cliente.name || '—';
-    // v1.2.8: Formatar doc_CNPJ como CNPJ
+    // v1.2.9: Formatar doc_CNPJ como CNPJ
     let tel = '';
     const pd = cliente.phone_digits || '';
     if (pd.startsWith('doc_')) {
@@ -707,7 +711,7 @@ function escAttr(s) {
 
 // ── Modal Editar Cliente ──
 let _editPhone = null;
-let _editBlingId = null; // v1.2.8: bling_contact_id do cliente sendo editado
+let _editBlingId = null; // v1.2.9: bling_contact_id do cliente sendo editado
 let _editProdutos = []; // produtos preferidos do cliente
 let _allProducts = [];  // todos os produtos do sistema
 
@@ -799,10 +803,10 @@ function updateCobrancaStyle() {
 
 async function editCliente(phone, nome) {
   _editPhone = phone;
-  _editBlingId = null; // v1.2.8: reset
+  _editBlingId = null; // v1.2.9: reset
   _editProdutos = [];
   
-  // v1.2.8: Resetar título e botão para modo edição
+  // v1.2.9: Resetar título e botão para modo edição
   document.getElementById('edit-modal-title').textContent = '✏️ Editar Cliente';
   document.getElementById('edit-save-btn').textContent = '💾 Salvar';
   
@@ -810,7 +814,7 @@ async function editCliente(phone, nome) {
   await loadAllProducts();
   renderProdutoSelect();
   
-  // v1.2.8: Mostrar botão deletar apenas para admin
+  // v1.2.9: Mostrar botão deletar apenas para admin
   const deleteBtn = document.getElementById('edit-delete-btn');
   const user = JSON.parse(localStorage.getItem('mg_user') || '{}');
   if (deleteBtn) deleteBtn.style.display = (user.role === 'admin') ? 'block' : 'none';
@@ -822,7 +826,7 @@ async function editCliente(phone, nome) {
     const c = res.cliente;
     hideLoading();
     document.getElementById('edit-nome').value  = c.name || '';
-    // v1.2.8: Se for doc_CNPJ, deixar campo vazio para preencher telefone real
+    // v1.2.9: Se for doc_CNPJ, deixar campo vazio para preencher telefone real
     const _pd = c.phone_digits || '';
     document.getElementById('edit-tel').value = _pd.startsWith('doc_') ? '' : _pd.replace(/^55/,'');
     document.getElementById('edit-cpf').value   = c.cpf_cnpj || '';
@@ -832,7 +836,7 @@ async function editCliente(phone, nome) {
     document.getElementById('edit-comp').value  = c.complemento || '';
     document.getElementById('edit-ref').value   = c.referencia || '';
     
-    // v1.2.8: Permitir edição de telefone também na edição (backend faz migração)
+    // v1.2.9: Permitir edição de telefone também na edição (backend faz migração)
     document.getElementById('edit-tel').readOnly = false;
     document.getElementById('edit-tel').style.background = '#fff';
     
@@ -876,7 +880,7 @@ async function editCliente(phone, nome) {
 function closeEditModal() {
   document.getElementById('modal-editar').style.display = 'none';
   _editPhone = null;
-  _editBlingId = null; // v1.2.8
+  _editBlingId = null; // v1.2.9
 }
 
 async function saveEditCliente() {
@@ -891,7 +895,7 @@ async function saveEditCliente() {
   
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
   try {
-    // v1.2.8: Enviar original_phone para o backend migrar se telefone foi alterado
+    // v1.2.9: Enviar original_phone para o backend migrar se telefone foi alterado
     const pgPrefSel = document.querySelector('input[name="pagamento_pref"]:checked');
     const result = await api('/api/customer/upsert', {
       method: 'POST',
@@ -905,7 +909,7 @@ async function saveEditCliente() {
         referencia:  document.getElementById('edit-ref').value.trim(),
         cpf_cnpj:    document.getElementById('edit-cpf').value.trim(),
         email:       document.getElementById('edit-email').value.trim(),
-        bling_contact_id: _editBlingId || null, // v1.2.8: preservar bling_contact_id
+        bling_contact_id: _editBlingId || null, // v1.2.9: preservar bling_contact_id
         cobranca_tipo: document.getElementById('edit-cobranca-mensalista').checked ? 'mensalista' : 'entrega',
         pagamento_preferencial: pgPrefSel ? pgPrefSel.value : '',
         origem: isNovoCadastro ? 'manual' : undefined
@@ -933,7 +937,7 @@ async function saveEditCliente() {
   }
 }
 
-// v1.2.8: Deletar cliente (admin only)
+// v1.2.9: Deletar cliente (admin only)
 async function deleteCliente() {
   if (!_editPhone) return;
   const nome = document.getElementById('edit-nome').value || 'este cliente';
@@ -953,15 +957,33 @@ async function deleteCliente() {
   }
 }
 
-// v1.2.8: Cadastro de novo cliente
+// v1.2.9: Busca CEP e preenche rua/bairro automaticamente
+async function buscarCEPCliente(valor) {
+  const clean = valor.replace(/\D/g, '');
+  if (clean.length !== 8) return;
+  
+  try {
+    const r = await api(`/api/cep/${clean}`);
+    if (r && r.logradouro) {
+      document.getElementById('edit-cep').value = clean.slice(0,5) + '-' + clean.slice(5);
+      document.getElementById('edit-rua').value = r.logradouro;
+      document.getElementById('edit-bairro').value = r.bairro || '';
+      toast('CEP encontrado!', 'success');
+    }
+  } catch(e) {
+    console.log('CEP erro:', e.message);
+  }
+}
+
+// v1.2.9: Cadastro de novo cliente
 function abrirNovoCliente() {
   _editPhone = null; // indica novo cadastro
-  _editBlingId = null; // v1.2.8
+  _editBlingId = null; // v1.2.9
   _editOrigem = 'manual';
   _editProdutos = [];
   document.getElementById('edit-modal-title').textContent = '➕ Cadastrar Novo Cliente';
   // Limpar todos os campos
-  ['edit-nome','edit-tel','edit-cpf','edit-email','edit-rua','edit-bairro','edit-comp','edit-ref'].forEach(id => {
+  ['edit-nome','edit-tel','edit-cpf','edit-email','edit-rua','edit-bairro','edit-comp','edit-ref','edit-cep'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -976,8 +998,8 @@ function abrirNovoCliente() {
   // Esconder botão deletar
   document.getElementById('edit-delete-btn').style.display = 'none';
   // Limpar preços de produtos
-  editClientePrecos = {};
-  renderEditProdutos();
+  _editProdutos = [];
+  renderProdutosCliente();
   // Trocar texto do botão para "Cadastrar"
   document.getElementById('edit-save-btn').textContent = '✅ Cadastrar';
   document.getElementById('edit-status').textContent = '';
@@ -989,7 +1011,7 @@ function abrirNovoCliente() {
 loadPage(1);
 </script>
 
-<!-- Modal Debug/Merge v1.2.8 -->
+<!-- Modal Debug/Merge v1.2.9 -->
 <div id="modal-debug" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:flex-start;padding-top:50px">
   <div style="background:#fff;border-radius:12px;width:95%;max-width:900px;max-height:85vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
     <div style="background:#1e293b;color:#fff;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
@@ -1035,7 +1057,7 @@ loadPage(1);
 </div>
 
 <script>
-// Debug Panel v1.2.8
+// Debug Panel v1.2.9
 let _debugResults = [];
 
 function abrirDebugPanel() {
