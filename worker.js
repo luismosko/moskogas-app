@@ -1,4 +1,5 @@
-// v2.52.71
+// v2.52.72
+// v2.52.72: Endpoint /api/pub/corporativos-marco para listar clientes CNPJ em março
 // v2.52.71: Endpoints diagnóstico e desfazer merge (temporário para correção)
 // v2.52.70: Duplicados CORRIGIDO - consumidor final só merge se MESMO endereço + log auditoria
 // v2.52.69: Duplicados inteligente - exclui falsos positivos + unificar-grupo com endereços
@@ -3516,6 +3517,114 @@ export default {
         cliente_restaurado: deletado,
         nome: nome,
         nota: 'Cliente recriado. Os pedidos NÃO foram revertidos automaticamente - faça manualmente se necessário.'
+      });
+    }
+
+    // GET /api/pub/corporativos-marco?key=Moskogas0909 — Clientes CNPJ com pedidos em março
+    if (method === 'GET' && path === '/api/pub/corporativos-marco') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      // Março 2026: 01/03 a 31/03 em epoch (UTC-4 BRT)
+      const inicioMarco = Math.floor(new Date('2026-03-01T00:00:00-04:00').getTime() / 1000);
+      const fimMarco = Math.floor(new Date('2026-03-31T23:59:59-04:00').getTime() / 1000);
+      
+      // Buscar pedidos ENTREGUES em março com dados do cliente
+      const pedidos = await env.DB.prepare(`
+        SELECT 
+          o.id, o.phone_digits, o.customer_name, o.total_value, o.tipo_pagamento, o.created_at,
+          c.cpf_cnpj, c.bling_contact_id, c.address_line, c.name as nome_cache
+        FROM orders o
+        LEFT JOIN customers_cache c ON c.phone_digits = o.phone_digits
+        WHERE o.status = 'ENTREGUE'
+          AND o.created_at >= ?
+          AND o.created_at <= ?
+        ORDER BY o.customer_name, o.created_at
+      `).bind(inicioMarco, fimMarco).all();
+      
+      // Agrupar por cliente (phone_digits)
+      const porCliente = {};
+      for (const p of (pedidos.results || [])) {
+        const phone = p.phone_digits;
+        if (!porCliente[phone]) {
+          porCliente[phone] = {
+            phone_digits: phone,
+            nome: p.customer_name || p.nome_cache || 'Sem nome',
+            cpf_cnpj: p.cpf_cnpj || '',
+            bling_contact_id: p.bling_contact_id || '',
+            endereco: p.address_line || '',
+            pedidos: [],
+            total_pedidos: 0,
+            valor_total: 0
+          };
+        }
+        porCliente[phone].pedidos.push({
+          id: p.id,
+          valor: p.total_value,
+          pgto: p.tipo_pagamento,
+          data: new Date(p.created_at * 1000).toLocaleDateString('pt-BR')
+        });
+        porCliente[phone].total_pedidos++;
+        porCliente[phone].valor_total += parseFloat(p.total_value) || 0;
+      }
+      
+      // Separar corporativos (CNPJ 14 dígitos) dos demais
+      const corporativos = [];
+      const pessoasFisicas = [];
+      
+      for (const c of Object.values(porCliente)) {
+        const docLimpo = (c.cpf_cnpj || '').replace(/\D/g, '');
+        c.doc_limpo = docLimpo;
+        c.eh_cnpj = docLimpo.length === 14;
+        c.tem_bling = !!c.bling_contact_id;
+        c.valor_formatado = `R$ ${c.valor_total.toFixed(2)}`;
+        
+        if (c.eh_cnpj) {
+          corporativos.push(c);
+        } else if (c.total_pedidos > 1) {
+          // PF com mais de 1 pedido (pode precisar de NF)
+          pessoasFisicas.push(c);
+        }
+      }
+      
+      // Ordenar por nome
+      corporativos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      pessoasFisicas.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      
+      // Detectar duplicados por CNPJ
+      const porCnpj = {};
+      for (const c of corporativos) {
+        if (!porCnpj[c.doc_limpo]) porCnpj[c.doc_limpo] = [];
+        porCnpj[c.doc_limpo].push(c);
+      }
+      const duplicadosCnpj = Object.entries(porCnpj)
+        .filter(([cnpj, lista]) => lista.length > 1)
+        .map(([cnpj, lista]) => ({ cnpj, clientes: lista }));
+      
+      // Detectar duplicados por nome similar
+      const duplicadosNome = [];
+      for (let i = 0; i < corporativos.length; i++) {
+        for (let j = i + 1; j < corporativos.length; j++) {
+          const n1 = corporativos[i].nome.toLowerCase().replace(/\b(ltda|me|mei|eireli|sa|s\/a)\b/gi, '').trim();
+          const n2 = corporativos[j].nome.toLowerCase().replace(/\b(ltda|me|mei|eireli|sa|s\/a)\b/gi, '').trim();
+          if (n1 === n2 || (n1.length > 8 && n2.includes(n1)) || (n2.length > 8 && n1.includes(n2))) {
+            duplicadosNome.push({ cliente1: corporativos[i], cliente2: corporativos[j] });
+          }
+        }
+      }
+      
+      return json({
+        periodo: 'Março 2026',
+        total_corporativos: corporativos.length,
+        total_pf_recorrente: pessoasFisicas.length,
+        corporativos: corporativos,
+        pf_recorrentes: pessoasFisicas,
+        duplicados_por_cnpj: duplicadosCnpj,
+        duplicados_por_nome: duplicadosNome,
+        resumo: {
+          total_pedidos_corp: corporativos.reduce((s, c) => s + c.total_pedidos, 0),
+          valor_total_corp: corporativos.reduce((s, c) => s + c.valor_total, 0).toFixed(2)
+        }
       });
     }
 
