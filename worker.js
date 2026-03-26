@@ -1,4 +1,5 @@
 // v2.52.64
+// v2.52.64: Campo venda_antecipada — exclui do cálculo de estoque
 // v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
 // v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
@@ -2160,7 +2161,7 @@ async function calcVendasAuto(env, data) {
   const startEpoch = Math.floor(new Date(data + 'T00:00:00-04:00').getTime() / 1000);
   const endEpoch = Math.floor(new Date(data + 'T23:59:59-04:00').getTime() / 1000);
   const orders = await env.DB.prepare(
-    "SELECT items_json FROM orders WHERE status='entregue' AND delivered_at >= ? AND delivered_at <= ?"
+    "SELECT items_json FROM orders WHERE status='entregue' AND (venda_antecipada IS NULL OR venda_antecipada = 0) AND delivered_at >= ? AND delivered_at <= ?"
   ).bind(startEpoch, endEpoch).all().then(r => r.results || []);
   const mapRow = await env.DB.prepare("SELECT value FROM app_config WHERE key='estoque_mapeamento'").first().catch(() => null);
   let mapeamento = {}; try { mapeamento = JSON.parse(mapRow?.value || '{}'); } catch { }

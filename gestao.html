@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedidos 2.9.31 — MoskoGás</title>
+<title>Pedidos 2.9.32 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -108,7 +108,7 @@
 <!-- SUMMARY -->
 <div class="summary-bar" id="summary-bar" style="align-items:center">
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.31</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.32</span>
   <span style="border-left:1px solid rgba(255,255,255,0.3);height:14px;margin:0 4px"></span>
   <span id="summary-bar-stats" style="display:contents"></span>
 </div>
@@ -470,6 +470,10 @@ function renderTable(rows) {
     const siteBadge = o.vendedor_nome === 'Site'
       ? '<span title="Pedido recebido pelo site moskogas.com.br" style="display:inline-flex;align-items:center;gap:3px;background:#1d4ed8;color:#fff;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:800;margin-right:5px;vertical-align:middle"><svg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'#fff\'><path d=\'M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96C5 16.1 5.9 17 7 17h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63H19c.75 0 1.41-.41 1.75-1.03l3.58-6.49A1 1 0 0023.46 4H5.21l-.94-2H1zm16 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z\'/></svg>SITE</span>'
       : '';
+    // v2.9.32: Badge venda antecipada (Vale Gás vendido, não entrega de produto)
+    const valeBadge = o.venda_antecipada
+      ? '<span title="🎫 Venda Antecipada — Vale Gás vendido, produto NÃO foi entregue" style="display:inline-block;background:#d946ef;color:#fff;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:800;margin-right:4px;vertical-align:middle">🎫 VALE</span>'
+      : '';
 
     const pgtoLabels = { dinheiro:'💵 Din', pix_vista:'✅ PIX Pago', pix_receber:'⏳ PIX Rec.', debito:'💳 Déb', credito:'💳 Créd', mensalista:'📅 Mensal', boleto:'🧾 Boleto', nfe:'📄 NFe', vale_gas:'🎫 Vale Gás', vale_gas_ultragaz:'🟠 Vale UG' };
     // Pedidos do site: pagamento sempre na entrega — label específico
@@ -492,7 +496,7 @@ function renderTable(rows) {
       <td><strong style="color:#6366f1">#${o.id}</strong></td>
       <td style="white-space:nowrap">${dataHora}</td>
       <td title="${o.customer_name||''}">
-        <div style="font-weight:700;color:#1e293b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ugBadge}${siteBadge}${nomeExibir}${_dataBadge}</div>
+        <div style="font-weight:700;color:#1e293b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${valeBadge}${ugBadge}${siteBadge}${nomeExibir}${_dataBadge}</div>
         <div style="font-size:11px;color:#64748b">${o.phone_digits || ''}</div>
       </td>
       <td>
@@ -547,7 +551,7 @@ function renderSummary(rows) {
 
   // ── Resumo por produto (exclui cancelados) ──
   const prodMap = {};
-  rows.filter(r => r.status !== 'cancelado').forEach(r => {
+  rows.filter(r => r.status !== 'cancelado' && !r.venda_antecipada).forEach(r => {
     let items = [];
     try { items = JSON.parse(r.items_json || '[]'); } catch(e) {}
     items.forEach(i => {
