@@ -1,5 +1,5 @@
-// v2.52.66
-// v2.52.66: Busca CEP por numero parcial
+// v2.52.67
+// v2.52.67: Busca CEP por numero parcial
 // v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
 // v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
@@ -3418,6 +3418,14 @@ export default {
       try { return json({ ...defaults, ...JSON.parse(row.value) }); } catch { return json(defaults); }
     }
 
+    // v2.52.67: Config do Entregador (editar itens, adicionar item)
+    if (method === 'GET' && path === '/api/pub/entregador-config') {
+      const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='entregador_config'").first();
+      const defaults = { editar_itens: false, adicionar_item: false };
+      if (!row?.value) return json(defaults);
+      try { return json({ ...defaults, ...JSON.parse(row.value) }); } catch { return json(defaults); }
+    }
+
     // v2.30.0: QR Code Avaliação Google
     if (method === 'GET' && path === '/api/pub/review-config') {
       const row = await env.DB.prepare("SELECT value FROM app_config WHERE key='google_review_url'").first();
@@ -6122,6 +6130,7 @@ export default {
       let tipoPagamento = null;
       let obsEntregador = null;
       let skipBling = false;
+      let updatedItemsJson = null; // v2.52.67: Itens atualizados pelo entregador
 
       const ct = request.headers.get('Content-Type') || '';
 
@@ -6131,6 +6140,8 @@ export default {
         const photoFile = formData.get('photo');
         tipoPagamento = formData.get('tipo_pagamento') || null;
         obsEntregador = formData.get('observacao_entregador') || null;
+        // v2.52.67: Itens atualizados pelo entregador
+        const itemsJsonStr = formData.get('items_json') || null;
 
         // v2.52.48: Se já tem comprovante anexado pelo atendente, foto é opcional
         const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
@@ -6172,6 +6183,15 @@ export default {
           // Já tem comprovante do atendente, pode continuar sem foto nova
           console.log(`[mark-delivered] Pedido #${id} já tem comprovante do atendente: ${order.foto_comprovante}`);
         }
+        // v2.52.67: Processar items_json se enviado
+        if (itemsJsonStr) {
+          try {
+            const parsedItems = JSON.parse(itemsJsonStr);
+            if (Array.isArray(parsedItems)) {
+              updatedItemsJson = itemsJsonStr;
+            }
+          } catch(e) { console.log('[mark-delivered] items_json inválido:', e.message); }
+        }
       } else if (ct.includes('application/json')) {
         // Fallback JSON (sem foto)
         const body = await request.json();
@@ -6184,6 +6204,15 @@ export default {
           if (drv) {
             await env.DB.prepare('UPDATE orders SET driver_id=?, driver_name_cache=?, driver_phone_cache=? WHERE id=?').bind(drv.id, drv.nome, drv.telefone||'', id).run();
           }
+        }
+        // v2.52.67: items_json atualizado pelo entregador
+        if (body.items_json) {
+          try {
+            const parsedItems = typeof body.items_json === 'string' ? JSON.parse(body.items_json) : body.items_json;
+            if (Array.isArray(parsedItems)) {
+              updatedItemsJson = typeof body.items_json === 'string' ? body.items_json : JSON.stringify(body.items_json);
+            }
+          } catch(e) { console.log('[mark-delivered] items_json inválido:', e.message); }
         }
         // v2.52.48: Entregador pode enviar JSON se já tem comprovante do atendente
         const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
@@ -6208,6 +6237,28 @@ export default {
       if (obsEntregador) {
         sql += `, observacao_entregador=?`;
         params.push(obsEntregador);
+      }
+
+      // v2.52.67: Itens atualizados pelo entregador — atualiza items_json e recalcula total_value
+      let itemsParaBling = JSON.parse(order.items_json || '[]');
+      let totalFinal = order.total_value || 0;
+      if (updatedItemsJson) {
+        try {
+          const newItems = JSON.parse(updatedItemsJson);
+          // Recalcular total
+          totalFinal = newItems.reduce((sum, item) => {
+            const qty = parseFloat(item.qty) || 0;
+            const price = parseFloat(item.price) || 0;
+            return sum + (qty * price);
+          }, 0);
+          itemsParaBling = newItems;
+          sql += `, items_json=?, total_value=?`;
+          params.push(updatedItemsJson);
+          params.push(totalFinal);
+          console.log(`[mark-delivered] Pedido #${id} itens atualizados pelo entregador. Novo total: R$${totalFinal.toFixed(2)}`);
+        } catch(e) {
+          console.log(`[mark-delivered] Erro ao processar items_json: ${e.message}`);
+        }
       }
 
       // Tipo pagamento (entregador pode alterar na hora)
@@ -6258,10 +6309,11 @@ export default {
             ? await env.DB.prepare('SELECT bling_vendedor_id, bling_vendedor_nome FROM app_users WHERE id=?').bind(order.vendedor_id).first()
             : null;
 
+          // v2.52.67: Usar itens atualizados (se houver) ao invés dos originais
           const orderDataCommon = {
             name: order.customer_name,
-            items: JSON.parse(order.items_json || '[]'),
-            total_value: order.total_value,
+            items: itemsParaBling,
+            total_value: totalFinal,
             tipo_pagamento: tipoFinal,
             bling_contact_id: custData?.bling_contact_id || null,
             cpf_cnpj: custData?.cpf_cnpj || null,

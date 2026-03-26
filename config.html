@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Config v2.15.3 — MoskoGás</title>
+<title>Config v2.15.4 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -138,8 +138,8 @@
 
 <div id="nav-placeholder"></div>
 <div class="container">
-  <div class="version-badge">v2.15.3 — config</div>
-  <h1>⚙️ Configurações v2.15.3</h1>
+  <div class="version-badge">v2.15.4 — config</div>
+  <h1>⚙️ Configurações v2.15.4</h1>
 
   <!-- ── ABAS DE CONFIGURAÇÃO ── -->
   <div id="cfg-tab-bar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.1)">
@@ -806,6 +806,35 @@
       <button class="btn btn-gray" onclick="resetFotoConfig()">🔄 Padrão</button>
     </div>
     <div id="foto-config-status"></div>
+  </div>
+
+<!-- v2.14.3: Configurações Extras do Entregador -->
+  <div class="card">
+    <h2>🚚 Opções do Entregador</h2>
+    <p style="font-size:13px;color:#64748b;margin-bottom:14px">Configure o que o entregador pode fazer ao finalizar uma entrega.</p>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;background:#f8fafc;border-radius:10px;border:2px solid #e2e8f0">
+        <input type="checkbox" id="cfgEntregadorEditarItens" style="width:20px;height:20px;margin-top:2px">
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#1e293b">📦 Permitir alterar quantidade de itens</div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">O entregador poderá aumentar ou diminuir a quantidade de cada produto no momento da entrega. Útil quando o cliente muda o pedido na hora.</div>
+        </div>
+      </label>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;background:#f8fafc;border-radius:10px;border:2px solid #e2e8f0">
+        <input type="checkbox" id="cfgEntregadorAdicionarItem" style="width:20px;height:20px;margin-top:2px">
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#1e293b">➕ Permitir adicionar novos itens</div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">O entregador poderá adicionar produtos que não estavam no pedido original. Ex: cliente pede mais uma água na hora.</div>
+        </div>
+      </label>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-orange" onclick="salvarConfigEntregador()" style="flex:1">💾 Salvar Configurações</button>
+    </div>
+    <div id="entregador-config-status" style="margin-top:8px"></div>
   </div>
 <!-- QR Code Avaliação Google -->
   <div class="card">
@@ -1901,6 +1930,34 @@ function resetFotoConfig() {
   document.getElementById('fotoSharpen').checked = true;
 }
 
+// ── v2.14.3: Config Entregador ──────────────────────────────
+async function carregarConfigEntregador() {
+  try {
+    const data = await api('/api/config?key=entregador_config');
+    if (data?.value) {
+      const c = data.value;
+      document.getElementById('cfgEntregadorEditarItens').checked = !!c.editar_itens;
+      document.getElementById('cfgEntregadorAdicionarItem').checked = !!c.adicionar_item;
+    }
+  } catch(_) {}
+}
+
+async function salvarConfigEntregador() {
+  const config = {
+    editar_itens: document.getElementById('cfgEntregadorEditarItens').checked,
+    adicionar_item: document.getElementById('cfgEntregadorAdicionarItem').checked,
+  };
+  const el = document.getElementById('entregador-config-status');
+  showLoading('Salvando configurações do entregador...');
+  try {
+    await api('/api/config', { method: 'POST', body: JSON.stringify({ key: 'entregador_config', value: config }) });
+    el.innerHTML = '<div class="status ok">✅ Configurações salvas! Os entregadores verão as opções na próxima entrega.</div>';
+    setTimeout(() => el.innerHTML = '', 4000);
+  } catch(e) {
+    el.innerHTML = '<div class="status err">❌ ' + e.message + '</div>';
+  } finally { hideLoading(); }
+}
+
 // ── Produtos Favoritos ──────────────────────────────────────
 // ── PRODUTOS MOSKOGAS (preços sugeridos + favoritos) ─────────
 let _appProducts = [];
@@ -2440,6 +2497,7 @@ loadAppProducts();
 if (_isAdmin) carregarSafetyConfig();
 if (_isAdmin) carregarLembreteConfig();
 if (_isAdmin) carregarFotoConfig();
+if (_isAdmin) carregarConfigEntregador(); // v2.14.3
 if (_isAdmin) carregarPermissoes();
 if (_isAdmin) carregarRelatorioConfig();
 // if (_isAdmin) loadUltragazConfig(); // HUB_CREDENTIALS_JS_DISABLED v2.14.5

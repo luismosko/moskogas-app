@@ -57,6 +57,24 @@
   .card-total { font-size: 20px; font-weight: 900; color: #16a34a; }
   .pgto-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 8px; background: #f1f5f9; color: #475569; }
 
+  /* v2.6.8: Edição de itens pelo entregador */
+  .items-editable { background: #f0fdf4; border: 2px solid #86efac; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+  .items-editable-title { font-size: 11px; font-weight: 700; color: #16a34a; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+  .item-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px dashed #d1fae5; }
+  .item-row:last-child { border-bottom: none; }
+  .item-name { flex: 1; font-size: 13px; font-weight: 600; color: #1e293b; }
+  .item-qty-ctrl { display: flex; align-items: center; gap: 4px; }
+  .qty-btn { width: 32px; height: 32px; border: none; border-radius: 8px; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .qty-btn.minus { background: #fee2e2; color: #dc2626; }
+  .qty-btn.plus { background: #d1fae5; color: #16a34a; }
+  .qty-btn:active { transform: scale(0.95); }
+  .qty-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .item-qty { width: 40px; text-align: center; font-size: 16px; font-weight: 800; color: #1e293b; }
+  .item-price { font-size: 13px; font-weight: 700; color: #16a34a; min-width: 70px; text-align: right; }
+  .items-total-row { margin-top: 8px; padding-top: 8px; border-top: 2px solid #86efac; display: flex; justify-content: space-between; align-items: center; }
+  .items-total-label { font-size: 12px; font-weight: 700; color: #475569; }
+  .items-total-value { font-size: 18px; font-weight: 900; color: #16a34a; }
+
   /* ── Quick action buttons ── */
   .card-quick { display: flex; gap: 6px; padding: 8px 0; flex-wrap: wrap; }
   .btn-maps  { background: #dcfce7; color: #16a34a; border: 2px solid #86efac; padding: 8px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex: 1; justify-content: center; min-width: 0; }
@@ -190,7 +208,7 @@
 <div id="nav-placeholder"></div>
 
 <div class="toolbar">
-  <h1>🚚 Entregas <small>v2.6.6</small></h1>
+  <h1>🚚 Entregas <small>v2.6.8</small></h1>
   <select id="fDriver" onchange="load()">
     <option value="">Todos</option>
   </select>
@@ -299,7 +317,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="shared.js"></script>
 <script>
-// v2.6.6
+// v2.6.8
 document.getElementById('nav-placeholder').innerHTML = NAV_HTML;
 checkApiKey();
 
@@ -318,11 +336,21 @@ let autoTimer;
 let allOrders = [];
 let currentTab = 'pendentes';
 
+// v2.6.8: Config do entregador (editar itens)
+let entregadorConfig = { editar_itens: false, adicionar_item: false };
+const itemsStore = {}; // {orderId: [{id, name, qty, price}, ...]}
+
 async function init() {
   // Carregar config de foto do backend
   try {
     const fc = await api('/api/pub/foto-config').catch(() => null);
     if (fc && fc.maxDim) fotoConfig = fc;
+  } catch(_) {}
+
+  // v2.6.8: Carregar config do entregador
+  try {
+    const ec = await api('/api/pub/entregador-config').catch(() => null);
+    if (ec) entregadorConfig = ec;
   } catch(_) {}
 
   // Carregar produtos para venda externa
@@ -418,6 +446,10 @@ function renderPendentes(rows) {
 
   el.innerHTML = rows.map(o => {
     const items = JSON.parse(o.items_json || '[]');
+    // v2.6.8: Inicializar itemsStore se edição habilitada
+    if (entregadorConfig.editar_itens && !itemsStore[o.id]) {
+      itemsStore[o.id] = JSON.parse(JSON.stringify(items)); // deep copy
+    }
     const itemsStr = items.map(i => `${parseInt(i.qty)}× ${i.name}`).join(' · ') || '—';
     const hora = o.created_at ? new Date(o.created_at * 1000).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
     const addr = `${o.address_line}${o.bairro ? ', ' + o.bairro : ''}, Campo Grande/MS`;
@@ -743,6 +775,92 @@ function compressImage(file, maxWidth, quality, contraste, desaturacao) {
   });
 }
 
+// ══════════════════════════════════════════════
+// v2.6.8: EDIÇÃO DE ITENS PELO ENTREGADOR
+// ══════════════════════════════════════════════
+
+function renderEditableItems(orderId, items, totalOriginal) {
+  // Usar itemsStore se existir, senão items originais
+  const currentItems = itemsStore[orderId] || items;
+  const total = currentItems.reduce((sum, item) => sum + (parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0), 0);
+  
+  return `
+    <div class="items-editable">
+      <div class="items-editable-title">✏️ Itens (toque para ajustar)</div>
+      ${currentItems.map((item, idx) => `
+        <div class="item-row">
+          <span class="item-name">${item.name}</span>
+          <div class="item-qty-ctrl">
+            <button type="button" class="qty-btn minus" onclick="updateItemQty(${orderId}, ${idx}, -1)" ${parseFloat(item.qty) <= 0 ? 'disabled' : ''}>−</button>
+            <span class="item-qty" id="qty-${orderId}-${idx}">${parseInt(item.qty)}</span>
+            <button type="button" class="qty-btn plus" onclick="updateItemQty(${orderId}, ${idx}, 1)">+</button>
+          </div>
+          <span class="item-price" id="price-${orderId}-${idx}">R$ ${((parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0)).toFixed(2)}</span>
+        </div>
+      `).join('')}
+      <div class="items-total-row">
+        <span class="items-total-label">TOTAL ATUALIZADO:</span>
+        <span class="items-total-value" id="items-total-${orderId}">R$ ${total.toFixed(2)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function updateItemQty(orderId, itemIdx, delta) {
+  // Garantir que itemsStore existe para este pedido
+  if (!itemsStore[orderId]) {
+    const order = allOrders.find(o => o.id === orderId);
+    if (order) {
+      itemsStore[orderId] = JSON.parse(JSON.stringify(JSON.parse(order.items_json || '[]')));
+    } else {
+      return;
+    }
+  }
+  
+  const items = itemsStore[orderId];
+  if (!items[itemIdx]) return;
+  
+  let newQty = (parseFloat(items[itemIdx].qty) || 0) + delta;
+  if (newQty < 0) newQty = 0;
+  items[itemIdx].qty = newQty;
+  
+  // Atualizar UI
+  const qtyEl = document.getElementById(`qty-${orderId}-${itemIdx}`);
+  if (qtyEl) qtyEl.textContent = parseInt(newQty);
+  
+  const priceEl = document.getElementById(`price-${orderId}-${itemIdx}`);
+  if (priceEl) {
+    const itemTotal = newQty * (parseFloat(items[itemIdx].price) || 0);
+    priceEl.textContent = `R$ ${itemTotal.toFixed(2)}`;
+  }
+  
+  // Atualizar botão minus
+  const minusBtn = qtyEl?.parentElement?.querySelector('.minus');
+  if (minusBtn) minusBtn.disabled = newQty <= 0;
+  
+  // Recalcular total
+  recalcularTotal(orderId);
+}
+
+function recalcularTotal(orderId) {
+  const items = itemsStore[orderId];
+  if (!items) return;
+  
+  const total = items.reduce((sum, item) => {
+    const qty = parseFloat(item.qty) || 0;
+    const price = parseFloat(item.price) || 0;
+    return sum + (qty * price);
+  }, 0);
+  
+  // Atualizar total na seção de itens editáveis
+  const itemsTotalEl = document.getElementById(`items-total-${orderId}`);
+  if (itemsTotalEl) itemsTotalEl.textContent = `R$ ${total.toFixed(2)}`;
+  
+  // Atualizar total principal do card
+  const cardTotalEl = document.getElementById(`total-${orderId}`);
+  if (cardTotalEl) cardTotalEl.textContent = `R$ ${total.toFixed(2)}`;
+}
+
 function removePhoto(orderId) {
   if (photoStore[orderId] && photoStore[orderId].dataUrl) {
     URL.revokeObjectURL(photoStore[orderId].dataUrl);
@@ -803,6 +921,10 @@ async function deliver(orderId) {
       formData.append('photo', photo.blob, 'comprovante_' + orderId + '.' + ext);
       if (tipoPg && tipoPg.value) formData.append('tipo_pagamento', tipoPg.value);
       if (obs && obs.value.trim()) formData.append('observacao_entregador', obs.value.trim());
+      // v2.6.8: Enviar itens atualizados se editados
+      if (entregadorConfig.editar_itens && itemsStore[orderId]) {
+        formData.append('items_json', JSON.stringify(itemsStore[orderId]));
+      }
 
       resp = await fetch(API_BASE + '/api/order/' + orderId + '/mark-delivered', {
         method: 'POST',
@@ -815,6 +937,10 @@ async function deliver(orderId) {
       const bodyJson = {};
       if (tipoPg && tipoPg.value) bodyJson.tipo_pagamento = tipoPg.value;
       if (obs && obs.value.trim()) bodyJson.observacao_entregador = obs.value.trim();
+      // v2.6.8: Enviar itens atualizados se editados
+      if (entregadorConfig.editar_itens && itemsStore[orderId]) {
+        bodyJson.items_json = itemsStore[orderId];
+      }
 
       resp = await fetch(API_BASE + '/api/order/' + orderId + '/mark-delivered', {
         method: 'POST',
@@ -840,7 +966,7 @@ async function deliver(orderId) {
     }
     toast(msg, result.bling_result && result.bling_result.action === 'create_error' ? 'warning' : 'success');
 
-    // v2.6.6: Mostrar QR de avaliação Google
+    // v2.6.8: Mostrar QR de avaliação Google
     showQrReview(orderId);
 
     load();
