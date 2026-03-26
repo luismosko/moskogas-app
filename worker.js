@@ -1,4 +1,5 @@
-// v2.52.69
+// v2.52.70
+// v2.52.70: Duplicados CORRIGIDO - consumidor final só merge se MESMO endereço + log auditoria
 // v2.52.69: Duplicados inteligente - exclui falsos positivos + unificar-grupo com endereços
 // v2.52.68: Agente de duplicados - detecta clientes similares + merge batch
 // v2.52.67: Busca CEP por numero parcial
@@ -4551,6 +4552,26 @@ export default {
         return intersection / union;
       };
       
+      // ═══════════════════════════════════════════════════════════════════
+      // FUNÇÃO PARA DETECTAR CONSUMIDOR FINAL (pessoa física com nome curto)
+      // Nomes como "Adriana", "João", "Maria" são consumidores finais
+      // Empresas têm CNPJ ou nomes longos como "Speed Pneus Ltda"
+      // ═══════════════════════════════════════════════════════════════════
+      const isConsumidorFinal = (cliente) => {
+        // Se tem CNPJ (14 dígitos), é empresa
+        const doc = (cliente.cpf_cnpj || '').replace(/\D/g, '');
+        if (doc.length === 14) return false; // CNPJ = empresa
+        
+        // Nome com 1-2 palavras sem sobrenome = consumidor final
+        const palavras = (cliente.name || '').trim().split(/\s+/).filter(p => p.length > 1);
+        if (palavras.length <= 2) return true;
+        
+        // Nome curto em geral = consumidor final
+        if ((cliente.name || '').length < 15) return true;
+        
+        return false;
+      };
+      
       // Buscar todos os clientes com nome
       const clientes = await env.DB.prepare(`
         SELECT c.phone_digits, c.name, c.cpf_cnpj, c.bling_contact_id, c.address_line, c.bairro, c.email,
@@ -4581,19 +4602,35 @@ export default {
           const sim = similarity(normA, normB);
           if (sim >= minSimilarity || normA === normB) {
             // ═══════════════════════════════════════════════════════════════
-            // REGRA ANTI-FALSO-POSITIVO:
-            // Se nome igual/similar MAS endereço DIFERENTE = pessoas diferentes, pular!
-            // Só considera duplicado se: mesmo nome E (mesmo endereço OU sem endereço)
+            // REGRA CRÍTICA ANTI-FALSO-POSITIVO:
             // ═══════════════════════════════════════════════════════════════
             const addrA = normalizeAddr(rows[i].address_line);
             const addrB = normalizeAddr(rows[j].address_line);
+            const cfA = isConsumidorFinal(rows[i]);
+            const cfB = isConsumidorFinal(rows[j]);
             
-            // Se AMBOS têm endereço e são DIFERENTES = pessoas diferentes, pular
-            if (addrA && addrB && addrA !== addrB) {
-              const addrSim = similarity(addrA, addrB);
-              if (addrSim < 0.5) {
-                // Endereços muito diferentes = provavelmente pessoas diferentes
+            // Se ALGUM dos dois é consumidor final (Adriana, João, Maria)
+            // SÓ faz merge se endereços forem IGUAIS ou muito similares
+            if (cfA || cfB) {
+              // Se ambos têm endereço e são diferentes = PESSOAS DIFERENTES, PULAR!
+              if (addrA && addrB) {
+                const addrSim = similarity(addrA, addrB);
+                if (addrSim < 0.8) {
+                  // Endereços diferentes = são pessoas diferentes com mesmo primeiro nome
+                  continue;
+                }
+              }
+              // Se um tem endereço e outro não, também pular (incerto demais)
+              if ((addrA && !addrB) || (!addrA && addrB)) {
                 continue;
+              }
+            } else {
+              // Ambos são empresas - verificar endereço com menos rigor
+              if (addrA && addrB) {
+                const addrSim = similarity(addrA, addrB);
+                if (addrSim < 0.5) {
+                  continue;
+                }
               }
             }
             
@@ -4617,6 +4654,7 @@ export default {
             
             duplicados.push({
               similaridade: Math.round(sim * 100),
+              tipo_cliente: (cfA || cfB) ? 'Consumidor Final' : 'Empresa',
               manter: {
                 phone_digits: manter.phone_digits,
                 name: manter.name,
@@ -4889,6 +4927,50 @@ export default {
       return json(resultados);
     }
 
+    // GET /api/clientes/merge-historico — Ver histórico de merges realizados
+    if (method === 'GET' && path === '/api/clientes/merge-historico') {
+      const authCheck = await requireAuth(request, env, ['admin']);
+      if (authCheck instanceof Response) return authCheck;
+      
+      // Criar tabela de log se não existir
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS merge_audit_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cliente_mantido TEXT NOT NULL,
+          cliente_deletado TEXT NOT NULL,
+          nome_mantido TEXT,
+          nome_deletado TEXT,
+          endereco_deletado TEXT,
+          pedidos_migrados INTEGER DEFAULT 0,
+          campos_copiados TEXT,
+          executado_por TEXT,
+          executado_em INTEGER DEFAULT (unixepoch())
+        )
+      `).run().catch(() => {});
+      
+      // Buscar histórico recente
+      const limit = Math.min(100, parseInt(url.searchParams.get('limit') || '50'));
+      const logs = await env.DB.prepare(`
+        SELECT * FROM merge_audit_log ORDER BY executado_em DESC LIMIT ?
+      `).bind(limit).all();
+      
+      // Também buscar da tabela customer_phones os merges antigos
+      const phoneMerges = await env.DB.prepare(`
+        SELECT cp.*, cc.name as cliente_nome
+        FROM customer_phones cp
+        LEFT JOIN customers_cache cc ON cc.phone_digits = cp.phone_digits
+        WHERE cp.label LIKE '%merge%'
+        ORDER BY cp.created_at DESC
+        LIMIT ?
+      `).bind(limit).all();
+      
+      return json({
+        logs_detalhados: logs.results || [],
+        telefones_mesclados: phoneMerges.results || [],
+        nota: 'Os logs detalhados só existem para merges feitos após v2.52.70'
+      });
+    }
+
     // POST /api/clientes/merge — Merge dois clientes (admin only)
     if (method === 'POST' && path === '/api/clientes/merge') {
       const authCheck = await requireAuth(request, env, ['admin']);
@@ -4937,6 +5019,21 @@ export default {
       
       // Deletar o registro
       await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(deletar).run();
+      
+      // Salvar log de auditoria para possível reversão
+      await env.DB.prepare(`
+        INSERT INTO merge_audit_log (cliente_mantido, cliente_deletado, nome_mantido, nome_deletado, endereco_deletado, pedidos_migrados, campos_copiados, executado_por)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        manter, 
+        deletar, 
+        regManter.name || '', 
+        regDeletar.name || '',
+        regDeletar.address_line || '',
+        pedidosMigrados.meta?.changes || 0,
+        JSON.stringify(updates.map(u => u.col)),
+        authCheck.nome || 'admin'
+      ).run().catch(() => {});
       
       console.log(`[merge] ${deletar} → ${manter}, updates: ${updates.length}, pedidos: ${pedidosMigrados.meta?.changes || 0}`);
       
