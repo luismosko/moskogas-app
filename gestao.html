@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedidos 2.9.32 — MoskoGás</title>
+<title>Pedidos 2.9.33 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -20,6 +20,14 @@
   .btn:hover { opacity: 0.85; }
   table { width: 100%; border-collapse: collapse; background: #fff; }
   th { background: #475569; color: #fff; padding: 8px 10px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; position: sticky; top: 58px; z-index: 40; }
+  th.sortable { cursor: pointer; user-select: none; transition: background 0.15s; }
+  th.sortable:hover { background: #334155; }
+  th.sortable.active { background: #1e40af; }
+  th .sort-arrow { font-size: 10px; margin-left: 4px; opacity: 0.4; }
+  th.sortable.active .sort-arrow { opacity: 1; }
+  th.sortable.asc .sort-arrow::after { content: '▲'; }
+  th.sortable.desc .sort-arrow::after { content: '▼'; }
+  th.sortable:not(.active) .sort-arrow::after { content: '⇅'; }
   td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
   tr:hover td { background: #f0f4ff; }
   tbody tr { cursor: pointer; transition: background .1s; }
@@ -108,7 +116,7 @@
 <!-- SUMMARY -->
 <div class="summary-bar" id="summary-bar" style="align-items:center">
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.32</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.33</span>
   <span style="border-left:1px solid rgba(255,255,255,0.3);height:14px;margin:0 4px"></span>
   <span id="summary-bar-stats" style="display:contents"></span>
 </div>
@@ -117,15 +125,15 @@
 <table>
   <thead>
     <tr>
-      <th>#</th>
-      <th>Hora</th>
-      <th>Cliente</th>
+      <th class="sortable" data-sort="id" onclick="sortBy('id')"># <span class="sort-arrow"></span></th>
+      <th class="sortable" data-sort="hora" onclick="sortBy('hora')">Hora <span class="sort-arrow"></span></th>
+      <th class="sortable" data-sort="cliente" onclick="sortBy('cliente')">Cliente <span class="sort-arrow"></span></th>
       <th>Endereço</th>
-      <th>Itens</th>
-      <th>Total</th>
-      <th>Pgto</th>
-      <th>Status</th>
-      <th>Entregador</th>
+      <th class="sortable" data-sort="itens" onclick="sortBy('itens')">Itens <span class="sort-arrow"></span></th>
+      <th class="sortable" data-sort="total" onclick="sortBy('total')">Total <span class="sort-arrow"></span></th>
+      <th class="sortable" data-sort="pgto" onclick="sortBy('pgto')">Pgto <span class="sort-arrow"></span></th>
+      <th class="sortable" data-sort="status" onclick="sortBy('status')">Status <span class="sort-arrow"></span></th>
+      <th class="sortable" data-sort="entregador" onclick="sortBy('entregador')">Entregador <span class="sort-arrow"></span></th>
       <th>Ações</th>
     </tr>
   </thead>
@@ -303,6 +311,88 @@ function setDateFilter(mode) {
 let lastRows = [];
 let activeStatuses = new Set(['novo','encaminhado','whatsapp_enviado','entregue']);
 
+// v2.9.33: Ordenação por coluna
+let currentSort = { col: 'hora', dir: 'desc' }; // Padrão: hora decrescente (mais recente primeiro)
+
+function sortBy(col) {
+  // Toggle direção se mesma coluna, senão reset para desc
+  if (currentSort.col === col) {
+    currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
+  } else {
+    currentSort.col = col;
+    currentSort.dir = 'desc';
+  }
+  
+  // Atualizar visual dos cabeçalhos
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('active', 'asc', 'desc');
+    if (th.dataset.sort === col) {
+      th.classList.add('active', currentSort.dir);
+    }
+  });
+  
+  // Re-renderizar com ordenação
+  if (lastRows.length) {
+    const sorted = sortRows([...lastRows], currentSort.col, currentSort.dir);
+    renderTable(sorted);
+  }
+}
+
+function sortRows(rows, col, dir) {
+  const mult = dir === 'asc' ? 1 : -1;
+  
+  return rows.sort((a, b) => {
+    let va, vb;
+    
+    switch(col) {
+      case 'id':
+        va = a.id || 0;
+        vb = b.id || 0;
+        break;
+      case 'hora':
+        va = a._sortTs || a.created_at || 0;
+        vb = b._sortTs || b.created_at || 0;
+        break;
+      case 'cliente':
+        va = (a.customer_name || '').toLowerCase();
+        vb = (b.customer_name || '').toLowerCase();
+        break;
+      case 'itens':
+        // Ordenar por quantidade total de itens
+        const itemsA = JSON.parse(a.items_json || '[]');
+        const itemsB = JSON.parse(b.items_json || '[]');
+        va = itemsA.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
+        vb = itemsB.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
+        break;
+      case 'total':
+        va = parseFloat(a.total_value) || 0;
+        vb = parseFloat(b.total_value) || 0;
+        break;
+      case 'pgto':
+        va = a.tipo_pagamento || '';
+        vb = b.tipo_pagamento || '';
+        break;
+      case 'status':
+        // Ordenar por prioridade: NOVO > ENCAMINHADO > WHATS > ENTREGUE > CANCELADO
+        const statusOrder = { 'novo': 1, 'encaminhado': 2, 'whatsapp_enviado': 3, 'entregue': 4, 'cancelado': 5 };
+        va = statusOrder[(a.status || '').toLowerCase()] || 9;
+        vb = statusOrder[(b.status || '').toLowerCase()] || 9;
+        break;
+      case 'entregador':
+        va = (a.driver_name_cache || '').toLowerCase();
+        vb = (b.driver_name_cache || '').toLowerCase();
+        break;
+      default:
+        va = 0; vb = 0;
+    }
+    
+    if (typeof va === 'string') {
+      return mult * va.localeCompare(vb, 'pt-BR');
+    }
+    return mult * (va - vb);
+  });
+}
+
 function toggleStatusMenu() {
   const m = document.getElementById('statusMenu');
   const ov = document.getElementById('statusOverlay');
@@ -409,7 +499,19 @@ async function _load() {
 
   lastRows = rows;
   window._gestaoRows = rows;
-  renderTable(rows);
+  
+  // v2.9.33: Aplicar ordenação atual
+  const sorted = sortRows([...rows], currentSort.col, currentSort.dir);
+  renderTable(sorted);
+  
+  // Atualizar visual do cabeçalho de ordenação
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('active', 'asc', 'desc');
+    if (th.dataset.sort === currentSort.col) {
+      th.classList.add('active', currentSort.dir);
+    }
+  });
+  
   renderSummary(rows);
   document.getElementById('count-badge').textContent = `${rows.length} pedidos`;
 }
