@@ -1,4 +1,5 @@
-// v2.52.72
+// v2.52.73
+// v2.52.73: Diagnóstico de corporativos (debug datas e status)
 // v2.52.72: Endpoint /api/pub/corporativos-marco para listar clientes CNPJ em março
 // v2.52.71: Endpoints diagnóstico e desfazer merge (temporário para correção)
 // v2.52.70: Duplicados CORRIGIDO - consumidor final só merge se MESMO endereço + log auditoria
@@ -3517,6 +3518,63 @@ export default {
         cliente_restaurado: deletado,
         nome: nome,
         nota: 'Cliente recriado. Os pedidos NÃO foram revertidos automaticamente - faça manualmente se necessário.'
+      });
+    }
+
+    // GET /api/pub/diag-pedidos?key=Moskogas0909 — Diagnóstico de pedidos março
+    if (method === 'GET' && path === '/api/pub/diag-pedidos') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      const inicioMarco = Math.floor(new Date('2026-03-01T00:00:00-04:00').getTime() / 1000);
+      const fimMarco = Math.floor(new Date('2026-03-31T23:59:59-04:00').getTime() / 1000);
+      
+      // Total de pedidos no banco
+      const totalGeral = await env.DB.prepare('SELECT COUNT(*) as total FROM orders').first();
+      
+      // Pedidos por status
+      const porStatus = await env.DB.prepare(`
+        SELECT status, COUNT(*) as total FROM orders GROUP BY status
+      `).all();
+      
+      // Pedidos em março (qualquer status)
+      const marcoTodos = await env.DB.prepare(`
+        SELECT COUNT(*) as total FROM orders WHERE created_at >= ? AND created_at <= ?
+      `).bind(inicioMarco, fimMarco).first();
+      
+      // Pedidos ENTREGUE em março
+      const marcoEntregue = await env.DB.prepare(`
+        SELECT COUNT(*) as total FROM orders WHERE status = 'ENTREGUE' AND created_at >= ? AND created_at <= ?
+      `).bind(inicioMarco, fimMarco).first();
+      
+      // Amostra de pedidos recentes
+      const amostra = await env.DB.prepare(`
+        SELECT id, phone_digits, customer_name, status, created_at, total_value
+        FROM orders ORDER BY created_at DESC LIMIT 10
+      `).all();
+      
+      // Clientes com CNPJ
+      const comCnpj = await env.DB.prepare(`
+        SELECT COUNT(*) as total FROM customers_cache 
+        WHERE LENGTH(REPLACE(REPLACE(REPLACE(cpf_cnpj, '.', ''), '-', ''), '/', '')) = 14
+      `).first();
+      
+      return json({
+        datas_filtro: {
+          inicio_marco_epoch: inicioMarco,
+          fim_marco_epoch: fimMarco,
+          inicio_legivel: new Date(inicioMarco * 1000).toISOString(),
+          fim_legivel: new Date(fimMarco * 1000).toISOString()
+        },
+        total_pedidos_banco: totalGeral?.total,
+        pedidos_por_status: porStatus.results,
+        pedidos_marco_todos: marcoTodos?.total,
+        pedidos_marco_entregue: marcoEntregue?.total,
+        clientes_com_cnpj: comCnpj?.total,
+        amostra_recentes: amostra.results?.map(p => ({
+          ...p,
+          created_at_legivel: new Date(p.created_at * 1000).toISOString()
+        }))
       });
     }
 
