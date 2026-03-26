@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novo Pedido — MoskoGás v2.11.69</title>
+<title>Novo Pedido — MoskoGás v2.11.70</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -51,12 +51,12 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.69 — pedido</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v2.11.70 — pedido</div>
 <div class="container">
   <h1>➕ Novo Pedido <span id="bling-indicator" title="Verificando Bling..." style="font-size:11px;padding:2px 8px;border-radius:10px;background:#94a3b8;color:#fff;cursor:pointer;vertical-align:middle">⏳ Bling</span>
     <!-- HUB_BADGE_DISABLED v1.25.0 — migrado para Extensão Chrome
     <span id="hub-indicator" title="Verificando Hub Ultragaz..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px" onclick="window.location.href='config.html#ultragaz'">H</span>
-    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.69</span></h1>
+    --> <span style="font-size:12px;color:#94a3b8;font-weight:400">v2.11.70</span></h1>
 
   <div class="two-col">
   <!-- ═══ COLUNA ESQUERDA: CLIENTE ═══ -->
@@ -126,37 +126,30 @@
       <span id="bling-badge-cliente" onclick="abrirModalDadosBling()" style="display:none;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:2px 9px;font-size:11px;font-weight:700;cursor:pointer" title="Ver cadastro completo no Bling">✅ Vinculado ao Bling 🔍</span>
       <button id="btn-vincular-bling" onclick="abrirModalVincularBling()" style="display:none;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:3px 10px;font-size:11px;color:#92400e;cursor:pointer;font-weight:600" title="Buscar este cliente no Bling e vincular">🔗 Vincular ao Bling</button>
     </div>
-    <!-- v2.11.69: Campo CEP na tela principal -->
-    <div class="row" style="margin-bottom:10px">
-      <div style="display:grid;grid-template-columns:140px 1fr;gap:8px">
+    <!-- v2.11.70: Campo CEP + RUA + NÚMERO na mesma linha (layout compacto) -->
+    <div class="row" style="margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:120px 1fr 80px;gap:6px">
         <div>
           <label>CEP</label>
           <div style="position:relative">
-            <input id="cCep" type="text" placeholder="79000-000" maxlength="9" autocomplete="off" oninput="buscarCEPPrincipal(this.value)">
-            <div id="cCep-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:2px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;z-index:100"></div>
+            <input id="cCep" type="text" placeholder="79000-000" maxlength="9" autocomplete="off" oninput="buscarCEPPrincipal(this.value)" style="font-size:13px">
+            <div id="cCep-ac" style="display:none;position:absolute;top:100%;left:0;width:350px;background:#fff;border:2px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;z-index:100"></div>
           </div>
         </div>
-        <div style="display:flex;align-items:flex-end">
-          <span style="font-size:11px;color:#94a3b8;padding-bottom:8px">💡 Digite o CEP para auto-preencher rua e bairro</span>
-        </div>
-      </div>
-    </div>
-    <div class="row" style="margin-bottom:12px">
-      <div style="display:grid;grid-template-columns:1fr 100px;gap:8px">
         <div>
           <label>Rua *</label>
           <div class="street-wrap">
-            <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas" autocomplete="off" oninput="streetAC(this,'cBairro','cAddr-ac')">
+            <input id="cAddr" type="text" placeholder="Ex: Rua das Orquídeas" autocomplete="off" oninput="streetAC(this,'cBairro','cAddr-ac')" style="font-size:13px">
             <div id="cAddr-ac" class="street-ac" style="display:none"></div>
           </div>
         </div>
         <div>
-          <label>Número *</label>
-          <input id="cNum" type="text" placeholder="123" autocomplete="off">
+          <label>Nº *</label>
+          <input id="cNum" type="text" placeholder="123" autocomplete="off" style="font-size:13px">
         </div>
       </div>
     </div>
-    <div class="row row-2">
+    <div class="row row-2" style="margin-bottom:8px">
       <div>
         <label>Bairro</label>
         <input id="cBairro" type="text" placeholder="Ex: Jardim Noroeste">
@@ -166,13 +159,13 @@
         <input id="cComp" type="text" placeholder="Apto, Bloco...">
       </div>
     </div>
-    <div>
+    <div style="margin-bottom:6px">
       <label>Ponto de Referência</label>
       <input id="cRef" type="text" placeholder="Ex: próximo ao mercado X">
     </div>
 
     <!-- Botão endereços adicionais (aparece ao selecionar cliente) -->
-    <div id="multi-addr-bar" style="display:none;margin-top:10px;padding-top:10px;border-top:2px dashed #e2e8f0;display:flex;align-items:center;gap:10px">
+    <div id="multi-addr-bar" style="display:none;margin-top:8px;padding-top:8px;border-top:2px dashed #e2e8f0;display:flex;align-items:center;gap:10px">
       <button type="button" onclick="openAddrModal()" title="Ver endereços salvos deste cliente" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">
         📍 Outros endereços <span id="addr-count-badge" style="background:rgba(255,255,255,0.3);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span>
       </button>
@@ -415,7 +408,7 @@ let searchTimer;
 
 function formatFone(p) {
   if (!p) return '';
-  // v2.11.69: Tratar clientes sem telefone (doc_CNPJ)
+  // v2.11.70: Tratar clientes sem telefone (doc_CNPJ)
   if (p.startsWith('doc_')) {
     const cnpj = p.slice(4);
     if (cnpj.length === 14) return `📋 ${cnpj.slice(0,2)}.${cnpj.slice(2,5)}.${cnpj.slice(5,8)}/${cnpj.slice(8,12)}-${cnpj.slice(12)}`;
@@ -580,7 +573,7 @@ async function selectCustomer(i) {
   const _addrBar = document.getElementById('multi-addr-bar');
   if (_addrBar) _addrBar.style.display = 'none';
   document.getElementById('cName').value   = c.name || c.customer_name || '';
-  // v2.11.69: Não preenche telefone se for doc_CNPJ (cliente Bling sem fone)
+  // v2.11.70: Não preenche telefone se for doc_CNPJ (cliente Bling sem fone)
   const _phoneVal = (c.phone_digits || '').startsWith('doc_') ? '' : (c.phone_digits || '');
   document.getElementById('cPhone').value  = _phoneVal;
   // Limpa indicadores de campo obrigatório vazio
@@ -900,7 +893,7 @@ function applyAddress(a) {
 }
 
 // ── Form de novo endereço no modal ───────────────────────────
-// ── Busca CEP (v2.11.69) ──────────────────────────────────────
+// ── Busca CEP (v2.11.70) ──────────────────────────────────────
 let _cepTimer = null;
 
 async function buscarCEP(valor) {
@@ -960,7 +953,7 @@ function selecionarCEP(cep, logradouro, bairro) {
   document.getElementById('m-num').focus();
 }
 
-// v2.11.69: Funções CEP para tela PRINCIPAL
+// v2.11.70: Funções CEP para tela PRINCIPAL
 async function buscarCEPPrincipal(valor) {
   const clean = valor.replace(/\D/g, '');
   const drop = document.getElementById('cCep-ac');
@@ -1675,7 +1668,7 @@ async function saveOrder() {
     hideLoading();
     toast(`✅ Pedido #${result.id} salvo — ${statusMsg}. Bling ao entregar.`);
 
-    // v2.11.69: Se pagamento à vista, abrir modal de comprovante
+    // v2.11.70: Se pagamento à vista, abrir modal de comprovante
     const pgtoAVista = ['dinheiro', 'pix_vista', 'debito', 'credito'].includes(tipoPgto);
     if (pgtoAVista) {
       // Guardar dados para popup de finalização rápida (será aberto depois do comprovante)
@@ -2239,7 +2232,7 @@ function fecharModalEmpenho() {
         <input id="m-obs" type="text" placeholder="Ex: Escola Municipal X, Clínica Saúde Plena"
           style="width:100%;padding:9px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;margin-top:3px">
       </div>
-      <!-- v2.11.69: Campo CEP com autocomplete -->
+      <!-- v2.11.70: Campo CEP com autocomplete -->
       <div style="margin-bottom:10px">
         <label style="font-size:11px;font-weight:700;color:#64748b">CEP</label>
         <div style="position:relative">
@@ -2736,7 +2729,7 @@ async function confirmQuickDeliver() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// v2.11.69: Carregar cliente da URL — chama selectCustomer corretamente
+// v2.11.70: Carregar cliente da URL — chama selectCustomer corretamente
 // ══════════════════════════════════════════════════════════════════════════════
 (function initFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -2819,7 +2812,7 @@ async function confirmQuickDeliver() {
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
-<!-- v2.11.69: MODAL DE COMPROVANTE — Abrir após criar pedido com pgto à vista -->
+<!-- v2.11.70: MODAL DE COMPROVANTE — Abrir após criar pedido com pgto à vista -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="comprovante-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
@@ -2870,7 +2863,7 @@ async function confirmQuickDeliver() {
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-// v2.11.69: UPLOAD DE COMPROVANTE
+// v2.11.70: UPLOAD DE COMPROVANTE
 // ═══════════════════════════════════════════════════════════════════════════
 
 let _compOrderId = null;
@@ -2891,7 +2884,7 @@ function closeComprovanteModal() {
   _compOrderId = null;
   _compFile = null;
   
-  // v2.11.69: Abrir popup de finalização rápida se tiver pendente
+  // v2.11.70: Abrir popup de finalização rápida se tiver pendente
   if (window._pendingQuickDeliver) {
     const pqd = window._pendingQuickDeliver;
     window._pendingQuickDeliver = null;

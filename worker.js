@@ -1,5 +1,5 @@
-// v2.52.64
-// v2.52.64: Campo venda_antecipada — exclui do cálculo de estoque
+// v2.52.66
+// v2.52.66: Busca CEP por numero parcial
 // v2.52.62: Nova categoria WhatsApp "ia_atendimento" para atendimento automático IA
 // v2.52.61: Lançar estoque automático via cron + flag estoque_lancado no D1
 // v2.52.56: Debug clientes + endpoint merge + fix migração doc_CNPJ
@@ -4149,19 +4149,27 @@ export default {
     }
 
     // ── CEP CAMPO GRANDE ──────────────────────────────────────
-    // v2.52.64: Consulta CEP - retorna logradouro/bairro
+    // v2.52.65: Consulta CEP - retorna logradouro/bairro
     if (method === 'GET' && path.startsWith('/api/cep/')) {
       const subpath = path.replace('/api/cep/', '');
       
-      // Busca por texto (logradouro ou bairro)
+      // Busca por texto (logradouro ou bairro) ou por número de CEP
       if (subpath === 'busca') {
         const q = (url.searchParams.get('q') || '').trim();
         if (q.length < 2) return json([]);
-        const rows = await env.DB.prepare(
-          `SELECT cep, logradouro, complemento, bairro FROM ceps_cg 
-           WHERE logradouro LIKE ? OR bairro LIKE ? 
-           ORDER BY logradouro ASC LIMIT 20`
-        ).bind(`%${q}%`, `%${q}%`).all().then(r => r.results || []);
+        const qDigits = q.replace(/\D/g, '');
+        // v2.52.65: Se input tem 5+ dígitos, busca por CEP
+        const isCepSearch = qDigits.length >= 5;
+        let rows;
+        if (isCepSearch) {
+          rows = await env.DB.prepare(
+            `SELECT cep, logradouro, complemento, bairro FROM ceps_cg WHERE cep LIKE ? ORDER BY cep ASC LIMIT 20`
+          ).bind(`${qDigits}%`).all().then(r => r.results || []);
+        } else {
+          rows = await env.DB.prepare(
+            `SELECT cep, logradouro, complemento, bairro FROM ceps_cg WHERE logradouro LIKE ? OR bairro LIKE ? ORDER BY logradouro ASC LIMIT 20`
+          ).bind(`%${q}%`, `%${q}%`).all().then(r => r.results || []);
+        }
         return json(rows);
       }
       
