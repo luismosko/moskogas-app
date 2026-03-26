@@ -1,4 +1,5 @@
-// v2.52.70
+// v2.52.71
+// v2.52.71: Endpoints diagnóstico e desfazer merge (temporário para correção)
 // v2.52.70: Duplicados CORRIGIDO - consumidor final só merge se MESMO endereço + log auditoria
 // v2.52.69: Duplicados inteligente - exclui falsos positivos + unificar-grupo com endereços
 // v2.52.68: Agente de duplicados - detecta clientes similares + merge batch
@@ -3439,6 +3440,84 @@ export default {
     // IA ATENDIMENTO IZCHAT — Endpoints públicos para o Agente IA consultar
     // v2.52.52: Sistema de atendimento automático via WhatsApp
     // ══════════════════════════════════════════════════════════════════════════════
+
+    // GET /api/pub/merge-diagnostico?key=Moskogas0909 — Ver merges recentes (temporário)
+    if (method === 'GET' && path === '/api/pub/merge-diagnostico') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      // Buscar telefones mesclados nas últimas 24h
+      const hoje = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+      
+      const merges = await env.DB.prepare(`
+        SELECT cp.phone_digits as mantido, 
+               cp.alt_phone as deletado,
+               cp.label,
+               cp.created_at,
+               cc.name as nome_cliente_mantido,
+               cc.address_line as endereco_mantido
+        FROM customer_phones cp
+        LEFT JOIN customers_cache cc ON cc.phone_digits = cp.phone_digits
+        WHERE cp.label LIKE '%merge%' AND cp.created_at > ?
+        ORDER BY cp.created_at DESC
+        LIMIT 100
+      `).bind(hoje).all();
+      
+      // Verificar se os deletados ainda existem em orders
+      const resultados = [];
+      for (const m of (merges.results || [])) {
+        const pedidosOriginal = await env.DB.prepare(
+          'SELECT COUNT(*) as count FROM orders WHERE phone_digits = ?'
+        ).bind(m.deletado).first();
+        
+        const pedidosMigrado = await env.DB.prepare(
+          'SELECT COUNT(*) as count FROM orders WHERE phone_digits = ?'
+        ).bind(m.mantido).first();
+        
+        resultados.push({
+          ...m,
+          pedidos_no_deletado: pedidosOriginal?.count || 0,
+          pedidos_no_mantido: pedidosMigrado?.count || 0,
+          data_formatada: new Date(m.created_at * 1000).toLocaleString('pt-BR')
+        });
+      }
+      
+      return json({
+        total_merges_24h: resultados.length,
+        merges: resultados,
+        instrucao: 'Para desfazer: POST /api/pub/merge-desfazer?key=Moskogas0909 com body {mantido, deletado, nome, endereco}'
+      });
+    }
+
+    // POST /api/pub/merge-desfazer?key=Moskogas0909 — Desfaz um merge específico
+    if (method === 'POST' && path === '/api/pub/merge-desfazer') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      const { mantido, deletado, nome, endereco } = await request.json();
+      if (!mantido || !deletado) return json({ error: 'Informe mantido e deletado' }, 400);
+      
+      // 1. Recriar o cliente deletado
+      await env.DB.prepare(`
+        INSERT OR IGNORE INTO customers_cache (phone_digits, name, address_line, updated_at)
+        VALUES (?, ?, ?, unixepoch())
+      `).bind(deletado, nome || 'Cliente Restaurado', endereco || '').run();
+      
+      // 2. Reverter pedidos que foram migrados (apenas se não tinha pedidos antes)
+      // CUIDADO: Não reverte automaticamente porque não sabemos quais pedidos eram de qual cliente
+      
+      // 3. Remover da tabela customer_phones
+      await env.DB.prepare(
+        'DELETE FROM customer_phones WHERE phone_digits = ? AND alt_phone = ?'
+      ).bind(mantido, deletado).run();
+      
+      return json({
+        ok: true,
+        cliente_restaurado: deletado,
+        nome: nome,
+        nota: 'Cliente recriado. Os pedidos NÃO foram revertidos automaticamente - faça manualmente se necessário.'
+      });
+    }
 
     // GET /api/pub/ia/cliente?phone=67999999999 — Busca dados do cliente
     if (method === 'GET' && path === '/api/pub/ia/cliente') {
