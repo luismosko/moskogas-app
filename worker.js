@@ -1,4 +1,5 @@
-// v2.52.74
+// v2.52.75
+// v2.52.75: Endpoints buscar-cliente e unificar-clientes (manual)
 // v2.52.74: Fix status case-sensitive (entregue vs ENTREGUE)
 // v2.52.73: Diagnóstico de corporativos (debug datas e status)
 // v2.52.72: Endpoint /api/pub/corporativos-marco para listar clientes CNPJ em março
@@ -3519,6 +3520,121 @@ export default {
         cliente_restaurado: deletado,
         nome: nome,
         nota: 'Cliente recriado. Os pedidos NÃO foram revertidos automaticamente - faça manualmente se necessário.'
+      });
+    }
+
+    // GET /api/pub/buscar-cliente?key=Moskogas0909&nome=xxx — Busca cliente por nome
+    if (method === 'GET' && path === '/api/pub/buscar-cliente') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      const nome = url.searchParams.get('nome') || '';
+      if (!nome) return json({ error: 'Informe nome' }, 400);
+      
+      const clientes = await env.DB.prepare(`
+        SELECT phone_digits, name, cpf_cnpj, bling_contact_id, address_line, bairro
+        FROM customers_cache
+        WHERE LOWER(name) LIKE ?
+        ORDER BY name
+        LIMIT 20
+      `).bind(`%${nome.toLowerCase()}%`).all();
+      
+      // Para cada cliente, buscar pedidos
+      const resultado = [];
+      for (const c of (clientes.results || [])) {
+        const pedidos = await env.DB.prepare(`
+          SELECT id, total_value, status, created_at
+          FROM orders WHERE phone_digits = ?
+          ORDER BY created_at DESC
+        `).bind(c.phone_digits).all();
+        
+        resultado.push({
+          ...c,
+          tem_bling: !!c.bling_contact_id,
+          total_pedidos: pedidos.results?.length || 0,
+          pedidos: pedidos.results || []
+        });
+      }
+      
+      return json({ clientes: resultado });
+    }
+
+    // POST /api/pub/unificar-clientes?key=Moskogas0909 — Unifica dois clientes
+    if (method === 'POST' && path === '/api/pub/unificar-clientes') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      const { manter, deletar } = await request.json();
+      if (!manter || !deletar) return json({ error: 'Informe manter e deletar (phone_digits)' }, 400);
+      
+      // Verificar se ambos existem
+      const clienteManter = await env.DB.prepare(
+        'SELECT * FROM customers_cache WHERE phone_digits = ?'
+      ).bind(manter).first();
+      
+      const clienteDeletar = await env.DB.prepare(
+        'SELECT * FROM customers_cache WHERE phone_digits = ?'
+      ).bind(deletar).first();
+      
+      if (!clienteManter) return json({ error: `Cliente ${manter} não encontrado` }, 404);
+      if (!clienteDeletar) return json({ error: `Cliente ${deletar} não encontrado` }, 404);
+      
+      // Contar pedidos antes
+      const pedidosManter = await env.DB.prepare(
+        'SELECT COUNT(*) as c FROM orders WHERE phone_digits = ?'
+      ).bind(manter).first();
+      
+      const pedidosDeletar = await env.DB.prepare(
+        'SELECT COUNT(*) as c FROM orders WHERE phone_digits = ?'
+      ).bind(deletar).first();
+      
+      // 1. Migrar pedidos do deletado para o mantido
+      await env.DB.prepare(
+        'UPDATE orders SET phone_digits = ? WHERE phone_digits = ?'
+      ).bind(manter, deletar).run();
+      
+      // 2. Salvar telefone alternativo
+      await env.DB.prepare(`
+        INSERT OR IGNORE INTO customer_phones (phone_digits, alt_phone, label, created_at)
+        VALUES (?, ?, 'merge-manual', unixepoch())
+      `).bind(manter, deletar).run();
+      
+      // 3. Copiar dados faltantes (CNPJ, Bling, etc)
+      const updates = [];
+      if (!clienteManter.cpf_cnpj && clienteDeletar.cpf_cnpj) {
+        await env.DB.prepare('UPDATE customers_cache SET cpf_cnpj = ? WHERE phone_digits = ?')
+          .bind(clienteDeletar.cpf_cnpj, manter).run();
+        updates.push('cpf_cnpj');
+      }
+      if (!clienteManter.bling_contact_id && clienteDeletar.bling_contact_id) {
+        await env.DB.prepare('UPDATE customers_cache SET bling_contact_id = ? WHERE phone_digits = ?')
+          .bind(clienteDeletar.bling_contact_id, manter).run();
+        updates.push('bling_contact_id');
+      }
+      
+      // 4. Deletar cliente duplicado
+      await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(deletar).run();
+      
+      // Contar pedidos depois
+      const pedidosDepois = await env.DB.prepare(
+        'SELECT COUNT(*) as c FROM orders WHERE phone_digits = ?'
+      ).bind(manter).first();
+      
+      return json({
+        ok: true,
+        cliente_mantido: {
+          phone: manter,
+          nome: clienteManter.name,
+          pedidos_antes: pedidosManter?.c || 0,
+          pedidos_depois: pedidosDepois?.c || 0
+        },
+        cliente_deletado: {
+          phone: deletar,
+          nome: clienteDeletar.name,
+          pedidos_migrados: pedidosDeletar?.c || 0
+        },
+        campos_copiados: updates,
+        msg: `Unificado! ${pedidosDeletar?.c || 0} pedidos migrados de "${clienteDeletar.name}" para "${clienteManter.name}"`
       });
     }
 
