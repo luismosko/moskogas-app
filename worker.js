@@ -1,4 +1,5 @@
-// v2.52.75
+// v2.52.76
+// v2.52.76: Endpoint ver-pedido para diagnóstico
 // v2.52.75: Endpoints buscar-cliente e unificar-clientes (manual)
 // v2.52.74: Fix status case-sensitive (entregue vs ENTREGUE)
 // v2.52.73: Diagnóstico de corporativos (debug datas e status)
@@ -3521,6 +3522,30 @@ export default {
         nome: nome,
         nota: 'Cliente recriado. Os pedidos NÃO foram revertidos automaticamente - faça manualmente se necessário.'
       });
+    }
+
+    // GET /api/pub/ver-pedido?key=Moskogas0909&id=xxx — Ver dados do pedido
+    if (method === 'GET' && path === '/api/pub/ver-pedido') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      const id = url.searchParams.get('id');
+      if (!id) return json({ error: 'Informe id' }, 400);
+      
+      const pedido = await env.DB.prepare(`
+        SELECT id, phone_digits, customer_name, address_line, total_value, status, tipo_pagamento
+        FROM orders WHERE id = ?
+      `).bind(id).first();
+      
+      if (!pedido) return json({ error: 'Pedido não encontrado' }, 404);
+      
+      // Buscar cliente
+      const cliente = await env.DB.prepare(`
+        SELECT phone_digits, name, cpf_cnpj, bling_contact_id
+        FROM customers_cache WHERE phone_digits = ?
+      `).bind(pedido.phone_digits).first();
+      
+      return json({ pedido, cliente });
     }
 
     // GET /api/pub/buscar-cliente?key=Moskogas0909&nome=xxx — Busca cliente por nome
