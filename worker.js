@@ -1,4 +1,5 @@
-// v2.52.76
+// v2.52.77
+// v2.52.77: Endpoint corrigir-phone para unificar telefones inconsistentes
 // v2.52.76: Endpoint ver-pedido para diagnóstico
 // v2.52.75: Endpoints buscar-cliente e unificar-clientes (manual)
 // v2.52.74: Fix status case-sensitive (entregue vs ENTREGUE)
@@ -3521,6 +3522,54 @@ export default {
         cliente_restaurado: deletado,
         nome: nome,
         nota: 'Cliente recriado. Os pedidos NÃO foram revertidos automaticamente - faça manualmente se necessário.'
+      });
+    }
+
+    // POST /api/pub/corrigir-phone?key=Moskogas0909 — Corrige phone_digits de pedidos
+    if (method === 'POST' && path === '/api/pub/corrigir-phone') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      const { phone_errado, phone_correto } = await request.json();
+      if (!phone_errado || !phone_correto) return json({ error: 'Informe phone_errado e phone_correto' }, 400);
+      
+      // Contar pedidos afetados
+      const antes = await env.DB.prepare(
+        'SELECT COUNT(*) as c FROM orders WHERE phone_digits = ?'
+      ).bind(phone_errado).first();
+      
+      // Atualizar pedidos
+      await env.DB.prepare(
+        'UPDATE orders SET phone_digits = ? WHERE phone_digits = ?'
+      ).bind(phone_correto, phone_errado).run();
+      
+      // Verificar se cliente errado existe e deletar
+      const clienteErrado = await env.DB.prepare(
+        'SELECT * FROM customers_cache WHERE phone_digits = ?'
+      ).bind(phone_errado).first();
+      
+      if (clienteErrado) {
+        // Salvar como telefone alternativo
+        await env.DB.prepare(`
+          INSERT OR IGNORE INTO customer_phones (phone_digits, alt_phone, label, created_at)
+          VALUES (?, ?, 'correcao-phone', unixepoch())
+        `).bind(phone_correto, phone_errado).run();
+        
+        // Deletar o errado
+        await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(phone_errado).run();
+      }
+      
+      // Contar depois
+      const depois = await env.DB.prepare(
+        'SELECT COUNT(*) as c FROM orders WHERE phone_digits = ?'
+      ).bind(phone_correto).first();
+      
+      return json({
+        ok: true,
+        pedidos_migrados: antes?.c || 0,
+        phone_errado,
+        phone_correto,
+        total_pedidos_cliente: depois?.c || 0
       });
     }
 
