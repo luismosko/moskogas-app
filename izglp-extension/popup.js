@@ -1,4 +1,4 @@
-// IZGLP — Popup Script v2.0.0
+// IZGLP — Popup Script v2.1.0
 
 const API_URL = 'https://api.moskogas.com.br';
 
@@ -89,6 +89,11 @@ async function initHub() {
     updatePauseButton(resp);
   });
 
+  // Carrega alertas pendentes
+  chrome.runtime.sendMessage({ type: 'GET_ALERTS' }, resp => {
+    updateAlertsPanel(resp && resp.alerts);
+  });
+
   // Verifica aba do Hub
   chrome.tabs.query({ url: 'https://hub.ultragaz.com.br/*' }, tabs => {
     const el = document.getElementById('hub-tab-status');
@@ -146,6 +151,48 @@ function formatPhone(phone) {
 // ══════════════════════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════════════════════
+// ── Som de alerta (Web Audio API) ─────────────────────────────────────────────
+function playAlertSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // 3 beeps ascendentes
+    [600, 800, 1000].forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.15);
+      osc.start(ctx.currentTime + i * 0.18);
+      osc.stop(ctx.currentTime + i * 0.18 + 0.15);
+    });
+  } catch(e) {}
+}
+
+// ── Atualiza painel de alertas ─────────────────────────────────────────────────
+function updateAlertsPanel(alerts) {
+  const panel = document.getElementById('alerts-panel');
+  const title = document.getElementById('alerts-title');
+  const list  = document.getElementById('alerts-list');
+  if (!panel) return;
+
+  if (!alerts || alerts.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  title.textContent = `${alerts.length} pedido(s) novo(s) aguardando!`;
+  list.innerHTML = alerts.map(a =>
+    `<div>🛒 <strong>${a.customer || 'Cliente'}</strong> · ${a.produto || 'P13'} · R$ ${parseFloat(a.total||0).toFixed(2).replace('.',',')} · Hub #${a.ultragaz_id}</div>`
+  ).join('');
+
+  // Toca som ao abrir popup se há alertas
+  playAlertSound();
+}
+
 async function init() {
   // Versão
   try {

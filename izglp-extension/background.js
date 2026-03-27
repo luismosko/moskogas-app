@@ -1,27 +1,20 @@
-// IZGLP — Background Service Worker v2.0.0
+// IZGLP — Background Service Worker v2.1.0
 // Hub Ultragaz + Bina Virtual — Sistema integrado
 
-const SCAN_INTERVAL_MINUTES = 1;
-const HUB_URL_PATTERN   = 'https://hub.ultragaz.com.br/*';
+const SCAN_INTERVAL_MINUTES = 3;       // ← era 1, agora 3 min entre varreduras
+const HUB_URL_PATTERN    = 'https://hub.ultragaz.com.br/*';
 const IZCHAT_URL_PATTERN = 'https://chat.izchat.com.br/*';
-const MOSKO_URL_PATTERN = 'https://moskogas-app.pages.dev/*';
-const DEFAULT_API_KEY   = 'Moskogas0909';
-const DEFAULT_API_URL   = 'https://api.moskogas.com.br';
+const MOSKO_URL_PATTERN  = 'https://moskogas-app.pages.dev/*';
+const DEFAULT_API_KEY    = 'Moskogas0909';
+const DEFAULT_API_URL    = 'https://api.moskogas.com.br';
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ALARME PERIÓDICO (Hub)
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Alarme periódico ──────────────────────────────────────────────────────────
 try {
   if (chrome.runtime && chrome.runtime.onInstalled) {
     chrome.runtime.onInstalled.addListener(() => {
       chrome.alarms.create('scan', { periodInMinutes: SCAN_INTERVAL_MINUTES });
       console.log('[IZGLP] Instalado. Scan Hub a cada', SCAN_INTERVAL_MINUTES, 'min.');
-      
-      // Configurações padrão
-      chrome.storage.sync.set({
-        bina_enabled: true,
-        bina_position: 'right'
-      });
+      chrome.storage.sync.set({ bina_enabled: true });
     });
   }
 } catch (e) {}
@@ -36,9 +29,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'scan') await triggerScanOnHubTab();
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// CONFIG
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Config ────────────────────────────────────────────────────────────────────
 async function getConfig() {
   return new Promise(resolve => {
     chrome.storage.sync.get(['apiKey', 'apiUrl'], data => {
@@ -50,19 +41,14 @@ async function getConfig() {
   });
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// API CALLS
-// ══════════════════════════════════════════════════════════════════════════════
+// ── API calls ─────────────────────────────────────────────────────────────────
 async function apiCall(path, body, method = 'POST') {
   const config = await getConfig();
-  const url = `${config.apiUrl}${path}${path.includes('?') ? '&' : '?'}api_key=${encodeURIComponent(config.apiKey)}`;
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${config.apiUrl}${path}${sep}api_key=${encodeURIComponent(config.apiKey)}`;
   try {
-    const opts = {
-      method,
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': config.apiKey },
-    };
+    const opts = { method, headers: { 'Content-Type': 'application/json', 'X-API-KEY': config.apiKey } };
     if (method !== 'GET' && body) opts.body = JSON.stringify(body);
-    
     const resp = await fetch(url, opts);
     const data = await resp.json().catch(() => ({}));
     console.log(`[IZGLP] ${method} ${path} → HTTP ${resp.status}`);
@@ -73,35 +59,29 @@ async function apiCall(path, body, method = 'POST') {
   }
 }
 
-async function apiGet(path) {
-  return apiCall(path, null, 'GET');
-}
+async function apiGet(path) { return apiCall(path, null, 'GET'); }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// HUB ULTRAGAZ — FUNÇÕES
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Hub: enviar/cancelar pedido ────────────────────────────────────────────────
 async function sendOrder(orderData) {
-  const result = await apiCall('/api/ultragaz/pedido', orderData);
-  return result.data;
+  return (await apiCall('/api/ultragaz/pedido', orderData)).data;
 }
 
-async function cancelOrder(ultragazOrderId) {
-  const result = await apiCall('/api/ultragaz/cancelar', { ultragaz_order_id: String(ultragazOrderId) });
-  return result.data;
+async function cancelOrder(id) {
+  return (await apiCall('/api/ultragaz/cancelar', { ultragaz_order_id: String(id) })).data;
 }
 
 async function updateHubStatus(conectado, status) {
   const config = await getConfig();
-  const url = `${config.apiUrl}/api/ultragaz/hub-status?api_key=${encodeURIComponent(config.apiKey)}`;
   try {
-    await fetch(url, {
+    await fetch(`${config.apiUrl}/api/ultragaz/hub-status?api_key=${encodeURIComponent(config.apiKey)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-KEY': config.apiKey },
-      body: JSON.stringify({ conectado, status, mensagem: 'IZGLP Extension v2.0.0', updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ conectado, status, mensagem: 'IZGLP Extension v2.1.0', updated_at: new Date().toISOString() }),
     });
   } catch {}
 }
 
+// ── Pausa ─────────────────────────────────────────────────────────────────────
 async function isPaused() {
   return new Promise(resolve => {
     chrome.storage.local.get(['pausedUntil'], data => {
@@ -113,6 +93,21 @@ async function isPaused() {
   });
 }
 
+// ── Alertas pendentes ─────────────────────────────────────────────────────────
+async function addPendingAlert(orderInfo) {
+  return new Promise(resolve => {
+    chrome.storage.local.get(['pendingAlerts'], data => {
+      const alerts = data.pendingAlerts || [];
+      // Não duplicar
+      if (!alerts.find(a => a.ultragaz_id === orderInfo.ultragaz_id)) {
+        alerts.push({ ...orderInfo, ts: Date.now() });
+      }
+      chrome.storage.local.set({ pendingAlerts: alerts }, resolve);
+    });
+  });
+}
+
+// ── Dispara scan ──────────────────────────────────────────────────────────────
 async function triggerScanOnHubTab() {
   if (await isPaused()) {
     console.log('[IZGLP] ⏸ Hub pausado — pulando varredura');
@@ -125,10 +120,12 @@ async function triggerScanOnHubTab() {
 
     const tab = tabs[0];
 
+    // Recarrega o Hub para dados frescos
     console.log('[IZGLP] 🔄 Recarregando Hub...');
     await chrome.tabs.reload(tab.id);
-    await new Promise(r => setTimeout(r, 6000));
+    await new Promise(r => setTimeout(r, 7000)); // aguarda 7s
 
+    // Injeta content script
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-hub.js'] });
       await new Promise(r => setTimeout(r, 1000));
@@ -145,33 +142,10 @@ async function triggerScanOnHubTab() {
   }
 }
 
-async function refreshMoskoGasTabs() {
-  try {
-    const tabs = await chrome.tabs.query({ url: MOSKO_URL_PATTERN });
-    for (const tab of tabs) await chrome.tabs.reload(tab.id);
-    if (tabs.length > 0) console.log(`[IZGLP] ✅ ${tabs.length} aba(s) IZGLP atualizada(s)`);
-  } catch(e) {}
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// BINA — FUNÇÕES
-// ══════════════════════════════════════════════════════════════════════════════
-async function searchCustomer(phone) {
-  const result = await apiGet(`/api/customer/search?q=${phone}&type=phone`);
-  return result;
-}
-
-async function getLastOrder(phone) {
-  const result = await apiGet(`/api/customer/last-order?phone=${phone}`);
-  return result;
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// MENSAGENS
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Mensagens ─────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
-  // ── HUB: Processa pedidos ──────────────────────────────────────────────────
+  // ── Processa pedidos (vem do content-hub.js) ─────────────────────────────
   if (msg.type === 'PROCESS_ORDERS') {
     (async () => {
       const { activeOrders, canceledIds } = msg;
@@ -181,7 +155,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const r = await sendOrder(order.payload);
         if (r && r.ok && !r.duplicado) {
           novos++;
-          console.log(`[IZGLP] ✅ Criado #${r.moskogas_order_id}`);
+          console.log(`[IZGLP] ✅ Criado MoskoGás #${r.moskogas_order_id}`);
+          // Salva como alerta pendente (para o popup mostrar e tocar som)
+          await addPendingAlert({
+            ultragaz_id: order.payload.ultragaz_order_id,
+            moskogas_id: r.moskogas_order_id,
+            customer:    order.payload.customer_name,
+            total:       order.payload.total_value,
+            produto:     order.payload.items_json ? JSON.parse(order.payload.items_json)[0]?.produto || 'P13' : 'P13',
+          });
         }
       }
 
@@ -189,46 +171,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const r = await cancelOrder(id);
         if (r && r.cancelado) {
           cancelamentos++;
-          console.log(`[IZGLP] 🚫 Cancelado Hub #${id}`);
+          console.log(`[IZGLP] 🚫 Cancelado Hub #${id} → MoskoGás #${r.moskogas_order_id}`);
         }
       }
 
       await updateHubStatus(true, 'conectado');
 
       if (novos > 0) {
-        refreshMoskoGasTabs();
-        chrome.notifications.create(`scan-${Date.now()}`, {
-          type: 'basic', iconUrl: 'icons/icon48.png',
-          title: '🛒 Novo pedido Ultragaz!',
-          message: `${novos} pedido(s) novo(s) no IZGLP!`,
-        });
+        // ⚠️ NÃO recarrega o MoskoGás — o shared.js detecta sozinho via polling
+        // Recarregar destruía o banner laranja antes do usuário ver
+        
+        // Notificação do sistema (som padrão do Chrome)
+        try {
+          chrome.notifications.create(`pedido-${Date.now()}`, {
+            type: 'basic', iconUrl: 'icons/icon48.png',
+            title: `🛒 ${novos} novo(s) pedido(s) Ultragaz!`,
+            message: `Abra o IZGLP para ver os detalhes.`,
+          });
+        } catch {}
       }
 
-      chrome.storage.local.set({ lastScan: { ts: Date.now(), novos, cancelamentos, total: (activeOrders||[]).length } });
+      chrome.storage.local.set({
+        lastScan: { ts: Date.now(), novos, cancelamentos, total: (activeOrders||[]).length }
+      });
+
       sendResponse({ ok: true, novos, cancelamentos });
     })();
     return true;
   }
 
-  // ── HUB: Controles ─────────────────────────────────────────────────────────
+  // ── Pausa ────────────────────────────────────────────────────────────────
   if (msg.type === 'PAUSE') {
     const minutes = msg.minutes || 10;
     const until = Date.now() + (minutes * 60 * 1000);
     chrome.storage.local.set({ pausedUntil: until }, () => {
-      console.log(`[IZGLP] ⏸ Hub pausado por ${minutes} minutos`);
       sendResponse({ ok: true, until });
     });
     return true;
   }
-  
+
   if (msg.type === 'RESUME') {
-    chrome.storage.local.remove('pausedUntil', () => {
-      console.log('[IZGLP] ▶️ Hub retomado');
-      sendResponse({ ok: true });
-    });
+    chrome.storage.local.remove('pausedUntil', () => sendResponse({ ok: true }));
     return true;
   }
-  
+
   if (msg.type === 'GET_PAUSE_STATUS') {
     chrome.storage.local.get(['pausedUntil'], data => {
       const paused = data.pausedUntil && Date.now() < data.pausedUntil;
@@ -236,99 +222,84 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
-  
+
   if (msg.type === 'SCAN_NOW') {
     triggerScanOnHubTab().then(() => sendResponse({ ok: true }));
     return true;
   }
 
-  // ── Config ─────────────────────────────────────────────────────────────────
+  // ── Alertas ──────────────────────────────────────────────────────────────
+  if (msg.type === 'DISMISS_ALERTS') {
+    chrome.storage.local.set({ pendingAlerts: [] }, () => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (msg.type === 'GET_ALERTS') {
+    chrome.storage.local.get(['pendingAlerts'], data => {
+      sendResponse({ alerts: data.pendingAlerts || [] });
+    });
+    return true;
+  }
+
+  // ── Config ────────────────────────────────────────────────────────────────
   if (msg.type === 'SAVE_CONFIG') {
-    chrome.storage.sync.set({ apiKey: msg.apiKey, apiUrl: msg.apiUrl || DEFAULT_API_URL }, () => sendResponse({ ok: true }));
+    chrome.storage.sync.set({ apiKey: msg.apiKey, apiUrl: msg.apiUrl || DEFAULT_API_URL }, () => {
+      sendResponse({ ok: true });
+    });
     return true;
   }
 
   if (msg.type === 'TEST_API_KEY') {
     (async () => {
       const result = await apiCall('/api/ultragaz/hub-status', {
-        conectado: true, status: 'testando', mensagem: 'Teste conexão IZGLP', updated_at: new Date().toISOString()
+        conectado: true, status: 'testando', mensagem: 'Teste IZGLP', updated_at: new Date().toISOString()
       });
       sendResponse({ ok: result.status >= 200 && result.status < 300 });
     })();
     return true;
   }
 
-  // ── BINA: Busca cliente ────────────────────────────────────────────────────
+  // ── Bina ──────────────────────────────────────────────────────────────────
   if (msg.type === 'BINA_SEARCH') {
     (async () => {
-      const phone = msg.phone;
-      
-      // Busca no cache local
-      const result = await searchCustomer(phone);
-      
+      const result = await apiGet(`/api/customer/search?q=${msg.phone}&type=phone`);
       if (result.status === 200 && result.data && result.data.length > 0) {
         sendResponse({ ok: true, found: true, client: result.data[0] });
         return;
       }
-      
-      // Tenta buscar última compra
-      const lastOrder = await getLastOrder(phone);
-      if (lastOrder.status === 200 && lastOrder.data && lastOrder.data.order) {
-        const order = lastOrder.data.order;
-        sendResponse({ 
-          ok: true, 
-          found: true, 
-          client: {
-            name: order.customer_name,
-            address_line: order.address_line,
-            bairro: order.bairro,
-            complemento: order.complemento,
-            referencia: order.referencia
-          },
-          lastOrder: order
-        });
+      const lastOrder = await apiGet(`/api/customer/last-order?phone=${msg.phone}`);
+      if (lastOrder.status === 200 && lastOrder.data?.order) {
+        const o = lastOrder.data.order;
+        sendResponse({ ok: true, found: true, client: { name: o.customer_name, address_line: o.address_line, bairro: o.bairro } });
         return;
       }
-      
       sendResponse({ ok: true, found: false });
     })();
     return true;
   }
 
-  // ── BINA: Controles ────────────────────────────────────────────────────────
   if (msg.type === 'BINA_SET_ENABLED') {
-    chrome.storage.sync.set({ bina_enabled: msg.enabled }, () => {
-      sendResponse({ ok: true });
-    });
+    chrome.storage.sync.set({ bina_enabled: msg.enabled }, () => sendResponse({ ok: true }));
     return true;
   }
 
   if (msg.type === 'BINA_GET_STATUS') {
-    chrome.storage.sync.get(['bina_enabled'], data => {
-      sendResponse({ enabled: data.bina_enabled !== false });
-    });
+    chrome.storage.sync.get(['bina_enabled'], data => sendResponse({ enabled: data.bina_enabled !== false }));
     return true;
   }
 
-  // ── Abrir IZGLP ────────────────────────────────────────────────────────────
   if (msg.type === 'OPEN_IZGLP') {
-    chrome.tabs.create({
-      url: `https://moskogas-app.pages.dev/${msg.page || 'pedido.html'}${msg.phone ? '?phone=' + msg.phone : ''}`
-    });
+    chrome.tabs.create({ url: `https://moskogas-app.pages.dev/${msg.page || 'pedido.html'}${msg.phone ? '?phone=' + msg.phone : ''}` });
     sendResponse({ ok: true });
     return true;
   }
 
-  // ── GET CONFIG ─────────────────────────────────────────────────────────────
   if (msg.type === 'GET_CONFIG') {
     getConfig().then(config => sendResponse(config));
     return true;
   }
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// SCAN INICIAL
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Scan inicial ──────────────────────────────────────────────────────────────
 triggerScanOnHubTab();
-
-console.log('[IZGLP] 🟢 Background v2.0.0 ativo');
+console.log('[IZGLP] 🟢 Background v2.1.0 ativo — scan a cada', SCAN_INTERVAL_MINUTES, 'min');

@@ -343,6 +343,18 @@
     </div>
   </div>
 
+  <!-- Painel de alertas pendentes -->
+  <div id="alerts-panel" style="display:none; margin:0 12px 10px; background:#fff3cd; border:2px solid #f59e0b; border-radius:10px; padding:12px; animation:pulse 1.5s infinite;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="font-size:20px;">🔔</span>
+      <strong id="alerts-title" style="color:#92400e;font-size:14px;">1 pedido novo!</strong>
+    </div>
+    <div id="alerts-list" style="font-size:12px;color:#78350f;margin-bottom:10px;max-height:80px;overflow-y:auto;"></div>
+    <button id="btn-dismiss-alerts" style="width:100%;padding:8px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;">
+      ✅ Marcar como Visto (silenciar)
+    </button>
+  </div>
+
   <button class="btn btn-primary" id="btn-scan">🔍 Varrer Agora</button>
   <button class="btn btn-secondary" id="btn-pause">⏸ Pausar Varredura (10 min)</button>
   <a class="btn btn-orange" href="https://hub.ultragaz.com.br" target="_blank" style="text-decoration:none;">
