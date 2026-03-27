@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedidos 2.9.33 — MoskoGás</title>
+<title>Pedidos 2.9.34 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -116,7 +116,7 @@
 <!-- SUMMARY -->
 <div class="summary-bar" id="summary-bar" style="align-items:center">
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.33</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.34</span>
   <span style="border-left:1px solid rgba(255,255,255,0.3);height:14px;margin:0 4px"></span>
   <span id="summary-bar-stats" style="display:contents"></span>
 </div>
@@ -311,8 +311,8 @@ function setDateFilter(mode) {
 let lastRows = [];
 let activeStatuses = new Set(['novo','encaminhado','whatsapp_enviado','entregue']);
 
-// v2.9.33: Ordenação por coluna
-let currentSort = { col: 'hora', dir: 'desc' }; // Padrão: hora decrescente (mais recente primeiro)
+// v2.9.34: Ordenação padrão por Status (abertos primeiro) + secundária por hora
+let currentSort = { col: 'status', dir: 'asc' }; // Padrão: status (NOVO primeiro, ENTREGUE por último)
 
 function sortBy(col) {
   // Toggle direção se mesma coluna, senão reset para desc
@@ -373,10 +373,16 @@ function sortRows(rows, col, dir) {
         vb = b.tipo_pagamento || '';
         break;
       case 'status':
-        // Ordenar por prioridade: NOVO > ENCAMINHADO > WHATS > ENTREGUE > CANCELADO
+        // v2.9.34: Ordenar por prioridade + hora dentro de cada status
         const statusOrder = { 'novo': 1, 'encaminhado': 2, 'whatsapp_enviado': 3, 'entregue': 4, 'cancelado': 5 };
         va = statusOrder[(a.status || '').toLowerCase()] || 9;
         vb = statusOrder[(b.status || '').toLowerCase()] || 9;
+        // Se mesmo status, ordena por hora (mais recente primeiro)
+        if (va === vb) {
+          const ha = a._sortTs || a.created_at || 0;
+          const hb = b._sortTs || b.created_at || 0;
+          return hb - ha; // Mais recente primeiro
+        }
         break;
       case 'entregador':
         va = (a.driver_name_cache || '').toLowerCase();
@@ -500,7 +506,7 @@ async function _load() {
   lastRows = rows;
   window._gestaoRows = rows;
   
-  // v2.9.33: Aplicar ordenação atual
+  // v2.9.34: Aplicar ordenação atual
   const sorted = sortRows([...rows], currentSort.col, currentSort.dir);
   renderTable(sorted);
   
