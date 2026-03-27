@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "IZGLP",
+  "version": "2.1.0",
+  "description": "Sistema de Gestão IZGLP — Hub Ultragaz + Bina IzChat",
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage", "alarms", "tabs", "notifications", "scripting"
+  ],
+  "host_permissions": [
+    "https://hub.ultragaz.com.br/*",
+    "https://chat.izchat.com.br/*",
+    "https://api.moskogas.com.br/*",
+    "https://moskogas-app.pages.dev/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://hub.ultragaz.com.br/*"],
+      "js": ["content-hub.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://chat.izchat.com.br/*"],
+      "js": ["content-bina.js"],
+      "css": ["content-bina.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "IZGLP",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}
