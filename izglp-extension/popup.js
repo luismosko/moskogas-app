@@ -1,4 +1,4 @@
-// IZGLP — Popup Script v2.1.0
+// IZGLP — Popup Script v2.2.0
 
 const API_URL = 'https://api.moskogas.com.br';
 
@@ -151,24 +151,33 @@ function formatPhone(phone) {
 // ══════════════════════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════════════════════
-// ── Som de alerta (Web Audio API) ─────────────────────────────────────────────
+// ── Som de alerta (MP3 do Hub Ultragaz) ───────────────────────────────────────
 function playAlertSound() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // 3 beeps ascendentes
-    [600, 800, 1000].forEach((freq, i) => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = freq;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.18);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.15);
-      osc.start(ctx.currentTime + i * 0.18);
-      osc.stop(ctx.currentTime + i * 0.18 + 0.15);
+    // Usa o áudio real capturado do Hub Ultragaz
+    const audioUrl = chrome.runtime.getURL('alerta.mp3');
+    const audio = new Audio(audioUrl);
+    audio.volume = 1.0;
+    audio.play().then(() => {
+      console.log('[IZGLP] 🔊 Som do Hub tocando no popup');
+    }).catch(e => {
+      console.warn('[IZGLP] Áudio bloqueado pelo browser — tentando sintetizar');
+      // Fallback: beeps sintéticos
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        [600, 800, 1000].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.frequency.value = freq; osc.type = 'sine';
+          gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.18);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.15);
+          osc.start(ctx.currentTime + i * 0.18);
+          osc.stop(ctx.currentTime + i * 0.18 + 0.15);
+        });
+      } catch {}
     });
-  } catch(e) {}
+  } catch(e) { console.warn('[IZGLP] Erro som:', e); }
 }
 
 // ── Atualiza painel de alertas ─────────────────────────────────────────────────

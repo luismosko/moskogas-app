@@ -1,4 +1,4 @@
-// IZGLP — Background Service Worker v2.1.0
+// IZGLP — Background Service Worker v2.2.0
 // Hub Ultragaz + Bina Virtual — Sistema integrado
 
 const SCAN_INTERVAL_MINUTES = 3;       // ← era 1, agora 3 min entre varreduras
@@ -76,7 +76,7 @@ async function updateHubStatus(conectado, status) {
     await fetch(`${config.apiUrl}/api/ultragaz/hub-status?api_key=${encodeURIComponent(config.apiKey)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-KEY': config.apiKey },
-      body: JSON.stringify({ conectado, status, mensagem: 'IZGLP Extension v2.1.0', updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ conectado, status, mensagem: 'IZGLP Extension v2.2.0', updated_at: new Date().toISOString() }),
     });
   } catch {}
 }
@@ -103,6 +103,48 @@ async function addPendingAlert(orderInfo) {
         alerts.push({ ...orderInfo, ts: Date.now() });
       }
       chrome.storage.local.set({ pendingAlerts: alerts }, resolve);
+    });
+  });
+}
+
+// ── Toca som de alerta na aba do Hub ─────────────────────────────────────────
+async function playSoundInHubTab() {
+  try {
+    const tabs = await chrome.tabs.query({ url: HUB_URL_PATTERN });
+    if (tabs.length === 0) return;
+    // Injeta script inline que toca o áudio
+    await chrome.scripting.executeScript({
+      target: { tabId: tabs[0].id },
+      func: (audioUrl) => {
+        try {
+          // Para qualquer áudio anterior
+          if (window._izglpAudio) { window._izglpAudio.pause(); window._izglpAudio.currentTime = 0; }
+          window._izglpAudio = new Audio(audioUrl);
+          window._izglpAudio.volume = 1.0;
+          window._izglpAudio.play().catch(() => {});
+          console.log('[IZGLP] 🔊 Alerta sonoro tocando!');
+        } catch(e) { console.warn('[IZGLP] Erro áudio:', e); }
+      },
+      args: [chrome.runtime.getURL('alerta.mp3')],
+    });
+    console.log('[IZGLP] 🔊 Som injetado na aba do Hub');
+  } catch(e) {
+    console.warn('[IZGLP] Erro ao tocar som:', e.message);
+  }
+}
+
+// ── Atualiza badge do ícone ────────────────────────────────────────────────────
+async function updateBadge() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(['pendingAlerts'], data => {
+      const count = (data.pendingAlerts || []).length;
+      if (count > 0) {
+        chrome.action.setBadgeText({ text: String(count) });
+        chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
+      } else {
+        chrome.action.setBadgeText({ text: '' });
+      }
+      resolve();
     });
   });
 }
@@ -164,6 +206,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             total:       order.payload.total_value,
             produto:     order.payload.items_json ? JSON.parse(order.payload.items_json)[0]?.produto || 'P13' : 'P13',
           });
+          // Toca som na aba do Hub (content script pode acessar Audio API)
+          await playSoundInHubTab();
         }
       }
 
@@ -194,6 +238,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.storage.local.set({
         lastScan: { ts: Date.now(), novos, cancelamentos, total: (activeOrders||[]).length }
       });
+      // Atualiza badge do ícone da extensão
+      await updateBadge();
 
       sendResponse({ ok: true, novos, cancelamentos });
     })();
@@ -302,4 +348,4 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ── Scan inicial ──────────────────────────────────────────────────────────────
 triggerScanOnHubTab();
-console.log('[IZGLP] 🟢 Background v2.1.0 ativo — scan a cada', SCAN_INTERVAL_MINUTES, 'min');
+console.log('[IZGLP] 🟢 Background v2.2.0 ativo — scan a cada', SCAN_INTERVAL_MINUTES, 'min');

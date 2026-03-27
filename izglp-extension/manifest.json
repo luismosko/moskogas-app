@@ -1,15 +1,19 @@
 {
   "manifest_version": 3,
   "name": "IZGLP",
-  "version": "2.1.0",
-  "description": "Sistema de Gestão IZGLP — Hub Ultragaz + Bina IzChat",
+  "version": "2.2.0",
+  "description": "Sistema de Gest\u00e3o IZGLP \u2014 Hub Ultragaz + Bina IzChat",
   "icons": {
-    "16":  "icons/icon16.png",
-    "48":  "icons/icon48.png",
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "permissions": [
-    "storage", "alarms", "tabs", "notifications", "scripting"
+    "storage",
+    "alarms",
+    "tabs",
+    "notifications",
+    "scripting"
   ],
   "host_permissions": [
     "https://hub.ultragaz.com.br/*",
@@ -22,14 +26,24 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://hub.ultragaz.com.br/*"],
-      "js": ["content-hub.js"],
+      "matches": [
+        "https://hub.ultragaz.com.br/*"
+      ],
+      "js": [
+        "content-hub.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://chat.izchat.com.br/*"],
-      "js": ["content-bina.js"],
-      "css": ["content-bina.css"],
+      "matches": [
+        "https://chat.izchat.com.br/*"
+      ],
+      "js": [
+        "content-bina.js"
+      ],
+      "css": [
+        "content-bina.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -37,9 +51,20 @@
     "default_popup": "popup.html",
     "default_title": "IZGLP",
     "default_icon": {
-      "16":  "icons/icon16.png",
-      "48":  "icons/icon48.png",
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "alerta.mp3",
+        "icons/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }

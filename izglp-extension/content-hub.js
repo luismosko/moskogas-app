@@ -1,4 +1,4 @@
-// IZGLP — Hub Ultragaz Content Script v2.0.0
+// IZGLP — Hub Ultragaz Content Script v2.2.0
 // Só lê o DOM — as chamadas à API são feitas pelo background (sem CSP)
 
 (function () {
@@ -192,7 +192,7 @@
     });
   }
 
-  log('🟢 IZGLP Hub v2.0.0 — DOM reader ativo');
+  log('🟢 IZGLP Hub v2.2.0 — DOM reader ativo');
   setTimeout(() => {
     if (isContextValid()) scanHub();
     else console.warn('[IZGLP-Hub] ⚠️ Contexto inválido — pressione F5');
