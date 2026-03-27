@@ -1,4 +1,5 @@
-// v2.52.77
+// v2.52.78
+// v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
 // v2.52.77: Endpoint corrigir-phone para unificar telefones inconsistentes
 // v2.52.76: Endpoint ver-pedido para diagnóstico
 // v2.52.75: Endpoints buscar-cliente e unificar-clientes (manual)
@@ -3573,6 +3574,82 @@ export default {
       });
     }
 
+    // GET /api/pub/merge-phone?key=Moskogas0909&errado=xxx&correto=xxx — Merge REAL de telefones
+    if (method === 'GET' && path === '/api/pub/merge-phone') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      const phone_errado = url.searchParams.get('errado');
+      const phone_correto = url.searchParams.get('correto');
+      if (!phone_errado || !phone_correto) return json({ error: 'Informe errado e correto' }, 400);
+      
+      // Buscar cliente correto (que vai permanecer)
+      const clienteCorreto = await env.DB.prepare(
+        'SELECT * FROM customers_cache WHERE phone_digits = ?'
+      ).bind(phone_correto).first();
+      
+      if (!clienteCorreto) return json({ error: `Cliente correto ${phone_correto} não encontrado` }, 404);
+      
+      // Contar pedidos com phone errado
+      const pedidosErrado = await env.DB.prepare(
+        'SELECT id, customer_name FROM orders WHERE phone_digits = ?'
+      ).bind(phone_errado).all();
+      
+      // 1. MERGE REAL: Atualizar TODOS os pedidos do phone errado para o correto
+      await env.DB.prepare(
+        'UPDATE orders SET phone_digits = ? WHERE phone_digits = ?'
+      ).bind(phone_correto, phone_errado).run();
+      
+      // 2. Verificar se existe cliente com phone errado e deletar
+      const clienteErrado = await env.DB.prepare(
+        'SELECT * FROM customers_cache WHERE phone_digits = ?'
+      ).bind(phone_errado).first();
+      
+      let clienteDeletado = null;
+      if (clienteErrado) {
+        clienteDeletado = { phone: phone_errado, nome: clienteErrado.name };
+        
+        // Copiar dados que faltam no cliente correto
+        if (!clienteCorreto.cpf_cnpj && clienteErrado.cpf_cnpj) {
+          await env.DB.prepare('UPDATE customers_cache SET cpf_cnpj = ? WHERE phone_digits = ?')
+            .bind(clienteErrado.cpf_cnpj, phone_correto).run();
+        }
+        if (!clienteCorreto.bling_contact_id && clienteErrado.bling_contact_id) {
+          await env.DB.prepare('UPDATE customers_cache SET bling_contact_id = ? WHERE phone_digits = ?')
+            .bind(clienteErrado.bling_contact_id, phone_correto).run();
+        }
+        
+        // Salvar telefone alternativo para referência futura
+        await env.DB.prepare(`
+          INSERT OR IGNORE INTO customer_phones (phone_digits, alt_phone, label, created_at)
+          VALUES (?, ?, 'merge-real', unixepoch())
+        `).bind(phone_correto, phone_errado).run();
+        
+        // DELETAR o cliente duplicado do banco
+        await env.DB.prepare('DELETE FROM customers_cache WHERE phone_digits = ?').bind(phone_errado).run();
+      }
+      
+      // 3. Contar total de pedidos do cliente após merge
+      const totalPedidos = await env.DB.prepare(
+        'SELECT COUNT(*) as c, SUM(total_value) as total FROM orders WHERE phone_digits = ?'
+      ).bind(phone_correto).first();
+      
+      return json({
+        ok: true,
+        merge_realizado: true,
+        cliente_unico: {
+          phone_digits: phone_correto,
+          nome: clienteCorreto.name,
+          cnpj: clienteCorreto.cpf_cnpj,
+          bling_id: clienteCorreto.bling_contact_id
+        },
+        registro_deletado: clienteDeletado || 'Não existia registro separado',
+        pedidos_migrados: pedidosErrado.results?.length || 0,
+        total_pedidos_apos_merge: totalPedidos?.c || 0,
+        valor_total: totalPedidos?.total || 0
+      });
+    }
+
     // GET /api/pub/ver-pedido?key=Moskogas0909&id=xxx — Ver dados do pedido
     if (method === 'GET' && path === '/api/pub/ver-pedido') {
       const key = url.searchParams.get('key');
@@ -3877,6 +3954,98 @@ export default {
       });
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════
+    // v2.52.78: Sistema de múltiplos contatos por cliente
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    // GET /api/pub/setup-contatos?key=Moskogas0909 — Cria tabela customer_contacts
+    if (method === 'GET' && path === '/api/pub/setup-contatos') {
+      const key = url.searchParams.get('key');
+      if (key !== 'Moskogas0909') return json({ error: 'Key inválida' }, 401);
+      
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS customer_contacts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          phone_digits TEXT NOT NULL,
+          contact_phone TEXT NOT NULL,
+          contact_name TEXT NOT NULL,
+          cargo TEXT DEFAULT '',
+          email TEXT DEFAULT '',
+          observacao TEXT DEFAULT '',
+          created_at INTEGER DEFAULT (unixepoch()),
+          UNIQUE(phone_digits, contact_phone)
+        )
+      `).run();
+      
+      await env.DB.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_contact_phone ON customer_contacts(contact_phone)
+      `).run();
+      
+      return json({ ok: true, msg: 'Tabela customer_contacts criada com sucesso' });
+    }
+
+    // GET /api/clientes/:phone/contatos — Lista contatos do cliente
+    if (method === 'GET' && path.match(/^\/api\/clientes\/([^/]+)\/contatos$/)) {
+      const authCheck = await requireAuth(request, env);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const phone = path.split('/')[3];
+      const contatos = await env.DB.prepare(`
+        SELECT id, contact_phone, contact_name, cargo, email, observacao, created_at
+        FROM customer_contacts WHERE phone_digits = ?
+        ORDER BY contact_name
+      `).bind(phone).all();
+      
+      return json({ ok: true, contatos: contatos.results || [] });
+    }
+
+    // POST /api/clientes/:phone/contatos — Adiciona contato ao cliente
+    if (method === 'POST' && path.match(/^\/api\/clientes\/([^/]+)\/contatos$/)) {
+      const authCheck = await requireAuth(request, env);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const phone = path.split('/')[3];
+      const { contact_phone, contact_name, cargo, email, observacao } = await request.json();
+      
+      if (!contact_phone || !contact_name) {
+        return json({ ok: false, error: 'contact_phone e contact_name são obrigatórios' }, 400);
+      }
+      
+      // Normaliza telefone do contato
+      const contactPhoneNorm = contact_phone.replace(/\D/g, '');
+      const contactPhoneFull = contactPhoneNorm.length === 11 ? `55${contactPhoneNorm}` : contactPhoneNorm;
+      
+      try {
+        await env.DB.prepare(`
+          INSERT INTO customer_contacts (phone_digits, contact_phone, contact_name, cargo, email, observacao)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(phone, contactPhoneFull, contact_name, cargo || '', email || '', observacao || '').run();
+        
+        return json({ ok: true, msg: 'Contato adicionado' });
+      } catch (e) {
+        if (e.message?.includes('UNIQUE')) {
+          return json({ ok: false, error: 'Este telefone de contato já está cadastrado para este cliente' }, 400);
+        }
+        throw e;
+      }
+    }
+
+    // DELETE /api/clientes/:phone/contatos/:id — Remove contato
+    if (method === 'DELETE' && path.match(/^\/api\/clientes\/([^/]+)\/contatos\/(\d+)$/)) {
+      const authCheck = await requireAuth(request, env);
+      if (authCheck instanceof Response) return authCheck;
+      
+      const parts = path.split('/');
+      const phone = parts[3];
+      const contatoId = parts[5];
+      
+      await env.DB.prepare(
+        'DELETE FROM customer_contacts WHERE id = ? AND phone_digits = ?'
+      ).bind(contatoId, phone).run();
+      
+      return json({ ok: true, msg: 'Contato removido' });
+    }
+
     // GET /api/pub/ia/cliente?phone=67999999999 — Busca dados do cliente
     if (method === 'GET' && path === '/api/pub/ia/cliente') {
       const phone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
@@ -3902,6 +4071,7 @@ export default {
       }
       
       // v2.52.53: Buscar em telefones adicionais (customer_phones)
+      let viaContato = null;
       if (!cliente) {
         try {
           const altMatch = await env.DB.prepare(`
@@ -3916,17 +4086,51 @@ export default {
         } catch (_) {}
       }
       
+      // v2.52.78: Buscar nos CONTATOS do cliente (customer_contacts)
+      if (!cliente) {
+        try {
+          const contatoMatch = await env.DB.prepare(`
+            SELECT cc.phone_digits, cc.name, cc.address_line, cc.bairro, cc.complemento, 
+                   cc.referencia, cc.cpf_cnpj, cc.email, cc.ultima_compra_glp,
+                   ct.contact_name, ct.cargo
+            FROM customer_contacts ct 
+            JOIN customers_cache cc ON cc.phone_digits = ct.phone_digits 
+            WHERE ct.contact_phone = ? OR ct.contact_phone = ?
+            LIMIT 1
+          `).bind(phoneDigits, phone.slice(-11)).first();
+          
+          if (contatoMatch) {
+            cliente = contatoMatch;
+            viaContato = {
+              nome_contato: contatoMatch.contact_name,
+              cargo: contatoMatch.cargo
+            };
+          }
+        } catch (_) {}
+      }
+      
       if (!cliente) return json({ encontrado: false });
+      
+      // v2.52.78: Para clientes corporativos encontrados via contato, monta nome composto
+      let nomeExibicao = cliente.name || '';
+      if (viaContato && viaContato.nome_contato) {
+        // Ex: "Karina - Sementes Boi Gordo LTDA"
+        nomeExibicao = `${viaContato.nome_contato} - ${cliente.name}`;
+      }
       
       return json({
         encontrado: true,
-        nome: cliente.name || '',
+        nome: nomeExibicao,
+        nome_empresa: cliente.name || '',
+        nome_contato: viaContato?.nome_contato || '',
+        cargo_contato: viaContato?.cargo || '',
         endereco: cliente.address_line || '',
         bairro: cliente.bairro || '',
         complemento: cliente.complemento || '',
         referencia: cliente.referencia || '',
         cpf_cnpj: cliente.cpf_cnpj || '',
-        ultima_compra: cliente.ultima_compra_glp || ''
+        ultima_compra: cliente.ultima_compra_glp || '',
+        via_contato: !!viaContato
       });
     }
 
