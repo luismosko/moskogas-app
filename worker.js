@@ -1,4 +1,5 @@
-// v2.52.80
+// v2.52.81
+// v2.52.81: Migration comprovante_pagamento no GET /api/pagamentos (fix SQLITE_ERROR)
 // v2.52.80: Campo comprovante_pagamento separado de foto_comprovante (entrega vs baixa financeiro)
 // v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
@@ -7851,6 +7852,8 @@ export default {
       if (!allowedPag) return err('Sem permissão para acessar pagamentos', 403);
       await ensureAuditTable(env);
       await ensurePixColumns(env);
+      // v2.52.81: Garantir coluna comprovante_pagamento existe
+      await env.DB.prepare("ALTER TABLE orders ADD COLUMN comprovante_pagamento TEXT DEFAULT NULL").run().catch(() => {});
       const rows = await env.DB.prepare(`
         SELECT 
           o.id, o.customer_name, o.phone_digits, o.address_line, o.total_value, 
