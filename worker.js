@@ -1,4 +1,5 @@
-// v2.52.78
+// v2.52.79
+// v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
 // v2.52.77: Endpoint corrigir-phone para unificar telefones inconsistentes
 // v2.52.76: Endpoint ver-pedido para diagnóstico
@@ -6992,6 +6993,20 @@ export default {
         }
       }
 
+      // v2.52.79: Bloquear troca de forma de pagamento após baixa (só admin pode trocar)
+      const editUser = await getSessionUser(request, env);
+      if (currentOrder.pago === 1 && tipo_pagamento !== undefined && tipo_pagamento !== currentOrder.tipo_pagamento) {
+        if (!editUser || editUser.role !== 'admin') {
+          return err('Pagamento já confirmado. Apenas o administrador pode alterar a forma de pagamento.', 403);
+        }
+        // Admin pode trocar - logar essa ação
+        await logEvent(env, orderId, 'tipo_pagamento_alterado_pos_baixa', { 
+          de: currentOrder.tipo_pagamento, 
+          para: tipo_pagamento, 
+          admin: editUser.nome 
+        });
+      }
+
       const TIPOS_COM_BLING = ['dinheiro', 'pix_vista', 'debito', 'credito']; // pix_receber: tratado na tela de pagamentos
       const TIPOS_PAGO_IMEDIATO = ['dinheiro', 'pix_vista', 'debito', 'credito', 'vale_gas', 'vale_hub'];
 
@@ -8102,6 +8117,187 @@ export default {
         pago: marcarPago || order.pago === 1,
         message: marcarPago ? 'Comprovante anexado e pedido marcado como pago' : 'Comprovante anexado com sucesso'
       });
+    }
+
+    // ── v2.52.79: Confirmar pagamento com comprovante + fiscal (tudo em um) ──────
+    const pagConfirmMatch = path.match(/^\/api\/pagamentos\/(\d+)\/confirmar$/);
+    if (method === 'POST' && pagConfirmMatch) {
+      const authCheck = await requireAuth(request, env, ['admin', 'gerente', 'atendente']);
+      if (authCheck instanceof Response) return authCheck;
+      const user = authCheck;
+
+      const orderId = parseInt(pagConfirmMatch[1]);
+      const order = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
+      if (!order) return err('Pedido não encontrado', 404);
+      if (order.pago === 1) return json({ ok: true, message: 'Pedido já estava pago', already_paid: true });
+
+      // Migrations
+      for (const col of [
+        "ALTER TABLE orders ADD COLUMN baixa_por_id INTEGER DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN baixa_por_nome TEXT DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN baixa_at INTEGER DEFAULT NULL",
+      ]) { await env.DB.prepare(col).run().catch(() => {}); }
+
+      const ct = request.headers.get('Content-Type') || '';
+      let tipoFiscal = null, compFile = null;
+      
+      if (ct.includes('multipart/form-data')) {
+        const formData = await request.formData();
+        tipoFiscal = formData.get('tipo_fiscal') || null;
+        compFile = formData.get('comprovante');
+        
+        // Validar comprovante se presente
+        if (compFile && compFile instanceof File && compFile.size > 100) {
+          const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+          if (!allowedTypes.includes(compFile.type)) {
+            return err('Tipo de arquivo inválido. Use JPG, PNG, WebP ou PDF.', 400);
+          }
+          if (compFile.size > 10 * 1024 * 1024) {
+            return err('Arquivo muito grande (máx 10MB)', 400);
+          }
+        } else {
+          compFile = null;
+        }
+      } else {
+        try { const b = await request.clone().json(); tipoFiscal = b?.tipo_fiscal || null; } catch {}
+      }
+
+      // Verificar se precisa de comprovante (PIX ou Cartão)
+      const tipoPgto = order.tipo_pagamento || '';
+      const tiposExigemComprovante = ['pix_receber', 'pix_vista', 'debito', 'credito'];
+      const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
+      
+      if (tiposExigemComprovante.includes(tipoPgto) && !compFile && !jaTemComprovante) {
+        return err('Comprovante de pagamento é obrigatório para ' + tipoPgto.replace('_', ' ').toUpperCase(), 400);
+      }
+
+      // Upload do comprovante se fornecido
+      let photoKey = order.foto_comprovante || null;
+      if (compFile) {
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const ts = Date.now();
+        let ext = 'jpg';
+        if (compFile.type === 'image/png') ext = 'png';
+        else if (compFile.type === 'image/webp') ext = 'webp';
+        else if (compFile.type === 'application/pdf') ext = 'pdf';
+        photoKey = `comprovantes/${dateStr}/pedido_${orderId}_baixa_${ts}.${ext}`;
+
+        const arrayBuffer = await compFile.arrayBuffer();
+        await env.BUCKET.put(photoKey, arrayBuffer, {
+          httpMetadata: { contentType: compFile.type },
+          customMetadata: {
+            order_id: String(orderId),
+            uploaded_by: user.nome || 'atendente',
+            uploaded_by_role: user.role || 'atendente',
+            source: 'baixa_pagamento',
+          },
+        });
+        console.log(`[R2] Comprovante baixa: ${photoKey} (${(compFile.size / 1024).toFixed(1)}KB) por ${user.nome}`);
+      }
+
+      // Preparar dados para fiscal
+      const items = JSON.parse(order.items_json || '[]');
+      const cached = order.phone_digits
+        ? await env.DB.prepare('SELECT bling_contact_id, cpf_cnpj FROM customers_cache WHERE phone_digits=?').bind(order.phone_digits).first().catch(() => null)
+        : null;
+      let vendedorBlingId = null, vendedorNome = order.vendedor_nome || null;
+      if (order.vendedor_id) {
+        const vu = await env.DB.prepare('SELECT bling_vendedor_id, nome FROM app_users WHERE id=?').bind(order.vendedor_id).first().catch(() => null);
+        if (vu?.bling_vendedor_id) vendedorBlingId = vu.bling_vendedor_id;
+        if (vu?.nome) vendedorNome = vu.nome;
+      }
+      const orderDataFiscal = {
+        name: order.customer_name, items, total_value: order.total_value,
+        forma_pagamento_key: order.forma_pagamento_key, forma_pagamento_id: order.forma_pagamento_id,
+        bling_contact_id: cached?.bling_contact_id || null, cpf_cnpj: cached?.cpf_cnpj || null,
+        tipo_pagamento: order.tipo_pagamento, bling_vendedor_id: vendedorBlingId, vendedor_nome: vendedorNome,
+      };
+
+      let fiscalResult = null;
+      const jaTemFiscal = order.nfce_id || order.bling_pedido_id;
+
+      if (tipoFiscal === 'nfce' && !jaTemFiscal) {
+        try {
+          const nfceData = await emitirNFCeBling(env, orderId, orderDataFiscal);
+          await env.DB.prepare(
+            'UPDATE orders SET nfce_id=?, nfce_numero=?, nfce_chave=?, nfce_status=?, nfce_emitida_at=unixepoch(), sync_status=? WHERE id=?'
+          ).bind(nfceData.nfce_id, nfceData.nfce_numero, nfceData.nfce_chave, nfceData.nfce_status, 'synced', orderId).run();
+          if (nfceData.nfce_error) {
+            await env.DB.prepare('UPDATE orders SET nfce_error=? WHERE id=?').bind(nfceData.nfce_error, orderId).run();
+          }
+          await logEvent(env, orderId, 'nfce_emitida_on_pay', { nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero });
+          fiscalResult = { tipo: 'nfce', nfce_id: nfceData.nfce_id, nfce_numero: nfceData.nfce_numero, nfce_status: nfceData.nfce_status };
+        } catch (e) {
+          await logEvent(env, orderId, 'nfce_error_on_pay', { error: e.message });
+          return json({ ok: false, error: 'Falha ao emitir NFC-e: ' + e.message }, 500);
+        }
+      } else if (tipoFiscal === 'nfe' && !jaTemFiscal) {
+        try {
+          const blingResult = await criarPedidoBling(env, orderId, orderDataFiscal);
+          await env.DB.prepare(
+            'UPDATE orders SET bling_pedido_id=?, bling_pedido_num=?, sync_status=? WHERE id=?'
+          ).bind(blingResult.bling_pedido_id, blingResult.bling_pedido_num, 'synced', orderId).run();
+          await logEvent(env, orderId, 'bling_created_on_pay', { bling_pedido_id: blingResult.bling_pedido_id });
+          fiscalResult = { tipo: 'nfe', bling_pedido_id: blingResult.bling_pedido_id, bling_pedido_num: blingResult.bling_pedido_num };
+        } catch (e) {
+          await logEvent(env, orderId, 'bling_error_on_pay', { error: e.message });
+          return json({ ok: false, error: 'Falha ao criar venda no Bling: ' + e.message }, 500);
+        }
+      }
+
+      // Marcar como pago + registrar quem fez
+      let updateSql = 'UPDATE orders SET pago=1, baixa_por_id=?, baixa_por_nome=?, baixa_at=unixepoch(), updated_at=unixepoch()';
+      const updateParams = [user.id, user.nome];
+      if (photoKey && photoKey !== order.foto_comprovante) {
+        updateSql += ', foto_comprovante=?';
+        updateParams.push(photoKey);
+      }
+      updateSql += ' WHERE id=?';
+      updateParams.push(orderId);
+      await env.DB.prepare(updateSql).bind(...updateParams).run();
+
+      await logBlingAudit(env, orderId, 'marcar_pago', 'success', { tipo: tipoPgto, tipo_fiscal: tipoFiscal, user: user.nome });
+      await logEvent(env, orderId, 'payment_confirmed', { tipo_fiscal: tipoFiscal, baixa_por: user.nome, comprovante: !!compFile });
+
+      // Se for DINHEIRO: enviar e-mail de alerta para admin
+      if (tipoPgto === 'dinheiro') {
+        try {
+          const resendKey = env.RESEND_API_KEY || (await env.DB.prepare("SELECT value FROM app_config WHERE key='resend_api_key'").first())?.value;
+          const adminEmail = (await env.DB.prepare("SELECT value FROM app_config WHERE key='relatorio_email'").first())?.value || '';
+          if (resendKey && adminEmail) {
+            const itemsStr = items.map(i => `${i.qty}x ${i.name}`).join(', ') || '—';
+            const valorFmt = 'R$ ' + parseFloat(order.total_value || 0).toFixed(2).replace('.', ',');
+            const html = `
+              <div style="font-family:system-ui;max-width:600px;margin:0 auto;padding:20px;">
+                <h2 style="color:#d97706;margin:0 0 16px">💵 Pagamento em Dinheiro Confirmado</h2>
+                <p style="margin:8px 0"><strong>Pedido:</strong> #${orderId}</p>
+                <p style="margin:8px 0"><strong>Cliente:</strong> ${order.customer_name || 'N/D'}</p>
+                <p style="margin:8px 0"><strong>Itens:</strong> ${itemsStr}</p>
+                <p style="margin:8px 0"><strong>Valor:</strong> <span style="font-size:18px;font-weight:bold;color:#16a34a">${valorFmt}</span></p>
+                <p style="margin:8px 0"><strong>Baixa por:</strong> ${user.nome} (${user.role})</p>
+                <p style="margin:8px 0"><strong>Data/Hora:</strong> ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande' })}</p>
+                <hr style="margin:20px 0;border:none;border-top:1px solid #e2e8f0">
+                <p style="color:#64748b;font-size:12px">Este e-mail foi enviado automaticamente pelo sistema MoskoGás porque um pagamento em dinheiro foi confirmado sem comprovante digital. Recomenda-se verificar o recebimento.</p>
+              </div>
+            `;
+            await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                from: 'MoskoGás <alertas@moskogas.com.br>',
+                to: adminEmail.split('\n').map(e => e.trim()).filter(Boolean),
+                subject: `💵 Dinheiro #${orderId} — ${order.customer_name || ''} — ${valorFmt}`,
+                html,
+              }),
+            });
+            console.log(`[Email] Alerta dinheiro #${orderId} enviado para ${adminEmail}`);
+          }
+        } catch (e) {
+          console.warn('[Email] Falha ao enviar alerta dinheiro:', e.message);
+        }
+      }
+
+      return json({ ok: true, fiscal: fiscalResult, comprovante: photoKey, baixa_por: user.nome });
     }
 
     // ── PushInPay PIX — QR Code do pedido ──────────────────

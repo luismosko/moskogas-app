@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.9.22</title>
+<title>Pagamentos — MoskoGás v1.10.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -64,21 +64,21 @@
   .btn-copy:hover { background: #0e7490; }
   .btn-whats { background: #16a34a; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-whats:hover { background: #15803d; }
-  /* v1.9.22: Upload de comprovante */
+  /* v1.10.0: Upload de comprovante integrado no modal de pagamento */
   .upload-drop-zone { 
     border: 3px dashed #cbd5e1; 
     border-radius: 16px; 
-    padding: 32px 20px; 
+    padding: 24px 16px; 
     text-align: center; 
     background: #f8fafc; 
     cursor: pointer; 
     transition: all 0.2s;
-    min-height: 180px;
+    min-height: 140px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
   }
   .upload-drop-zone:hover, .upload-drop-zone.drag-over { 
     border-color: #f97316; 
@@ -88,38 +88,38 @@
     border-color: #16a34a; 
     background: #f0fdf4; 
   }
-  .upload-drop-zone .icon { font-size: 48px; }
-  .upload-drop-zone .title { font-size: 16px; font-weight: 700; color: #374151; }
-  .upload-drop-zone .hint { font-size: 13px; color: #64748b; }
+  .upload-drop-zone .icon { font-size: 36px; }
+  .upload-drop-zone .title { font-size: 14px; font-weight: 700; color: #374151; }
+  .upload-drop-zone .hint { font-size: 12px; color: #64748b; }
   .upload-drop-zone .hint kbd { 
     background: #e2e8f0; 
     border-radius: 4px; 
     padding: 2px 6px; 
     font-family: monospace; 
-    font-size: 11px;
+    font-size: 10px;
     border: 1px solid #cbd5e1;
   }
-  .upload-preview { margin-top: 16px; text-align: center; }
-  .upload-preview img { max-width: 100%; max-height: 250px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .upload-preview { margin-top: 12px; text-align: center; }
+  .upload-preview img { max-width: 100%; max-height: 180px; border-radius: 10px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
   .upload-preview .pdf-preview { 
     background: #fee2e2; 
     border: 2px solid #fca5a5; 
     border-radius: 12px; 
-    padding: 20px; 
+    padding: 16px; 
     display: flex; 
     align-items: center; 
     gap: 12px;
   }
-  .upload-preview .pdf-preview .icon { font-size: 40px; }
-  .upload-preview .pdf-preview .name { font-weight: 700; color: #991b1b; word-break: break-all; }
+  .upload-preview .pdf-preview .icon { font-size: 32px; }
+  .upload-preview .pdf-preview .name { font-weight: 700; color: #991b1b; word-break: break-all; font-size: 13px; }
   .upload-preview .btn-remove { 
-    margin-top: 12px; 
+    margin-top: 10px; 
     background: #ef4444; 
     color: #fff; 
     border: none; 
     border-radius: 8px; 
-    padding: 8px 16px; 
-    font-size: 13px; 
+    padding: 6px 14px; 
+    font-size: 12px; 
     font-weight: 700; 
     cursor: pointer; 
   }
@@ -128,13 +128,52 @@
   .btn-comprovante { background: #8b5cf6; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-comprovante:hover { background: #7c3aed; }
   .has-comprovante-badge { background: #dcfce7; color: #166534; border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 4px; }
+  
+  /* v1.10.0: Versão Mobile */
+  .mobile-toggle { display: none; }
+  @media (max-width: 768px) {
+    .mobile-toggle { display: inline-flex; }
+  }
+  .mobile-mode .desktop-only { display: none !important; }
+  .mobile-mode .toolbar { padding: 8px; gap: 6px; }
+  .mobile-mode .summary-cards { grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px; }
+  .mobile-mode .s-card { padding: 10px; }
+  .mobile-mode .s-card .value { font-size: 18px; }
+  .mobile-mode .s-card .label { font-size: 10px; }
+  .mobile-mode table { display: none; }
+  .mobile-list { display: none; }
+  .mobile-mode .mobile-list { display: block; padding: 8px; }
+  .mobile-card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .mobile-card.pago { background: #f0fdf4; opacity: 0.7; }
+  .mobile-card .mc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .mobile-card .mc-id { font-weight: 900; font-size: 15px; color: #1e293b; }
+  .mobile-card .mc-valor { font-weight: 900; font-size: 18px; color: #16a34a; }
+  .mobile-card .mc-cliente { font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #374151; }
+  .mobile-card .mc-endereco { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+  .mobile-card .mc-items { font-size: 12px; color: #475569; margin-bottom: 8px; background: #f8fafc; padding: 6px 10px; border-radius: 8px; }
+  .mobile-card .mc-tipo { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+  .mobile-card .mc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mobile-card .mc-actions button { flex: 1; min-width: 100px; padding: 12px 16px; font-size: 14px; }
+  .btn-mobile-pago { background: #16a34a; color: #fff; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn-mobile-pago:hover { background: #15803d; }
+  .btn-mobile-qr { background: #0891b2; color: #fff; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn-mobile-qr:hover { background: #0e7490; }
+  
+  /* Estilos dos tipos de pagamento */
+  .tipo-pix_receber { background: #2563eb; }
+  .tipo-mensalista { background: #7c3aed; }
+  .tipo-boleto { background: #6366f1; }
+  .tipo-vale_gas { background: #d97706; }
+  .tipo-dinheiro { background: #16a34a; }
+  
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.9.22 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.10.0 — pagamentos</div>
 <div class="toolbar">
-  <div style="display:flex;align-items:center;gap:4px">
+  <div style="display:flex;align-items:center;gap:4px" class="desktop-only">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
     <span style="color:#94a3b8;font-size:12px">até</span>
     <input type="date" id="fDateTo" onchange="loadPagamentos()" style="width:135px">
@@ -143,18 +182,19 @@
     <button class="btn" onclick="setDateFilter('semana')" id="btnSemana" title="Últimos 7 dias" style="background:#64748b;color:#fff;padding:6px 10px;font-size:12px">7 dias</button>
     <button class="btn" onclick="setDateFilter('limpar')" title="Limpar filtro" style="background:#e2e8f0;color:#64748b;padding:6px 8px;font-size:12px">✕</button>
   </div>
-  <select id="fTipo" onchange="loadPagamentos()" title="Filtrar por tipo">
+  <select id="fTipo" onchange="loadPagamentos()" title="Filtrar por tipo" class="desktop-only">
     <option value="">Todos os tipos</option>
     <option value="pix_receber">⏳ PIX a Receber</option>
     <option value="mensalista">📅 Mensalista</option>
     <option value="boleto">🧾 Boleto</option>
     <option value="vale_gas">🎫 Vale Gás</option>
   </select>
-  <input type="text" id="fQ" placeholder="🔍 Cliente, telefone..." oninput="loadPagamentos()" style="width:160px">
+  <input type="text" id="fQ" placeholder="🔍 Cliente, telefone..." oninput="loadPagamentos()" style="width:160px" class="desktop-only">
   <button class="btn btn-orange" onclick="loadPagamentos()" title="Recarregar">🔄 Atualizar</button>
-  <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px">👁 Ver Pagos</button>
+  <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px" class="desktop-only">👁 Ver Pagos</button>
+  <button class="btn mobile-toggle" id="btn-mobile-mode" onclick="toggleMobileMode()" title="Alternar modo mobile" style="background:#6366f1;color:#fff;padding:6px 12px;font-size:12px">📱 Baixas</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.9.22</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.10.0</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -174,13 +214,14 @@
   <div class="s-card"><div class="label">📱 Lembretes</div><div class="value gray" id="count-lembretes">0</div></div>
 </div>
 
-<table>
+<table class="desktop-only">
   <thead><tr>
     <th style="width:30px"><input type="checkbox" id="th-check" onchange="toggleBulkAll(this.checked)" title="Selecionar todos"></th>
     <th>#</th><th>Data</th><th>Cliente</th><th>Endereço</th><th>Itens</th><th>Valor</th><th>Tipo</th><th>Bling</th><th>Ação</th>
   </tr></thead>
   <tbody id="tbody"></tbody>
 </table>
+<div id="mobile-list" class="mobile-list"></div>
 <div id="empty-msg" class="empty" style="display:none">✅ Nenhum pagamento pendente!</div>
 
 <!-- Modal NFe Preview -->
@@ -302,7 +343,9 @@ async function _load() {
         return words.every(w => haystack.includes(w));
       });
     }
-    renderTable(rows); renderSummary(rows);
+    renderTable(rows); 
+    renderMobileList(rows); // v1.10.0: renderizar lista mobile
+    renderSummary(rows);
     document.getElementById('count-badge').textContent = mostrarPagos
       ? rows.length + ' registros (' + rows.filter(r=>r.pago).length + ' pagos)'
       : rows.length + ' pendentes';
@@ -473,16 +516,24 @@ function updateBulkBar(){
 
 // ═══ MARCAR PAGO (PIX a Receber) ═══
 async function marcarPago(orderId){
-  // Modal de escolha fiscal
+  // Modal de escolha fiscal (agora com upload de comprovante integrado)
   const pedido = allData.find(r=>r.id==orderId);
   const nome = pedido ? pedido.customer_name : '#'+orderId;
   const total = pedido ? 'R$ '+(pedido.total_value||0).toFixed(2).replace('.',',') : '';
 
-  const tipoFiscal = await escolherTipoFiscal(orderId, nome, total);
-  if(tipoFiscal === null) return; // cancelou
+  // A nova função escolherTipoFiscal vai lidar internamente com comprovantes
+  // Se retornar null = cancelou ou já processou via novo endpoint
+  // Se retornar string = usar endpoint antigo PATCH
+  const resultado = await escolherTipoFiscal(orderId, nome, total);
+  
+  // null = cancelou OU já foi processado pelo novo endpoint com comprovante
+  if(resultado === null || resultado === undefined) return;
+  
+  // Se chegou aqui, é o fluxo antigo sem comprovante (dinheiro, mensalista, boleto)
+  const tipoFiscal = resultado;
 
   const blingOk = await checkBlingBeforeAction();
-  if(!blingOk){toast('⚠️ Bling não conectado','error');return;}
+  if(!blingOk && tipoFiscal){toast('⚠️ Bling não conectado','error');return;}
 
   showLoading(tipoFiscal==='nfce' ? 'Emitindo NFC-e...' : tipoFiscal==='nfe' ? 'Criando NF-e no Bling...' : 'Marcando como pago...');
   try {
@@ -502,28 +553,85 @@ async function marcarPago(orderId){
 
 function escolherTipoFiscal(orderId, nome, total){
   return new Promise(resolve => {
+    const pedido = allData.find(r=>r.id==orderId);
+    const tipoPgto = pedido?.tipo_pagamento || '';
+    const jaTemComprovante = pedido?.foto_comprovante && pedido.foto_comprovante.length > 5;
+    
+    // Tipos que exigem comprovante
+    const TIPOS_EXIGEM_COMP = ['pix_receber', 'pix_vista', 'debito', 'credito'];
+    const exigeComprovante = TIPOS_EXIGEM_COMP.includes(tipoPgto) && !jaTemComprovante;
+    const ehDinheiro = tipoPgto === 'dinheiro';
+    
     // Remove modal anterior se houver
     const old = document.getElementById('modal-fiscal-choice');
     if(old) old.remove();
 
     const m = document.createElement('div');
     m.id = 'modal-fiscal-choice';
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    
+    const tipoLabel = { 
+      pix_receber: '⏳ PIX a Receber', pix_vista: '✅ PIX Pago',
+      debito: '💳 Débito', credito: '💳 Crédito',
+      dinheiro: '💵 Dinheiro', mensalista: '📅 Mensalista', boleto: '🧾 Boleto'
+    }[tipoPgto] || tipoPgto;
+    
     m.innerHTML = `
-      <div style="background:#fff;border-radius:16px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-        <h3 style="margin:0 0 6px;font-size:18px;color:#1e293b">💳 Confirmar Pagamento</h3>
-        <p style="margin:0 0 20px;color:#64748b;font-size:14px">Pedido <strong>#${orderId}</strong> — ${nome}<br><strong>${total}</strong></p>
-        <p style="margin:0 0 14px;font-weight:600;color:#374151;font-size:14px">Emitir documento fiscal?</p>
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+          <div>
+            <h3 style="margin:0;font-size:18px;color:#1e293b">💳 Confirmar Pagamento</h3>
+            <p style="margin:4px 0 0;color:#64748b;font-size:14px">Pedido <strong>#${orderId}</strong> — ${nome}</p>
+          </div>
+          <button onclick="document.getElementById('modal-fiscal-choice').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8">✕</button>
+        </div>
+        
+        <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;padding:12px 16px;border-radius:12px;margin-bottom:16px">
+          <span style="font-size:13px;color:#64748b">${tipoLabel}</span>
+          <span style="font-size:22px;font-weight:900;color:#16a34a">${total}</span>
+        </div>
+        
+        ${exigeComprovante ? `
+        <div style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span style="font-size:16px">📎</span>
+            <span style="font-weight:700;color:#374151;font-size:14px">Comprovante de Pagamento</span>
+            <span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700">OBRIGATÓRIO</span>
+          </div>
+          <div id="comp-drop-zone" class="upload-drop-zone" onclick="document.getElementById('comp-file-input').click()" style="min-height:100px">
+            <div class="icon">📷</div>
+            <div class="title">Tire uma foto ou anexe o comprovante</div>
+            <div class="hint"><kbd>Ctrl+V</kbd> para colar • JPG, PNG, PDF</div>
+          </div>
+          <input type="file" id="comp-file-input" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="handleCompFile(this.files)">
+          <div id="comp-preview" style="display:none;margin-top:10px;text-align:center"></div>
+        </div>
+        ` : jaTemComprovante ? `
+        <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">✅</span>
+          <span style="font-weight:600;color:#166534;font-size:13px">Comprovante já anexado</span>
+        </div>
+        ` : ehDinheiro ? `
+        <div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:12px;padding:12px 16px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px">💵</span>
+            <span style="font-weight:600;color:#92400e;font-size:13px">Pagamento em Dinheiro</span>
+          </div>
+          <p style="margin:6px 0 0;font-size:12px;color:#92400e">Será enviado e-mail de alerta para o administrador.</p>
+        </div>
+        ` : ''}
+        
+        <p style="margin:0 0 12px;font-weight:600;color:#374151;font-size:14px">Emitir documento fiscal?</p>
         <div style="display:flex;flex-direction:column;gap:10px;">
-          <button id="btn-fiscal-nfce" style="background:#0ea5e9;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+          <button id="btn-fiscal-nfce" style="background:#0ea5e9;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;" ${exigeComprovante ? 'disabled style="opacity:0.5;cursor:not-allowed;background:#94a3b8"' : ''}>
             <span style="font-size:22px">🧾</span>
             <div><div>Emitir NFC-e agora</div><div style="font-size:11px;font-weight:400;opacity:0.85">Emite automaticamente para SEFAZ</div></div>
           </button>
-          <button id="btn-fiscal-nfe" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+          <button id="btn-fiscal-nfe" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;" ${exigeComprovante ? 'disabled style="opacity:0.5;cursor:not-allowed;background:#94a3b8"' : ''}>
             <span style="font-size:22px">📄</span>
             <div><div>Criar NF-e / Pedido de Venda</div><div style="font-size:11px;font-weight:400;opacity:0.85">Cria venda no Bling para emitir NF-e depois</div></div>
           </button>
-          <button id="btn-fiscal-none" style="background:#f1f5f9;color:#475569;border:none;border-radius:10px;padding:12px 20px;font-size:14px;font-weight:600;cursor:pointer;">
+          <button id="btn-fiscal-none" style="background:#f1f5f9;color:#475569;border:none;border-radius:10px;padding:12px 20px;font-size:14px;font-weight:600;cursor:pointer;" ${exigeComprovante ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}>
             Sem documento fiscal — só marcar pago
           </button>
           <button id="btn-fiscal-cancel" style="background:transparent;color:#94a3b8;border:1px solid #e2e8f0;border-radius:10px;padding:10px 20px;font-size:13px;cursor:pointer;">
@@ -533,12 +641,154 @@ function escolherTipoFiscal(orderId, nome, total){
       </div>`;
 
     document.body.appendChild(m);
+    
+    // Variável para armazenar arquivo selecionado
+    window._compFile = null;
+    
+    // Setup drag & drop se exige comprovante
+    if(exigeComprovante){
+      const dropZone = document.getElementById('comp-drop-zone');
+      dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+      dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-over'); });
+      dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); if(e.dataTransfer.files.length) handleCompFile(e.dataTransfer.files); });
+      
+      // Paste handler
+      m.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if(!items) return;
+        for(let item of items){
+          if(item.type.startsWith('image/')){ const f=item.getAsFile(); if(f) handleCompFile([f]); return; }
+        }
+      });
+    }
 
-    document.getElementById('btn-fiscal-nfce').onclick   = () => { m.remove(); resolve('nfce'); };
-    document.getElementById('btn-fiscal-nfe').onclick    = () => { m.remove(); resolve('nfe');  };
-    document.getElementById('btn-fiscal-none').onclick   = () => { m.remove(); resolve('');     };
-    document.getElementById('btn-fiscal-cancel').onclick = () => { m.remove(); resolve(null);   };
+    // Handlers
+    const confirmarPgto = async (tipoFiscal) => {
+      m.remove();
+      
+      // Se exige comprovante ou tem arquivo, usar novo endpoint
+      if(exigeComprovante || window._compFile){
+        await confirmarPagamentoComComprovante(orderId, tipoFiscal, window._compFile);
+        resolve(null); // null = já processado, não continuar no marcarPago
+      } else {
+        // Fluxo antigo sem comprovante (dinheiro, mensalista, boleto, etc)
+        resolve(tipoFiscal);
+      }
+    };
+
+    document.getElementById('btn-fiscal-nfce').onclick = () => confirmarPgto('nfce');
+    document.getElementById('btn-fiscal-nfe').onclick = () => confirmarPgto('nfe');
+    document.getElementById('btn-fiscal-none').onclick = () => confirmarPgto('');
+    document.getElementById('btn-fiscal-cancel').onclick = () => { m.remove(); resolve(null); };
   });
+}
+
+// v1.10.0: Handler para arquivo de comprovante no modal
+function handleCompFile(files){
+  if(!files || !files.length) return;
+  const file = files[0];
+  
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  if(!allowedTypes.includes(file.type)){ toast('❌ Use JPG, PNG ou PDF','error'); return; }
+  if(file.size > 10*1024*1024){ toast('❌ Arquivo muito grande (máx 10MB)','error'); return; }
+  
+  window._compFile = file;
+  
+  const dropZone = document.getElementById('comp-drop-zone');
+  const preview = document.getElementById('comp-preview');
+  
+  dropZone.classList.add('has-file');
+  preview.style.display = 'block';
+  
+  // Habilitar botões
+  ['btn-fiscal-nfce','btn-fiscal-nfe','btn-fiscal-none'].forEach(id => {
+    const btn = document.getElementById(id);
+    if(btn){ btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; btn.style.background = id==='btn-fiscal-nfce'?'#0ea5e9':id==='btn-fiscal-nfe'?'#7c3aed':'#f1f5f9'; }
+  });
+  
+  if(file.type.startsWith('image/')){
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      preview.innerHTML = `
+        <img src="${e.target.result}" style="max-width:100%;max-height:150px;border-radius:10px;border:2px solid #16a34a">
+        <div style="font-size:11px;color:#64748b;margin-top:4px">${file.name} (${(file.size/1024).toFixed(1)}KB)</div>
+        <button onclick="removeCompFile()" style="background:#ef4444;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;margin-top:6px;cursor:pointer">✕ Remover</button>
+      `;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    preview.innerHTML = `
+      <div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:28px">📄</span>
+        <div style="text-align:left"><div style="font-weight:700;color:#991b1b;font-size:13px">${file.name}</div><div style="font-size:11px;color:#64748b">${(file.size/1024).toFixed(1)}KB</div></div>
+      </div>
+      <button onclick="removeCompFile()" style="background:#ef4444;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;margin-top:6px;cursor:pointer">✕ Remover</button>
+    `;
+  }
+}
+
+function removeCompFile(){
+  window._compFile = null;
+  const dropZone = document.getElementById('comp-drop-zone');
+  const preview = document.getElementById('comp-preview');
+  const fileInput = document.getElementById('comp-file-input');
+  
+  if(dropZone) dropZone.classList.remove('has-file');
+  if(preview){ preview.style.display = 'none'; preview.innerHTML = ''; }
+  if(fileInput) fileInput.value = '';
+  
+  // Desabilitar botões novamente
+  ['btn-fiscal-nfce','btn-fiscal-nfe','btn-fiscal-none'].forEach(id => {
+    const btn = document.getElementById(id);
+    if(btn){ btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; btn.style.background = '#94a3b8'; }
+  });
+}
+
+// v1.10.0: Confirmar pagamento com comprovante via novo endpoint
+async function confirmarPagamentoComComprovante(orderId, tipoFiscal, compFile){
+  const blingOk = await checkBlingBeforeAction();
+  if(!blingOk && tipoFiscal){ toast('⚠️ Bling não conectado','error'); return; }
+  
+  showLoading(tipoFiscal==='nfce' ? 'Enviando comprovante e emitindo NFC-e...' : tipoFiscal==='nfe' ? 'Enviando comprovante e criando NF-e...' : 'Enviando comprovante e confirmando pagamento...');
+  
+  try {
+    const formData = new FormData();
+    if(tipoFiscal) formData.append('tipo_fiscal', tipoFiscal);
+    if(compFile) formData.append('comprovante', compFile);
+    
+    const token = getToken();
+    const headers = {};
+    if(token) headers['Authorization'] = 'Bearer ' + token;
+    
+    const resp = await fetch(API_BASE + '/api/pagamentos/' + orderId + '/confirmar', {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    
+    if(!resp.ok){
+      const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(errData.error || 'Erro ' + resp.status);
+    }
+    
+    const data = await resp.json();
+    hideLoading();
+    
+    if(data.ok){
+      const f = data.fiscal;
+      let msg = '✅ Pagamento #'+orderId+' confirmado!';
+      if(f?.tipo==='nfce') msg += f.nfce_status==='emitida' ? ` NFC-e nº ${f.nfce_numero||f.nfce_id} emitida ✅` : ' ⚠️ NFC-e pendente emissão SEFAZ';
+      else if(f?.tipo==='nfe') msg += ` Venda Bling nº ${f.bling_pedido_num||f.bling_pedido_id} criada`;
+      if(data.comprovante) msg += ' 📎';
+      toast(msg, 'success');
+      loadPagamentos();
+    } else {
+      toast('❌ '+(data.error||'Falha'),'error');
+    }
+  } catch(e){
+    hideLoading();
+    toast('❌ '+e.message,'error');
+  }
 }
 async function bulkMarcarPago(){
   const ids=[...selectedIds].filter(id=>{const p=allData.find(r=>r.id==id);return p&&p.tipo_pagamento==='pix_receber';});
@@ -873,6 +1123,81 @@ async function bulkEnviarLembrete(){
 
 setDateFilter('semana');
 setInterval(loadPagamentos,30000);
+
+// ═══════════════════════════════════════════════════════════════
+// v1.10.0: MODO MOBILE — Versão otimizada para celular
+// ═══════════════════════════════════════════════════════════════
+let mobileMode = false;
+
+function toggleMobileMode(){
+  mobileMode = !mobileMode;
+  document.body.classList.toggle('mobile-mode', mobileMode);
+  
+  const btn = document.getElementById('btn-mobile-mode');
+  if(mobileMode){
+    btn.textContent = '🖥️ Desktop';
+    btn.style.background = '#16a34a';
+    // No modo mobile, mostrar apenas pendentes por padrão
+    loadPagamentos();
+  } else {
+    btn.textContent = '📱 Baixas';
+    btn.style.background = '#6366f1';
+    loadPagamentos();
+  }
+}
+
+function renderMobileList(rows){
+  const container = document.getElementById('mobile-list');
+  if(!mobileMode){
+    container.innerHTML = '';
+    return;
+  }
+  
+  // No modo mobile, filtrar apenas pendentes (não pagos)
+  const pendentes = rows.filter(p => !p.pago);
+  
+  if(!pendentes.length){
+    container.innerHTML = '<div class="empty">✅ Nenhum pagamento pendente!</div>';
+    return;
+  }
+  
+  container.innerHTML = pendentes.map(p => {
+    const items = (()=>{try{return JSON.parse(p.items_json||'[]');}catch(e){return[];}})();
+    const itemsStr = items.map(i=>i.qty+'x '+i.name).join(', ')||'—';
+    const dt = p.created_at ? new Date(p.created_at*1000).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',timeZone:'America/Campo_Grande'}) : '—';
+    const valor = parseFloat(p.total_value||0).toFixed(2);
+    const tipoClass = 'tipo-' + (p.tipo_pagamento||'').replace(/\s/g,'_');
+    const tipoLabel = TIPO_LABELS[p.tipo_pagamento] || p.tipo_pagamento || '—';
+    const hasComprovante = p.foto_comprovante && p.foto_comprovante.length > 5;
+    
+    let actionsHtml = '';
+    
+    // PIX: mostrar botão QR + Pago
+    if(p.tipo_pagamento === 'pix_receber'){
+      const hasQr = p.pix_tx_id || p.cora_invoice_id;
+      if(hasQr){
+        actionsHtml += `<button class="btn-mobile-qr" onclick="showQrCode(${p.id})">📱 Ver QR</button>`;
+      }
+    }
+    
+    // Botão principal de confirmar pagamento
+    actionsHtml += `<button class="btn-mobile-pago" onclick="marcarPago(${p.id})">✅ Confirmar Pagamento</button>`;
+    
+    return `
+      <div class="mobile-card ${p.pago?'pago':''}">
+        <div class="mc-header">
+          <span class="mc-id">#${p.id} · ${dt}</span>
+          <span class="mc-valor">R$ ${valor}</span>
+        </div>
+        <div class="mc-cliente">${p.customer_name||'—'} ${hasComprovante?'<span class="has-comprovante-badge">📎 ✓</span>':''}</div>
+        <div class="mc-endereco">${p.address_line||''} ${p.bairro?'· '+p.bairro:''}</div>
+        <div class="mc-items">${itemsStr}</div>
+        <span class="mc-tipo ${tipoClass}">${tipoLabel}</span>
+        <div class="mc-actions">${actionsHtml}</div>
+      </div>
+    `;
+  }).join('');
+}
 
 // ═══ PIX AUTO-CHECK POLLING ═══
 // Verifica automaticamente PIX pendentes a cada 30s
