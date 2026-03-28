@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pagamentos — MoskoGás v1.10.0</title>
+<title>Pagamentos — MoskoGás v1.10.1</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
@@ -64,7 +64,7 @@
   .btn-copy:hover { background: #0e7490; }
   .btn-whats { background: #16a34a; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-whats:hover { background: #15803d; }
-  /* v1.10.0: Upload de comprovante integrado no modal de pagamento */
+  /* v1.10.1: Upload de comprovante integrado no modal de pagamento */
   .upload-drop-zone { 
     border: 3px dashed #cbd5e1; 
     border-radius: 16px; 
@@ -129,7 +129,7 @@
   .btn-comprovante:hover { background: #7c3aed; }
   .has-comprovante-badge { background: #dcfce7; color: #166534; border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 4px; }
   
-  /* v1.10.0: Versão Mobile */
+  /* v1.10.1: Versão Mobile */
   .mobile-toggle { display: none; }
   @media (max-width: 768px) {
     .mobile-toggle { display: inline-flex; }
@@ -171,7 +171,7 @@
 </head>
 <body>
 <div id="nav-placeholder"></div>
-<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.10.0 — pagamentos</div>
+<div style="font-size:10px;color:#94a3b8;text-align:right;padding:2px 12px 0">v1.10.1 — pagamentos</div>
 <div class="toolbar">
   <div style="display:flex;align-items:center;gap:4px" class="desktop-only">
     <input type="date" id="fDateFrom" onchange="loadPagamentos()" style="width:135px">
@@ -194,7 +194,7 @@
   <button class="btn" id="btn-ver-pagos" onclick="toggleVerPagos()" title="Mostrar/ocultar pedidos já pagos" style="background:#64748b;color:#fff;padding:6px 12px;font-size:12px" class="desktop-only">👁 Ver Pagos</button>
   <button class="btn mobile-toggle" id="btn-mobile-mode" onclick="toggleMobileMode()" title="Alternar modo mobile" style="background:#6366f1;color:#fff;padding:6px 12px;font-size:12px">📱 Baixas</button>
   <span id="count-badge" style="font-size:12px;color:#64748b;margin-left:4px"></span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.10.0</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">v1.10.1</span>
 </div>
 
 <div class="bulk-bar" id="bulk-bar">
@@ -344,7 +344,7 @@ async function _load() {
       });
     }
     renderTable(rows); 
-    renderMobileList(rows); // v1.10.0: renderizar lista mobile
+    renderMobileList(rows); // v1.10.1: renderizar lista mobile
     renderSummary(rows);
     document.getElementById('count-badge').textContent = mostrarPagos
       ? rows.length + ' registros (' + rows.filter(r=>r.pago).length + ' pagos)'
@@ -404,9 +404,9 @@ function renderTable(rows) {
           if(hasQr) actionBtns+=`<button class="btn-check-pix" onclick="checkPixStatus(${p.id})" title="Verificar pagamento na PushInPay" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-weight:700">✔ Check</button>`;
         }
         // v1.9.22: Botão para anexar comprovante
-        const hasComprovante = p.foto_comprovante && p.foto_comprovante.length > 5;
-        if (hasComprovante) {
-          actionBtns+=`<span class="has-comprovante-badge" title="Comprovante já anexado">📎 ✓</span>`;
+        const hasComprovantePgto = p.comprovante_pagamento && p.comprovante_pagamento.length > 5;
+        if (hasComprovantePgto) {
+          actionBtns+=`<span class="has-comprovante-badge" title="Comprovante de pagamento já anexado">💳 ✓</span>`;
         } else {
           actionBtns+=`<button class="btn-comprovante" onclick="abrirComprovanteModal(${p.id})" title="Anexar comprovante de pagamento">📎</button>`;
         }
@@ -436,9 +436,9 @@ function renderTable(rows) {
       }
       // v1.9.22: Botão comprovante para todos os tipos (se ainda não tem)
       if (p.tipo_pagamento !== 'pix_receber') { // PIX já tem botão acima
-        const hasComprovante2 = p.foto_comprovante && p.foto_comprovante.length > 5;
-        if (hasComprovante2) {
-          actionBtns+=`<span class="has-comprovante-badge" title="Comprovante já anexado">📎 ✓</span>`;
+        const hasComprovantePgto2 = p.comprovante_pagamento && p.comprovante_pagamento.length > 5;
+        if (hasComprovantePgto2) {
+          actionBtns+=`<span class="has-comprovante-badge" title="Comprovante de pagamento já anexado">💳 ✓</span>`;
         } else {
           actionBtns+=`<button class="btn-comprovante" onclick="abrirComprovanteModal(${p.id})" title="Anexar comprovante de pagamento">📎</button>`;
         }
@@ -555,11 +555,13 @@ function escolherTipoFiscal(orderId, nome, total){
   return new Promise(resolve => {
     const pedido = allData.find(r=>r.id==orderId);
     const tipoPgto = pedido?.tipo_pagamento || '';
-    const jaTemComprovante = pedido?.foto_comprovante && pedido.foto_comprovante.length > 5;
+    // foto_comprovante = entregador (recibo de entrega)
+    // comprovante_pagamento = financeiro (comprovante de pagamento real)
+    const jaTemCompPagamento = pedido?.comprovante_pagamento && pedido.comprovante_pagamento.length > 5;
     
-    // Tipos que exigem comprovante
+    // Tipos que exigem comprovante de PAGAMENTO (não confundir com recibo de entrega)
     const TIPOS_EXIGEM_COMP = ['pix_receber', 'pix_vista', 'debito', 'credito'];
-    const exigeComprovante = TIPOS_EXIGEM_COMP.includes(tipoPgto) && !jaTemComprovante;
+    const exigeComprovante = TIPOS_EXIGEM_COMP.includes(tipoPgto) && !jaTemCompPagamento;
     const ehDinheiro = tipoPgto === 'dinheiro';
     
     // Remove modal anterior se houver
@@ -606,10 +608,10 @@ function escolherTipoFiscal(orderId, nome, total){
           <input type="file" id="comp-file-input" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="handleCompFile(this.files)">
           <div id="comp-preview" style="display:none;margin-top:10px;text-align:center"></div>
         </div>
-        ` : jaTemComprovante ? `
+        ` : jaTemCompPagamento ? `
         <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
           <span style="font-size:20px">✅</span>
-          <span style="font-weight:600;color:#166534;font-size:13px">Comprovante já anexado</span>
+          <span style="font-weight:600;color:#166534;font-size:13px">Comprovante de pagamento já anexado</span>
         </div>
         ` : ehDinheiro ? `
         <div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:12px;padding:12px 16px;margin-bottom:16px">
@@ -683,7 +685,7 @@ function escolherTipoFiscal(orderId, nome, total){
   });
 }
 
-// v1.10.0: Handler para arquivo de comprovante no modal
+// v1.10.1: Handler para arquivo de comprovante no modal
 function handleCompFile(files){
   if(!files || !files.length) return;
   const file = files[0];
@@ -744,7 +746,7 @@ function removeCompFile(){
   });
 }
 
-// v1.10.0: Confirmar pagamento com comprovante via novo endpoint
+// v1.10.1: Confirmar pagamento com comprovante via novo endpoint
 async function confirmarPagamentoComComprovante(orderId, tipoFiscal, compFile){
   const blingOk = await checkBlingBeforeAction();
   if(!blingOk && tipoFiscal){ toast('⚠️ Bling não conectado','error'); return; }
@@ -1125,7 +1127,7 @@ setDateFilter('semana');
 setInterval(loadPagamentos,30000);
 
 // ═══════════════════════════════════════════════════════════════
-// v1.10.0: MODO MOBILE — Versão otimizada para celular
+// v1.10.1: MODO MOBILE — Versão otimizada para celular
 // ═══════════════════════════════════════════════════════════════
 let mobileMode = false;
 
@@ -1168,7 +1170,7 @@ function renderMobileList(rows){
     const valor = parseFloat(p.total_value||0).toFixed(2);
     const tipoClass = 'tipo-' + (p.tipo_pagamento||'').replace(/\s/g,'_');
     const tipoLabel = TIPO_LABELS[p.tipo_pagamento] || p.tipo_pagamento || '—';
-    const hasComprovante = p.foto_comprovante && p.foto_comprovante.length > 5;
+    const hasComprovantePgto = p.comprovante_pagamento && p.comprovante_pagamento.length > 5;
     
     let actionsHtml = '';
     
@@ -1189,7 +1191,7 @@ function renderMobileList(rows){
           <span class="mc-id">#${p.id} · ${dt}</span>
           <span class="mc-valor">R$ ${valor}</span>
         </div>
-        <div class="mc-cliente">${p.customer_name||'—'} ${hasComprovante?'<span class="has-comprovante-badge">📎 ✓</span>':''}</div>
+        <div class="mc-cliente">${p.customer_name||'—'} ${hasComprovantePgto?'<span class="has-comprovante-badge">💳 ✓</span>':''}</div>
         <div class="mc-endereco">${p.address_line||''} ${p.bairro?'· '+p.bairro:''}</div>
         <div class="mc-items">${itemsStr}</div>
         <span class="mc-tipo ${tipoClass}">${tipoLabel}</span>

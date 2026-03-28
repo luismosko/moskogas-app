@@ -1,4 +1,5 @@
-// v2.52.79
+// v2.52.80
+// v2.52.80: Campo comprovante_pagamento separado de foto_comprovante (entrega vs baixa financeiro)
 // v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
 // v2.52.77: Endpoint corrigir-phone para unificar telefones inconsistentes
@@ -7859,7 +7860,7 @@ export default {
           o.pix_tx_id, o.pix_qrcode, o.pix_qrcode_base64, o.pix_paid_at,
           o.cora_invoice_id, o.cora_qrcode, o.cora_paid_at,
           o.nfce_id, o.nfce_numero, o.nfce_status,
-          o.foto_comprovante,
+          o.foto_comprovante, o.comprovante_pagamento,
           cc.bling_contact_id,
           (SELECT COUNT(*) FROM payment_reminders pr WHERE pr.order_id = o.id) as reminder_count,
           (SELECT MAX(sent_at) FROM payment_reminders pr WHERE pr.order_id = o.id) as last_reminder_at
@@ -8136,6 +8137,7 @@ export default {
         "ALTER TABLE orders ADD COLUMN baixa_por_id INTEGER DEFAULT NULL",
         "ALTER TABLE orders ADD COLUMN baixa_por_nome TEXT DEFAULT NULL",
         "ALTER TABLE orders ADD COLUMN baixa_at INTEGER DEFAULT NULL",
+        "ALTER TABLE orders ADD COLUMN comprovante_pagamento TEXT DEFAULT NULL",
       ]) { await env.DB.prepare(col).run().catch(() => {}); }
 
       const ct = request.headers.get('Content-Type') || '';
@@ -8162,17 +8164,18 @@ export default {
         try { const b = await request.clone().json(); tipoFiscal = b?.tipo_fiscal || null; } catch {}
       }
 
-      // Verificar se precisa de comprovante (PIX ou Cartão)
+      // Verificar se precisa de comprovante (PIX ou Cartão a prazo)
       const tipoPgto = order.tipo_pagamento || '';
       const tiposExigemComprovante = ['pix_receber', 'pix_vista', 'debito', 'credito'];
-      const jaTemComprovante = order.foto_comprovante && order.foto_comprovante.length > 5;
+      // comprovante_pagamento é o do financeiro, foto_comprovante é do entregador (recibo de entrega)
+      const jaTemComprovantePgto = order.comprovante_pagamento && order.comprovante_pagamento.length > 5;
       
-      if (tiposExigemComprovante.includes(tipoPgto) && !compFile && !jaTemComprovante) {
+      if (tiposExigemComprovante.includes(tipoPgto) && !compFile && !jaTemComprovantePgto) {
         return err('Comprovante de pagamento é obrigatório para ' + tipoPgto.replace('_', ' ').toUpperCase(), 400);
       }
 
       // Upload do comprovante se fornecido
-      let photoKey = order.foto_comprovante || null;
+      let photoKey = order.comprovante_pagamento || null;
       if (compFile) {
         const dateStr = new Date().toISOString().slice(0, 10);
         const ts = Date.now();
@@ -8180,7 +8183,7 @@ export default {
         if (compFile.type === 'image/png') ext = 'png';
         else if (compFile.type === 'image/webp') ext = 'webp';
         else if (compFile.type === 'application/pdf') ext = 'pdf';
-        photoKey = `comprovantes/${dateStr}/pedido_${orderId}_baixa_${ts}.${ext}`;
+        photoKey = `comprovantes/${dateStr}/pedido_${orderId}_pagamento_${ts}.${ext}`;
 
         const arrayBuffer = await compFile.arrayBuffer();
         await env.BUCKET.put(photoKey, arrayBuffer, {
@@ -8189,10 +8192,10 @@ export default {
             order_id: String(orderId),
             uploaded_by: user.nome || 'atendente',
             uploaded_by_role: user.role || 'atendente',
-            source: 'baixa_pagamento',
+            source: 'comprovante_pagamento',
           },
         });
-        console.log(`[R2] Comprovante baixa: ${photoKey} (${(compFile.size / 1024).toFixed(1)}KB) por ${user.nome}`);
+        console.log(`[R2] Comprovante pagamento: ${photoKey} (${(compFile.size / 1024).toFixed(1)}KB) por ${user.nome}`);
       }
 
       // Preparar dados para fiscal
@@ -8248,8 +8251,8 @@ export default {
       // Marcar como pago + registrar quem fez
       let updateSql = 'UPDATE orders SET pago=1, baixa_por_id=?, baixa_por_nome=?, baixa_at=unixepoch(), updated_at=unixepoch()';
       const updateParams = [user.id, user.nome];
-      if (photoKey && photoKey !== order.foto_comprovante) {
-        updateSql += ', foto_comprovante=?';
+      if (photoKey && photoKey !== order.comprovante_pagamento) {
+        updateSql += ', comprovante_pagamento=?';
         updateParams.push(photoKey);
       }
       updateSql += ' WHERE id=?';
