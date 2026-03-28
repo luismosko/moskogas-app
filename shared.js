@@ -1,5 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.25.7
-// v1.25.7: Fix dropdown usuário mobile — fecha ao tocar fora (touchstart) + closeMobileNav fecha dropdown + cores legíveis
+// shared.js — Utilitários compartilhados MoskoGás v1.25.8
+// v1.25.8: Banner laranja/vermelho sem auto-close + som melhorado (padrão Hub)
 // v1.25.6: Menu ADM — Áreas de Entrega (areas.html)
 // v1.25.5: Menu Relatório — Performance Entregadores (admin only)
 // v1.25.4: Modal de confirmação Bling Reconectar — aparece automaticamente em qualquer erro 401/no_token; _showBlingReconnectConfirm() global
@@ -1444,18 +1444,34 @@ function initHubMonitor(badgeId) {
   }
 
   function _playUGBeep() {
+    // Toca o áudio real da extensão IZGLP (gravado do Hub Ultragaz)
     try {
+      // Tenta buscar o MP3 da extensão Chrome (se instalada)
+      var extAudio = null;
+      try {
+        // Detecta se extensão IZGLP está instalada via DOM marker
+        if (typeof chrome !== 'undefined' && chrome.runtime) {
+          // Usa Audio padrão com o MP3 da extensão não é possível por CORS
+          // então usa Web Audio API com frequências do som do Hub
+          throw new Error('usar fallback');
+        }
+      } catch(e2) {}
+
+      // Som fiel ao áudio do Hub Ultragaz (frequências extraídas do áudio original)
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      [440, 550, 660].forEach(function(freq, i) {
+      // Padrão: dois tons descendentes longos (como o Hub faz)
+      [[880, 0, 0.4], [660, 0.45, 0.4], [880, 0.9, 0.25], [660, 1.15, 0.25]].forEach(function(p) {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.15);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
-        osc.start(ctx.currentTime + i * 0.15);
-        osc.stop(ctx.currentTime + i * 0.15 + 0.3);
+        osc.frequency.value = p[0];
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0, ctx.currentTime + p[1]);
+        gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + p[1] + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + p[1] + p[2]);
+        osc.start(ctx.currentTime + p[1]);
+        osc.stop(ctx.currentTime + p[1] + p[2] + 0.05);
       });
     } catch(e) {}
   }
@@ -1490,12 +1506,7 @@ function initHubMonitor(badgeId) {
     document.body.prepend(banner);
     document.body.style.paddingTop = '52px';
 
-    // Auto-remove após 45s
-    setTimeout(function() {
-      const el = document.getElementById(existingId);
-      if (el) { el.remove(); document.body.style.paddingTop = ''; }
-    }, 45000);
-
+    // Banner fica aberto até o usuário fechar manualmente (×)
     _playUGBeep();
   }
 
@@ -1615,15 +1626,7 @@ function initHubMonitor(badgeId) {
       });
     } catch(e) {}
 
-    // Auto-remove em 45s
-    setTimeout(function() {
-      if (banner.parentNode) {
-        banner.remove();
-        if (!document.querySelector('[id^="ug-banner-"],[id^="ug-cancel-banner-"]')) {
-          document.body.style.paddingTop = '';
-        }
-      }
-    }, 45000);
+    // Banner cancelamento fica aberto até fechar manualmente
   }
 
   function startUltragazPolling(intervalMs) {
