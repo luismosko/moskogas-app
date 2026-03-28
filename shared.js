@@ -1,4 +1,5 @@
-// shared.js — Utilitários compartilhados MoskoGás v1.25.6
+// shared.js — Utilitários compartilhados MoskoGás v1.25.7
+// v1.25.7: Fix dropdown usuário mobile — fecha ao tocar fora (touchstart) + closeMobileNav fecha dropdown + cores legíveis
 // v1.25.6: Menu ADM — Áreas de Entrega (areas.html)
 // v1.25.5: Menu Relatório — Performance Entregadores (admin only)
 // v1.25.4: Modal de confirmação Bling Reconectar — aparece automaticamente em qualquer erro 401/no_token; _showBlingReconnectConfirm() global
@@ -564,16 +565,17 @@ function buildNav() {
   .mg-ud-menu {
     position: static;
     box-shadow: none;
-    background: rgba(255,255,255,0.08);
+    background: #1a3d8f;
     border-radius: 8px;
     margin-top: 4px;
     min-width: auto;
+    border: 1px solid rgba(255,255,255,0.2);
   }
   .mg-ud-menu.mg-ud-open { display: block; }
-  .mg-ud-item { color: #ffffffcc; }
-  .mg-ud-item:hover { background: rgba(255,255,255,0.1); }
-  .mg-ud-divider { background: rgba(255,255,255,0.1); }
-  .mg-ud-logout { color: #fca5a5 !important; }
+  .mg-ud-item { color: #ffffff; font-size: 14px; }
+  .mg-ud-item:hover { background: rgba(255,255,255,0.15); color: #ffffff; }
+  .mg-ud-divider { background: rgba(255,255,255,0.2); }
+  .mg-ud-logout { color: #ffd5d5 !important; }
 }
 </style>`;
 }
@@ -606,6 +608,7 @@ function toggleMobileNav() {
 function closeMobileNav() {
   const nav = document.getElementById('mgNavbar');
   if (nav) nav.classList.remove('mg-mobile-open');
+  closeUserDropdown();
 }
 
 // Mantém NAV_HTML para compatibilidade
@@ -635,13 +638,16 @@ function toggleUserDropdown(e) {
   if (menu.classList.contains('mg-ud-open')) {
     setTimeout(() => {
       document.addEventListener('click', closeUserDropdown, { once: true });
-    }, 10);
+      document.addEventListener('touchstart', closeUserDropdown, { once: true });
+    }, 30);
   }
 }
 
 function closeUserDropdown() {
   const menu = document.getElementById('mgUserMenu');
   if (menu) menu.classList.remove('mg-ud-open');
+  document.removeEventListener('click', closeUserDropdown);
+  document.removeEventListener('touchstart', closeUserDropdown);
 }
 
 // ── Modal Trocar Senha ────────────────────────────────────────
