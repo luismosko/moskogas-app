@@ -1144,7 +1144,8 @@ function verFotoComprovante() {
   const fotoKey = window._editFotoComprovante;
   if (!fotoKey) { toast('Nenhuma foto disponível', 'error'); return; }
   
-  const url = `https://api.moskogas.com.br/api/pub/comprovante/${encodeURIComponent(fotoKey)}`;
+  // Usar endpoint correto: /api/comprovante/:orderId
+  const url = 'https://api.moskogas.com.br/api/comprovante/' + editOrderId;
   
   // Criar modal para exibir foto
   const overlay = document.createElement('div');
