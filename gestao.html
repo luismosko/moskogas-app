@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedidos 2.9.34 — MoskoGás</title>
+<title>Pedidos 2.9.35 — MoskoGás</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f1f5f9; }
@@ -116,7 +116,7 @@
 <!-- SUMMARY -->
 <div class="summary-bar" id="summary-bar" style="align-items:center">
   <span id="bling-indicator" title="Verificando Bling..." style="background:#94a3b8;color:#fff;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">⏳ Bling</span>
-  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.34</span>
+  <span title="Versão" style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700">v2.9.35</span>
   <span style="border-left:1px solid rgba(255,255,255,0.3);height:14px;margin:0 4px"></span>
   <span id="summary-bar-stats" style="display:contents"></span>
 </div>
@@ -311,7 +311,7 @@ function setDateFilter(mode) {
 let lastRows = [];
 let activeStatuses = new Set(['novo','encaminhado','whatsapp_enviado','entregue']);
 
-// v2.9.34: Ordenação padrão por Status (abertos primeiro) + secundária por hora
+// v2.9.35: Ordenação padrão por Status (abertos primeiro) + secundária por hora
 let currentSort = { col: 'status', dir: 'asc' }; // Padrão: status (NOVO primeiro, ENTREGUE por último)
 
 function sortBy(col) {
@@ -373,7 +373,7 @@ function sortRows(rows, col, dir) {
         vb = b.tipo_pagamento || '';
         break;
       case 'status':
-        // v2.9.34: Ordenar por prioridade + hora dentro de cada status
+        // v2.9.35: Ordenar por prioridade + hora dentro de cada status
         const statusOrder = { 'novo': 1, 'encaminhado': 2, 'whatsapp_enviado': 3, 'entregue': 4, 'cancelado': 5 };
         va = statusOrder[(a.status || '').toLowerCase()] || 9;
         vb = statusOrder[(b.status || '').toLowerCase()] || 9;
@@ -506,7 +506,7 @@ async function _load() {
   lastRows = rows;
   window._gestaoRows = rows;
   
-  // v2.9.34: Aplicar ordenação atual
+  // v2.9.35: Aplicar ordenação atual
   const sorted = sortRows([...rows], currentSort.col, currentSort.dir);
   renderTable(sorted);
   
@@ -1122,12 +1122,56 @@ function openEditModal(orderId) {
     });
   }
   if (_dtBloq) _dtBloq.style.display = isEntregue ? 'block' : 'none';
+  
+  // v2.9.35: Botão de ver foto do comprovante de entrega
+  const btnVerFoto = document.getElementById('edit-btn-ver-foto');
+  if (btnVerFoto) {
+    const temFoto = o.foto_comprovante && o.foto_comprovante.length > 5;
+    btnVerFoto.style.display = temFoto ? 'flex' : 'none';
+    window._editFotoComprovante = temFoto ? o.foto_comprovante : null;
+  }
+  
   renderEditItems();
   document.getElementById('modal-edit').style.display = 'flex';
 }
 
 function closeEditModal() {
   document.getElementById('modal-edit').style.display = 'none';
+}
+
+// v2.9.35: Ver foto do comprovante de entrega
+function verFotoComprovante() {
+  const fotoKey = window._editFotoComprovante;
+  if (!fotoKey) { toast('Nenhuma foto disponível', 'error'); return; }
+  
+  const url = `https://api.moskogas.com.br/api/pub/comprovante/${encodeURIComponent(fotoKey)}`;
+  
+  // Criar modal para exibir foto
+  const overlay = document.createElement('div');
+  overlay.id = 'foto-comprovante-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative">
+      <div style="padding:12px 16px;background:#10b981;color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700">📷 Comprovante de Entrega — Pedido #${editOrderId}</span>
+        <button onclick="document.getElementById('foto-comprovante-modal').remove()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:16px;text-align:center;max-height:calc(90vh - 100px);overflow:auto">
+        <img src="${url}" style="max-width:100%;max-height:70vh;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15)" 
+             onerror="this.outerHTML='<div style=\\'padding:40px;color:#ef4444\\'>❌ Erro ao carregar imagem</div>'" />
+      </div>
+      <div style="padding:12px 16px;background:#f8fafc;text-align:center;border-top:1px solid #e2e8f0">
+        <a href="${url}" target="_blank" style="color:#0ea5e9;font-weight:600;font-size:13px;text-decoration:none">🔗 Abrir em nova aba</a>
+      </div>
+    </div>
+  `;
+  
+  // Fechar ao clicar fora
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+  
+  document.body.appendChild(overlay);
 }
 
 // v2.9.13: helpers data modal edicao
@@ -1425,7 +1469,12 @@ setInterval(autoCheckPixGestao, 20000);
 <div class="modal-overlay" id="modal-edit" style="display:none">
   <div class="modal" style="max-width:620px;width:95%;max-height:90vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h2 style="margin:0">✏️ Editar Pedido <span id="edit-order-id" style="color:#f97316"></span></h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0">✏️ Editar Pedido <span id="edit-order-id" style="color:#f97316"></span></h2>
+        <button id="edit-btn-ver-foto" onclick="verFotoComprovante()" style="display:none;background:#10b981;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px" title="Ver foto do comprovante de entrega">
+          📷 Ver Foto
+        </button>
+      </div>
       <button onclick="closeEditModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px" title="Fechar">&times;</button>
     </div>
 
