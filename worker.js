@@ -1,5 +1,5 @@
-// v2.52.84
-// v2.52.84: IA /cliente - recorrente = qualquer histórico + total_pedidos
+// v2.52.85
+// v2.52.85: IA /cliente - recorrente = qualquer histórico + total_pedidos
 // v2.52.80: Campo comprovante_pagamento separado de foto_comprovante (entrega vs baixa financeiro)
 // v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
@@ -4121,21 +4121,32 @@ export default {
         nomeExibicao = `${viaContato.nome_contato} - ${cliente.name}`;
       }
       
-      // v2.52.84: Buscar último pedido do cliente para fluxo inteligente
+      // v2.52.85: Buscar último pedido do cliente para fluxo inteligente
       let ultimoPedido = null;
       let ehMensalista = false;
       let ehRecorrente = false;
       let totalPedidos = 0;
       
       try {
+        // v2.52.85: Buscar pedidos com telefone normalizado (com e sem 55)
+        // Alguns pedidos antigos podem ter 67xxx, outros 5567xxx
+        const phoneVariants = [];
+        const phoneRaw = cliente.phone_digits || '';
+        phoneVariants.push(phoneRaw);
+        if (phoneRaw.startsWith('55')) {
+          phoneVariants.push(phoneRaw.substring(2)); // Sem o 55
+        } else {
+          phoneVariants.push('55' + phoneRaw); // Com o 55
+        }
+        
         const pedido = await env.DB.prepare(`
           SELECT id, address_line, bairro, complemento, referencia, items_json, 
                  tipo_pagamento, total_value, status,
                  datetime(created_at, 'unixepoch', '-4 hours') as data_pedido
           FROM orders 
-          WHERE phone_digits = ? AND status != 'CANCELADO'
+          WHERE phone_digits IN (?, ?) AND UPPER(status) != 'CANCELADO'
           ORDER BY created_at DESC LIMIT 1
-        `).bind(cliente.phone_digits).first();
+        `).bind(phoneVariants[0], phoneVariants[1] || phoneVariants[0]).first();
         
         if (pedido) {
           // Verifica se é mensalista/boleto (recorrente)
@@ -4168,11 +4179,11 @@ export default {
           };
         }
         
-        // v2.52.84: Conta TODOS os pedidos do cliente (recorrente = qualquer histórico)
+        // v2.52.85: Conta TODOS os pedidos do cliente (recorrente = qualquer histórico)
         const countPedidos = await env.DB.prepare(`
           SELECT COUNT(*) as total FROM orders 
-          WHERE phone_digits = ? AND status != 'CANCELADO'
-        `).bind(cliente.phone_digits).first();
+          WHERE phone_digits IN (?, ?) AND UPPER(status) != 'CANCELADO'
+        `).bind(phoneVariants[0], phoneVariants[1] || phoneVariants[0]).first();
         
         totalPedidos = countPedidos?.total || 0;
         
@@ -4197,7 +4208,7 @@ export default {
         cpf_cnpj: cliente.cpf_cnpj || '',
         ultima_compra: cliente.ultima_compra_glp || '',
         via_contato: !!viaContato,
-        // v2.52.84: Dados para fluxo inteligente
+        // v2.52.85: Dados para fluxo inteligente
         mensalista: ehMensalista,
         recorrente: ehRecorrente,
         total_pedidos: totalPedidos,
@@ -7920,7 +7931,7 @@ export default {
       if (!allowedPag) return err('Sem permissão para acessar pagamentos', 403);
       await ensureAuditTable(env);
       await ensurePixColumns(env);
-      // v2.52.84: Garantir coluna comprovante_pagamento existe
+      // v2.52.85: Garantir coluna comprovante_pagamento existe
       await env.DB.prepare("ALTER TABLE orders ADD COLUMN comprovante_pagamento TEXT DEFAULT NULL").run().catch(() => {});
       const rows = await env.DB.prepare(`
         SELECT 
