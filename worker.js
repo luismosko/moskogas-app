@@ -1,5 +1,5 @@
-// v2.52.83
-// v2.52.83: IA /cliente - recorrente = qualquer histórico + total_pedidos
+// v2.52.84
+// v2.52.84: IA /cliente - recorrente = qualquer histórico + total_pedidos
 // v2.52.80: Campo comprovante_pagamento separado de foto_comprovante (entrega vs baixa financeiro)
 // v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
@@ -4121,10 +4121,11 @@ export default {
         nomeExibicao = `${viaContato.nome_contato} - ${cliente.name}`;
       }
       
-      // v2.52.83: Buscar último pedido do cliente para fluxo inteligente
+      // v2.52.84: Buscar último pedido do cliente para fluxo inteligente
       let ultimoPedido = null;
       let ehMensalista = false;
       let ehRecorrente = false;
+      let totalPedidos = 0;
       
       try {
         const pedido = await env.DB.prepare(`
@@ -4167,13 +4168,13 @@ export default {
           };
         }
         
-        // v2.52.83: Conta TODOS os pedidos do cliente (recorrente = qualquer histórico)
+        // v2.52.84: Conta TODOS os pedidos do cliente (recorrente = qualquer histórico)
         const countPedidos = await env.DB.prepare(`
           SELECT COUNT(*) as total FROM orders 
           WHERE phone_digits = ? AND status != 'CANCELADO'
         `).bind(cliente.phone_digits).first();
         
-        const totalPedidos = countPedidos?.total || 0;
+        totalPedidos = countPedidos?.total || 0;
         
         // Cliente é recorrente se tem qualquer pedido anterior
         if (totalPedidos >= 1) {
@@ -4196,7 +4197,7 @@ export default {
         cpf_cnpj: cliente.cpf_cnpj || '',
         ultima_compra: cliente.ultima_compra_glp || '',
         via_contato: !!viaContato,
-        // v2.52.83: Dados para fluxo inteligente
+        // v2.52.84: Dados para fluxo inteligente
         mensalista: ehMensalista,
         recorrente: ehRecorrente,
         total_pedidos: totalPedidos,
@@ -7919,7 +7920,7 @@ export default {
       if (!allowedPag) return err('Sem permissão para acessar pagamentos', 403);
       await ensureAuditTable(env);
       await ensurePixColumns(env);
-      // v2.52.83: Garantir coluna comprovante_pagamento existe
+      // v2.52.84: Garantir coluna comprovante_pagamento existe
       await env.DB.prepare("ALTER TABLE orders ADD COLUMN comprovante_pagamento TEXT DEFAULT NULL").run().catch(() => {});
       const rows = await env.DB.prepare(`
         SELECT 
