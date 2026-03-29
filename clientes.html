@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.3.3 — MoskoGás</title>
+  <title>Clientes v1.3.4 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.3.3 — clientes</div>
+  <div class="version-badge" style="display:none">v1.3.4 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.3.3</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.3.4</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -306,10 +306,15 @@
       <div style="border-top:1px solid #f1f5f9;padding-top:10px">
         <label style="font-size:10px;font-weight:700;color:#94a3b8;display:block;margin-bottom:8px">🛒 PRODUTOS PREFERIDOS (preços negociados)</label>
         <div id="edit-prods-list" style="display:grid;gap:6px;margin-bottom:8px;max-height:200px;overflow-y:auto"></div>
-        <div style="display:flex;gap:6px">
-          <select id="edit-prod-select" style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none">
-            <option value="">— Selecione produto —</option>
-          </select>
+        <div style="display:flex;gap:6px;position:relative">
+          <div style="flex:1;position:relative">
+            <input id="edit-prod-search" type="text" placeholder="Buscar produto..." autocomplete="off"
+              oninput="filterProductSuggestions(this.value)"
+              onfocus="showProductSuggestions()"
+              style="width:100%;padding:8px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none">
+            <input id="edit-prod-id" type="hidden">
+            <div id="edit-prod-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:2px solid #e2e8f0;border-top:none;border-radius:0 0 7px 7px;max-height:180px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+          </div>
           <input id="edit-prod-preco" type="number" step="0.01" min="0" placeholder="Preço" style="width:90px;padding:8px;border:2px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none;text-align:right">
           <button onclick="addProdutoCliente()" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:8px 12px;font-size:13px;cursor:pointer;white-space:nowrap">+ Add</button>
         </div>
@@ -414,7 +419,12 @@ async function loadPage(page) {
         <td style="text-align:center;cursor:pointer" onclick="openCliente('${escAttr(c.phone_digits)}')">${abertos > 0 ? `<span class="badge-aberto">${abertos}</span>` : '<span class="num-gray">—</span>'}</td>
         <td style="text-align:right;cursor:pointer" onclick="openCliente('${escAttr(c.phone_digits)}')">${aRec > 0 ? '<span class="num-red">R$ '+aRec.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</span>' : '<span class="num-gray">—</span>'}</td>
         <td style="text-align:center">${blingBadge}</td>
-        <td style="text-align:center">
+        <td style="text-align:center;white-space:nowrap">
+          <button onclick="openCliente('${escAttr(c.phone_digits)}')" 
+            title="Ver vendas do cliente"
+            style="background:#fef3c7;border:1.5px solid #fcd34d;color:#b45309;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;margin-right:4px"
+            onmouseover="this.style.background='#f59e0b';this.style.color='#fff'"
+            onmouseout="this.style.background='#fef3c7';this.style.color='#b45309'">📋</button>
           <button onclick="editCliente('${escAttr(c.phone_digits)}','${escAttr(c.name)}')" 
             title="Editar cliente"
             style="background:#f0f9ff;border:1.5px solid #bae6fd;color:#0369a1;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s"
@@ -731,13 +741,59 @@ async function loadAllProducts() {
   }
 }
 
-function renderProdutoSelect() {
-  const sel = document.getElementById('edit-prod-select');
-  sel.innerHTML = '<option value="">— Selecione produto —</option>' +
-    _allProducts.filter(p => p.ativo !== 0).map(p =>
-      `<option value="${p.id}" data-price="${p.price}" data-name="${escHtml(p.name)}">${escHtml(p.name)} (R$ ${(p.price||0).toFixed(2)})</option>`
-    ).join('');
+// v1.3.4: Funções de busca de produtos com autocomplete
+function filterProductSuggestions(query) {
+  const container = document.getElementById('edit-prod-suggestions');
+  if (!query || query.length < 1) {
+    container.style.display = 'none';
+    return;
+  }
+  const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filtered = _allProducts.filter(p => {
+    if (p.ativo === 0) return false;
+    const name = (p.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return name.includes(q);
+  }).slice(0, 10);
+  
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="padding:10px;color:#94a3b8;font-size:12px;text-align:center">Nenhum produto encontrado</div>';
+  } else {
+    container.innerHTML = filtered.map(p => {
+      // Limitar nome a 35 chars para não quebrar layout
+      const displayName = p.name.length > 35 ? p.name.substring(0, 35) + '...' : p.name;
+      return `<div onclick="selectProduct(${p.id}, '${escAttr(p.name)}', ${p.price||0})" 
+        style="padding:8px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center"
+        onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='#fff'">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(p.name)}">${escHtml(displayName)}</span>
+        <span style="color:#16a34a;font-weight:600;margin-left:8px;white-space:nowrap">R$ ${(p.price||0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+  }
+  container.style.display = 'block';
 }
+
+function showProductSuggestions() {
+  const input = document.getElementById('edit-prod-search');
+  if (input.value.length >= 1) {
+    filterProductSuggestions(input.value);
+  }
+}
+
+function selectProduct(id, name, price) {
+  document.getElementById('edit-prod-id').value = id;
+  document.getElementById('edit-prod-search').value = name;
+  document.getElementById('edit-prod-preco').value = price.toFixed(2);
+  document.getElementById('edit-prod-suggestions').style.display = 'none';
+}
+
+// Fechar sugestões ao clicar fora
+document.addEventListener('click', function(e) {
+  const container = document.getElementById('edit-prod-suggestions');
+  const input = document.getElementById('edit-prod-search');
+  if (container && input && !container.contains(e.target) && e.target !== input) {
+    container.style.display = 'none';
+  }
+});
 
 function renderProdutosCliente() {
   const list = document.getElementById('edit-prods-list');
@@ -747,7 +803,7 @@ function renderProdutosCliente() {
   }
   list.innerHTML = _editProdutos.map((p, i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
-      <span style="flex:1;font-size:13px;font-weight:600;color:#1e293b">${escHtml(p.product_name)}</span>
+      <span style="flex:1;font-size:13px;font-weight:600;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(p.product_name)}">${escHtml(p.product_name.length > 30 ? p.product_name.substring(0,30)+'...' : p.product_name)}</span>
       <input type="number" step="0.01" min="0" value="${p.preco_negociado}" 
         onchange="updatePrecoProduto(${i}, this.value)"
         style="width:85px;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:right;outline:none">
@@ -758,26 +814,32 @@ function renderProdutosCliente() {
 }
 
 function addProdutoCliente() {
-  const sel = document.getElementById('edit-prod-select');
+  const searchInput = document.getElementById('edit-prod-search');
+  const idInput = document.getElementById('edit-prod-id');
   const precoInput = document.getElementById('edit-prod-preco');
-  const productId = parseInt(sel.value);
-  if (!productId) { toast('Selecione um produto', 'error'); return; }
+  const productId = parseInt(idInput.value);
+  
+  if (!productId) { toast('Selecione um produto da lista', 'error'); return; }
   
   // Verifica se já existe
   if (_editProdutos.some(p => p.product_id === productId)) {
     toast('Produto já adicionado', 'error'); return;
   }
   
-  const opt = sel.options[sel.selectedIndex];
-  const preco = parseFloat(precoInput.value) || parseFloat(opt.dataset.price) || 0;
+  const product = _allProducts.find(p => p.id === productId);
+  if (!product) { toast('Produto não encontrado', 'error'); return; }
+  
+  const preco = parseFloat(precoInput.value) || product.price || 0;
   
   _editProdutos.push({
     product_id: productId,
-    product_name: opt.dataset.name,
+    product_name: product.name,
     preco_negociado: preco
   });
   
-  sel.value = '';
+  // Limpar campos
+  searchInput.value = '';
+  idInput.value = '';
   precoInput.value = '';
   renderProdutosCliente();
 }
@@ -815,7 +877,11 @@ async function editCliente(phone, nome) {
   
   // Carregar produtos do sistema
   await loadAllProducts();
-  renderProdutoSelect();
+  // v1.3.4: Limpar campos de busca de produto
+  document.getElementById('edit-prod-search').value = '';
+  document.getElementById('edit-prod-id').value = '';
+  document.getElementById('edit-prod-preco').value = '';
+  document.getElementById('edit-prod-suggestions').style.display = 'none';
   
   // v1.2.9: Mostrar botão deletar apenas para admin
   const deleteBtn = document.getElementById('edit-delete-btn');
