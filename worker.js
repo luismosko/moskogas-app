@@ -1,5 +1,5 @@
-// v2.52.81
-// v2.52.81: Migration comprovante_pagamento no GET /api/pagamentos (fix SQLITE_ERROR)
+// v2.52.82
+// v2.52.82: Endpoint IA /cliente retorna último pedido + flag mensalista/recorrente
 // v2.52.80: Campo comprovante_pagamento separado de foto_comprovante (entrega vs baixa financeiro)
 // v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
@@ -4121,6 +4121,65 @@ export default {
         nomeExibicao = `${viaContato.nome_contato} - ${cliente.name}`;
       }
       
+      // v2.52.82: Buscar último pedido do cliente para fluxo inteligente
+      let ultimoPedido = null;
+      let ehMensalista = false;
+      let ehRecorrente = false;
+      
+      try {
+        const pedido = await env.DB.prepare(`
+          SELECT id, address_line, bairro, complemento, referencia, items_json, 
+                 tipo_pagamento, total_value, status,
+                 datetime(created_at, 'unixepoch', '-4 hours') as data_pedido
+          FROM orders 
+          WHERE phone_digits = ? AND status != 'CANCELADO'
+          ORDER BY created_at DESC LIMIT 1
+        `).bind(cliente.phone_digits).first();
+        
+        if (pedido) {
+          // Verifica se é mensalista/boleto (recorrente)
+          ehMensalista = pedido.tipo_pagamento === 'mensalista';
+          ehRecorrente = ['mensalista', 'boleto'].includes(pedido.tipo_pagamento);
+          
+          // Parse dos itens
+          let itens = [];
+          try {
+            const parsed = JSON.parse(pedido.items_json || '[]');
+            itens = parsed.map(i => ({
+              nome: i.name || i.nome,
+              codigo: i.code || i.codigo,
+              qtd: i.qty || i.qtd || 1,
+              preco: i.price || i.preco
+            }));
+          } catch (_) {}
+          
+          ultimoPedido = {
+            id: pedido.id,
+            data: pedido.data_pedido?.split(' ')[0] || '',
+            endereco: pedido.address_line || '',
+            bairro: pedido.bairro || '',
+            complemento: pedido.complemento || '',
+            referencia: pedido.referencia || '',
+            itens: itens,
+            tipo_pagamento: pedido.tipo_pagamento || '',
+            total: pedido.total_value || 0,
+            status: pedido.status
+          };
+        }
+        
+        // Conta quantos pedidos mensalista/boleto o cliente tem (para confirmar recorrência)
+        const countRec = await env.DB.prepare(`
+          SELECT COUNT(*) as total FROM orders 
+          WHERE phone_digits = ? AND tipo_pagamento IN ('mensalista', 'boleto') AND status != 'CANCELADO'
+        `).bind(cliente.phone_digits).first();
+        
+        if (countRec && countRec.total >= 2) {
+          ehRecorrente = true;
+        }
+      } catch (e) {
+        console.warn('[IA-Cliente] Erro ao buscar último pedido:', e.message);
+      }
+      
       return json({
         encontrado: true,
         nome: nomeExibicao,
@@ -4133,7 +4192,11 @@ export default {
         referencia: cliente.referencia || '',
         cpf_cnpj: cliente.cpf_cnpj || '',
         ultima_compra: cliente.ultima_compra_glp || '',
-        via_contato: !!viaContato
+        via_contato: !!viaContato,
+        // v2.52.82: Dados para fluxo inteligente
+        mensalista: ehMensalista,
+        recorrente: ehRecorrente,
+        ultimo_pedido: ultimoPedido
       });
     }
 
@@ -7852,7 +7915,7 @@ export default {
       if (!allowedPag) return err('Sem permissão para acessar pagamentos', 403);
       await ensureAuditTable(env);
       await ensurePixColumns(env);
-      // v2.52.81: Garantir coluna comprovante_pagamento existe
+      // v2.52.82: Garantir coluna comprovante_pagamento existe
       await env.DB.prepare("ALTER TABLE orders ADD COLUMN comprovante_pagamento TEXT DEFAULT NULL").run().catch(() => {});
       const rows = await env.DB.prepare(`
         SELECT 
