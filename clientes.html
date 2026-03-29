@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clientes v1.3.2 — MoskoGás</title>
+  <title>Clientes v1.3.3 — MoskoGás</title>
   <script src="shared.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -120,9 +120,9 @@
 <div id="nav-placeholder"></div>
 
 <div class="container">
-  <div class="version-badge" style="display:none">v1.3.2 — clientes</div>
+  <div class="version-badge" style="display:none">v1.3.3 — clientes</div>
   <div class="page-header">
-    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.3.2</span></div>
+    <div class="page-title">👥 Gestão de Clientes <span class="version-badge" style="background:#64748b">v1.3.3</span></div>
     <div class="stats-bar">
       <span class="stat-pill" id="total-label">— clientes</span>
     </div>
@@ -722,7 +722,8 @@ async function loadAllProducts() {
   if (_allProducts.length > 0) return _allProducts;
   try {
     const res = await api('/api/app-products');
-    _allProducts = res.products || [];
+    // v1.3.3: Endpoint retorna array diretamente, não {products:[]}
+    _allProducts = Array.isArray(res) ? res : (res.products || []);
     return _allProducts;
   } catch(e) {
     console.warn('Erro ao carregar produtos:', e);
