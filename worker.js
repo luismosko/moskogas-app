@@ -1,5 +1,5 @@
-// v2.52.82
-// v2.52.82: Endpoint IA /cliente retorna último pedido + flag mensalista/recorrente
+// v2.52.83
+// v2.52.83: IA /cliente - recorrente = qualquer histórico + total_pedidos
 // v2.52.80: Campo comprovante_pagamento separado de foto_comprovante (entrega vs baixa financeiro)
 // v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
@@ -4121,7 +4121,7 @@ export default {
         nomeExibicao = `${viaContato.nome_contato} - ${cliente.name}`;
       }
       
-      // v2.52.82: Buscar último pedido do cliente para fluxo inteligente
+      // v2.52.83: Buscar último pedido do cliente para fluxo inteligente
       let ultimoPedido = null;
       let ehMensalista = false;
       let ehRecorrente = false;
@@ -4167,13 +4167,16 @@ export default {
           };
         }
         
-        // Conta quantos pedidos mensalista/boleto o cliente tem (para confirmar recorrência)
-        const countRec = await env.DB.prepare(`
+        // v2.52.83: Conta TODOS os pedidos do cliente (recorrente = qualquer histórico)
+        const countPedidos = await env.DB.prepare(`
           SELECT COUNT(*) as total FROM orders 
-          WHERE phone_digits = ? AND tipo_pagamento IN ('mensalista', 'boleto') AND status != 'CANCELADO'
+          WHERE phone_digits = ? AND status != 'CANCELADO'
         `).bind(cliente.phone_digits).first();
         
-        if (countRec && countRec.total >= 2) {
+        const totalPedidos = countPedidos?.total || 0;
+        
+        // Cliente é recorrente se tem qualquer pedido anterior
+        if (totalPedidos >= 1) {
           ehRecorrente = true;
         }
       } catch (e) {
@@ -4193,9 +4196,10 @@ export default {
         cpf_cnpj: cliente.cpf_cnpj || '',
         ultima_compra: cliente.ultima_compra_glp || '',
         via_contato: !!viaContato,
-        // v2.52.82: Dados para fluxo inteligente
+        // v2.52.83: Dados para fluxo inteligente
         mensalista: ehMensalista,
         recorrente: ehRecorrente,
+        total_pedidos: totalPedidos,
         ultimo_pedido: ultimoPedido
       });
     }
@@ -7915,7 +7919,7 @@ export default {
       if (!allowedPag) return err('Sem permissão para acessar pagamentos', 403);
       await ensureAuditTable(env);
       await ensurePixColumns(env);
-      // v2.52.82: Garantir coluna comprovante_pagamento existe
+      // v2.52.83: Garantir coluna comprovante_pagamento existe
       await env.DB.prepare("ALTER TABLE orders ADD COLUMN comprovante_pagamento TEXT DEFAULT NULL").run().catch(() => {});
       const rows = await env.DB.prepare(`
         SELECT 
