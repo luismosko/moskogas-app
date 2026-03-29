@@ -1,5 +1,5 @@
-// v2.52.85
-// v2.52.85: IA /cliente - recorrente = qualquer histórico + total_pedidos
+// v2.52.86
+// v2.52.86: IA /cliente - recorrente = qualquer histórico + total_pedidos
 // v2.52.80: Campo comprovante_pagamento separado de foto_comprovante (entrega vs baixa financeiro)
 // v2.52.79: Pagamentos: comprovante obrigatório PIX/Cartão, email admin p/ dinheiro, bloqueia troca tipo após baixa
 // v2.52.78: Sistema de múltiplos contatos por cliente + merge-phone GET + busca contatos na Bina
@@ -4049,6 +4049,22 @@ export default {
       return json({ ok: true, msg: 'Contato removido' });
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // GET /api/pub/ia/teste — Endpoint de teste para verificar se a IA está chamando a API
+    // v2.52.86
+    // ═══════════════════════════════════════════════════════════════════════
+    if (method === 'GET' && path === '/api/pub/ia/teste') {
+      const codigoSecreto = 'BANANA-7391';
+      const agora = new Date().toISOString();
+      return json({
+        sucesso: true,
+        codigo_secreto: codigoSecreto,
+        mensagem: `Se a IA disse o código ${codigoSecreto}, a API foi chamada com sucesso!`,
+        horario_servidor: agora,
+        instrucao: 'Responda ao cliente: O código secreto é BANANA-7391'
+      });
+    }
+
     // GET /api/pub/ia/cliente?phone=67999999999 — Busca dados do cliente
     if (method === 'GET' && path === '/api/pub/ia/cliente') {
       const phone = (url.searchParams.get('phone') || '').replace(/\D/g, '');
@@ -4121,14 +4137,14 @@ export default {
         nomeExibicao = `${viaContato.nome_contato} - ${cliente.name}`;
       }
       
-      // v2.52.85: Buscar último pedido do cliente para fluxo inteligente
+      // v2.52.86: Buscar último pedido do cliente para fluxo inteligente
       let ultimoPedido = null;
       let ehMensalista = false;
       let ehRecorrente = false;
       let totalPedidos = 0;
       
       try {
-        // v2.52.85: Buscar pedidos com telefone normalizado (com e sem 55)
+        // v2.52.86: Buscar pedidos com telefone normalizado (com e sem 55)
         // Alguns pedidos antigos podem ter 67xxx, outros 5567xxx
         const phoneVariants = [];
         const phoneRaw = cliente.phone_digits || '';
@@ -4179,7 +4195,7 @@ export default {
           };
         }
         
-        // v2.52.85: Conta TODOS os pedidos do cliente (recorrente = qualquer histórico)
+        // v2.52.86: Conta TODOS os pedidos do cliente (recorrente = qualquer histórico)
         const countPedidos = await env.DB.prepare(`
           SELECT COUNT(*) as total FROM orders 
           WHERE phone_digits IN (?, ?) AND UPPER(status) != 'CANCELADO'
@@ -4208,7 +4224,7 @@ export default {
         cpf_cnpj: cliente.cpf_cnpj || '',
         ultima_compra: cliente.ultima_compra_glp || '',
         via_contato: !!viaContato,
-        // v2.52.85: Dados para fluxo inteligente
+        // v2.52.86: Dados para fluxo inteligente
         mensalista: ehMensalista,
         recorrente: ehRecorrente,
         total_pedidos: totalPedidos,
@@ -7931,7 +7947,7 @@ export default {
       if (!allowedPag) return err('Sem permissão para acessar pagamentos', 403);
       await ensureAuditTable(env);
       await ensurePixColumns(env);
-      // v2.52.85: Garantir coluna comprovante_pagamento existe
+      // v2.52.86: Garantir coluna comprovante_pagamento existe
       await env.DB.prepare("ALTER TABLE orders ADD COLUMN comprovante_pagamento TEXT DEFAULT NULL").run().catch(() => {});
       const rows = await env.DB.prepare(`
         SELECT 
